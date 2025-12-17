@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Optional, Union
 
 from loguru import logger
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
@@ -142,6 +142,19 @@ class Database(Compat):
             kwargs["max_overflow"] = 100  # type: ignore[assignment]
 
         self.engine = create_async_engine(database_uri, **kwargs)
+
+        # Ensure SQLite enforces foreign keys on every connection
+        if self.type == SQLITE:
+
+            @event.listens_for(self.engine.sync_engine, "connect")
+            def _set_sqlite_pragma(dbapi_connection, connection_record):
+                try:
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute("PRAGMA foreign_keys=ON;")
+                    cursor.close()
+                except Exception as e:
+                    logger.warning(f"Could not enable SQLite PRAGMA foreign_keys: {e}")
+
         self.async_session = sessionmaker(
             self.engine,  # type: ignore
             expire_on_commit=False,

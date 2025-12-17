@@ -1,4 +1,5 @@
 import copy
+import json
 from typing import List
 
 from sqlalchemy import RowMapping
@@ -26,10 +27,10 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises')} (
                     amount {db.big_int} NOT NULL,
-                    b_b TEXT NOT NULL,
-                    c_b TEXT NOT NULL,
+                    b_ TEXT NOT NULL,
+                    c_ TEXT NOT NULL,
 
-                    UNIQUE (b_b)
+                    UNIQUE (b_)
 
                 );
             """
@@ -52,11 +53,11 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('invoices')} (
                     amount {db.big_int} NOT NULL,
-                    pr TEXT NOT NULL,
-                    hash TEXT NOT NULL,
+                    bolt11 TEXT NOT NULL,
+                    id TEXT NOT NULL,
                     issued BOOL NOT NULL,
 
-                    UNIQUE (hash)
+                    UNIQUE (id)
 
                 );
             """
@@ -78,7 +79,7 @@ async def create_balance_views(db: Database, conn: Connection):
         SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
             SELECT id, SUM(amount) AS s
             FROM {db.table_with_schema('promises')}
-            WHERE amount > 0
+            WHERE amount > 0 AND c_ IS NOT NULL
             GROUP BY id
         ) AS balance_issued;
         """
@@ -191,7 +192,7 @@ async def m006_invoices_add_payment_hash(db: Database):
             " TEXT"
         )
         await conn.execute(
-            f"UPDATE {db.table_with_schema('invoices')} SET payment_hash = hash"
+            f"UPDATE {db.table_with_schema('invoices')} SET payment_hash = id"
         )
 
 
@@ -230,16 +231,6 @@ async def m008_promises_dleq(db: Database):
 async def m009_add_out_to_invoices(db: Database):
     # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
     async with db.connect() as conn:
-        # rename column pr to bolt11
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('invoices')} RENAME COLUMN pr TO"
-            " bolt11"
-        )
-        # rename column hash to payment_hash
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('invoices')} RENAME COLUMN hash TO id"
-        )
-
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('invoices')} ADD COLUMN out BOOL"
         )
@@ -720,7 +711,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
         )
 
         await conn.execute(
-            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_b, c_b, e, s, created FROM {db.table_with_schema('promises')}"
+            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_, c_, e, s, created FROM {db.table_with_schema('promises')}"
         )
         await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
         await conn.execute(
@@ -967,4 +958,200 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
                     time TIMESTAMP DEFAULT {db.timestamp_now}
                 );
             """
+        )
+
+
+async def m028_promises_c_allow_null_add_melt_quote(db: Database):
+    """
+    Allow column that stores the c_ to be NULL and add melt_quote to promises.
+    Insert all change promises from melt_quotes into the promises table.
+    Drop the change and the outputs columns from melt_quotes.
+    """
+
+    # migrate stored melt outputs for pending quotes into promises
+    async def migrate_stored_melt_outputs_for_pending_quotes(
+        db: Database, conn: Connection
+    ):
+        rows = await conn.fetchall(
+            f"""
+                SELECT quote, outputs FROM {db.table_with_schema('melt_quotes')}
+                WHERE state = :state AND outputs IS NOT NULL
+            """,
+            {"state": MeltQuoteState.pending.value},
+        )
+        for row in rows:
+            try:
+                outputs = json.loads(row["outputs"]) if row["outputs"] else []
+            except Exception:
+                outputs = []
+
+            for o in outputs:
+                amount = o.get("amount") if isinstance(o, dict) else None
+                keyset_id = o.get("id") if isinstance(o, dict) else None
+                b_hex = o.get("B_") if isinstance(o, dict) else None
+                if amount is None or keyset_id is None or b_hex is None:
+                    continue
+                # check if promise with b_ already exists
+                existing_promise = await conn.fetchone(
+                    f"""
+                        SELECT * FROM {db.table_with_schema('promises')}
+                        WHERE b_ = :b_
+                    """,
+                    {
+                        "b_": b_hex,
+                    },
+                )
+                if not existing_promise:
+                    await conn.execute(
+                        f"""
+                            INSERT INTO {db.table_with_schema('promises')}
+                            (amount, id, b_, created, mint_quote, melt_quote, swap_id)
+                            VALUES (:amount, :id, :b_, :created, :mint_quote, :melt_quote, :swap_id)
+                        """,
+                        {
+                            "amount": int(amount),
+                            "id": keyset_id,
+                            "b_": b_hex,
+                            "created": db.to_timestamp(db.timestamp_now_str()),
+                            "mint_quote": None,
+                            "melt_quote": row["quote"],
+                            "swap_id": None,
+                        },
+                    )
+
+    # remove obsolete columns outputs and change from melt_quotes
+    async def remove_obsolete_columns_from_melt_quotes(db: Database, conn: Connection):
+        if conn.type == "SQLITE":
+            # For SQLite, recreate table without the columns
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                    CREATE TABLE IF NOT EXISTS {db.table_with_schema('melt_quotes_new')} (
+                        quote TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        request TEXT NOT NULL,
+                        checking_id TEXT NOT NULL,
+                        unit TEXT NOT NULL,
+                        amount {db.big_int} NOT NULL,
+                        fee_reserve {db.big_int},
+                        paid BOOL NOT NULL,
+                        created_time TIMESTAMP,
+                        paid_time TIMESTAMP,
+                        fee_paid {db.big_int},
+                        proof TEXT,
+                        state TEXT,
+                        expiry TIMESTAMP,
+
+                        UNIQUE (quote)
+                    );
+                """
+            )
+            await conn.execute(
+                f"""
+                    INSERT INTO {db.table_with_schema('melt_quotes_new')} (
+                        quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state, expiry
+                    )
+                    SELECT quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state, expiry
+                    FROM {db.table_with_schema('melt_quotes')};
+                """
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('melt_quotes')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes_new')} RENAME TO {db.table_with_schema('melt_quotes')}"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+        else:
+            # For Postgres/Cockroach, drop the columns directly if they exist
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS outputs"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS change"
+            )
+
+    # recreate promises table with columns mint_quote, melt_quote, swap_id and with c_ nullable
+    async def recreate_promises_table(db: Database, conn: Connection):
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                        CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises_new')} (
+                            amount {db.big_int} NOT NULL,
+                            id TEXT,
+                            b_ TEXT NOT NULL,
+                            c_ TEXT,
+                            dleq_e TEXT,
+                            dleq_s TEXT,
+                            created TIMESTAMP,
+                            signed_at TIMESTAMP,
+                            mint_quote TEXT,
+                            melt_quote TEXT,
+                            swap_id TEXT,
+
+                            FOREIGN KEY (mint_quote) REFERENCES {db.table_with_schema('mint_quotes')}(quote),
+                            FOREIGN KEY (melt_quote) REFERENCES {db.table_with_schema('melt_quotes')}(quote),
+
+                            UNIQUE (b_)
+                        );
+                    """
+            )
+
+            await conn.execute(
+                f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id) "
+                f"SELECT amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id FROM {db.table_with_schema('promises')}"
+            )
+
+            await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+        else:
+            # add columns melt_quote, signed_at and make column c_ nullable
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN melt_quote TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN signed_at TIMESTAMP"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
+            )
+            # add foreign key constraint to melt_quote
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD CONSTRAINT fk_promises_melt_quote FOREIGN KEY (melt_quote) REFERENCES {db.table_with_schema('melt_quotes')}(quote)"
+            )
+
+    async with db.connect() as conn:
+        # drop the balance views first
+        await drop_balance_views(db, conn)
+
+        # recreate promises table
+        await recreate_promises_table(db, conn)
+
+        # migrate stored melt outputs for pending quotes into promises
+        await migrate_stored_melt_outputs_for_pending_quotes(db, conn)
+
+        # remove obsolete columns from melt_quotes table
+        await remove_obsolete_columns_from_melt_quotes(db, conn)
+
+        # recreate the balance views
+        await create_balance_views(db, conn)
+
+
+async def m029_remove_overlong_witness_values(db: Database):
+    """
+    Delete any witness values longer than 1024 characters in proofs tables.
+    """
+    async with db.connect() as conn:
+        # Clean proofs_used
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('proofs_used')} SET witness = NULL "
+            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
+        )
+
+        # Clean proofs_pending (column exists in newer schemas)
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
+            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
         )

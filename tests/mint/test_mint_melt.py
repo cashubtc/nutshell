@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
-from cashu.core.errors import LightningPaymentFailedError
+from cashu.core.errors import LightningPaymentFailedError, OutputsAlreadySignedError
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
@@ -12,7 +12,11 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    get_real_invoice,
+    is_deprecated_api_only,
+    is_fake,
     is_regtest,
+    pay_if_regtest,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -80,6 +84,174 @@ async def create_pending_melts(
     )
     assert melt_quotes
     return pending_proof, quote
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake or is_deprecated_api_only,
+    reason="only fakewallet and non-deprecated api",
+)
+async def test_pending_melt_quote_outputs_registration_regression(
+    wallet, ledger: Ledger
+):
+    """When paying a request results in a PENDING melt quote,
+    the change outputs should be registered properly
+    and further requests with the same outputs should result in an expected error.
+    """
+    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    # await pay_if_regtest(mint_quote1.request)
+    # await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+    melt_quote2 = await wallet.melt_quote(invoice_62_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets,
+        change_rs,
+        change_derivation_paths,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs, change_rs = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+    response1 = await ledger.melt(
+        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    )
+    assert response1.state == "PENDING"
+
+    await assert_err(
+        ledger.melt(
+            proofs=proofs2,
+            quote=melt_quote2.quote,
+            outputs=change_outputs,
+        ),
+        OutputsAlreadySignedError.detail,
+    )
+
+    # use get_melt_quote to verify that the quote state is updated
+    melt_quote1_updated = await ledger.get_melt_quote(melt_quote1.quote)
+    assert melt_quote1_updated.state == MeltQuoteState.pending
+
+    melt_quote2_updated = await ledger.get_melt_quote(melt_quote2.quote)
+    assert melt_quote2_updated.state == MeltQuoteState.unpaid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake or is_deprecated_api_only,
+    reason="only fakewallet and non-deprecated api",
+)
+async def test_settled_melt_quote_outputs_registration_regression(
+    wallet, ledger: Ledger
+):
+    """Verify that if one melt request fails, we can still use the same outputs in another request"""
+
+    settings.fakewallet_payment_state = PaymentResult.FAILED.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    # await pay_if_regtest(mint_quote1.request)
+    # await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+    melt_quote2 = await wallet.melt_quote(invoice_62_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets,
+        change_rs,
+        change_derivation_paths,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs, change_rs = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+    await assert_err(
+        ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
+        "Lightning payment failed.",
+    )
+
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
+
+    response2 = await ledger.melt(
+        proofs=proofs2,
+        quote=melt_quote2.quote,
+        outputs=change_outputs,
+    )
+
+    assert response2.state == "PAID"
+
+    # use get_melt_quote to verify that the quote state is updated
+    melt_quote2_updated = await ledger.get_melt_quote(melt_quote2.quote)
+    assert melt_quote2_updated.state == MeltQuoteState.paid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake or is_deprecated_api_only,
+    reason="only fakewallet and non-deprecated api",
+)
+async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
+    """Verify that if the same outputs are used in two melt requests,
+    the second one fails.
+    """
+
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    # await pay_if_regtest(mint_quote1.request)
+    # await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+    melt_quote2 = await wallet.melt_quote(invoice_62_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets,
+        change_rs,
+        change_derivation_paths,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs, change_rs = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+    (ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),)
+
+    await assert_err(
+        ledger.melt(
+            proofs=proofs2,
+            quote=melt_quote2.quote,
+            outputs=change_outputs,
+        ),
+        OutputsAlreadySignedError.detail,
+    )
 
 
 @pytest.mark.asyncio
@@ -369,3 +541,223 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     mint_resp = await ledger.mint(outputs=outputs, quote_id=sat_mint_quote.quote)
 
     assert len(mint_resp) == len(outputs)
+
+
+# Tests for unique pending melt quote checking_id constraint
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_without_checking_id(ledger: Ledger):
+    """Test that setting a melt quote as pending without a checking_id raises an error."""
+    from cashu.core.errors import TransactionError
+
+    quote = MeltQuote(
+        quote="quote_id_no_checking",
+        method="bolt11",
+        request="lnbc123",
+        checking_id="temp_id",
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+
+    # Set checking_id to empty to simulate the error condition
+    quote.checking_id = ""
+
+    try:
+        await ledger.db_write._set_melt_quote_pending(quote=quote)
+        raise AssertionError("Expected TransactionError")
+    except TransactionError as e:
+        assert "Melt quote doesn't have checking ID" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Ledger):
+    """Test that setting a melt quote as pending fails if another quote with same checking_id is already pending."""
+    from cashu.core.errors import TransactionError
+
+    checking_id = "test_checking_id_duplicate"
+
+    quote1 = MeltQuote(
+        quote="quote_id_dup_first",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_dup_second",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+
+    # Set the first quote as pending
+    await ledger.db_write._set_melt_quote_pending(quote=quote1)
+
+    # Verify the first quote is pending
+    quote1_db = await ledger.crud.get_melt_quote(
+        quote_id="quote_id_dup_first", db=ledger.db
+    )
+    assert quote1_db.state == MeltQuoteState.pending
+
+    # Attempt to set the second quote as pending should fail
+    try:
+        await ledger.db_write._set_melt_quote_pending(quote=quote2)
+        raise AssertionError("Expected TransactionError")
+    except TransactionError as e:
+        assert "Melt quote already paid or pending." in str(e)
+
+    # Verify the second quote is still unpaid
+    quote2_db = await ledger.crud.get_melt_quote(
+        quote_id="quote_id_dup_second", db=ledger.db
+    )
+    assert quote2_db.state == MeltQuoteState.unpaid
+
+
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_allows_different_checking_id(ledger: Ledger):
+    """Test that setting melt quotes as pending succeeds when they have different checking_ids."""
+    checking_id_1 = "test_checking_id_allow_1"
+    checking_id_2 = "test_checking_id_allow_2"
+
+    quote1 = MeltQuote(
+        quote="quote_id_allow_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id_1,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_allow_2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id_2,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+
+    # Set both quotes as pending - should succeed
+    await ledger.db_write._set_melt_quote_pending(quote=quote1)
+    await ledger.db_write._set_melt_quote_pending(quote=quote2)
+
+    # Verify both quotes are pending
+    quote1_db = await ledger.crud.get_melt_quote(
+        quote_id="quote_id_allow_1", db=ledger.db
+    )
+    quote2_db = await ledger.crud.get_melt_quote(
+        quote_id="quote_id_allow_2", db=ledger.db
+    )
+    assert quote1_db.state == MeltQuoteState.pending
+    assert quote2_db.state == MeltQuoteState.pending
+
+
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_after_unset(ledger: Ledger):
+    """Test that a quote can be set as pending again after being unset."""
+    checking_id = "test_checking_id_unset_test"
+
+    quote1 = MeltQuote(
+        quote="quote_id_unset_first",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_unset_second",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+
+    # Set the first quote as pending
+    quote1_pending = await ledger.db_write._set_melt_quote_pending(quote=quote1)
+    assert quote1_pending.state == MeltQuoteState.pending
+
+    # Unset the first quote (mark as paid)
+    await ledger.db_write._unset_melt_quote_pending(
+        quote=quote1_pending, state=MeltQuoteState.paid
+    )
+
+    # Verify the first quote is no longer pending
+    quote1_db = await ledger.crud.get_melt_quote(
+        quote_id="quote_id_unset_first", db=ledger.db
+    )
+    assert quote1_db.state == MeltQuoteState.paid
+
+    # Now the second quote should still
+    await assert_err(
+        ledger.db_write._set_melt_quote_pending(quote=quote2),
+        "Melt quote already paid or pending.",
+    )
+
+    # Verify the second quote is unpaid
+    quote2_db = await ledger.crud.get_melt_quote(
+        quote_id="quote_id_unset_second", db=ledger.db
+    )
+    assert quote2_db.state == MeltQuoteState.unpaid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_mint_pay_with_duplicate_checking_id(wallet):
+    mint_quote1 = await wallet.request_mint(1024)
+    mint_quote2 = await wallet.request_mint(1024)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=1024, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=1024, quote_id=mint_quote2.quote)
+
+    invoice = get_real_invoice(64)["payment_request"]
+
+    # Get two melt quotes for the same invoice
+    melt_quote1 = await wallet.melt_quote(invoice)
+    melt_quote2 = await wallet.melt_quote(invoice)
+
+    response1 = await wallet.melt(
+        proofs=proofs1,
+        invoice=invoice,
+        fee_reserve_sat=melt_quote1.fee_reserve,
+        quote_id=melt_quote1.quote,
+    )
+    assert response1.state == "PAID"
+
+    assert_err(
+        wallet.melt(
+            proofs=proofs2,
+            invoice=invoice,
+            fee_reserve_sat=melt_quote2.fee_reserve,
+            quote_id=melt_quote2.quote,
+        ),
+        "Melt quote already paid or pending.",
+    )

@@ -139,7 +139,9 @@ async def test_wallet_subscription_multiple_listeners_receive_updates(wallet: Wa
     from cashu.wallet.subscriptions import SubscriptionManager
 
     subs = SubscriptionManager(wallet.url)
-    threading.Thread(target=subs.connect, name="SubscriptionManager", daemon=True).start()
+    threading.Thread(
+        target=subs.connect, name="SubscriptionManager", daemon=True
+    ).start()
 
     stack1: list[JSONRPCNotficationParams] = []
     stack2: list[JSONRPCNotficationParams] = []
