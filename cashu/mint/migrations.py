@@ -741,8 +741,7 @@ async def m018_duplicate_deprecated_keyset_ids(db: Database):
             if keyset.version_tuple < (0, 15):
                 keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
             else:
-                keyset_copy.id = derive_keyset_id_deprecated(
-                    keyset_copy.public_keys)
+                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
             duplicated_keysets.append(keyset_copy)
 
         for keyset in duplicated_keysets:
