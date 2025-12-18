@@ -29,11 +29,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
 
     async def create_p2pk_pubkey(self):
         """Create a P2PK public key from the private key."""
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        assert self.private_key, "No private key set in settings or .env"
         public_key = self.private_key.pubkey
-        # logger.debug(f"Private key: {self.private_key.bech32()}")
         assert public_key
         return public_key.serialize().hex()
 

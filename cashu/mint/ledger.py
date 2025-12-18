@@ -349,7 +349,7 @@ class Ledger(
                 f"Maximum mint amount is {settings.mint_max_mint_bolt11_sat} sat."
             )
         if settings.mint_bolt11_disable_mint:
-            raise NotAllowedError("Minting with bol11 is disabled.")
+            raise NotAllowedError("Minting with bolt11 is disabled.")
 
         unit, method = self._verify_and_get_unit_method(
             quote_request.unit, Method.bolt11.name
@@ -1216,3 +1216,4 @@ class Ledger(
                 )
 
             return signatures
+
