@@ -327,6 +327,7 @@ class LedgerCrud(ABC):
         conn: Optional[Connection] = None,
     ) -> MintBalanceLogEntry | None: ...
 
+
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
 
@@ -1052,4 +1053,4 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"checking_id": checking_id},
         )
-        return [MeltQuote.from_row(row) for row in results]  # type: ignore
+        return [MeltQuote.from_row(row) for row in results] # type: ignore
