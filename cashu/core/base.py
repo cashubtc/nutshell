@@ -230,10 +230,11 @@ class BlindedMessage(BaseModel):
     amount: int
     id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
+    C_: Optional[str] = None  # Hex-encoded signature, None if not signed yet
 
     @classmethod
     def from_row(cls, row: RowMapping):
-        return cls(amount=row["amount"], B_=row["b_"], id=row["id"])
+        return cls(amount=row["amount"], B_=row["b_"], id=row["id"], C_=row.get("c_"))
 
 
 class BlindedMessage_Deprecated(BaseModel):

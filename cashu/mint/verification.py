@@ -18,6 +18,7 @@ from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
     OutputsAlreadySignedError,
+    OutputsArePendingError,
     SecretTooLongError,
     TransactionDuplicateInputsError,
     TransactionDuplicateOutputsError,
@@ -132,43 +133,38 @@ class LedgerVerification(
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionDuplicateOutputsError()
-        # verify that outputs have not been signed previously
-        signed_before = await self._check_outputs_pending_or_issued_before(
+        # verify that outputs have not been stored or signed before
+        stored_before = await self._check_outputs_pending_or_issued_before(
             outputs, conn
         )
-        if any(signed_before):
-            already_stored = [
-                {"B_": output.B_, "present": present}
-                for output, present in zip(outputs, signed_before)
-                if present
-            ]
-            logger.debug(
-                "Detected %s outputs already stored (pending or issued): %s",
-                len(already_stored),
-                already_stored,
-            )
-            raise OutputsAlreadySignedError()
+        if stored_before:
+            signed_outputs = [o for o in stored_before if o.C_ is not None]
+            if any(o.C_ for o in signed_outputs):
+                raise OutputsAlreadySignedError()
+            else:
+                raise OutputsArePendingError()
+
         logger.trace(f"Verified {len(outputs)} outputs.")
 
     async def _check_outputs_pending_or_issued_before(
         self,
         outputs: List[BlindedMessage],
         conn: Optional[Connection] = None,
-    ) -> List[bool]:
-        """Checks whether the provided outputs have previously stored (as blinded messages) been signed (as blind signatures) by the mint
-        (which would lead to a duplication error later when trying to store these outputs again).
+    ) -> List[BlindedMessage]:
+        """Checks whether the provided outputs have previously stored (as blinded messages,
+        or signed as blind signatures) by the mint.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to check
 
         Returns:
-            result (List[bool]): Whether outputs are already present in the database.
+            result (List[BlindedMessage]): List of booleans indicating whether each output was already stored before
         """
         async with self.db.get_connection(conn) as conn:
             promises = await self.crud.get_outputs(
                 b_s=[output.B_ for output in outputs], db=self.db, conn=conn
             )
-        return [True if promise else False for promise in promises]
+        return promises
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
