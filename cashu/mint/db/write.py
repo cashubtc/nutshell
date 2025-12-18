@@ -14,6 +14,7 @@ from ...core.base import (
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
+    ProofsArePendingError,
     TransactionError,
 )
 from ..crud import LedgerCrud
@@ -135,8 +136,8 @@ class DbWriteHelper:
         pending_proofs = await self.crud.get_proofs_pending(
             Ys=[p.Y for p in proofs], db=self.db, conn=conn
         )
-        if not (len(pending_proofs) == 0):
-            raise TransactionError("proofs are pending.")
+        if pending_proofs:
+            raise ProofsArePendingError()
 
     async def _set_mint_quote_pending(self, quote_id: str) -> MintQuote:
         """Sets the mint quote as pending.

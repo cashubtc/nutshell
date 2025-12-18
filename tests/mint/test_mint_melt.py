@@ -4,7 +4,11 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
-from cashu.core.errors import LightningPaymentFailedError, OutputsAlreadySignedError
+from cashu.core.errors import (
+    LightningPaymentFailedError,
+    OutputsAlreadySignedError,
+    OutputsArePendingError,
+)
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
@@ -136,7 +140,7 @@ async def test_pending_melt_quote_outputs_registration_regression(
             quote=melt_quote2.quote,
             outputs=change_outputs,
         ),
-        OutputsAlreadySignedError.detail,
+        OutputsArePendingError.detail,
     )
 
     # use get_melt_quote to verify that the quote state is updated
