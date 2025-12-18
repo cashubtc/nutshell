@@ -1,7 +1,5 @@
-import pytest
-pytestmark = pytest.mark.skip(reason="Wallet v0 / deprecated mint API removed in https://github.com/cashubtc/nutshell/pull/814")
-
 import httpx
+import pytest
 import pytest_asyncio
 
 from cashu.core.base import Proof, Unit
@@ -16,6 +14,8 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+
+pytestmark = pytest.mark.skip(reason="Wallet v0 / deprecated mint API removed in https://github.com/cashubtc/nutshell/pull/814")
 
 BASE_URL = "http://localhost:3337"
 
