@@ -1,5 +1,7 @@
-import httpx
 import pytest
+pytestmark = pytest.mark.skip(reason="Wallet v0 / deprecated mint API removed in https://github.com/cashubtc/nutshell/pull/814")
+
+import httpx
 import pytest_asyncio
 
 from cashu.core.base import Proof, Unit
