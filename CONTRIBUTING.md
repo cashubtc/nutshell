@@ -55,6 +55,14 @@ FAKEWALLET_DELAY_INCOMING_PAYMENT=3
 
 There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.
 
+Quick setup checklist:
+
+- Prereqs: Docker with compose plugin, `jq`, and your user in the `docker` group.
+- Keep `cashu-regtest` as a sibling of `nutshell` (e.g. `../cashu-regtest`).
+- Start regtest: `cd ../cashu-regtest && ./start.sh` (runs health checks; give it a minute).
+- In `nutshell`: `cp .env.example .env`, then fill the variables below; use absolute paths if you run the mint from elsewhere.
+- If `./start.sh` fails on `jq` or Docker permissions, install `jq` or re-login after adding yourself to the `docker` group.
+
 You can choose one of the nodes as a backend for nutshell using the `.env` variable:
 
 ```
@@ -69,17 +77,17 @@ The Nutshell settings to connect to the provided nodes are given below
 ```
 # regtest
 MINT_LND_REST_ENDPOINT=https://localhost:8081
-MINT_LND_REST_CERT="../cashu-regtest-enviroment/data/lnd-3/tls.cert"
-MINT_LND_REST_MACAROON="../cashu-regtest-enviroment/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon"
+MINT_LND_REST_CERT="../cashu-regtest/data/lnd-3/tls.cert"
+MINT_LND_REST_MACAROON="../cashu-regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon"
 
 
 MINT_CLNREST_URL=https://localhost:3010
-MINT_CLNREST_RUNE="../cashu-regtest-enviroment/data/clightning-2/rune"
-MINT_CLNREST_CERT="../cashu-regtest-enviroment/data/clightning-2/regtest/ca.pem"
+MINT_CLNREST_RUNE="../cashu-regtest/data/clightning-2/rune"
+MINT_CLNREST_CERT="../cashu-regtest/data/clightning-2/regtest/ca.pem"
 
 MINT_CORELIGHTNING_REST_URL=https://localhost:3001
-MINT_CORELIGHTNING_REST_MACAROON=../cashu-regtest-enviroment/data/clightning-2-rest/access.macaroon
-MINT_CORELIGHTNING_REST_CERT=../cashu-regtest-enviroment/data/clightning-2-rest/certificate.pem
+MINT_CORELIGHTNING_REST_MACAROON=../cashu-regtest/data/clightning-2-rest/access.macaroon
+MINT_CORELIGHTNING_REST_CERT=../cashu-regtest/data/clightning-2-rest/certificate.pem
 ```
 
 ### Profiling
