@@ -16,7 +16,9 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10"]
         poetry-version: ["1.8.5"]
-        mint-only-deprecated: ["false", "true"]
+        # Wallet v0 / deprecated mint API support was removed in https://github.com/cashubtc/nutshell/pull/814; deprecated-only CI runs are no longer valid.
+        # mint-only-deprecated: ["false", "true"]
+        mint-only-deprecated: ["false"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
