@@ -1,3 +1,5 @@
+VERSION := $(shell poetry version -s)
+
 ruff:
 	poetry run ruff check . --fix
 
@@ -16,6 +18,7 @@ clean:
 	find . -name ".DS_Store" -exec rm -f {} \; || true
 	rm -rf dist || true
 	rm -rf build || true
+	rm -rf docker-build || true
 
 package:
 	poetry export -f requirements.txt --without-hashes --output requirements.txt
@@ -64,13 +67,13 @@ install-pre-commit-hook:
 pre-commit:
 	poetry run pre-commit run --all-files
 
+.PHONY: docker-build
 docker-build:
 	rm -rf docker-build || true
 	mkdir -p docker-build
 	git clone . docker-build
 	cd docker-build
-	docker buildx build -f Dockerfile -t cashubtc/nutshell:0.15.0 --platform linux/amd64 .
-	# docker push cashubtc/nutshell:0.15.0
+	docker buildx build -f Dockerfile -t cashubtc/nutshell:$(VERSION) --platform linux/amd64 .
 
 clear-postgres:
 	psql cashu -c "DROP SCHEMA public CASCADE;" -c "CREATE SCHEMA public;" -c "GRANT ALL PRIVILEGES ON SCHEMA public TO cashu;"
