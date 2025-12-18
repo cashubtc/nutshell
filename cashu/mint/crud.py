@@ -1053,4 +1053,4 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"checking_id": checking_id},
         )
-        return [MeltQuote.from_row(row) for row in results] # type: ignore
+        return [MeltQuote.from_row(row) for row in results]  # type: ignore
