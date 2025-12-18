@@ -169,6 +169,14 @@ class QuoteNotPaidError(CashuError):
         super().__init__(self.detail, code=self.code)
 
 
+class QuoteAlreadyIssuedError(CashuError):
+    detail = "quote already issued"
+    code = 20002
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
 class LightningPaymentFailedError(CashuError):
     detail = "Lightning payment failed"
     code = 20004

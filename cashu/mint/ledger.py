@@ -34,6 +34,7 @@ from ..core.errors import (
     LightningError,
     LightningPaymentFailedError,
     NotAllowedError,
+    QuoteAlreadyIssuedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
@@ -492,7 +493,7 @@ class Ledger(
         if quote.pending:
             raise TransactionError("Mint quote already pending.")
         if quote.issued:
-            raise TransactionError("Mint quote already issued.")
+            raise QuoteAlreadyIssuedError()
         if not quote.paid:
             raise QuoteNotPaidError()
 
@@ -1216,4 +1217,3 @@ class Ledger(
                 )
 
             return signatures
-
