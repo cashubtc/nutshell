@@ -1172,7 +1172,7 @@ class Ledger(
             Tuple[str, PublicKey, int, PublicKey, PrivateKey, PrivateKey]
         ] = []
         for output in outputs:
-            B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
+            B_ = PublicKey(bytes.fromhex(output.B_))
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
@@ -1195,10 +1195,10 @@ class Ledger(
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
                 await self.crud.update_blinded_message_signature(
                     amount=amount,
-                    b_=B_.serialize().hex(),
-                    c_=C_.serialize().hex(),
-                    e=e.serialize(),
-                    s=s.serialize(),
+                    b_=B_.format().hex(),
+                    c_=C_.format().hex(),
+                    e=e.to_hex(),
+                    s=s.to_hex(),
                     db=self.db,
                     conn=conn,
                 )
@@ -1206,8 +1206,8 @@ class Ledger(
                 signature = BlindedSignature(
                     id=keyset_id,
                     amount=amount,
-                    C_=C_.serialize().hex(),
-                    dleq=DLEQ(e=e.serialize(), s=s.serialize()),
+                    C_=C_.format().hex(),
+                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
                 )
                 signatures.append(signature)
 

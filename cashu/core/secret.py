@@ -68,7 +68,7 @@ class Secret(BaseModel):
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
             "data": self.data,
-            "nonce": self.nonce or PrivateKey().serialize()[:32],
+            "nonce": self.nonce or PrivateKey().to_hex()[:32],
         }
         if self.tags.__root__:
             logger.debug(f"Serializing tags: {self.tags.__root__}")

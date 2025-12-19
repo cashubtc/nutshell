@@ -45,7 +45,7 @@ async def info() -> GetInfoResponse_deprecated:
     logger.trace("> GET /info")
     return GetInfoResponse_deprecated(
         name=settings.mint_info_name,
-        pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
+        pubkey=ledger.pubkey.format().hex() if ledger.pubkey else None,
         version=f"Nutshell/{settings.version}",
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,

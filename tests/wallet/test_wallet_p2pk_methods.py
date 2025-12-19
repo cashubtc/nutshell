@@ -4,6 +4,7 @@ import secrets
 
 import pytest
 import pytest_asyncio
+from coincurve import PublicKeyXOnly
 
 from cashu.core.base import P2PKWitness
 from cashu.core.crypto.secp import PrivateKey
@@ -43,7 +44,7 @@ async def wallet2():
         SERVER_ENDPOINT, "test_data/wallet_p2pk_methods_2", "wallet2"
     )
     await migrate_databases(wallet2.db, migrations)
-    wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
+    wallet2.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet2.load_mint()
     yield wallet2
 
@@ -111,9 +112,10 @@ async def test_signatures_proofs_sig_inputs(wallet1: Wallet):
         message = proof.secret.encode("utf-8")
         sig_bytes = bytes.fromhex(signature)
         # Make sure wallet has a pubkey
-        assert wallet1.private_key.pubkey is not None
-        assert wallet1.private_key.pubkey.schnorr_verify(
-            hashlib.sha256(message).digest(), sig_bytes, None, raw=True
+        assert wallet1.private_key.public_key is not None
+        xonly_pub = PublicKeyXOnly(wallet1.private_key.public_key.format()[1:])
+        assert xonly_pub.verify(  # type: ignore[attr-defined]
+            sig_bytes, hashlib.sha256(message).digest()
         )
 
 
@@ -133,9 +135,10 @@ async def test_schnorr_sign_message(wallet1: Wallet):
     # Verify signature is valid
     sig_bytes = bytes.fromhex(signature)
     # Make sure wallet has a pubkey
-    assert wallet1.private_key.pubkey is not None
-    assert wallet1.private_key.pubkey.schnorr_verify(
-        hashlib.sha256(message.encode("utf-8")).digest(), sig_bytes, None, raw=True
+    assert wallet1.private_key.public_key is not None
+    xonly_pub = PublicKeyXOnly(wallet1.private_key.public_key.format()[1:])
+    assert xonly_pub.verify(
+        sig_bytes, hashlib.sha256(message.encode("utf-8")).digest()
     )
 
 
@@ -306,8 +309,8 @@ async def test_filter_proofs_locked_to_our_pubkey(wallet1: Wallet, wallet2: Wall
     signed_proofs3 = wallet2.sign_p2pk_sig_inputs(signed_proofs3)
 
     # Ensure pubkeys are available
-    assert wallet1.private_key.pubkey is not None
-    assert wallet2.private_key.pubkey is not None
+    assert wallet1.private_key.public_key is not None
+    assert wallet2.private_key.public_key is not None
 
     # Filter using wallet1
     filtered1 = wallet1.filter_proofs_locked_to_our_pubkey(
@@ -351,9 +354,9 @@ async def test_sign_p2pk_sig_inputs(wallet1: Wallet):
     )
 
     # P2PK locked to a different pubkey - these won't be signed
-    garbage_pubkey_p = PrivateKey().pubkey
+    garbage_pubkey_p = PrivateKey().public_key
     assert garbage_pubkey_p is not None
-    garbage_pubkey = garbage_pubkey_p.serialize().hex()
+    garbage_pubkey = garbage_pubkey_p.format().hex()
     secret_lock_other = await wallet1.create_p2pk_lock(garbage_pubkey)
     _, p2pk_other_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 16, secret_lock=secret_lock_other
@@ -447,11 +450,11 @@ async def test_edge_cases(wallet1: Wallet, wallet2: Wallet):
         wallet1.add_signatures_to_proofs(proofs, signatures)
 
     # Case 3: SIG_ALL with proofs locked to different public keys
-    assert wallet1.private_key.pubkey is not None
-    garbage_pubkey = PrivateKey().pubkey
+    assert wallet1.private_key.public_key is not None
+    garbage_pubkey = PrivateKey().public_key
     assert garbage_pubkey is not None
     secret_lock_other = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(), sig_all=True
+        garbage_pubkey.format().hex(), sig_all=True
     )
     _, other_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 16, secret_lock=secret_lock_other

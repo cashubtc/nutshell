@@ -244,7 +244,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 id=keyset.id,
                 unit=keyset.unit,
                 public_keys={
-                    int(amt): PublicKey(bytes.fromhex(val), raw=True)
+                    int(amt): PublicKey(bytes.fromhex(val))
                     for amt, val in keyset.keys.items()
                 },
                 mint_url=self.url,
@@ -282,7 +282,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         keys = KeysResponse.parse_obj(keys_dict)
         this_keyset = keys.keysets[0]
         keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            int(amt): PublicKey(bytes.fromhex(val))
             for amt, val in this_keyset.keys.items()
         }
         keyset = WalletKeyset(
