@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from mnemonic import Mnemonic
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import MeltQuote, MeltQuoteState, MintKeyset, MintQuoteState, Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -560,7 +560,7 @@ async def testactivate_keyset_specific_keyset(wallet1: Wallet):
 async def test_keyset_disappears_from_mint(wallet1: Wallet):
     """
     Ensure that when a mint no longer returns a previously known keyset,
-    it gets removed from the wallet's keyset list.
+    it gets removed from the wallet's keyset list and marked as deleted in the DB.
     """
 
     # Manually seed the wallet (avoids 'seed not set')
@@ -573,11 +573,14 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     # Initialize private key using this dummy seed
     await wallet1._init_private_key()
 
+    # Save the old keyset ID for verification
+    old_keyset_id = list(wallet1.keysets.keys())[0]
+
     # Mock backend response so only one keyset remains active on the mint
     wallet1._get_keysets = AsyncMock(
         return_value=[
             MintKeyset(
-                id=list(wallet1.keysets.values())[0].id,
+                id=old_keyset_id,
                 unit="sat",
                 active=True,
                 derivation_path="m/0'/0'/0'",
@@ -593,6 +596,10 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
 
     after = len(wallet1.keysets)
 
-    # ✅ Assert keyset count remains consistent
+    # Assert keyset count remains consistent
     assert after == 1
     assert after <= before
+
+    # Assert that the old keyset (if disappeared) is marked deleted in DB
+    all_keysets_db = await get_keysets(db=wallet1.db, id=old_keyset_id)
+    assert all_keysets_db[0].deleted is False  # the one we kept is not deleted

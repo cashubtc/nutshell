@@ -300,17 +300,17 @@ class Wallet(
         # load all keysets of this mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
-        # mark keysets that disappeared from mint as inactive
+        # mark keysets that disappeared from mint as deleted
         active_ids = set(mint_keysets_dict.keys())
         local_ids = {key.id for key in keysets_in_db}
         keysets_in_db_dict = {k.id: k for k in keysets_in_db}
 
         for key_id in (local_ids - active_ids):
-            logger.debug(
-                f"Keyset {key_id} no longer reported by mint, marking as inactive"
-            )
             ks = keysets_in_db_dict[key_id]
-            ks.active = False
+            logger.debug(
+                f"Keyset {key_id} no longer reported by mint, marking as deleted"
+            )
+            ks.deleted = True
             await update_keyset(keyset=ks, db=self.db)
 
         # db is empty, get all keys from the mint and store them
@@ -368,9 +368,8 @@ class Wallet(
         # RE-FETCH after all DB updates so we see the final active 
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
-        # only ACTIVE keysets for this unit go into memory
         keysets_active_unit = [
-            k for k in keysets_in_db if k.unit == self.unit and k.active
+            k for k in keysets_in_db if k.unit == self.unit and k.active and not k.deleted
         ]
         self.keysets = {k.id: k for k in keysets_active_unit}
         logger.trace(
