@@ -716,6 +716,7 @@ class WalletKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
+    deleted: bool = False 
     input_fee_ppk: int = 0
 
     def __init__(
@@ -728,12 +729,14 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
+        deleted=False,
         input_fee_ppk=0,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = bool(active)
+        self.deleted = bool(deleted)
         self.mint_url = mint_url
         self.input_fee_ppk = input_fee_ppk
 
@@ -779,6 +782,7 @@ class WalletKeyset:
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
             active=row["active"],
+            deleted=row.get("deleted", False),
             input_fee_ppk=row["input_fee_ppk"],
         )
 
