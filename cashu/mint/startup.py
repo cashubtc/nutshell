@@ -12,6 +12,7 @@ import cashu.mint.management_rpc.management_rpc as management_rpc
 
 from ..core.base import Method, Unit
 from ..core.db import Database
+from ..core.errors import BackendConnectionError
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -122,9 +123,21 @@ async def start_auth():
 async def start_mint():
     await migrate_databases(ledger.db, mint_migrations)
     logger.info("Starting mint ledger.")
-    await ledger.startup_ledger()
-    logger.info("Mint started.")
-    # asyncio.create_task(rotate_keys())
+    try:
+        await ledger.startup_ledger()
+        logger.info("Mint started.")
+        # asyncio.create_task(rotate_keys())
+    except BackendConnectionError as e:
+        logger.error(f"Failed to start mint: {e}")
+        # Re-raise the error to be caught by the app's error handler
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during mint startup: {e}")
+        # Wrap other exceptions in BackendConnectionError for consistent handling
+        raise BackendConnectionError(
+            backend_name="Unknown",
+            error_message=f"Unexpected error during mint startup: {str(e)}",
+        )
 
 
 async def shutdown_mint():
