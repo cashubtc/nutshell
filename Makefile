@@ -27,6 +27,10 @@ test:
 	DEBUG=true \
 	poetry run pytest tests --cov-report xml --cov cashu
 
+bench:
+	PYTHONUNBUFFERED=1	\
+	poetry run pytest benchmarks --benchmark-only
+
 test-wallet:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
