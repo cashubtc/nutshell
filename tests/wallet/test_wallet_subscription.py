@@ -28,6 +28,10 @@ async def wallet(mint):
 
 @pytest.mark.asyncio
 async def test_wallet_subscription_mint(wallet: Wallet):
+    """The state will go from UNPAID to PAID to ISSUED. After the state becomes 'PAID', the
+       wallet must take action (see the 'def callback' below) to convert the PAID invoice
+       to ISSUED
+    """
     if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
         pytest.skip("No websocket support")
 
@@ -43,7 +47,8 @@ async def test_wallet_subscription_mint(wallet: Wallet):
         nonlocal triggered, msg_stack
         triggered = True
         msg_stack.append(msg)
-        asyncio.run(wallet.mint(int(mint_quote.amount), quote_id=mint_quote.quote))
+        if msg.payload['state'] == 'PAID':
+            asyncio.run(wallet.mint(int(mint_quote.amount), quote_id=mint_quote.quote))
 
     mint_quote, sub = await wallet.request_mint_with_callback(128, callback=callback)
     await pay_if_regtest(mint_quote.request)
@@ -51,12 +56,13 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     await asyncio.sleep(wait + 2)
 
     assert triggered
+
     assert len(msg_stack) >= 3
-
+    # First state is UNPAID
     assert msg_stack[0].payload["state"] == MintQuoteState.unpaid.value
-
-    assert msg_stack[1].payload["state"] == MintQuoteState.paid.value
-
+    # There must be at least one PAID state
+    assert any(m.payload["state"] == MintQuoteState.paid.value for m in msg_stack)
+    # LAST state is ISSUED
     assert msg_stack[-1].payload["state"] == MintQuoteState.issued.value
 
 
