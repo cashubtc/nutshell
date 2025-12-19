@@ -6,9 +6,11 @@ services:
     container_name: mint
     ports:
       - "3338:3338"
+    env_file:
+      - .env
     environment:
-      - MINT_BACKEND_BOLT11_SAT=FakeWallet
-      - MINT_LISTEN_HOST=0.0.0.0
-      - MINT_LISTEN_PORT=3338
-      - MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+      - MINT_BACKEND_BOLT11_SAT=${MINT_BACKEND_BOLT11_SAT:-FakeWallet}
+      - MINT_LISTEN_HOST=${MINT_LISTEN_HOST:-0.0.0.0}
+      - MINT_LISTEN_PORT=${MINT_LISTEN_PORT:-3338}
+      - MINT_PRIVATE_KEY=${MINT_PRIVATE_KEY:-TEST_PRIVATE_KEY}
     command: ["poetry", "run", "mint"]
