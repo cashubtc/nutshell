@@ -782,7 +782,7 @@ class WalletKeyset:
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
             active=row["active"],
-            deleted=row.get("deleted", False),
+            deleted=dict(row).get("deleted", False), # use existing value, or false if column doesn't exist of older DB.
             input_fee_ppk=row["input_fee_ppk"],
         )
 
