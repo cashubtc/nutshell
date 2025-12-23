@@ -195,6 +195,9 @@ class Ledger(
         logger.debug("Shutting down regular tasks")
         for task in self.regular_tasks:
             task.cancel()
+        logger.debug("Shutting down background melt tasks")
+        for task in self.background_tasks:
+            task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
