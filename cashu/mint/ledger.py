@@ -938,6 +938,7 @@ class Ledger(
         proofs: List[Proof],
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
+        prefer_async: bool = False,
     ) -> PostMeltQuoteResponse:
         """Invalidates proofs and pays a Lightning invoice.
 
@@ -945,6 +946,8 @@ class Ledger(
             proofs (List[Proof]): Proofs provided for paying the Lightning invoice
             quote (str): ID of the melt quote.
             outputs (Optional[List[BlindedMessage]]): Blank outputs for returning overpaid fees to the wallet.
+            prefer_async (bool): If set to true, the melt operation will occur in a different task while
+                the request will return immediately with the melt quote state set to PENDING.
 
         Raises:
             e: Lightning payment unsuccessful
