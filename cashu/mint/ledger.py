@@ -214,6 +214,74 @@ class Ledger(
             quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
+    def _create_background_task(self, coro) -> asyncio.Task:
+        """Creates a background task with proper lifecycle management and error handling.
+
+        Args:
+            coro: The coroutine to run as a background task
+
+        Returns:
+            asyncio.Task: The created task
+        """
+        task = asyncio.create_task(coro)
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
+        return task
+
+    async def _execute_payment_and_finalize_with_error_handling(
+        self,
+        mq: MeltQuote,
+        proofs_copy: List[Proof],
+        prev_state: MeltQuoteState,
+        fee_reserve_provided_local: int,
+        unit_local: Unit,
+        method_local: Method,
+        outputs: Optional[List[BlindedMessage]],
+        _execute_payment_and_finalize,
+    ):
+        """Wrapper for _execute_payment_and_finalize with comprehensive error handling.
+
+        This ensures that background task failures are properly logged and handled,
+        including updating melt quote state appropriately on unhandled errors.
+        """
+        try:
+            return await _execute_payment_and_finalize(
+                mq,
+                proofs_copy,
+                prev_state,
+                fee_reserve_provided_local,
+                unit_local,
+                method_local,
+                outputs,
+            )
+        except Exception as e:
+            logger.error(
+                f"Background melt task failed for quote {mq.quote}: {e}. "
+                f"Rolling back proofs and setting quote to unpaid."
+            )
+            try:
+                # Rollback operations on unhandled background task errors
+                await self.db_write._unset_proofs_pending(
+                    proofs_copy, keysets=self.keysets
+                )
+                await self.db_write._unset_melt_quote_pending(
+                    quote=mq, state=prev_state
+                )
+                await self.crud.delete_blinded_messages_melt_id(
+                    melt_id=mq.quote, db=self.db
+                )
+                logger.info(
+                    f"Successfully rolled back melt quote {mq.quote} after background task failure"
+                )
+            except Exception as rollback_error:
+                logger.critical(
+                    f"Failed to rollback melt quote {mq.quote} after background task failure. "
+                    f"Manual intervention required. Original error: {e}. Rollback error: {rollback_error}"
+                )
+                # Disable melt operations as a safety measure
+                self.disable_melt = True
+            raise
+
     # ------- ECASH -------
 
     async def _invalidate_proofs(
