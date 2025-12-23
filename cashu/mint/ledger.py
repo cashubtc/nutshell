@@ -297,26 +297,31 @@ class Ledger(
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        # Group proofs by keyset_id to calculate fees per keyset
-        proofs_by_keyset: Dict[str, List[Proof]] = {}
-        for p in proofs:
-            proofs_by_keyset.setdefault(p.id, []).append(p)
 
         async with self.db.get_connection(conn) as conn:
+            inserted_proofs: List[Proof] = []
+
             # store in db
             for p in proofs:
                 logger.trace(f"Invalidating proof {p.Y}")
-                await self.crud.invalidate_proof(
+                inserted = await self.crud.invalidate_proof(
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
-                await self.crud.bump_keyset_balance(
-                    keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
-                )
-                await self.events.submit(
-                    ProofState(
-                        Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
+                if inserted:
+                    inserted_proofs.append(p)
+                    await self.crud.bump_keyset_balance(
+                        keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
                     )
-                )
+                    await self.events.submit(
+                        ProofState(
+                            Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
+                        )
+                    )
+
+            # Group proofs by keyset_id to calculate fees per keyset
+            proofs_by_keyset: Dict[str, List[Proof]] = {}
+            for p in inserted_proofs:
+                proofs_by_keyset.setdefault(p.id, []).append(p)
 
             # Calculate and increment fees for each keyset separately
             for keyset_id, keyset_proofs in proofs_by_keyset.items():
