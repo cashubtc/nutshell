@@ -106,6 +106,7 @@ class Ledger(
         self.invoice_listener_tasks: List[asyncio.Task] = []
         self.watchdog_tasks: List[asyncio.Task] = []
         self.regular_tasks: List[asyncio.Task] = []
+        self.background_tasks: set = set()
 
         if not seed:
             raise Exception("seed not set")
