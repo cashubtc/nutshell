@@ -1135,7 +1135,7 @@ class Ledger(
             logger.debug(
                 f"Melt quote {melt_quote.quote} is being finalized. prefer_async={prefer_async}"
             )
-            melt_quote = await _execute_payment_and_finalize_with_error_handling(
+            melt_quote = await self._execute_payment_and_finalize_with_error_handling(
                 melt_quote,
                 proofs,
                 previous_state,
