@@ -76,7 +76,7 @@ class AuthLedgerCrud(ABC):
         proof: Proof,
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> None: ...
+    ) -> bool: ...
 
     @abstractmethod
     async def get_proofs_pending(
@@ -274,13 +274,15 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         proof: Proof,
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> None:
-        await (conn or db).execute(
+    ) -> bool:
+        result = await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('proofs_used')}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
-            """,
+            ON CONFLICT(y) DO NOTHING
+            """
+            ,
             {
                 "amount": proof.amount,
                 "c": proof.C,
@@ -292,6 +294,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "melt_quote": quote_id,
             },
         )
+        return bool(getattr(result, "rowcount", 0))
 
     async def get_all_melt_quotes_from_pending_proofs(
         self,
