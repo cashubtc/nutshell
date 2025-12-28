@@ -668,7 +668,7 @@ class Ledger(
             created_time=int(time.time()),
             expiry=expiry,
         )
-        await self.crud.store_melt_quote(quote=quote, db=self.db)
+        await self.db_write._store_melt_quote(quote=quote, db=self.db)
         await self.events.submit(quote)
 
         return PostMeltQuoteResponse(

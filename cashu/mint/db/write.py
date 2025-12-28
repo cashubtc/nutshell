@@ -283,3 +283,27 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not found.")
             melt_quote.state = state
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
+
+    async def _store_melt_quote(
+        self,
+        quote: MeltQuote
+    ):
+        async with self.db.get_connection(
+            lock_table="melt_quotes",
+            lock_select_statement=f"checking_id='{quote.checking_id}'",
+        ) as conn:
+            # get all melt quotes with same checking_id from db and check if there is one already pending or paid
+            quotes_db = await self.crud.get_melt_quotes_by_checking_id(
+                checking_id=quote.checking_id, db=self.db, conn=conn
+            )
+            if any(
+                [
+                    quote.state == MeltQuoteState.pending
+                    or quote.state == MeltQuoteState.paid
+                    for quote in quotes_db
+                ]
+            ):
+                raise TransactionError("Melt quote already paid or pending.")
+            
+            # store the melt quote
+            await self.crud.store_melt_quote(quote=quote, db=self.db, conn=conn)
