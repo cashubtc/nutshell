@@ -4,7 +4,7 @@ import click
 import uvicorn
 from click import Context
 
-from ..core.settings import settings, VERSION
+from ..core.settings import VERSION, settings
 
 
 @click.command(
