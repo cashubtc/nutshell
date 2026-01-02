@@ -318,11 +318,13 @@ def get_melt_quote(ctx: Context, quote_id: str):
 @click.argument("unit")
 @click.argument("input_fee_ppk", required=False, type=int)
 @click.argument("max_order", required=False, type=int)
+@click.argument("final_expiry", required=False, type=int)
 @click.pass_context
-def rotate_next_keyset(ctx: Context, unit: str, input_fee_ppk: Optional[int], max_order: Optional[int]):
+def rotate_next_keyset(ctx: Context, unit: str, input_fee_ppk: Optional[int], max_order: Optional[int], final_expiry: Optional[int]):
     stub = ctx.obj['STUB']
     try:
-        keyset = stub.RotateNextKeyset(management_pb2.RotateNextKeysetRequest(unit=unit, max_order=max_order, input_fee_ppk=input_fee_ppk))
-        click.echo(f"New keyset successfully created:\n{keyset.id = }\n{keyset.unit = }\n{keyset.max_order = }\n{keyset.input_fee_ppk = }")
+        print(f"{final_expiry = }")
+        keyset = stub.RotateNextKeyset(management_pb2.RotateNextKeysetRequest(unit=unit, max_order=max_order, input_fee_ppk=input_fee_ppk, final_expiry=final_expiry))
+        click.echo(f"New keyset successfully created:\n{keyset.id = }\n{keyset.unit = }\n{keyset.max_order = }\n{keyset.input_fee_ppk = }\n{keyset.final_expiry}")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
