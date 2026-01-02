@@ -772,7 +772,7 @@ async def test_melt_quote_pending_prevents_second_quote_for_same_invoice(
     """
     # 1. Prepare wallet with some funds
     mint_quote = await wallet.request_mint(128)
-    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await pay_if_regtest(mint_quote.quote)
     await wallet.mint(128, quote_id=mint_quote.quote)
 
     # 2. Setup fakewallet to returns PENDING for payments
