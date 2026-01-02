@@ -314,6 +314,8 @@ message RotateNextKeysetRequest {
     optional uint32 max_order = 2;
     // Optional: The input fee per kilobyte for the new keyset.
     optional uint64 input_fee_ppk = 3;
+    // Optional: The final expiry of the keyset, as a unix epoch in seconds
+    optional uint64 final_expiry = 4;
 }
 
 // RotateNextKeysetResponse contains information about the newly rotated keyset.
@@ -326,6 +328,8 @@ message RotateNextKeysetResponse {
     uint32 max_order = 3;
     // The input fee per kilobyte for the new keyset.
     uint64 input_fee_ppk = 4;
+    // Optional: The final expiry of the keyset, as a unix epoch in seconds
+    optional uint64 final_expiry = 5;
 }
 
 // UpdateLightningFeeRequest is used to update the lightning network fee configuration.
