@@ -761,3 +761,37 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
         ),
         "Melt quote already paid or pending.",
     )
+
+@pytest.mark.asyncio
+async def test_melt_quote_pending_prevents_second_quote_for_same_invoice(
+    ledger: Ledger, wallet: Wallet
+):
+    """
+    Test that when a melt payment is PENDING, trying to get another melt quote
+    for the same invoice (same checking_id) results in an error if one is already pending.
+    """
+    # 1. Prepare wallet with some funds
+    mint_quote = await wallet.request_mint(128)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await wallet.mint(128, quote_id=mint_quote.quote)
+
+    # 2. Setup fakewallet to returns PENDING for payments
+    settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
+    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    
+    invoice = ("lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+        if is_fake else get_real_invoice()["payment_request"]
+    )
+    # 3. Get first melt quote and pay it
+    quote1 = await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice))
+    
+    # This should put it into PENDING state
+    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote1.quote)
+    assert melt_response.state == MeltQuoteState.pending.value
+    
+    # 4. Try to get a second melt quote for the same invoice. 
+    # The ledger should prevent this if the first one is still pending.
+    await assert_err(
+        ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice)),
+        "Melt quote already paid or pending.",
+    )
