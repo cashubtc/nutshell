@@ -763,7 +763,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
 
 @pytest.mark.asyncio
-@pytest.skipif(is_regtest, "Can't reliably perform this test on regtest")
+@pytest.mark.skip(is_regtest, "Can't reliably perform this test on regtest")
 async def test_melt_quote_pending_prevents_second_quote_for_same_invoice(
     ledger: Ledger, wallet: Wallet
 ):
