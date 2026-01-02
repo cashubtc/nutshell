@@ -83,6 +83,7 @@ async def keys():
                     active=keyset.active,
                     input_fee_ppk=keyset.input_fee_ppk,
                     keys={k: v for k, v in keyset.public_keys_hex.items()},
+                    final_expiry=keyset.final_expiry,  # NEW: Include final expiry to align with NUT-02 PR #182
                 )
             )
     return KeysResponse(keysets=keyset_for_response)
@@ -121,6 +122,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
         active=keyset.active,
         input_fee_ppk=keyset.input_fee_ppk,
         keys={k: v for k, v in keyset.public_keys_hex.items()},
+        final_expiry=keyset.final_expiry,
     )
     return KeysResponse(keysets=[keyset_for_response])
 
@@ -143,6 +145,7 @@ async def keysets() -> KeysetsResponse:
                 unit=keyset.unit.name,
                 active=keyset.active,
                 input_fee_ppk=keyset.input_fee_ppk,
+                final_expiry=keyset.final_expiry,
             )
         )
     return KeysetsResponse(keysets=keysets)

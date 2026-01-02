@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 import os
 from typing import List, Optional, Tuple
 
@@ -7,6 +8,7 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
+from ..core.crypto.keys import get_keyset_id_version
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
@@ -109,10 +111,37 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
     ) -> Tuple[bytes, bytes, str]:
         """
         Determinstically generates two secrets (one as the secret message,
-        one as the blinding factor).
+        one as the blinding factor) using versioned derivation.
+        
+        NUT-13: Uses keyset version to determine derivation method:
+        - Version "base64" (ancient, pre-0.15.0): BIP32 derivation
+        - Version "00" (legacy): BIP32 derivation 
+        - Version "01" (v2): HMAC-SHA256 derivation
+        """
+        keyset_id = keyset_id or self.keyset_id
+        
+        # Get keyset version to determine derivation method
+        version = get_keyset_id_version(keyset_id)
+        logger.trace(f"Keyset {keyset_id} version: {version}")
+        
+        if version == "base64" or version == "00":
+            # BIP32 derivation for base64 (ancient) and version 00 keysets
+            return await self._derive_secret_bip32(counter, keyset_id)
+        elif version == "01":
+            # HMAC-SHA256 derivation for version 01 keysets (per NUT-13 test vectors)
+            return await self._derive_secret_hmac_sha256(counter, keyset_id)
+        else:
+            raise ValueError(f"Unsupported keyset version: {version}")
+
+    async def _derive_secret_bip32(
+        self, counter: int, keyset_id: str
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        Derives secret and blinding factor using BIP32 derivation (legacy method).
+        Used for keyset version "00".
         """
         assert self.bip32, "BIP32 not initialized yet."
-        keyset_id = keyset_id or self.keyset_id
+        
         # integer keyset id modulo max number of bip32 child keys
         try:
             keyest_id_int = int.from_bytes(bytes.fromhex(keyset_id), "big") % (
@@ -126,17 +155,37 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             )
             # END: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
 
-        logger.trace(f"keyset id: {keyset_id} becomes {keyest_id_int}")
+        logger.trace(f"BIP32: keyset id: {keyset_id} becomes {keyest_id_int}")
         token_derivation_path = f"m/129372'/0'/{keyest_id_int}'/{counter}'"
         # for secret
         secret_derivation_path = f"{token_derivation_path}/0"
-        logger.trace(f"secret derivation path: {secret_derivation_path}")
+        logger.trace(f"BIP32: secret derivation path: {secret_derivation_path}")
         secret = self.bip32.get_privkey_from_path(secret_derivation_path)
         # blinding factor
         r_derivation_path = f"{token_derivation_path}/1"
-        logger.trace(f"r derivation path: {r_derivation_path}")
+        logger.trace(f"BIP32: r derivation path: {r_derivation_path}")
         r = self.bip32.get_privkey_from_path(r_derivation_path)
         return secret, r, token_derivation_path
+
+    async def _derive_secret_hmac_sha256(
+        self, counter: int, keyset_id: str
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "01".
+        NUT-13 (updated):
+        - message = b"Cashu_KDF_HMAC_SHA256" || keyset_id_bytes || counter_bytes
+        - secret  = HMAC_SHA256(seed, message || 0x00)
+        - r       = HMAC_SHA256(seed, message || 0x01)
+        - counter_bytes is 8-byte unsigned big-endian
+        """
+        assert self.seed, "Seed not initialized yet."
+        keyset_id_bytes = bytes.fromhex(keyset_id)
+        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
+        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+        secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
+        r = hmac.new(self.seed, base + b"\x01", hashlib.sha256).digest()
+        derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
+        return secret, r, derivation_path
 
     async def generate_n_secrets(
         self, n: int = 1, skip_bump: bool = False

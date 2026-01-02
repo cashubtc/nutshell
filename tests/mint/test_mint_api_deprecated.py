@@ -60,7 +60,7 @@ async def test_api_keysets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/keys/009a1f293253e41e")
+    response = httpx.get(f"{BASE_URL}/keys/016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     assert response.json() == {
@@ -148,7 +148,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["promises"]) == 2
     assert result["promises"][0]["amount"] == 32
     assert result["promises"][1]["amount"] == 32
-    assert result["promises"][0]["id"] == "009a1f293253e41e"
+    assert result["promises"][0]["id"] == "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
     assert result["promises"][0]["dleq"]
     assert "e" in result["promises"][0]["dleq"]
     assert "s" in result["promises"][0]["dleq"]

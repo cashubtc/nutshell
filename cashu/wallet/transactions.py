@@ -30,13 +30,23 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         # for each proof, find the keyset with the same id and sum the fees
-        fees = max(
-            (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000, 0
-        )
+        fees_ppk = []
+        for p in proofs:
+            if p.id in self.keysets:
+                fees_ppk.append(self.keysets[p.id].input_fee_ppk)
+            else:
+                raise Exception(f"no keyset with ID: {p.id}")
+        fees = max((sum(fees_ppk) + 999) // 1000, 0)
         return fees
 
     def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
-        return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
+        fees_ppk = []
+        for p in proofs:
+            if p.id in self.keysets:
+                fees_ppk.append(self.keysets[p.id].input_fee_ppk)
+            else:
+                raise Exception(f"no keyset with ID: {p.id}")
+        return sum(fees_ppk)
 
     def coinselect(
         self,

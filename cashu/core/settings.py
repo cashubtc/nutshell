@@ -91,7 +91,6 @@ class MintWatchdogSettings(MintSettings):
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
 
-
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
