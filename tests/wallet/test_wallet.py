@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
-from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
+from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
 from cashu.wallet.crud import (
@@ -545,9 +545,9 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == ["009a1f293253e41e"]
+    assert list(wallet1.keysets.keys()) == ["016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
-    await wallet1.activate_keyset(keyset_id="009a1f293253e41e")
+    await wallet1.activate_keyset(keyset_id="016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1")
     # expect deprecated keyset id to be present
     await assert_err(
         wallet1.activate_keyset(keyset_id="nonexistent"),
