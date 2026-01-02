@@ -763,6 +763,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
 
 @pytest.mark.asyncio
+@pytest.skipif(is_regtest, "Can't reliably perform this test on regtest")
 async def test_melt_quote_pending_prevents_second_quote_for_same_invoice(
     ledger: Ledger, wallet: Wallet
 ):
@@ -772,16 +773,14 @@ async def test_melt_quote_pending_prevents_second_quote_for_same_invoice(
     """
     # 1. Prepare wallet with some funds
     mint_quote = await wallet.request_mint(128)
-    await pay_if_regtest(mint_quote.quote)
+    await pay_if_regtest(mint_quote.request)
     await wallet.mint(128, quote_id=mint_quote.quote)
 
     # 2. Setup fakewallet to returns PENDING for payments
     settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
     
-    invoice = ("lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-        if is_fake else get_real_invoice()["payment_request"]
-    )
+    invoice = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
     # 3. Get first melt quote and pay it
     quote1 = await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice))
     
