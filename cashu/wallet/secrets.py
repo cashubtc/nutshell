@@ -174,7 +174,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
             rs = [
-                PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths
+                PrivateKey(s[1]) for s in secrets_rs_derivationpaths
             ]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
@@ -208,7 +208,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
+        rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
         return secrets, rs, derivation_paths
 

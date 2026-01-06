@@ -945,10 +945,10 @@ class Wallet(
             ), f"Keyset {proof.id} not known, can not verify DLEQ."
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C), raw=True),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+                C=PublicKey(bytes.fromhex(proof.C)),
+                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
+                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
+                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
                 A=self.keysets[proof.id].public_keys[proof.amount],
             ):
                 raise Exception("DLEQ proof invalid.")
@@ -985,7 +985,7 @@ class Wallet(
                 # we don't have the keyset for this promise, so we load all keysets from the mint
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
-            C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
+            C_ = PublicKey(bytes.fromhex(promise.C_))
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
@@ -1002,7 +1002,7 @@ class Wallet(
             proof = Proof(
                 id=promise.id,
                 amount=promise.amount,
-                C=C.serialize().hex(),
+                C=C.format().hex(),
                 secret=secret,
                 derivation_path=path,
             )
@@ -1010,13 +1010,13 @@ class Wallet(
             # if the mint returned a dleq proof, we add it to the proof
             if promise.dleq:
                 proof.dleq = DLEQWallet(
-                    e=promise.dleq.e, s=promise.dleq.s, r=r.serialize()
+                    e=promise.dleq.e, s=promise.dleq.s, r=r.to_hex()
                 )
 
             proofs.append(proof)
 
             logger.trace(
-                f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
+                f"Created proof: {proof}, r: {r.to_hex()} out of promise {promise}"
             )
 
         # DLEQ verify
@@ -1068,12 +1068,13 @@ class Wallet(
                 B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
+            assert r
             rs_return.append(r)
             output = BlindedMessage(
-                amount=amount, B_=B_.serialize().hex(), id=keyset_id
+                amount=amount, B_=B_.format().hex(), id=keyset_id
             )
             outputs.append(output)
-            logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
+            logger.trace(f"Constructing output: {output}, r: {r.to_hex()}")
 
         return outputs, rs_return
 

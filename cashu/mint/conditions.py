@@ -152,7 +152,7 @@ class LedgerSpendingConditions:
                 logger.trace(f"Message: {message_to_sign}")
                 if verify_schnorr_signature(
                     message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
+                    pubkey=PublicKey(bytes.fromhex(pubkey)),
                     signature=bytes.fromhex(input_sig),
                 ):
                     n_pubkeys_with_valid_sigs += 1
@@ -361,7 +361,7 @@ class LedgerSpendingConditions:
             for i, s in enumerate(signatures):
                 if verify_schnorr_signature(
                     message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(p), raw=True),
+                    pubkey=PublicKey(bytes.fromhex(p)),
                     signature=bytes.fromhex(s),
                 ):
                     n_valid_sigs += 1

@@ -90,7 +90,7 @@ async def test_decrypt_seed():
     await ledger.init_keysets()
     assert ledger.keyset.seed == SEED
     private_key_1 = (
-        ledger.keysets[list(ledger.keysets.keys())[0]].private_keys[1].serialize()
+        ledger.keysets[list(ledger.keysets.keys())[0]].private_keys[1].to_hex()
     )
     assert (
         private_key_1
@@ -99,7 +99,7 @@ async def test_decrypt_seed():
     pubkeys = ledger.keysets[list(ledger.keysets.keys())[0]].public_keys
     assert pubkeys
     assert (
-        pubkeys[1].serialize().hex()
+        pubkeys[1].format().hex()
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
 
@@ -116,7 +116,7 @@ async def test_decrypt_seed():
     private_key_1 = (
         ledger_encrypted.keysets[list(ledger_encrypted.keysets.keys())[0]]
         .private_keys[1]
-        .serialize()
+        .to_hex()
     )
     assert (
         private_key_1
@@ -127,7 +127,7 @@ async def test_decrypt_seed():
     ].public_keys
     assert pubkeys_encrypted
     assert (
-        pubkeys_encrypted[1].serialize().hex()
+        pubkeys_encrypted[1].format().hex()
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
 

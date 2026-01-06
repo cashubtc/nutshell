@@ -227,7 +227,7 @@ class WalletAuth(Wallet):
 
         amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-        rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]
+        rs = [PrivateKey(os.urandom(32)) for _ in amounts]
         derivation_paths = ["" for _ in amounts]
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
