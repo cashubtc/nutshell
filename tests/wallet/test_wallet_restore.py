@@ -99,7 +99,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     for s in secrets1:
         print(f'"{s}",')
     for r in rs1:
-        print(f'"{r.private_key.hex()}",')
+        print(f'"{r.to_hex()}",')
     assert secrets1 == [
         "c5aed7e4e2f1ec01f8a97006c5eb0089e4e53ca26362d074c4a1650f015621ad",
         "5b8fc42ee617d9c6c778840b6a42e658d86f39c67b83a010852c90e18b449338",
