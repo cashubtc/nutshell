@@ -78,14 +78,14 @@ def derive_keyset_id_v2(
     sorted_keys = dict(sorted(keys.items()))
     
     # concatenate all public keys to one byte array with fixed separator between keys
-    keyset_id_bytes = b"".join([p.format() for p in sorted_keys.values()])
+    keyset_id_bytes = b":".join([p.format() + b":" + a.to_bytes(8, "big") for (a, p) in sorted_keys.items()])
     
     # add the lowercase unit string to the byte array (no separator necessary since we hash)
-    keyset_id_bytes += f"unit:{unit}".encode("utf-8")
+    keyset_id_bytes += f":unit:{unit}".encode("utf-8")
     
     # only include final_expiry if provided (per spec discussion)
     if final_expiry is not None:
-        keyset_id_bytes += f"final_expiry:{final_expiry}".encode("utf-8")
+        keyset_id_bytes += f":final_expiry:{final_expiry}".encode("utf-8")
     
     # SHA256 hash the concatenated byte array
     hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()

@@ -430,7 +430,7 @@ async def test_keyset_id_v2_test_vectors():
         8: PublicKey(bytes.fromhex("02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528")),
     }
     keyset_id_v2_vec1 = derive_keyset_id_v2(keys_v2_vec1, Unit.sat, 2059210353)
-    assert keyset_id_v2_vec1 == "01adc013fa9d85171586660abab27579888611659d357bc86bc09cb26eee8bc035", \
+    assert keyset_id_v2_vec1 == "019d288ec71731d2010045a659726e615b023a95aa685cc003562b8c7b86070f24", \
         "V2 vector 1 keyset ID mismatch"
     
     # V2 Vectors 2 and 3: Large keyset (all max_order amounts)
@@ -503,12 +503,12 @@ async def test_keyset_id_v2_test_vectors():
     
     # V2 Vector 2: Unit=sat, final_expiry=2059210353 (with large keyset)
     keyset_id_v2_vec2 = derive_keyset_id_v2(keys_v2_vec23, Unit.sat, 2059210353)
-    assert keyset_id_v2_vec2 == "0125bc634e270ad7e937af5b957f8396bb627d73f6e1fd2ffe4294c26b57daf9e0", \
+    assert keyset_id_v2_vec2 == "01c8f72f6eed7a549c5309977770a4a3401eaf578d04b3432febbf6eb6f23883b7", \
         "V2 vector 2 keyset ID mismatch"
     
     # V2 Vector 3: Unit=sat, no final_expiry (with large keyset)
     keyset_id_v2_vec3 = derive_keyset_id_v2(keys_v2_vec23, Unit.sat)
-    assert keyset_id_v2_vec3 == "016d72f27c8d22808ad66d1959b3dab83af17e2510db7ffd57d2365d9eec3ced75", \
+    assert keyset_id_v2_vec3 == "01d4e519810a7b0357982602fcb31434c3fcff0a091daf62c728673ce8dba6be5e", \
         "V2 vector 3 keyset ID mismatch"
     
     # Verify all are v2 format
