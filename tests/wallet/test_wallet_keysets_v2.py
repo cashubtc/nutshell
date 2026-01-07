@@ -19,6 +19,7 @@ from cashu.core.crypto.keys import (
     is_base64_keyset_id,
     is_keyset_id_v2,
 )
+from cashu.core.crypto.secp import PrivateKey
 from cashu.wallet.keyset_manager import KeysetManager
 from cashu.wallet.proofs import WalletProofs
 from cashu.wallet.secrets import WalletSecrets
@@ -168,7 +169,6 @@ async def test_token_v4_short_keyset_expansion():
 async def test_token_serialization_with_short_ids():
     """Test token serialization uses short keyset IDs for v2 keysets."""
     from cashu.core.base import Proof, WalletKeyset
-    from cashu.core.crypto.secp import PublicKey
     from cashu.wallet.proofs import WalletProofs
 
     # Mock keyset data - use the actual constant
