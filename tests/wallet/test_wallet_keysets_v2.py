@@ -188,7 +188,7 @@ async def test_token_serialization_with_short_ids():
     # Prepare WalletProofs with a minimal keyset map
     wp = WalletProofs()
     # Minimal WalletKeyset (unit and mint_url are required by _make_tokenv4)
-    mock_keyset = WalletKeyset(public_keys={64: PublicKey()}, unit="sat", id=full_keyset_id, mint_url="https://mint.example.com")
+    mock_keyset = WalletKeyset(public_keys={64: PrivateKey(b"\x00" * 31 + b"\x02").public_key}, unit="sat", id=full_keyset_id, mint_url="https://mint.example.com")
     wp.keysets = {full_keyset_id: mock_keyset}
 
     # Create token; implementation should switch v2 full ID -> short ID
