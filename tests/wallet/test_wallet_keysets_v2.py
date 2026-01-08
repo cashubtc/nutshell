@@ -27,7 +27,7 @@ from cashu.wallet.secrets import WalletSecrets
 # Reference mnemonic from NUT-13 test vectors
 MNEMONIC = "half depart obvious quality work element tank gorilla view sugar picture humble"
 LEGACY_V1_KEYSET_ID = "009a1f293253e41e"
-V2_KEYSET_ID = "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
+V2_KEYSET_ID = "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 BASE64_KEYSET_ID = "yjzQhxghPdrr"
 
 
@@ -265,7 +265,7 @@ async def test_secret_derivation_version_routing():
 async def test_short_keyset_id_round_trip():
     """Test round-trip conversion between full and short keyset IDs."""
     full_id = V2_KEYSET_ID
-    expected_short = "016d1ce32977b2d8"
+    expected_short = "01d8a63077d0a51f"
     
     # Test derivation
     short_id = derive_keyset_short_id(full_id)
@@ -324,7 +324,7 @@ async def test_proof_short_id_expansion():
     full_keyset_id = V2_KEYSET_ID
     short_keyset_id = derive_keyset_short_id(full_keyset_id)
     assert len(short_keyset_id) == 16, "Short ID should be 16 chars"
-    assert short_keyset_id == "016d1ce32977b2d8", "Short ID mismatch"
+    assert short_keyset_id == "01d8a63077d0a51f", "Short ID mismatch"
     
     # Mock a keyset in the wallet
     mock_keyset = WalletKeyset(
