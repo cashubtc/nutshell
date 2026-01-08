@@ -55,6 +55,7 @@ ruff = "^0.7.1"
 mypy = "^1.13.0"
 pre-commit = "^4.0.1"
 types-redis = "^4.6.0"
+hypothesis = "^6.150.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
