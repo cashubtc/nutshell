@@ -60,13 +60,13 @@ def test_tokenv3_serialize_example_token_nut00():
                 "proofs": [
                     {
                         "amount": 2,
-                        "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
+                        "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
                         "secret": "407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837",
                         "C": "02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea",
                     },
                     {
                         "amount": 8,
-                        "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
+                        "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
                         "secret": "fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be",
                         "C": "029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059",
                     },
@@ -78,8 +78,8 @@ def test_tokenv3_serialize_example_token_nut00():
     }
     tokenObj = TokenV3.parse_obj(token_dict)
     # NOTE: The serialized token here is different from the example in NUT-00 because the order of keys in the JSON is different in our seiralization
-    encoded_token = "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAxNmQxY2UzMjk3N2IyZDhhMzQwNDc5MzM2YTc3ZGMxOGRiOGRhM2U3ODJjNTA4M2E2ZjMzZDcwYmMxNTgwNTZkMSIsImFtb3VudCI6Miwic2VjcmV0IjoiNDA3OTE1YmMyMTJiZTYxYTc3ZTNlNmQyYWViNGM3Mjc5ODBiZGE1MWNkMDZhNmFmYzI5ZTI4NjE3NjhhNzgzNyIsIkMiOiIwMmJjOTA5Nzk5N2Q4MWFmYjJjYzczNDZiNWU0MzQ1YTkzNDZiZDJhNTA2ZWI3OTU4NTk4YTcyZjBjZjg1MTYzZWEifSx7ImlkIjoiMDE2ZDFjZTMyOTc3YjJkOGEzNDA0NzkzMzZhNzdkYzE4ZGI4ZGEzZTc4MmM1MDgzYTZmMzNkNzBiYzE1ODA1NmQxIiwiYW1vdW50Ijo4LCJzZWNyZXQiOiJmZTE1MTA5MzE0ZTYxZDc3NTZiMGY4ZWUwZjIzYTYyNGFjYWEzZjRlMDQyZjYxNDMzYzcyOGM3MDU3YjkzMWJlIiwiQyI6IjAyOWU4ZTUwNTBiODkwYTdkNmMwOTY4ZGIxNmJjMWQ1ZDVmYTA0MGVhMWRlMjg0ZjZlYzY5ZDYxMjk5ZjY3MTA1OSJ9XSwibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4In1dLCJtZW1vIjoiVGhhbmsgeW91LiIsInVuaXQiOiJzYXQifQ"
-    encoded_token_nut00 = "cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJhbW91bnQiOjIsImlkIjoiMDE2ZDFjZTMyOTc3YjJkOGEzNDA0NzkzMzZhNzdkYzE4ZGI4ZGEzZTc4MmM1MDgzYTZmMzNkNzBiYzE1ODA1NmQxIiwic2VjcmV0IjoiNDA3OTE1YmMyMTJiZTYxYTc3ZTNlNmQyYWViNGM3Mjc5ODBiZGE1MWNkMDZhNmFmYzI5ZTI4NjE3NjhhNzgzNyIsIkMiOiIwMmJjOTA5Nzk5N2Q4MWFmYjJjYzczNDZiNWU0MzQ1YTkzNDZiZDJhNTA2ZWI3OTU4NTk4YTcyZjBjZjg1MTYzZWEifSx7ImFtb3VudCI6OCwiaWQiOiIwMTZkMWNlMzI5NzdiMmQ4YTM0MDQ3OTMzNmE3N2RjMThkYjhkYTNlNzgyYzUwODNhNmYzM2Q3MGJjMTU4MDU2ZDEiLCJzZWNyZXQiOiJmZTE1MTA5MzE0ZTYxZDc3NTZiMGY4ZWUwZjIzYTYyNGFjYWEzZjRlMDQyZjYxNDMzYzcyOGM3MDU3YjkzMWJlIiwiQyI6IjAyOWU4ZTUwNTBiODkwYTdkNmMwOTY4ZGIxNmJjMWQ1ZDVmYTA0MGVhMWRlMjg0ZjZlYzY5ZDYxMjk5ZjY3MTA1OSJ9XX1dLCJ1bml0Ijoic2F0IiwibWVtbyI6IlRoYW5rIHlvdS4ifQ"
+    encoded_token = "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAxZDhhNjMwNzdkMGE1MWY5ODU1ZjA2NjQwOTc4MmZmY2IzMjJkYzhhMjI2NTI5MTg2NTIyMWVkMDZjMDM5ZjZiYyIsImFtb3VudCI6Miwic2VjcmV0IjoiNDA3OTE1YmMyMTJiZTYxYTc3ZTNlNmQyYWViNGM3Mjc5ODBiZGE1MWNkMDZhNmFmYzI5ZTI4NjE3NjhhNzgzNyIsIkMiOiIwMmJjOTA5Nzk5N2Q4MWFmYjJjYzczNDZiNWU0MzQ1YTkzNDZiZDJhNTA2ZWI3OTU4NTk4YTcyZjBjZjg1MTYzZWEifSx7ImlkIjoiMDFkOGE2MzA3N2QwYTUxZjk4NTVmMDY2NDA5NzgyZmZjYjMyMmRjOGEyMjY1MjkxODY1MjIxZWQwNmMwMzlmNmJjIiwiYW1vdW50Ijo4LCJzZWNyZXQiOiJmZTE1MTA5MzE0ZTYxZDc3NTZiMGY4ZWUwZjIzYTYyNGFjYWEzZjRlMDQyZjYxNDMzYzcyOGM3MDU3YjkzMWJlIiwiQyI6IjAyOWU4ZTUwNTBiODkwYTdkNmMwOTY4ZGIxNmJjMWQ1ZDVmYTA0MGVhMWRlMjg0ZjZlYzY5ZDYxMjk5ZjY3MTA1OSJ9XSwibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4In1dLCJtZW1vIjoiVGhhbmsgeW91LiIsInVuaXQiOiJzYXQifQ"
+    encoded_token_nut00 = "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAxZDhhNjMwNzdkMGE1MWY5ODU1ZjA2NjQwOTc4MmZmY2IzMjJkYzhhMjI2NTI5MTg2NTIyMWVkMDZjMDM5ZjZiYyIsImFtb3VudCI6Miwic2VjcmV0IjoiNDA3OTE1YmMyMTJiZTYxYTc3ZTNlNmQyYWViNGM3Mjc5ODBiZGE1MWNkMDZhNmFmYzI5ZTI4NjE3NjhhNzgzNyIsIkMiOiIwMmJjOTA5Nzk5N2Q4MWFmYjJjYzczNDZiNWU0MzQ1YTkzNDZiZDJhNTA2ZWI3OTU4NTk4YTcyZjBjZjg1MTYzZWEifSx7ImlkIjoiMDFkOGE2MzA3N2QwYTUxZjk4NTVmMDY2NDA5NzgyZmZjYjMyMmRjOGEyMjY1MjkxODY1MjIxZWQwNmMwMzlmNmJjIiwiYW1vdW50Ijo4LCJzZWNyZXQiOiJmZTE1MTA5MzE0ZTYxZDc3NTZiMGY4ZWUwZjIzYTYyNGFjYWEzZjRlMDQyZjYxNDMzYzcyOGM3MDU3YjkzMWJlIiwiQyI6IjAyOWU4ZTUwNTBiODkwYTdkNmMwOTY4ZGIxNmJjMWQ1ZDVmYTA0MGVhMWRlMjg0ZjZlYzY5ZDYxMjk5ZjY3MTA1OSJ9XSwibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4In1dLCJtZW1vIjoiVGhhbmsgeW91LiIsInVuaXQiOiJzYXQifQ"
     assert (
         tokenObj.serialize() == encoded_token
         # NUT-00 example:
@@ -237,7 +237,7 @@ def test_parse_token_v3_v4_base64_keyset_id():
                 "proofs": [
                     {
                         "amount": 2,
-                        "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
+                        "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
                         "secret": "407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837",
                         "C": "02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea",
                     },

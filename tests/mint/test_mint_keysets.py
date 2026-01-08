@@ -19,7 +19,7 @@ from tests.mint.test_mint_init import (
 )
 
 V1_KEYSET_ID = "009a1f293253e41e"
-V2_KEYSET_ID = "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
+V2_KEYSET_ID = "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 
 
 async def assert_err(f, msg):
