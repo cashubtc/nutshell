@@ -62,7 +62,7 @@ def derive_keyset_id_v2(
     keys: Dict[int, PublicKey], 
     unit: str, 
     final_expiry: Optional[int] = None,
-    input_fee_ppk: Optional[int] = 0,
+    input_fee_ppk: int = 0,
 ) -> str:
     """
     Deterministic derivation keyset_id v2 from set of public keys (version 01).
