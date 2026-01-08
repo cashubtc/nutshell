@@ -61,7 +61,8 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
 def derive_keyset_id_v2(
     keys: Dict[int, PublicKey], 
     unit: str, 
-    final_expiry: Optional[int] = None
+    final_expiry: Optional[int] = None,
+    input_fee_ppk: Optional[int] = 0,
 ) -> str:
     """
     Deterministic derivation keyset_id v2 from set of public keys (version 01).
@@ -78,10 +79,14 @@ def derive_keyset_id_v2(
     sorted_keys = dict(sorted(keys.items()))
     
     # concatenate all public keys to one byte array with fixed separator between keys
-    keyset_id_bytes = b",".join([p.format() + b":" + a.to_bytes(8, "big") for (a, p) in sorted_keys.items()])
+    keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
     
     # add the lowercase unit string to the byte array (no separator necessary since we hash)
     keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
+
+    # add the input_fee_ppk if > 0
+    if input_fee_ppk > 0:
+        keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
     
     # only include final_expiry if provided (per spec discussion)
     if final_expiry is not None:

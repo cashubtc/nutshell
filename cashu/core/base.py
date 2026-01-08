@@ -987,7 +987,7 @@ class MintKeyset:
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry)
+                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
