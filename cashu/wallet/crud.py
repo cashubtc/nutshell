@@ -39,7 +39,7 @@ async def store_proof(
             "secret": str(proof.secret),
             "time_created": int(time.time()),
             "derivation_path": proof.derivation_path,
-            "dleq": json.dumps(proof.dleq.dict()) if proof.dleq else "",
+            "dleq": json.dumps(proof.dleq.model_dump()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
         },
@@ -390,7 +390,7 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.dict() for c in quote.change]) if quote.change else ""
+                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
             ),
         },
     )
@@ -617,4 +617,4 @@ async def get_mint_by_url(
         """,
         {"url": url},
     )
-    return WalletMint.parse_obj(dict(row)) if row else None
+    return WalletMint.model_validate(dict(row)) if row else None

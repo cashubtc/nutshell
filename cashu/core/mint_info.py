@@ -28,7 +28,7 @@ class MintInfo(BaseModel):
 
     @classmethod
     def from_json_str(cls, json_str: str):
-        return cls.parse_obj(json.loads(json_str))
+        return cls.model_validate(json.loads(json_str))
 
     def supports_nut(self, nut: int) -> bool:
         if self.nuts is None:
@@ -43,7 +43,7 @@ class MintInfo(BaseModel):
             return False
 
         for entry in nut_15["methods"]:
-            entry_obj = Nut15MppSupport.parse_obj(entry)
+            entry_obj = Nut15MppSupport.model_validate(entry)
             if entry_obj.method == method and entry_obj.unit == unit.name:
                 return True
 
@@ -83,7 +83,7 @@ class MintInfo(BaseModel):
         if not self.requires_clear_auth():
             return []
         return [
-            MintInfoProtectedEndpoint.parse_obj(e)
+            MintInfoProtectedEndpoint.model_validate(e)
             for e in self.nuts[CLEAR_AUTH_NUT]["protected_endpoints"]
         ]
 
@@ -113,7 +113,7 @@ class MintInfo(BaseModel):
         if not self.requires_blind_auth():
             return []
         return [
-            MintInfoProtectedEndpoint.parse_obj(e)
+            MintInfoProtectedEndpoint.model_validate(e)
             for e in self.nuts[BLIND_AUTH_NUT]["protected_endpoints"]
         ]
 
