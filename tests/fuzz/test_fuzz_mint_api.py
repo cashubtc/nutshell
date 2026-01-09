@@ -1,21 +1,15 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from hypothesis import given, strategies as st
+from hypothesis import HealthCheck, given
 from hypothesis import settings as hypothesis_settings
-from hypothesis import HealthCheck
-from cashu.mint.app import app
+from hypothesis import strategies as st
+
 from cashu.core.models import (
-    PostMintQuoteRequest,
-    PostMintRequest,
-    PostMeltQuoteRequest,
-    PostMeltRequest,
-    PostSwapRequest,
-    PostCheckStateRequest,
-    PostRestoreRequest,
     BlindedMessage,
-    Proof
+    Proof,
 )
+from cashu.mint.app import app
 
 # Define strategies
 

@@ -1,29 +1,27 @@
 
-import json
-import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
+
 from cashu.core.base import (
-    Proof,
+    DLEQ,
     BlindedMessage,
     BlindedSignature,
-    MeltQuote,
-    MintQuote,
-    MeltQuoteState,
-    MintQuoteState,
     DLEQWallet,
-    DLEQ,
-    WalletKeyset, 
-    MintKeyset, 
-    TokenV3, 
-    TokenV3Token, 
-    TokenV4, 
-    TokenV4Token, 
-    TokenV4Proof, 
-    TokenV4DLEQ, 
-    Unit
+    MeltQuote,
+    MeltQuoteState,
+    MintKeyset,
+    MintQuote,
+    MintQuoteState,
+    Proof,
+    TokenV3,
+    TokenV3Token,
+    TokenV4,
+    Unit,
+    WalletKeyset,
 )
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.secret import Secret, Tags
-from cashu.core.crypto.secp import PrivateKey, PublicKey
+
 
 # Helpers
 def hex_string(min_len=66, max_len=66):
