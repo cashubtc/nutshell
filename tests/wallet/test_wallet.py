@@ -461,7 +461,7 @@ async def test_split_race_condition(wallet1: Wallet):
             wallet1.split(wallet1.proofs, 20),
             wallet1.split(wallet1.proofs, 20),
         ),
-        ["proofs are pending.", "already spent."],
+        ["proofs are pending.", "already spent"],
     )
 
 

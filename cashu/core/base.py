@@ -133,8 +133,8 @@ class Proof(BaseModel):
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet
     send_id: Union[None, str] = ""
-    time_created: Union[None, str] = ""
-    time_reserved: Union[None, str] = ""
+    time_created: Union[None, str, int] = ""
+    time_reserved: Union[None, str, int] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
     mint_id: Union[None, str] = (
         None  # holds the id of the mint operation that created this proof
