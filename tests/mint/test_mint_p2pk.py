@@ -120,7 +120,7 @@ async def test_ledger_verify_p2pk_signature_validation(
     # Create a fake witness with an incorrect signature
     fake_signature = "0" * 128  # Just a fake 64-byte hex string
     for proof in send_proofs:
-        proof.witness = P2PKWitness(signatures=[fake_signature]).json()
+        proof.witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
 
     # The swap should fail because the signatures are invalid
     await assert_err(
@@ -150,7 +150,7 @@ async def test_ledger_verify_incorrect_signature(wallet1: Wallet1, ledger: Ledge
     # Create a fake witness with an incorrect signature
     fake_signature = "0" * 128  # Just a fake 64-byte hex string
     for proof in send_proofs:
-        proof.witness = P2PKWitness(signatures=[fake_signature]).json()
+        proof.witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
 
     # Generate outputs for the swap
     output_amounts = [32]
@@ -198,7 +198,7 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
     signature = wallet1.schnorr_sign_message(message_to_sign)
 
     # Add the signature to the first proof only (as required for SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
 
     # The swap should succeed because the SIG_ALL signature is valid
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
@@ -236,7 +236,7 @@ async def test_ledger_verify_incorrect_sigall_signature(
 
     # Create a fake witness with an incorrect signature
     fake_signature = "0" * 128  # Just a fake 64-byte hex string
-    send_proofs[0].witness = P2PKWitness(signatures=[fake_signature]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
 
     # The swap should fail because the SIG_ALL signature is invalid
     await assert_err(
