@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, RootModel, model_validator
+from pydantic import BaseModel, ConfigDict, RootModel, model_validator
 from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
@@ -1026,8 +1026,7 @@ class TokenV3(Token):
     _memo: Optional[str] = None
     _unit: str = "sat"
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def proofs(self) -> List[Proof]:

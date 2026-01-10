@@ -384,7 +384,7 @@ async def invoice(
         if paid:
             return
         try:
-            ws_quote_resp = PostMintQuoteResponse.parse_obj(msg.payload)
+            ws_quote_resp = PostMintQuoteResponse.model_validate(msg.payload)
         except Exception:
             return
         logger.debug(
@@ -1106,7 +1106,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                 if not mint_info_obj:
                     print("        - Mint information not available.")
                     continue
-                mint_info = mint_info_obj.dict()
+                mint_info = mint_info_obj.model_dump()
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
