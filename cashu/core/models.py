@@ -103,6 +103,8 @@ class GetInfoResponse_deprecated(BaseModel):
 class KeysResponseKeyset(BaseModel):
     id: str
     unit: str
+    active: bool
+    input_fee_ppk: Optional[int] = None
     keys: Dict[int, str]
 
 
