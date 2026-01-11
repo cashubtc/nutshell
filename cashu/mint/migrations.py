@@ -1197,3 +1197,9 @@ async def m030_remove_paid_from_mint_quote(db: Database):
             await conn.execute("ALTER TABLE mint_quotes_new RENAME TO mint_quotes;")
 
             await conn.execute("PRAGMA foreign_keys=ON;")
+
+        elif conn.type == "POSTGRES":
+            # Postgres supports dropping columns directly
+            await conn.execute(
+                "ALTER TABLE mint_quotes DROP COLUMN IF EXISTS paid;"
+            )
