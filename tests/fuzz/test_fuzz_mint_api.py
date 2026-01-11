@@ -10,6 +10,7 @@ from cashu.core.models import (
     Proof,
 )
 from cashu.mint.app import app
+from tests.helpers import is_deprecated_api_only
 
 # Define strategies
 
@@ -46,6 +47,9 @@ proof_strategy = st.builds(
 def client():
     with TestClient(app) as c:
         yield c
+
+# Apply skip marker to all tests in this module if deprecated API is enabled
+pytestmark = pytest.mark.skipif(is_deprecated_api_only, reason="Deprecated API enabled")
 
 # Fuzzers
 
