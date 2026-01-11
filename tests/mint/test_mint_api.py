@@ -70,6 +70,8 @@ async def test_api_keys(ledger: Ledger):
             {
                 "id": keyset.id,
                 "unit": keyset.unit.name,
+                "active": keyset.active,
+                "input_fee_ppk": keyset.input_fee_ppk,
                 "keys": {
                     str(k): v.format().hex()
                     for k, v in keyset.public_keys.items()  # type: ignore
@@ -122,6 +124,8 @@ async def test_api_keyset_keys(ledger: Ledger):
             {
                 "id": "009a1f293253e41e",
                 "unit": "sat",
+                "active": True,
+                "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
                     for k, v in ledger.keysets["009a1f293253e41e"].public_keys.items()  # type: ignore
@@ -146,6 +150,8 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
             {
                 "id": "009a1f293253e41e",
                 "unit": "sat",
+                "active": True,
+                "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
                     for k, v in ledger.keysets["009a1f293253e41e"].public_keys.items()  # type: ignore
