@@ -65,7 +65,7 @@ def test_fuzz_mint_quote(client, unit, amount, description, pubkey):
     }
     try:
         response = client.post("/v1/mint/quote/bolt11", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -84,7 +84,7 @@ def test_fuzz_mint(client, quote, outputs, signature):
     }
     try:
         response = client.post("/v1/mint/bolt11", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -102,7 +102,7 @@ def test_fuzz_melt_quote(client, unit, request, options):
     }
     try:
         response = client.post("/v1/melt/quote/bolt11", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -123,7 +123,7 @@ def test_fuzz_melt(client, quote, inputs, outputs):
     }
     try:
         response = client.post("/v1/melt/bolt11", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -141,7 +141,7 @@ def test_fuzz_swap(client, inputs, outputs):
     }
     try:
         response = client.post("/v1/swap", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -155,7 +155,7 @@ def test_fuzz_checkstate(client, Ys):
     }
     try:
         response = client.post("/v1/checkstate", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -170,7 +170,7 @@ def test_fuzz_restore(client, outputs):
     }
     try:
         response = client.post("/v1/restore", json=payload)
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -181,7 +181,7 @@ def test_fuzz_restore(client, outputs):
 def test_fuzz_keys_keyset_id(client, keyset_id):
     try:
         response = client.get(f"/v1/keys/{keyset_id}")
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -190,7 +190,7 @@ def test_fuzz_keys_keyset_id(client, keyset_id):
 def test_fuzz_mint_quote_get(client, quote):
     try:
         response = client.get(f"/v1/mint/quote/bolt11/{quote}")
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
@@ -199,7 +199,7 @@ def test_fuzz_mint_quote_get(client, quote):
 def test_fuzz_melt_quote_get(client, quote):
     try:
         response = client.get(f"/v1/melt/quote/bolt11/{quote}")
-        assert response.status_code in [200, 400, 404, 422, 503]
+        assert response.status_code in [400, 404, 422, 503]
     except Exception:
         pass
 
