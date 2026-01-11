@@ -47,7 +47,7 @@ def test_fuzz_secret_serialization(kind, data, tags_list, nonce):
     # Check properties (ignoring nonce for equality if it was None originally and generated during serialization)
     assert deserialized.kind == kind
     assert deserialized.data == data
-    assert deserialized.tags.__root__ == tags_list
+    assert deserialized.tags.root == tags_list
     
     # Verify equality method
     assert secret == deserialized
