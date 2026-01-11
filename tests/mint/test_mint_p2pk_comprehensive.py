@@ -139,7 +139,7 @@ async def test_p2pk_sig_all_valid(wallet1: Wallet, wallet2: Wallet, ledger: Ledg
     signature = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add the signature to the first proof only (since it's SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
 
     # Swap should succeed
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
@@ -166,7 +166,7 @@ async def test_p2pk_sig_all_invalid(wallet1: Wallet, wallet2: Wallet, ledger: Le
 
     # Add an invalid signature
     fake_signature = "0" * 128  # Just a fake 64-byte hex string
-    send_proofs[0].witness = P2PKWitness(signatures=[fake_signature]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
 
     # Swap should fail
     await assert_err(
@@ -211,7 +211,7 @@ async def test_p2pk_sig_all_mixed(wallet1: Wallet, wallet2: Wallet, ledger: Ledg
     mixed_proofs = signed_proofs_sig_all + signed_proofs_sig_inputs
 
     # Add an invalid signature to the SIG_ALL proof
-    mixed_proofs[0].witness = P2PKWitness(signatures=["0" * 128]).json()
+    mixed_proofs[0].witness = P2PKWitness(signatures=["0" * 128]).model_dump_json()
 
     # Try to use the mixed proofs (should fail)
     await assert_err(
@@ -677,7 +677,7 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     signature2 = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add both signatures to the first proof only (SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).model_dump_json()
 
     # This should succeed with 2 valid signatures
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)

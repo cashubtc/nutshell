@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, ConfigDict, RootModel, model_validator
 from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
@@ -67,12 +67,11 @@ class ProofState(LedgerEvent):
     state: ProofSpentState
     witness: Optional[str] = None
 
-    @root_validator()
-    def check_witness(cls, values):
-        state, witness = values.get("state"), values.get("witness")
-        if witness is not None and state != ProofSpentState.spent:
+    @model_validator(mode="after")
+    def check_witness(self):
+        if self.witness is not None and self.state != ProofSpentState.spent:
             raise ValueError('Witness can only be set if the spent state is "SPENT"')
-        return values
+        return self
 
     @property
     def identifier(self) -> str:
@@ -134,8 +133,8 @@ class Proof(BaseModel):
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet
     send_id: Union[None, str] = ""
-    time_created: Union[None, str] = ""
-    time_reserved: Union[None, str] = ""
+    time_created: Union[None, str, int] = ""
+    time_reserved: Union[None, str, int] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
     mint_id: Union[None, str] = (
         None  # holds the id of the mint operation that created this proof
@@ -168,7 +167,7 @@ class Proof(BaseModel):
         # optional fields
         if include_dleq:
             assert self.dleq, "DLEQ proof is missing"
-            return_dict["dleq"] = self.dleq.dict()  # type: ignore
+            return_dict["dleq"] = self.dleq.model_dump()  # type: ignore
 
         if self.witness:
             return_dict["witness"] = self.witness
@@ -217,9 +216,9 @@ class Proof(BaseModel):
             return None
 
 
-class Proofs(BaseModel):
+class Proofs(RootModel):
     # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
+    root: List[Proof]
 
 
 class BlindedMessage(BaseModel):
@@ -1027,8 +1026,7 @@ class TokenV3(Token):
     _memo: Optional[str] = None
     _unit: str = "sat"
 
-    class Config:
-        allow_population_by_field_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def proofs(self) -> List[Proof]:
@@ -1285,7 +1283,7 @@ class TokenV4(Token):
         return cls(t=cls.t, d=cls.d, m=cls.m, u=cls.u)
 
     def serialize_to_dict(self, include_dleq=False):
-        return_dict: Dict[str, Any] = dict(t=[t.dict() for t in self.t])
+        return_dict: Dict[str, Any] = dict(t=[t.model_dump() for t in self.t])
         # strip dleq if needed
         if not include_dleq:
             for token in return_dict["t"]:
@@ -1392,7 +1390,7 @@ class AuthProof(BaseModel):
         return cls(id=proof.id, secret=proof.secret, C=proof.C)
 
     def to_base64(self):
-        serialize_dict = self.dict()
+        serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
         return (
             self.prefix + base64.b64encode(json.dumps(serialize_dict).encode()).decode()
@@ -1404,7 +1402,7 @@ class AuthProof(BaseModel):
             f"Token prefix not valid. Expected {cls.prefix}."
         )
         base64_str = base64_str[len(cls.prefix) :]
-        return cls.parse_obj(json.loads(base64.b64decode(base64_str).decode()))
+        return cls.model_validate(json.loads(base64.b64decode(base64_str).decode()))
 
     def to_proof(self):
         return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)
@@ -1413,7 +1411,7 @@ class AuthProof(BaseModel):
 class WalletMint(BaseModel):
     url: str
     info: str
-    updated: Optional[str] = None
+    updated: Optional[Union[str, int]] = None
     access_token: Optional[str] = None
     refresh_token: Optional[str] = None
     username: Optional[str] = None

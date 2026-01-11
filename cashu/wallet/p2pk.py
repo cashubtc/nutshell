@@ -221,9 +221,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                     if proof_signatures and s not in proof_signatures:
                         p.witness = P2PKWitness(
                             signatures=proof_signatures + [s]
-                        ).json()
+                        ).model_dump_json()
                 else:
-                    p.witness = P2PKWitness(signatures=[s]).json()
+                    p.witness = P2PKWitness(signatures=[s]).model_dump_json()
             elif Secret.deserialize(p.secret).kind == SecretKind.HTLC.value:
                 # if there are already signatures, append
                 if p.witness and HTLCWitness.from_witness(p.witness).signatures:
@@ -232,15 +232,15 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                     if proof_signatures and s not in proof_signatures:
                         p.witness = HTLCWitness(
                             preimage=witness.preimage, signatures=proof_signatures + [s]
-                        ).json()
+                        ).model_dump_json()
                 else:
                     if p.witness:
                         witness = HTLCWitness.from_witness(p.witness)
                         p.witness = HTLCWitness(
                             preimage=witness.preimage, signatures=[s]
-                        ).json()
+                        ).model_dump_json()
                     else:
-                        p.witness = HTLCWitness(signatures=[s]).json()
+                        p.witness = HTLCWitness(signatures=[s]).model_dump_json()
             else:
                 raise Exception("Secret kind not supported")
 

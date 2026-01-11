@@ -21,7 +21,7 @@ class P2PKSecret(Secret):
         assert SecretKind(secret.kind) == SecretKind.P2PK, "Secret is not a P2PK secret"
         # NOTE: exclude tags in .dict() because it doesn't deserialize it properly
         # need to add it back in manually with tags=secret.tags
-        return cls(**secret.dict(exclude={"tags"}), tags=secret.tags)
+        return cls(**secret.model_dump(exclude={"tags"}), tags=secret.tags)
 
     @property
     def locktime(self) -> Union[None, int]:

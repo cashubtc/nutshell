@@ -286,11 +286,11 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).dict()
-        ).dict(),
+            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump()
+        ).model_dump(),
     )
 
-    websocket_mock.send_text.assert_called_with(notification.json())
+    websocket_mock.send_text.assert_called_with(notification.model_dump_json())
 
     # remove subscription
     client.remove_subscription("subId")

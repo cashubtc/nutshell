@@ -247,7 +247,7 @@ class Wallet(
                 raise Exception("Cannot reload mint info offline.")
             logger.debug("Forcing reload of mint info.")
             mint_info_resp = await self._get_info()
-            self.mint_info = MintInfo(**mint_info_resp.dict())
+            self.mint_info = MintInfo(**mint_info_resp.model_dump())
 
         wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
         if not wallet_mint_db:
@@ -256,7 +256,7 @@ class Wallet(
                 await store_mint(
                     db=self.db,
                     mint=WalletMint(
-                        url=self.url, info=json.dumps(self.mint_info.dict())
+                        url=self.url, info=json.dumps(self.mint_info.model_dump())
                     ),
                 )
             else:
@@ -264,24 +264,24 @@ class Wallet(
                     return None
             logger.debug("Loading mint info from mint.")
             mint_info_resp = await self._get_info()
-            self.mint_info = MintInfo(**mint_info_resp.dict())
+            self.mint_info = MintInfo(**mint_info_resp.model_dump())
             if not wallet_mint_db:
                 logger.debug("Storing mint info in db.")
                 await store_mint(
                     db=self.db,
                     mint=WalletMint(
-                        url=self.url, info=json.dumps(self.mint_info.dict())
+                        url=self.url, info=json.dumps(self.mint_info.model_dump())
                     ),
                 )
             return self.mint_info
         elif (
             self.mint_info
-            and not json.dumps(self.mint_info.dict()) == wallet_mint_db.info
+            and not json.dumps(self.mint_info.model_dump()) == wallet_mint_db.info
         ):
             logger.debug("Updating mint info in db.")
             await update_mint(
                 db=self.db,
-                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.dict())),
+                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.model_dump())),
             )
             return self.mint_info
         else:

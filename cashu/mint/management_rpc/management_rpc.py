@@ -205,8 +205,8 @@ async def serve(ledger: Ledger):
         logger.info(f"Starting mTLS Management RPC service on {host}:{port}")
         # Load server credentials
         server_credentials = grpc.ssl_server_credentials(
-            ((open(mint_rpc_key_path, 'rb').read(), open(mint_rpc_cert_path, 'rb').read()),),
-            root_certificates=open(mint_rpc_ca_path, 'rb').read(),
+            ((open(mint_rpc_key_path, 'rb').read(), open(mint_rpc_cert_path, 'rb').read()),), # type: ignore
+            root_certificates=open(mint_rpc_ca_path, 'rb').read(), # type: ignore
             require_client_auth=True,
         )
         server.add_secure_port(f"{host}:{port}", server_credentials)

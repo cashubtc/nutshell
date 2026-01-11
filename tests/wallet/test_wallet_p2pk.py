@@ -399,7 +399,7 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
         coincurve_signature, msg
     )
     # add coincurve signature, and the wallet2 signature will be added during .redeem
-    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).model_dump_json()
 
     # here we add the signatures of wallet2
     await assert_err(

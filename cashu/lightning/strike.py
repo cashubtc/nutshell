@@ -195,7 +195,7 @@ class StrikeWallet(LightningBackend):
         except Exception:
             return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
-        invoice = StrikeCreateInvoiceResponse.parse_obj(r.json())
+        invoice = StrikeCreateInvoiceResponse.model_validate(r.json())
 
         try:
             payload = {"descriptionHash": secrets.token_hex(32)}
@@ -206,7 +206,7 @@ class StrikeWallet(LightningBackend):
         except Exception:
             return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
-        quote = InvoiceQuoteResponse.parse_obj(r2.json())
+        quote = InvoiceQuoteResponse.model_validate(r2.json())
         return InvoiceResponse(
             ok=True, checking_id=invoice.invoiceId, payment_request=quote.lnInvoice
         )
@@ -225,7 +225,7 @@ class StrikeWallet(LightningBackend):
         except Exception:
             error_message = r.json()["data"]["message"]
             raise Exception(error_message)
-        strike_quote = StrikePaymentQuoteResponse.parse_obj(r.json())
+        strike_quote = StrikePaymentQuoteResponse.model_validate(r.json())
         if strike_quote.amount.currency != self.currency:
             raise Exception(
                 f"Expected currency {self.currency}, got {strike_quote.amount.currency}"
@@ -256,7 +256,7 @@ class StrikeWallet(LightningBackend):
                 result=PaymentResult.FAILED, error_message=error_message
             )
 
-        payment = StrikePaymentResponse.parse_obj(r.json())
+        payment = StrikePaymentResponse.model_validate(r.json())
         fee = self.fee_int(payment, self.unit)
         return PaymentResponse(
             result=PAYMENT_RESULT_MAP[payment.state],
@@ -277,7 +277,7 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.get(url=f"{self.endpoint}/v1/payments/{checking_id}")
             r.raise_for_status()
-            payment = StrikePaymentResponse.parse_obj(r.json())
+            payment = StrikePaymentResponse.model_validate(r.json())
             fee = self.fee_int(payment, self.unit)
             return PaymentStatus(
                 result=PAYMENT_RESULT_MAP[payment.state],
