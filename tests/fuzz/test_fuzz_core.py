@@ -69,8 +69,8 @@ def test_fuzz_blinded_message(amount, id, B_, C_):
     assert bm.C_ == C_
     
     # To dict and back (via Pydantic)
-    d = bm.dict()
-    bm2 = BlindedMessage.parse_obj(d)
+    d = bm.model_dump()
+    bm2 = BlindedMessage.model_validate(d)
     assert bm == bm2
 
 @given(
@@ -90,7 +90,7 @@ def test_fuzz_blinded_signature(id, amount, C_, dleq_e, dleq_s):
     assert bs.dleq == dleq
     
     # Round trip
-    bs2 = BlindedSignature.parse_obj(bs.dict())
+    bs2 = BlindedSignature.model_validate(bs.model_dump())
     assert bs == bs2
 
 @given(

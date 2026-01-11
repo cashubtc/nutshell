@@ -76,7 +76,7 @@ def test_fuzz_mint_quote(client, unit, amount, description, pubkey):
     signature=st.one_of(st.none(), hex_string())
 )
 def test_fuzz_mint(client, quote, outputs, signature):
-    outputs_json = [o.dict() for o in outputs]
+    outputs_json = [o.model_dump() for o in outputs]
     payload = {
         "quote": quote,
         "outputs": outputs_json,
@@ -113,8 +113,8 @@ def test_fuzz_melt_quote(client, unit, request, options):
     outputs=st.one_of(st.none(), st.lists(blinded_message_strategy, min_size=1, max_size=5))
 )
 def test_fuzz_melt(client, quote, inputs, outputs):
-    inputs_json = [i.dict(exclude={'dleq', 'witness'}) for i in inputs]
-    outputs_json = [o.dict() for o in outputs] if outputs else None
+    inputs_json = [i.model_dump(exclude={'dleq', 'witness'}) for i in inputs]
+    outputs_json = [o.model_dump() for o in outputs] if outputs else None
     
     payload = {
         "quote": quote,
@@ -133,8 +133,8 @@ def test_fuzz_melt(client, quote, inputs, outputs):
     outputs=st.lists(blinded_message_strategy, min_size=1, max_size=10)
 )
 def test_fuzz_swap(client, inputs, outputs):
-    inputs_json = [i.dict() for i in inputs]
-    outputs_json = [o.dict() for o in outputs]
+    inputs_json = [i.model_dump() for i in inputs]
+    outputs_json = [o.model_dump() for o in outputs]
     payload = {
         "inputs": inputs_json,
         "outputs": outputs_json
@@ -164,7 +164,7 @@ def test_fuzz_checkstate(client, Ys):
     outputs=st.lists(blinded_message_strategy, min_size=1, max_size=20)
 )
 def test_fuzz_restore(client, outputs):
-    outputs_json = [o.dict() for o in outputs]
+    outputs_json = [o.model_dump() for o in outputs]
     payload = {
         "outputs": outputs_json
     }
