@@ -6,6 +6,9 @@ ruff:
 ruff-check:
 	poetry run ruff check .
 
+fuzz:
+	poetry run pytest tests/fuzz
+
 mypy:
 	poetry run mypy cashu --check-untyped-defs
 
