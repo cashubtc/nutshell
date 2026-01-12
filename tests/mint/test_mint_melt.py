@@ -246,7 +246,7 @@ async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    (ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),)
+    await ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs)
 
     await assert_err(
         ledger.melt(
