@@ -277,7 +277,6 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             request=mint_response.pr,
             amount=decoded_invoice.amount_msat // 1000,
             unit="sat",
-            paid=False,
             state=MintQuoteState.unpaid.value,
             expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
             pubkey=None,
