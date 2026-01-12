@@ -103,6 +103,12 @@ class MintBackends(MintSettings):
     mint_strike_key: Optional[str] = Field(default=None)
     mint_blink_key: Optional[str] = Field(default=None)
 
+    mint_lnmarkets_key: str = Field(default=None)
+    mint_lnmarkets_secret: str = Field(default=None)
+    mint_lnmarkets_passphrase: str = Field(default=None)
+    mint_lnmarkets_endpoint: str = Field(
+        default="https://api.lnmarkets.com/v3"
+    )
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
