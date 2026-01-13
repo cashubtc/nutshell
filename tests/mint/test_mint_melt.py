@@ -480,10 +480,10 @@ async def test_melt_lightning_pay_invoice_exception_exception(
 ):
     """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
     settings.mint_disable_melt_on_error = True
-    mint_quote = await wallet.request_mint(64)
+    mint_quote = await wallet.request_mint(128)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    await wallet.mint(128, quote_id=mint_quote.quote)
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
         await ledger.melt_quote(
@@ -501,7 +501,7 @@ async def test_melt_lightning_pay_invoice_exception_exception(
     # the mint should be locked now and not allow any other melts until it is restarted
     quote_id = (
         await ledger.melt_quote(
-            PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
+            PostMeltQuoteRequest(unit="sat", request=invoice_64_sat)
         )
     ).quote
     await assert_err(
@@ -763,5 +763,38 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
             fee_reserve_sat=melt_quote2.fee_reserve,
             quote_id=melt_quote2.quote,
         ),
+        "Melt quote already paid or pending.",
+    )
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="Can't reliably perform this test on regtest")
+async def test_melt_quote_pending_prevents_second_quote_for_same_invoice(
+    ledger: Ledger, wallet: Wallet
+):
+    """
+    Test that when a melt payment is PENDING, trying to get another melt quote
+    for the same invoice (same checking_id) results in an error if one is already pending.
+    """
+    # 1. Prepare wallet with some funds
+    mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(128, quote_id=mint_quote.quote)
+
+    # 2. Setup fakewallet to returns PENDING for payments
+    settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
+    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    
+    invoice = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    # 3. Get first melt quote and pay it
+    quote1 = await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice))
+    
+    # This should put it into PENDING state
+    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote1.quote)
+    assert melt_response.state == MeltQuoteState.pending.value
+    
+    # 4. Try to get a second melt quote for the same invoice. 
+    # The ledger should prevent this if the first one is still pending.
+    await assert_err(
+        ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice)),
         "Melt quote already paid or pending.",
     )
