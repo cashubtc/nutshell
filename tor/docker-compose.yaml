@@ -2,7 +2,7 @@ services:
   mint:
     image: cashubtc/nutshell:0.18.2
   #  build:
-  #   context: .
+  #   context: ..
   #   dockerfile: Dockerfile
     container_name: mint
     ports:
@@ -15,7 +15,7 @@ services:
       - MINT_LISTEN_PORT=3338
     command: ["poetry", "run", "mint"]
   tor:
-    build: ./tor
+    build: .
     container_name: tor
     restart: unless-stopped
     volumes:
