@@ -243,22 +243,17 @@ class PostMeltQuoteResponse(BaseModel):
         str
     ]  # output payment request (optional for BACKWARDS COMPAT mint response < 0.17.0)
     fee_reserve: int  # input fee reserve
-    paid: Optional[bool] = (
-        None  # whether the request has been paid # DEPRECATED as per NUT PR #136
-    )
     state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None  # NUT-08 change
 
     @classmethod
-    def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
+    def from_melt_quote(cls, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
         to_dict = melt_quote.model_dump()
         # turn state into string
         to_dict["state"] = melt_quote.state.value
-        # add deprecated "paid" field
-        to_dict["paid"] = melt_quote.paid
-        return PostMeltQuoteResponse.model_validate(to_dict)
+        return cls.model_validate(to_dict)
 
 
 # ------- API: MELT -------
