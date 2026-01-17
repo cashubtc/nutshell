@@ -349,7 +349,6 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-@redis.cache()
 async def swap(
     request: Request,
     payload: PostSwapRequest,
