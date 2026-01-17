@@ -37,8 +37,6 @@ async def wallet(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_info(ledger: Ledger):
@@ -57,8 +55,6 @@ async def test_info(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keys(ledger: Ledger):
@@ -84,8 +80,6 @@ async def test_api_keys(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keysets(ledger: Ledger):
@@ -111,8 +105,6 @@ async def test_api_keysets(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys(ledger: Ledger):
@@ -137,8 +129,6 @@ async def test_api_keyset_keys(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
@@ -163,8 +153,6 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_swap(ledger: Ledger, wallet: Wallet):
@@ -191,8 +179,6 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_mint_quote(ledger: Ledger):
@@ -252,8 +238,6 @@ async def test_mint_quote(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_mint(ledger: Ledger, wallet: Wallet):
@@ -285,8 +269,6 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
@@ -323,100 +305,10 @@ async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-@pytest.mark.skipif(
-    is_regtest,
-    reason="regtest",
-)
-async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
-    # internal invoice
-    mint_quote = await wallet.request_mint(64)
-    request = mint_quote.request
-    response = httpx.post(
-        f"{BASE_URL}/v1/melt/quote/bolt11",
-        json={"unit": "sat", "request": request},
-    )
-    assert response.status_code == 200, f"{response.url} {response.status_code}"
-    result = response.json()
-    assert result["quote"]
-    assert result["amount"] == 64
-    # TODO: internal invoice, fee should be 0
-    assert result["fee_reserve"] == 0
-
-    # deserialize the response
-    resp_quote = PostMeltQuoteResponse(**result)
-    assert resp_quote.quote == result["quote"]
-    assert resp_quote.payment_preimage is None
-    assert resp_quote.change is None
-    assert resp_quote.state == MeltQuoteState.unpaid.value
-    assert resp_quote.amount == 64
-    assert resp_quote.unit == "sat"
-    assert resp_quote.request == request
-
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is False
-    assert resp_quote.paid is False
-
-    invoice_obj = bolt11.decode(request)
-
-    expiry = None
-    if invoice_obj.expiry is not None:
-        expiry = invoice_obj.date + invoice_obj.expiry
-
-    assert result["expiry"] == expiry
-
-    # # get melt quote again from api
-    # response = httpx.get(
-    #     f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}",
-    # )
-    # assert response.status_code == 200, f"{response.url} {response.status_code}"
-    # result2 = response.json()
-    # assert result2["quote"] == result["quote"]
-
-    # # deserialize the response
-    # resp_quote = PostMeltQuoteResponse(**result2)
-    # assert resp_quote.quote == result["quote"]
-    # assert resp_quote.payment_preimage is not None
-    # assert len(resp_quote.payment_preimage) == 64
-    # assert resp_quote.change is not None
-    # assert resp_quote.state == MeltQuoteState.paid.value
-
-    # # check if DEPRECATED paid flag is also returned
-    # assert result2["paid"] is True
-    # assert resp_quote.paid is True
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-@pytest.mark.skipif(
-    is_fake,
-    reason="only works on regtest",
-)
-async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
-    # internal invoice
-    invoice_dict = get_real_invoice(64)
-    request = invoice_dict["payment_request"]
-    response = httpx.post(
-        f"{BASE_URL}/v1/melt/quote/bolt11",
-        json={"unit": "sat", "request": request},
-    )
-    assert response.status_code == 200, f"{response.url} {response.status_code}"
-    result = response.json()
-    assert result["quote"]
-    assert result["amount"] == 64
-    # external invoice, fee should be 2
-    assert result["fee_reserve"] == 2
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
@@ -473,74 +365,8 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-@pytest.mark.skipif(
-    is_fake,
-    reason="only works on regtest",
-)
-async def test_melt_external(ledger: Ledger, wallet: Wallet):
-    # internal invoice
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
-
-    invoice_dict = get_real_invoice(62)
-    invoice_payment_request = invoice_dict["payment_request"]
-
-    quote = await wallet.melt_quote(invoice_payment_request)
-    assert quote.amount == 62
-    assert quote.fee_reserve == 2
-
-    keep, send = await wallet.swap_to_send(wallet.proofs, 64)
-    inputs_payload = [p.to_dict() for p in send]
-
-    # outputs for change
-    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
-    outputs, rs = wallet._construct_outputs([2], secrets, rs)
-    outputs_payload = [o.model_dump() for o in outputs]
-
-    response = httpx.post(
-        f"{BASE_URL}/v1/melt/bolt11",
-        json={
-            "quote": quote.quote,
-            "inputs": inputs_payload,
-            "outputs": outputs_payload,
-        },
-        timeout=None,
-    )
-    response.raise_for_status()
-    assert response.status_code == 200, f"{response.url} {response.status_code}"
-    result = response.json()
-    assert result.get("payment_preimage") is not None
-    assert result["paid"] is True
-    assert result["change"]
-    # we get back 2 sats because Lightning was free to pay on regtest
-    assert result["change"][0]["amount"] == 2
-
-    # deserialize the response
-    resp_quote = PostMeltQuoteResponse(**result)
-    assert resp_quote.quote == quote.quote
-    assert resp_quote.amount == 62
-    assert resp_quote.unit == "sat"
-    assert resp_quote.request == invoice_payment_request
-    assert resp_quote.payment_preimage is not None
-    assert len(resp_quote.payment_preimage) == 64
-    assert resp_quote.change is not None
-    assert resp_quote.change[0].amount == 2
-    assert resp_quote.state == MeltQuoteState.paid.value
-
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is True
-    assert resp_quote.paid is True
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_check_state(ledger: Ledger):
@@ -557,8 +383,6 @@ async def test_api_check_state(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_restore(ledger: Ledger, wallet: Wallet):

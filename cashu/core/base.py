@@ -236,23 +236,6 @@ class BlindedMessage(BaseModel):
         return cls(amount=row["amount"], B_=row["b_"], id=row["id"], C_=row.get("c_"))
 
 
-class BlindedMessage_Deprecated(BaseModel):
-    """
-    Deprecated: BlindedMessage for v0 protocol (deprecated api routes) have no id field.
-
-    Blinded message or blinded secret or "output" which is to be signed by the mint
-    """
-
-    amount: int
-    B_: str  # Hex-encoded blinded message
-    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
-
-    @property
-    def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness missing in output"
-        return P2PKWitness.from_witness(self.witness).signatures
-
-
 class BlindedSignature(BaseModel):
     """
     Blinded signature or "promise" which is the signature on a `BlindedMessage`

@@ -55,29 +55,6 @@ async def test_balance_update_on_mint(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_fake, reason="only works with Regtest")
-async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledger):
-    settings.fakewallet_brr = False
-    # mint twice so we have enough to pay the second invoice back
-    mint_quote = await wallet.request_mint(128)
-    await pay_if_regtest(mint_quote.request)
-    await wallet.mint(128, quote_id=mint_quote.quote)
-    assert wallet.balance == 128
-
-    balance_before, fees_paid_before = await ledger.get_unit_balance_and_fees(
-        Unit.sat, ledger.db
-    )
-
-    # create a mint quote so that we can melt to it internally
-    payment_amount = 64
-    mint_quote_to_pay = await wallet.request_mint(payment_amount)
-    invoice_payment_request = mint_quote_to_pay.request
-
-    melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
-    )
-
-    if not settings.debug_mint_only_deprecated:
         melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
         assert (
             not melt_quote_response_pre_payment.state == MeltQuoteState.paid.value
@@ -117,30 +94,6 @@ async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledg
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_fake, reason="only works with Regtest")
-async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
-    # mint twice so we have enough to pay the second invoice back
-    mint_quote = await wallet.request_mint(128)
-    await pay_if_regtest(mint_quote.request)
-    await wallet.mint(128, quote_id=mint_quote.quote)
-    assert wallet.balance == 128
-
-    balance_before, fees_paid_before = await ledger.get_unit_balance_and_fees(
-        Unit.sat, ledger.db
-    )
-
-    invoice_dict = get_real_invoice(64)
-    invoice_payment_request = invoice_dict["payment_request"]
-
-    mint_quote = await wallet.melt_quote(invoice_payment_request)
-
-    total_amount = mint_quote.amount + mint_quote.fee_reserve
-    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
-    )
-
-    if not settings.debug_mint_only_deprecated:
         melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
         assert (
             melt_quote_response_pre_payment.state == MeltQuoteState.unpaid.value

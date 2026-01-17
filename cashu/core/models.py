@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field, RootModel, model_validator
 
 from .base import (
     BlindedMessage,
-    BlindedMessage_Deprecated,
     BlindedSignature,
     MeltQuote,
     MintQuote,
@@ -86,18 +85,6 @@ class Nut15MppSupport(BaseModel):
     unit: str
 
 
-class GetInfoResponse_deprecated(BaseModel):
-    name: Optional[str] = None
-    pubkey: Optional[str] = None
-    version: Optional[str] = None
-    description: Optional[str] = None
-    description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
-    nuts: Optional[List[str]] = None
-    motd: Optional[str] = None
-    parameter: Optional[dict] = None
-
-
 # ------- API: KEYS -------
 
 
@@ -122,14 +109,6 @@ class KeysetsResponseKeyset(BaseModel):
 
 class KeysetsResponse(BaseModel):
     keysets: list[KeysetsResponseKeyset]
-
-
-class KeysResponse_deprecated(RootModel):
-    root: Dict[str, str]
-
-
-class KeysetsResponse_deprecated(BaseModel):
-    keysets: list[str]
 
 
 # ------- API: MINT QUOTE -------
@@ -183,21 +162,6 @@ class PostMintRequest(BaseModel):
 
 class PostMintResponse(BaseModel):
     signatures: List[BlindedSignature] = []
-
-
-class GetMintResponse_deprecated(BaseModel):
-    pr: str
-    hash: str
-
-
-class PostMintRequest_deprecated(BaseModel):
-    outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
-
-
-class PostMintResponse_deprecated(BaseModel):
-    promises: List[BlindedSignature] = []
 
 
 # ------- API: MELT QUOTE -------
@@ -272,20 +236,6 @@ class PostMeltRequest(BaseModel):
     )
 
 
-class PostMeltResponse_deprecated(BaseModel):
-    paid: Union[bool, None]
-    preimage: Union[str, None]
-    change: Union[List[BlindedSignature], None] = None
-
-
-class PostMeltRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
-    pr: str = Field(..., max_length=settings.mint_max_request_length)
-    outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
-        None, max_length=settings.mint_max_request_length
-    )
-
-
 # ------- API: SPLIT -------
 
 
@@ -300,25 +250,6 @@ class PostSwapResponse(BaseModel):
     signatures: List[BlindedSignature]
 
 
-# deprecated since 0.13.0
-class PostSwapRequest_Deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
-    amount: Optional[int] = None
-    outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
-
-
-class PostSwapResponse_Deprecated(BaseModel):
-    promises: List[BlindedSignature] = []
-
-
-class PostSwapResponse_Very_Deprecated(BaseModel):
-    fst: List[BlindedSignature] = []
-    snd: List[BlindedSignature] = []
-    deprecated: str = "The amount field is deprecated since 0.13.0"
-
-
 # ------- API: CHECK -------
 
 
@@ -330,34 +261,11 @@ class PostCheckStateResponse(BaseModel):
     states: List[ProofState] = []
 
 
-class CheckSpendableRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
-
-
-class CheckSpendableResponse_deprecated(BaseModel):
-    spendable: List[bool]
-    pending: List[bool]
-
-
-class CheckFeesRequest_deprecated(BaseModel):
-    pr: str = Field(..., max_length=settings.mint_max_request_length)
-
-
-class CheckFeesResponse_deprecated(BaseModel):
-    fee: Union[int, None]
-
-
 # ------- API: RESTORE -------
 
 
 class PostRestoreRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
-
-
-class PostRestoreRequest_Deprecated(BaseModel):
-    outputs: List[BlindedMessage_Deprecated] = Field(
         ..., max_length=settings.mint_max_request_length
     )
 

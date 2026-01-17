@@ -43,7 +43,6 @@ class EnvSettings(CashuSettings):
     log_level: str = Field(default="INFO")
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
-    debug_mint_only_deprecated: bool = Field(default=False)
     db_backup_path: Optional[str] = Field(default=None)
     db_connection_pool: bool = Field(default=True)
 
