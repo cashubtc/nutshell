@@ -1071,6 +1071,27 @@ class Ledger(
             List[BlindedSignature]: New promises (signatures) for the outputs.
         """
         logger.trace("swap called")
+        
+        # Check if signatures already exist for all outputs (idempotency per NUT-19)
+        async with self.db.get_connection() as conn:
+            existing_signatures: List[BlindedSignature] = []
+            all_exist = True
+            for output in outputs:
+                signature = await self.crud.get_blind_signature(
+                    b_=output.B_, db=self.db, conn=conn
+                )
+                if signature is None:
+                    all_exist = False
+                    break
+                existing_signatures.append(signature)
+            
+            # If all signatures exist, return them (idempotent behavior)
+            if all_exist:
+                logger.trace("swap idempotent: all signatures already exist, returning cached")
+                return existing_signatures
+        
+        # Otherwise, proceed with normal swap flow
+        logger.trace("swap: generating new signatures")
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
         await self.db_write._verify_spent_proofs_and_set_pending(
