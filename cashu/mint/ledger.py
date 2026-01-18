@@ -34,6 +34,7 @@ from ..core.errors import (
     LightningError,
     LightningPaymentFailedError,
     NotAllowedError,
+    QuoteAlreadyIssuedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
@@ -224,8 +225,11 @@ class Ledger(
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        # sum_proofs = sum([p.amount for p in proofs])
-        fees_proofs = self.get_fees_for_proofs(proofs)
+        # Group proofs by keyset_id to calculate fees per keyset
+        proofs_by_keyset: Dict[str, List[Proof]] = {}
+        for p in proofs:
+            proofs_by_keyset.setdefault(p.id, []).append(p)
+
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
@@ -241,9 +245,18 @@ class Ledger(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
-            await self.crud.bump_keyset_fees_paid(
-                keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
-            )
+
+            # Calculate and increment fees for each keyset separately
+            for keyset_id, keyset_proofs in proofs_by_keyset.items():
+                keyset_fees = self.get_fees_for_proofs(keyset_proofs)
+                if keyset_fees > 0:
+                    logger.trace(f"Adding fees {keyset_fees} to keyset {keyset_id}")
+                    await self.crud.bump_keyset_fees_paid(
+                        keyset=self.keysets[keyset_id],
+                        amount=keyset_fees,
+                        db=self.db,
+                        conn=conn,
+                    )
 
     async def _generate_change_promises(
         self,
@@ -337,7 +350,7 @@ class Ledger(
                 f"Maximum mint amount is {settings.mint_max_mint_bolt11_sat} sat."
             )
         if settings.mint_bolt11_disable_mint:
-            raise NotAllowedError("Minting with bol11 is disabled.")
+            raise NotAllowedError("Minting with bolt11 is disabled.")
 
         unit, method = self._verify_and_get_unit_method(
             quote_request.unit, Method.bolt11.name
@@ -480,7 +493,7 @@ class Ledger(
         if quote.pending:
             raise TransactionError("Mint quote already pending.")
         if quote.issued:
-            raise TransactionError("Mint quote already issued.")
+            raise QuoteAlreadyIssuedError()
         if not quote.paid:
             raise QuoteNotPaidError()
 
@@ -491,7 +504,7 @@ class Ledger(
                 raise TransactionError("quote unit does not match output unit")
             if not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
-            if quote.expiry and quote.expiry > int(time.time()):
+            if quote.expiry and quote.expiry < int(time.time()):
                 raise TransactionError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
@@ -1086,7 +1099,7 @@ class Ledger(
         async with self.db.get_connection() as conn:
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
-                promise = await self.crud.get_promise(
+                promise = await self.crud.get_blind_signature(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
@@ -1159,7 +1172,7 @@ class Ledger(
             Tuple[str, PublicKey, int, PublicKey, PrivateKey, PrivateKey]
         ] = []
         for output in outputs:
-            B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
+            B_ = PublicKey(bytes.fromhex(output.B_))
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
@@ -1182,10 +1195,10 @@ class Ledger(
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
                 await self.crud.update_blinded_message_signature(
                     amount=amount,
-                    b_=B_.serialize().hex(),
-                    c_=C_.serialize().hex(),
-                    e=e.serialize(),
-                    s=s.serialize(),
+                    b_=B_.format().hex(),
+                    c_=C_.format().hex(),
+                    e=e.to_hex(),
+                    s=s.to_hex(),
                     db=self.db,
                     conn=conn,
                 )
@@ -1193,8 +1206,8 @@ class Ledger(
                 signature = BlindedSignature(
                     id=keyset_id,
                     amount=amount,
-                    C_=C_.serialize().hex(),
-                    dleq=DLEQ(e=e.serialize(), s=s.serialize()),
+                    C_=C_.format().hex(),
+                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
                 )
                 signatures.append(signature)
 

@@ -6,13 +6,14 @@ import pytest_asyncio
 from fastapi import WebSocket
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.errors import ProofsArePendingError
 from cashu.core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
     JSONRPCNotification,
     JSONRPCSubscriptionKinds,
 )
-from cashu.core.models import PostMeltQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMeltQuoteResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -52,7 +53,7 @@ async def test_mint_proofs_pending(wallet: Wallet, ledger: Ledger):
 
     proof_states = await wallet.check_proof_state(proofs)
     assert all([s.pending for s in proof_states.states])
-    await assert_err(wallet.split(wallet.proofs, 20), "proofs are pending.")
+    await assert_err(wallet.split(wallet.proofs, 20), ProofsArePendingError.detail)
 
     await ledger.db_write._unset_proofs_pending(proofs, ledger.keysets)
 
@@ -285,10 +286,11 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId", payload=quote_pending.dict()
-        ).dict(),
+            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump()
+        ).model_dump(),
     )
-    websocket_mock.send_text.assert_called_with(notification.json())
+
+    websocket_mock.send_text.assert_called_with(notification.model_dump_json())
 
     # remove subscription
     client.remove_subscription("subId")
@@ -343,15 +345,13 @@ async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
     )
 
 
-
 # Tests for get_melt_quotes_by_checking_id CRUD method
 @pytest.mark.asyncio
 async def test_get_melt_quotes_by_checking_id_empty(ledger: Ledger):
     """Test that get_melt_quotes_by_checking_id returns empty list for non-existent checking_id."""
-    
+
     quotes = await ledger.crud.get_melt_quotes_by_checking_id(
-        checking_id="non_existent_id",
-        db=ledger.db
+        checking_id="non_existent_id", db=ledger.db
     )
     assert quotes == []
 
@@ -360,7 +360,7 @@ async def test_get_melt_quotes_by_checking_id_empty(ledger: Ledger):
 async def test_get_melt_quotes_by_checking_id_single(ledger: Ledger):
     """Test that get_melt_quotes_by_checking_id returns a single quote when only one exists."""
     from cashu.core.base import MeltQuote
-    
+
     checking_id = "test_checking_id_single"
     quote = MeltQuote(
         quote="quote_id_1",
@@ -373,12 +373,11 @@ async def test_get_melt_quotes_by_checking_id_single(ledger: Ledger):
         state=MeltQuoteState.unpaid,
     )
     await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
-    
+
     quotes = await ledger.crud.get_melt_quotes_by_checking_id(
-        checking_id=checking_id,
-        db=ledger.db
+        checking_id=checking_id, db=ledger.db
     )
-    
+
     assert len(quotes) == 1
     assert quotes[0].quote == "quote_id_1"
     assert quotes[0].checking_id == checking_id
@@ -388,9 +387,9 @@ async def test_get_melt_quotes_by_checking_id_single(ledger: Ledger):
 async def test_get_melt_quotes_by_checking_id_multiple(ledger: Ledger):
     """Test that get_melt_quotes_by_checking_id returns all quotes with the same checking_id."""
     from cashu.core.base import MeltQuote
-    
+
     checking_id = "test_checking_id_multiple"
-    
+
     quote1 = MeltQuote(
         quote="quote_id_m1",
         method="bolt11",
@@ -421,16 +420,15 @@ async def test_get_melt_quotes_by_checking_id_multiple(ledger: Ledger):
         fee_reserve=3,
         state=MeltQuoteState.unpaid,
     )
-    
+
     await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
     await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
     await ledger.crud.store_melt_quote(quote=quote3, db=ledger.db)
-    
+
     quotes = await ledger.crud.get_melt_quotes_by_checking_id(
-        checking_id=checking_id,
-        db=ledger.db
+        checking_id=checking_id, db=ledger.db
     )
-    
+
     assert len(quotes) == 3
     quote_ids = {q.quote for q in quotes}
     assert quote_ids == {"quote_id_m1", "quote_id_m2", "quote_id_m3"}
@@ -440,10 +438,10 @@ async def test_get_melt_quotes_by_checking_id_multiple(ledger: Ledger):
 async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Ledger):
     """Test that get_melt_quotes_by_checking_id only returns quotes with the specified checking_id."""
     from cashu.core.base import MeltQuote
-    
+
     checking_id_1 = "test_checking_id_diff_1"
     checking_id_2 = "test_checking_id_diff_2"
-    
+
     quote1 = MeltQuote(
         quote="quote_id_diff_1",
         method="bolt11",
@@ -464,20 +462,18 @@ async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Led
         fee_reserve=2,
         state=MeltQuoteState.unpaid,
     )
-    
+
     await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
     await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
-    
+
     quotes_1 = await ledger.crud.get_melt_quotes_by_checking_id(
-        checking_id=checking_id_1,
-        db=ledger.db
+        checking_id=checking_id_1, db=ledger.db
     )
     assert len(quotes_1) == 1
     assert quotes_1[0].quote == "quote_id_diff_1"
-    
+
     quotes_2 = await ledger.crud.get_melt_quotes_by_checking_id(
-        checking_id=checking_id_2,
-        db=ledger.db
+        checking_id=checking_id_2, db=ledger.db
     )
     assert len(quotes_2) == 1
     assert quotes_2[0].quote == "quote_id_diff_2"

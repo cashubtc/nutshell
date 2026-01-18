@@ -366,7 +366,7 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
     amount = 8
     keyset_id = ledger.keyset.id
     B_pubkey, _ = step1_alice("test_store_and_sign_blinded_message")
-    B_hex = B_pubkey.serialize().hex()
+    B_hex = B_pubkey.format().hex()
 
     # Act: store the blinded message (unsinged promise row)
     await ledger.crud.store_blinded_message(
@@ -378,23 +378,23 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
 
     # Act: compute a valid blind signature for the stored row and persist it
     private_key_amount = ledger.keyset.private_keys[amount]
-    B_point = PublicKey(bytes.fromhex(B_hex), raw=True)
+    B_point = PublicKey(bytes.fromhex(B_hex))
     C_point, e, s = step2_bob(B_point, private_key_amount)
 
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
         b_=B_hex,
-        c_=C_point.serialize().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        c_=C_point.format().hex(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
-    # Assert: row is now a full promise and can be read back via get_promise
-    promise = await ledger.crud.get_promise(db=ledger.db, b_=B_hex)
+    # Assert: row is now a full promise and can be read back via get_blind_signature
+    promise = await ledger.crud.get_blind_signature(db=ledger.db, b_=B_hex)
     assert promise is not None
     assert promise.amount == amount
-    assert promise.C_ == C_point.serialize().hex()
+    assert promise.C_ == C_point.format().hex()
     assert promise.id == keyset_id
 
 
@@ -415,8 +415,8 @@ async def test_get_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
     # Create two blinded messages
     B1, _ = step1_alice("get_by_melt_id_1")
     B2, _ = step1_alice("get_by_melt_id_2")
-    b1_hex = B1.serialize().hex()
-    b2_hex = B2.serialize().hex()
+    b1_hex = B1.format().hex()
+    b2_hex = B2.format().hex()
 
     # Persist as unsigned messages with proper melt_id FK
     await ledger.crud.store_blinded_message(
@@ -451,8 +451,8 @@ async def test_delete_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger
     # Create two blinded messages
     B1, _ = step1_alice("delete_by_melt_id_1")
     B2, _ = step1_alice("delete_by_melt_id_2")
-    b1_hex = B1.serialize().hex()
-    b2_hex = B2.serialize().hex()
+    b1_hex = B1.format().hex()
+    b2_hex = B2.format().hex()
 
     # Persist as unsigned messages
     await ledger.crud.store_blinded_message(
@@ -495,8 +495,8 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
 
     B1, _ = step1_alice("filter_by_melt_id_1")
     B2, _ = step1_alice("filter_by_melt_id_2")
-    b1_hex = B1.serialize().hex()
-    b2_hex = B2.serialize().hex()
+    b1_hex = B1.format().hex()
+    b2_hex = B2.format().hex()
 
     # Persist two unsigned messages
     await ledger.crud.store_blinded_message(
@@ -508,14 +508,14 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
 
     # Sign one of them (it should no longer be returned by get_blinded_messages_melt_id which filters c_ IS NULL)
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
         b_=b1_hex,
-        c_=C_point.serialize().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        c_=C_point.format().hex(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Act
@@ -534,7 +534,7 @@ async def test_store_blinded_message(ledger: Ledger):
     amount = 8
     keyset_id = ledger.keyset.id
     B_pub, _ = step1_alice("test_store_blinded_message")
-    b_hex = B_pub.serialize().hex()
+    b_hex = B_pub.format().hex()
 
     # Act: store unsigned blinded message
     await ledger.crud.store_blinded_message(
@@ -565,11 +565,11 @@ async def test_update_blinded_message_signature_before_store_blinded_message_err
     amount = 8
     # Generate a blinded message that we will NOT store
     B_pub, _ = step1_alice("test_sign_before_store_blinded_message")
-    b_hex = B_pub.serialize().hex()
+    b_hex = B_pub.format().hex()
 
     # Create a valid signature tuple for that blinded message
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b_hex), raw=True), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b_hex)), priv)
 
     # Expect a DB-level error; on SQLite/Postgres this is typically a no-op update, so this test is xfail.
     await assert_err(
@@ -577,9 +577,9 @@ async def test_update_blinded_message_signature_before_store_blinded_message_err
             db=ledger.db,
             amount=amount,
             b_=b_hex,
-            c_=C_point.serialize().hex(),
-            e=e.serialize(),
-            s=s.serialize(),
+            c_=C_point.format().hex(),
+            e=e.to_hex(),
+            s=s.to_hex(),
         ),
         "blinded message does not exist",
     )
@@ -592,7 +592,7 @@ async def test_store_blinded_message_duplicate_b_(ledger: Ledger):
     amount = 2
     keyset_id = ledger.keyset.id
     B_pub, _ = step1_alice("test_duplicate_b_")
-    b_hex = B_pub.serialize().hex()
+    b_hex = B_pub.format().hex()
 
     # First insert should succeed
     await ledger.crud.store_blinded_message(
@@ -619,8 +619,8 @@ async def test_get_blind_signatures_by_melt_id_returns_signed(
     # Prepare two blinded messages under the same melt_id
     B1, _ = step1_alice("signed_promises_by_melt_id_1")
     B2, _ = step1_alice("signed_promises_by_melt_id_2")
-    b1_hex = B1.serialize().hex()
-    b2_hex = B2.serialize().hex()
+    b1_hex = B1.format().hex()
+    b2_hex = B2.format().hex()
 
     await ledger.crud.store_blinded_message(
         db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
@@ -631,14 +631,14 @@ async def test_get_blind_signatures_by_melt_id_returns_signed(
 
     # Sign only one of them -> should be returned by get_blind_signatures_melt_id
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
         b_=b1_hex,
-        c_=C_point.serialize().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        c_=C_point.format().hex(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Act
@@ -673,8 +673,8 @@ async def test_get_melt_quote_includes_change_signatures(
     # Create two blinded messages, sign one -> becomes change
     B1, _ = step1_alice("melt_quote_change_1")
     B2, _ = step1_alice("melt_quote_change_2")
-    b1_hex = B1.serialize().hex()
-    b2_hex = B2.serialize().hex()
+    b1_hex = B1.format().hex()
+    b2_hex = B2.format().hex()
 
     await ledger.crud.store_blinded_message(
         db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
@@ -685,14 +685,14 @@ async def test_get_melt_quote_includes_change_signatures(
 
     # Sign one -> should appear in change loaded by get_melt_quote
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
         b_=b1_hex,
-        c_=C_point.serialize().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        c_=C_point.format().hex(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Act
@@ -714,8 +714,8 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
     keyset_id = ledger.keyset.id
     B1, _ = step1_alice("fk_check_melt")
     B2, _ = step1_alice("fk_check_mint")
-    b1_hex = B1.serialize().hex()
-    b2_hex = B2.serialize().hex()
+    b1_hex = B1.format().hex()
+    b2_hex = B2.format().hex()
 
     # Use a single connection and enable FK enforcement on SQLite
     async with ledger.db.connect() as conn:
@@ -736,7 +736,7 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
         )
 
     async with ledger.db.connect() as conn:
-        # Fake mint_id should violate FK on promises.mint_quote
+        # Fake melt_id should violate FK on promises.melt_quote
         await assert_err_multiple(
             ledger.crud.store_blinded_message(
                 db=ledger.db,
@@ -760,9 +760,9 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
 async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger):
     """Test that concurrent attempts to set quotes with same checking_id as pending are handled correctly."""
     from cashu.core.base import MeltQuote, MeltQuoteState
-    
+
     checking_id = "test_checking_id_concurrent"
-    
+
     # Create two quotes with the same checking_id
     quote1 = MeltQuote(
         quote="quote_id_conc_1",
@@ -784,24 +784,24 @@ async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger
         fee_reserve=2,
         state=MeltQuoteState.unpaid,
     )
-    
+
     await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
     await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
-    
+
     # Try to set both as pending concurrently
     results = await asyncio.gather(
         ledger.db_write._set_melt_quote_pending(quote=quote1),
         ledger.db_write._set_melt_quote_pending(quote=quote2),
-        return_exceptions=True
+        return_exceptions=True,
     )
-    
+
     # One should succeed, one should fail
     success_count = sum(1 for r in results if isinstance(r, MeltQuote))
     error_count = sum(1 for r in results if isinstance(r, Exception))
-    
+
     assert success_count == 1, "Exactly one quote should be set as pending"
     assert error_count == 1, "Exactly one should fail"
-    
+
     # The error should be about the quote already being pending
     error = next(r for r in results if isinstance(r, Exception))
     assert "Melt quote already paid or pending." in str(error)

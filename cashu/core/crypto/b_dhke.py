@@ -53,7 +53,7 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 import hashlib
 from typing import Optional, Tuple
 
-from secp256k1 import PrivateKey, PublicKey
+from .secp import PrivateKey, PublicKey
 
 DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_Cashu_"
 
@@ -78,7 +78,7 @@ def hash_to_curve(message: bytes) -> PublicKey:
         _hash = hashlib.sha256(msg_to_hash + counter.to_bytes(4, "little")).digest()
         try:
             # will error if point does not lie on curve
-            return PublicKey(b"\x02" + _hash, raw=True)
+            return PublicKey(b"\x02" + _hash)
         except Exception:
             counter += 1
     # it should never reach this point
@@ -90,25 +90,25 @@ def step1_alice(
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    B_: PublicKey = Y + r.public_key # type: ignore
     return B_, r
 
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
-    C_: PublicKey = B_.mult(a)  # type: ignore
+    C_: PublicKey = B_ * a  # type: ignore
     # produce dleq proof
     e, s = step2_bob_dleq(B_, a)
     return C_, e, s
 
 
 def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
-    C: PublicKey = C_ - A.mult(r)  # type: ignore
+    C: PublicKey = C_ - A * r  # type: ignore
     return C
 
 
 def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    valid = C == Y.mult(a)  # type: ignore
+    valid = C == Y * a  # type: ignore
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
         valid = verify_deprecated(a, C, secret_msg)
@@ -119,7 +119,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 def hash_e(*publickeys: PublicKey) -> bytes:
     e_ = ""
     for p in publickeys:
-        _p = p.serialize(compressed=False).hex()
+        _p = p.format(compressed=False).hex()
         e_ += str(_p)
     e = hashlib.sha256(e_.encode("utf-8")).digest()
     return e
@@ -130,30 +130,30 @@ def step2_bob_dleq(
 ) -> Tuple[PrivateKey, PrivateKey]:
     if p_bytes:
         # deterministic p for testing
-        p = PrivateKey(privkey=p_bytes, raw=True)
+        p = PrivateKey(p_bytes)
     else:
         # normally, we generate a random p
         p = PrivateKey()
 
-    R1 = p.pubkey  # R1 = pG
+    R1 = p.public_key  # R1 = pG
     assert R1
-    R2: PublicKey = B_.mult(p)  # R2 = pB_ # type: ignore
-    C_: PublicKey = B_.mult(a)  # C_ = aB_ # type: ignore
-    A = a.pubkey
+    R2: PublicKey = B_ * p  # type: ignore
+    C_: PublicKey = B_ * a  # type: ignore
+    A = a.public_key
     assert A
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
-    s = p.tweak_add(a.tweak_mul(e))  # s = p + ek
-    spk = PrivateKey(s, raw=True)
-    epk = PrivateKey(e, raw=True)
+    s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
+    spk = PrivateKey(bytes.fromhex(s.to_hex()))
+    epk = PrivateKey(e)
     return epk, spk
 
 
 def alice_verify_dleq(
     B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
 ) -> bool:
-    R1 = s.pubkey - A.mult(e)  # type: ignore
-    R2 = B_.mult(s) - C_.mult(e)  # type: ignore
-    e_bytes = e.private_key
+    R1 = s.public_key - A * e  # type: ignore
+    R2 = B_ * s - C_ * e  # type: ignore
+    e_bytes = bytes.fromhex(e.to_hex())
     return e_bytes == hash_e(R1, R2, A, C_)
 
 
@@ -166,8 +166,8 @@ def carol_verify_dleq(
     A: PublicKey,
 ) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    C_: PublicKey = C + A.mult(r)  # type: ignore
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    C_: PublicKey = C + A * r  # type: ignore
+    B_: PublicKey = Y + r.public_key  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
@@ -188,7 +188,7 @@ def hash_to_curve_deprecated(message: bytes) -> PublicKey:
         _hash = hashlib.sha256(msg_to_hash).digest()
         try:
             # will error if point does not lie on curve
-            point = PublicKey(b"\x02" + _hash, raw=True)
+            point = PublicKey(b"\x02" + _hash)
         except Exception:
             msg_to_hash = _hash
     return point
@@ -199,13 +199,13 @@ def step1_alice_deprecated(
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    B_: PublicKey = Y + r.public_key  # type: ignore
     return B_, r
 
 
 def verify_deprecated(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
-    valid = C == Y.mult(a)  # type: ignore
+    valid = C == Y * a  # type: ignore
     return valid
 
 
@@ -218,8 +218,8 @@ def carol_verify_dleq_deprecated(
     A: PublicKey,
 ) -> bool:
     Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
-    C_: PublicKey = C + A.mult(r)  # type: ignore
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    C_: PublicKey = C + A * r  # type: ignore
+    B_: PublicKey = Y + r.public_key  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
     return valid
 
@@ -228,7 +228,7 @@ def carol_verify_dleq_deprecated(
 
 # # Alice's keys
 # a = PrivateKey()
-# A = a.pubkey
+# A = a.public_key
 # secret_msg = "test"
 # B_, r = step1_alice(secret_msg)
 # C_ = step2_bob(B_, a)
@@ -240,6 +240,6 @@ def carol_verify_dleq_deprecated(
 
 # # Test operations
 # b = PrivateKey()
-# B = b.pubkey
+# B = b.public_key
 # assert -A -A + A == -A  # neg
-# assert B.mult(a) == A.mult(b)  # a*B = A*b
+# assert B * a == A * b  # a*B = A*b

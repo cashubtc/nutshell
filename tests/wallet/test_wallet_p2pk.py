@@ -8,6 +8,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 from coincurve import PrivateKey as CoincurvePrivateKey
+from coincurve import PublicKeyXOnly
 
 from cashu.core.base import P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
@@ -54,7 +55,7 @@ async def wallet2():
         SERVER_ENDPOINT, "test_data/wallet_p2pk_2", "wallet2"
     )
     await migrate_databases(wallet2.db, migrations)
-    wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
+    wallet2.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet2.load_mint()
     yield wallet2
 
@@ -65,7 +66,7 @@ async def test_create_p2pk_pubkey(wallet1: Wallet):
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     pubkey = await wallet1.create_p2pk_pubkey()
-    PublicKey(bytes.fromhex(pubkey), raw=True)
+    PublicKey(bytes.fromhex(pubkey))
 
 
 @pytest.mark.asyncio
@@ -162,11 +163,11 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     await wallet1.mint(64, quote_id=mint_quote.quote)
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
-    garbage_priv = PrivateKey(secrets.token_bytes(32), raw=True)
-    garbage_pubkey = garbage_priv.pubkey
+    garbage_priv = PrivateKey(secrets.token_bytes(32))
+    garbage_pubkey = garbage_priv.public_key
     assert garbage_pubkey
     secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        garbage_pubkey.format().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
         tags=Tags([["refund", pubkey_wallet2]]),  # refund pubkey
     )  # sender side
@@ -192,15 +193,15 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     await wallet1.mint(64, quote_id=mint_quote.quote)
     await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
-    garbage_priv = PrivateKey(secrets.token_bytes(32), raw=True)
-    garbage_pubkey = garbage_priv.pubkey
-    garbage_pubkey_2 = PrivateKey().pubkey
+    garbage_priv = PrivateKey(secrets.token_bytes(32))
+    garbage_pubkey = garbage_priv.public_key
+    garbage_pubkey_2 = PrivateKey().public_key
     assert garbage_pubkey
     assert garbage_pubkey_2
     secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        garbage_pubkey.format().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
-        tags=Tags([["refund", garbage_pubkey_2.serialize().hex()]]),  # refund pubkey
+        tags=Tags([["refund", garbage_pubkey_2.format().hex()]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -230,11 +231,11 @@ async def test_p2pk_locktime_with_second_refund_pubkey(
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()  # receiver side
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
-    garbage_priv = PrivateKey(secrets.token_bytes(32), raw=True)
-    garbage_pubkey = garbage_priv.pubkey
+    garbage_priv = PrivateKey(secrets.token_bytes(32))
+    garbage_pubkey = garbage_priv.public_key
     assert garbage_pubkey
     secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        garbage_pubkey.format().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
         tags=Tags(
             [["refund", pubkey_wallet2, pubkey_wallet1]]
@@ -267,11 +268,11 @@ async def test_p2pk_locktime_with_2_of_2_refund_pubkeys(
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()  # receiver side
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
-    garbage_priv = PrivateKey(secrets.token_bytes(32), raw=True)
-    garbage_pubkey = garbage_priv.pubkey
+    garbage_priv = PrivateKey(secrets.token_bytes(32))
+    garbage_pubkey = garbage_priv.public_key
     assert garbage_pubkey
     secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        garbage_pubkey.format().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
         tags=Tags(
             [["refund", pubkey_wallet2, pubkey_wallet1], ["n_sigs_refund", "2"]],
@@ -375,10 +376,10 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
     proof = send_proofs[0]
     # create coincurve private key so we can sign the message
     coincurve_privatekey2 = CoincurvePrivateKey(
-        bytes.fromhex(wallet2.private_key.serialize())
+        bytes.fromhex(wallet2.private_key.to_hex())
     )
     # check if private keys are the same
-    assert coincurve_privatekey2.to_hex() == wallet2.private_key.serialize()
+    assert coincurve_privatekey2.to_hex() == wallet2.private_key.to_hex()
 
     msg = hashlib.sha256(proof.secret.encode("utf-8")).digest()
     coincurve_signature = coincurve_privatekey2.sign_schnorr(msg)
@@ -390,15 +391,15 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
     assert coincurve_signature.hex() != proof.p2pksigs[0]
 
     # verify both signatures:
-    assert PublicKey(bytes.fromhex(pubkey_wallet2), raw=True).schnorr_verify(
-        msg, bytes.fromhex(proof.p2pksigs[0]), None, raw=True
+    xonly_pub = PublicKeyXOnly(bytes.fromhex(pubkey_wallet2)[1:])
+    assert xonly_pub.verify(
+        bytes.fromhex(proof.p2pksigs[0]), msg
     )
-    assert PublicKey(bytes.fromhex(pubkey_wallet2), raw=True).schnorr_verify(
-        msg, coincurve_signature, None, raw=True
+    assert xonly_pub.verify(
+        coincurve_signature, msg
     )
-
     # add coincurve signature, and the wallet2 signature will be added during .redeem
-    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).model_dump_json()
 
     # here we add the signatures of wallet2
     await assert_err(
@@ -434,14 +435,14 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
     await wallet1.mint(64, quote_id=mint_quote.quote)
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    garbage_priv = PrivateKey(secrets.token_bytes(32), raw=True)
-    garbage_pubkey = garbage_priv.pubkey
+    garbage_priv = PrivateKey(secrets.token_bytes(32))
+    garbage_pubkey = garbage_priv.public_key
     assert garbage_pubkey
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
         pubkey_wallet2,
-        tags=Tags([["pubkeys", pubkey_wallet1, garbage_pubkey.serialize().hex()]]),
+        tags=Tags([["pubkeys", pubkey_wallet1, garbage_pubkey.format().hex()]]),
         n_sigs=3,
     )
     # create locked proofs
@@ -482,9 +483,9 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
     await wallet1.mint(64, quote_id=mint_quote.quote)
     await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    wrong_pubklic_key = PrivateKey().pubkey
+    wrong_pubklic_key = PrivateKey().public_key
     assert wrong_pubklic_key
-    wrong_public_key_hex = wrong_pubklic_key.serialize().hex()
+    wrong_public_key_hex = wrong_pubklic_key.format().hex()
 
     assert wrong_public_key_hex != pubkey_wallet2
 
@@ -523,10 +524,10 @@ def test_tags():
 @pytest.mark.asyncio
 async def test_secret_initialized_with_tags(wallet1: Wallet):
     tags = Tags([["locktime", "100"], ["n_sigs", "3"], ["sigflag", "SIG_ALL"]])
-    pubkey = PrivateKey().pubkey
+    pubkey = PrivateKey().public_key
     assert pubkey
     secret = await wallet1.create_p2pk_lock(
-        data=pubkey.serialize().hex(),
+        data=pubkey.format().hex(),
         tags=tags,
     )
     assert secret.locktime == 100
@@ -536,10 +537,10 @@ async def test_secret_initialized_with_tags(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_secret_initialized_with_arguments(wallet1: Wallet):
-    pubkey = PrivateKey().pubkey
+    pubkey = PrivateKey().public_key
     assert pubkey
     secret = await wallet1.create_p2pk_lock(
-        data=pubkey.serialize().hex(),
+        data=pubkey.format().hex(),
         locktime_seconds=100,
         n_sigs=3,
         sig_all=True,
@@ -635,11 +636,11 @@ async def test_p2pk_locktime_with_3_of_3_refund_pubkeys(
 ):
     """Testing the case where we expect a 3-of-3 signature from the refund pubkeys"""
     # Create a third wallet for this test
-    wallet3 = await Wallet.with_db(
+    wallet3 = await Wallet2.with_db(
         SERVER_ENDPOINT, "test_data/wallet_p2pk_3", "wallet3"
     )
     await migrate_databases(wallet3.db, migrations)
-    wallet3.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
+    wallet3.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet3.load_mint()
 
     # Get tokens and create public keys for all wallets
@@ -651,10 +652,10 @@ async def test_p2pk_locktime_with_3_of_3_refund_pubkeys(
     pubkey_wallet3 = await wallet3.create_p2pk_pubkey()
 
     # Create an unspendable lock with refund conditions requiring 3 signatures
-    garbage_pubkey = PrivateKey().pubkey
+    garbage_pubkey = PrivateKey().public_key
     assert garbage_pubkey
     secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        garbage_pubkey.format().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
         tags=Tags(
             [

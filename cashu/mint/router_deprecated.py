@@ -45,7 +45,7 @@ async def info() -> GetInfoResponse_deprecated:
     logger.trace("> GET /info")
     return GetInfoResponse_deprecated(
         name=settings.mint_info_name,
-        pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
+        pubkey=ledger.pubkey.format().hex() if ledger.pubkey else None,
         version=f"Nutshell/{settings.version}",
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,
@@ -70,8 +70,10 @@ async def keys_deprecated() -> Dict[str, str]:
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     logger.trace("> GET /keys")
     keyset = ledger.get_keyset()
-    keys = KeysResponse_deprecated.parse_obj(keyset)
-    return keys.__root__
+    keys = KeysResponse_deprecated.model_validate(
+        {str(k): v for k, v in keyset.items()}
+    )
+    return keys.root
 
 
 @router_deprecated.get(
@@ -94,8 +96,10 @@ async def keyset_deprecated(idBase64Urlsafe: str) -> Dict[str, str]:
     logger.trace(f"> GET /keys/{idBase64Urlsafe}")
     id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
     keyset = ledger.get_keyset(keyset_id=id)
-    keys = KeysResponse_deprecated.parse_obj(keyset)
-    return keys.__root__
+    keys = KeysResponse_deprecated.model_validate(
+        {str(k): v for k, v in keyset.items()}
+    )
+    return keys.root
 
 
 @router_deprecated.get(
@@ -173,7 +177,7 @@ async def mint_deprecated(
     # BEGIN BACKWARDS COMPATIBILITY < 0.15
     # Mint expects "id" in outputs to know which keyset to use to sign them.
     outputs: list[BlindedMessage] = [
-        BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+        BlindedMessage(id=ledger.keyset.id, **o.model_dump(exclude={"id"}))
         for o in payload.outputs
     ]
     # END BACKWARDS COMPATIBILITY < 0.15
@@ -289,7 +293,7 @@ async def split_deprecated(
     assert payload.outputs, Exception("no outputs provided.")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
     outputs: list[BlindedMessage] = [
-        BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+        BlindedMessage(id=ledger.keyset.id, **o.model_dump(exclude={"id"}))
         for o in payload.outputs
     ]
     # END BACKWARDS COMPATIBILITY < 0.14

@@ -139,7 +139,7 @@ async def test_p2pk_sig_all_valid(wallet1: Wallet, wallet2: Wallet, ledger: Ledg
     signature = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add the signature to the first proof only (since it's SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
 
     # Swap should succeed
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
@@ -166,7 +166,7 @@ async def test_p2pk_sig_all_invalid(wallet1: Wallet, wallet2: Wallet, ledger: Le
 
     # Add an invalid signature
     fake_signature = "0" * 128  # Just a fake 64-byte hex string
-    send_proofs[0].witness = P2PKWitness(signatures=[fake_signature]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
 
     # Swap should fail
     await assert_err(
@@ -211,7 +211,7 @@ async def test_p2pk_sig_all_mixed(wallet1: Wallet, wallet2: Wallet, ledger: Ledg
     mixed_proofs = signed_proofs_sig_all + signed_proofs_sig_inputs
 
     # Add an invalid signature to the SIG_ALL proof
-    mixed_proofs[0].witness = P2PKWitness(signatures=["0" * 128]).json()
+    mixed_proofs[0].witness = P2PKWitness(signatures=["0" * 128]).model_dump_json()
 
     # Try to use the mixed proofs (should fail)
     await assert_err(
@@ -331,6 +331,10 @@ async def test_p2pk_timelock(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
         int(time.time()) > locktime
     ), f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
 
+    # ensure wallet1 doesn't reuse already swapped proofs later in the test suite
+    await wallet1.invalidate(send_proofs)
+    await wallet1.load_proofs(reload=True)
+
     # Try to redeem without signature after locktime (should succeed)
     unsigned_proofs = copy.deepcopy(send_proofs)
     for proof in unsigned_proofs:
@@ -448,6 +452,59 @@ async def test_p2pk_timelock_with_refund_after_locktime(
     outputs = await create_test_outputs(wallet1, 16)
     promises2 = await ledger.swap(proofs=refund_signed_proofs2, outputs=outputs)
     assert len(promises2) == len(outputs)
+
+
+@pytest.mark.asyncio
+async def test_p2pk_locktime_allows_both_paths_after_expiry(
+    wallet1: Wallet, wallet2: Wallet, wallet3: Wallet, ledger: Ledger
+):
+    """After expiry the receiver path remains valid and refund keys become available."""
+
+    receiver_pubkey = await wallet2.create_p2pk_pubkey()
+    refund_pubkey = await wallet3.create_p2pk_pubkey()
+    expired_locktime = int(time.time()) - 30
+
+    def expired_tags() -> Tags:
+        return Tags(
+            [
+                ["refund", refund_pubkey],
+                ["locktime", str(expired_locktime)],
+            ]
+        )
+
+    # --- Receiver (main pubkeys) path still works after locktime ---
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    secret_main = await wallet1.create_p2pk_lock(receiver_pubkey, tags=expired_tags())
+    _, proofs_main = await wallet1.swap_to_send(
+        wallet1.proofs, 16, secret_lock=secret_main
+    )
+
+    outputs_main = await create_test_outputs(wallet2, 16)
+    signed_main = wallet2.sign_p2pk_sig_inputs(proofs_main)
+    promises_main = await ledger.swap(proofs=signed_main, outputs=outputs_main)
+    assert len(promises_main) == len(outputs_main)
+    await wallet1.invalidate(proofs_main, check_spendable=True)
+    await wallet1.load_proofs(reload=True)
+
+    # --- Refund path becomes available after locktime ---
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    proofs2 = await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    secret_refund = await wallet1.create_p2pk_lock(receiver_pubkey, tags=expired_tags())
+    _, proofs_refund = await wallet1.swap_to_send(
+        proofs2, 16, secret_lock=secret_refund
+    )
+
+    outputs_refund = await create_test_outputs(wallet3, 16)
+    signed_refund = wallet3.sign_p2pk_sig_inputs(proofs_refund)
+    promises_refund = await ledger.swap(proofs=signed_refund, outputs=outputs_refund)
+    assert len(promises_refund) == len(outputs_refund)
+    await wallet1.invalidate(proofs_refund, check_spendable=True)
+    await wallet1.load_proofs(reload=True)
 
 
 @pytest.mark.asyncio
@@ -620,7 +677,7 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     signature2 = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add both signatures to the first proof only (SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).json()
+    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).model_dump_json()
 
     # This should succeed with 2 valid signatures
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)

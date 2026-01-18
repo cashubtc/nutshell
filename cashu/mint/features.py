@@ -55,7 +55,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         ]
         return MintInfo(
             name=settings.mint_info_name,
-            pubkey=self.pubkey.serialize().hex() if self.pubkey else None,
+            pubkey=self.pubkey.format().hex() if self.pubkey else None,
             version=f"{_VERSION_PREFIX}/{settings.version}",
             description=settings.mint_info_description,
             description_long=settings.mint_info_description_long,

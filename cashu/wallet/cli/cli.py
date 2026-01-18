@@ -32,7 +32,6 @@ from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
 from ...core.settings import settings
-from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
     get_bolt11_melt_quotes,
@@ -59,7 +58,6 @@ from ..helpers import (
     receive,
     send,
 )
-from ..nostr import receive_nostr, send_nostr
 from ..subscriptions import SubscriptionManager
 
 
@@ -157,7 +155,9 @@ def init_auth_wallet(func):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
+async def cli(
+    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
@@ -384,7 +384,7 @@ async def invoice(
         if paid:
             return
         try:
-            ws_quote_resp = PostMintQuoteResponse.parse_obj(msg.payload)
+            ws_quote_resp = PostMintQuoteResponse.model_validate(msg.payload)
         except Exception:
             return
         logger.debug(
@@ -613,13 +613,6 @@ async def balance(ctx: Context, verbose):
     help="Memo for the token.",
     type=str,
 )
-@click.option(
-    "--nostr",
-    "-n",
-    default=None,
-    help="Send to nostr pubkey.",
-    type=str,
-)
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
 @click.option(
     "--dleq",
@@ -636,17 +629,6 @@ async def balance(ctx: Context, verbose):
     is_flag=True,
     help="Print legacy TokenV3 format.",
     type=bool,
-)
-@click.option(
-    "--verbose",
-    "-v",
-    default=False,
-    is_flag=True,
-    help="Show more information.",
-    type=bool,
-)
-@click.option(
-    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.option(
     "--offline",
@@ -679,44 +661,31 @@ async def send_command(
     ctx: Context,
     amount: int,
     memo: str,
-    nostr: str,
     lock: str,
     dleq: bool,
     legacy: bool,
-    verbose: bool,
-    yes: bool,
     offline: bool,
     include_fees: bool,
     force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
-    if not nostr:
-        await send(
-            wallet,
-            amount=amount,
-            lock=lock,
-            legacy=legacy,
-            offline=offline,
-            include_dleq=dleq,
-            include_fees=include_fees,
-            memo=memo,
-            force_swap=force_swap,
-        )
-    else:
-        await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
+    await send(
+        wallet,
+        amount=amount,
+        lock=lock,
+        legacy=legacy,
+        offline=offline,
+        include_dleq=dleq,
+        include_fees=include_fees,
+        memo=memo,
+        force_swap=force_swap,
+    )
     await print_balance(ctx)
 
 
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str, default="")
-@click.option(
-    "--nostr",
-    "-n",
-    default=False,
-    is_flag=True,
-    help="Receive tokens via nostr.receive",
-)
 @click.option(
     "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
 )
@@ -726,7 +695,6 @@ async def send_command(
 async def receive_cli(
     ctx: Context,
     token: str,
-    nostr: bool,
     all: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
@@ -746,18 +714,11 @@ async def receive_cli(
         await verify_mint(mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
-    # receive tokens via nostr
-    elif nostr:
-        await receive_nostr(wallet)
-        # exit on keypress
-        input("Enter any text to exit.")
-        print("Exiting.")
-        os._exit(0)
     # receive all pending outgoing tokens back to the wallet
     elif all:
         await receive_all_pending(ctx, wallet)
     else:
-        print("Error: enter token or use either flag --nostr or --all.")
+        print("Error: enter token or use flag --all.")
         return
     await print_balance(ctx)
 
@@ -1145,7 +1106,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                 if not mint_info_obj:
                     print("        - Mint information not available.")
                     continue
-                mint_info = mint_info_obj.dict()
+                mint_info = mint_info_obj.model_dump()
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
@@ -1182,14 +1143,6 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
         print(f"    - File: {settings.env_file}")
     if settings.tor:
         print(f"Tor enabled: {settings.tor}")
-    if settings.nostr_private_key:
-        try:
-            client = NostrClient(private_key=settings.nostr_private_key, connect=False)
-            print("Nostr:")
-            print(f"    - Public key: {client.public_key.bech32()}")
-            print(f"    - Relays: {', '.join(settings.nostr_relays)}")
-        except Exception:
-            print("Nostr: Error. Invalid key.")
     if settings.socks_proxy:
         print(f"Socks proxy: {settings.socks_proxy}")
     if settings.http_proxy:

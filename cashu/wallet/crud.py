@@ -39,7 +39,7 @@ async def store_proof(
             "secret": str(proof.secret),
             "time_created": int(time.time()),
             "derivation_path": proof.derivation_path,
-            "dleq": json.dumps(proof.dleq.dict()) if proof.dleq else "",
+            "dleq": json.dumps(proof.dleq.model_dump()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
         },
@@ -243,12 +243,13 @@ async def update_keyset(
     await (conn or db).execute(
         """
         UPDATE keysets
-        SET active = :active
+        SET active = :active, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
         """,
         {
             "active": keyset.active,
             "id": keyset.id,
+            "input_fee_ppk": keyset.input_fee_ppk,
         },
     )
 
@@ -389,7 +390,7 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.dict() for c in quote.change]) if quote.change else ""
+                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
             ),
         },
     )
@@ -525,30 +526,6 @@ async def set_secret_derivation(
     )
 
 
-async def set_nostr_last_check_timestamp(
-    db: Database,
-    timestamp: int,
-    conn: Optional[Connection] = None,
-) -> None:
-    await (conn or db).execute(
-        "UPDATE nostr SET last = :last WHERE type = :type",
-        {"last": timestamp, "type": "dm"},
-    )
-
-
-async def get_nostr_last_check_timestamp(
-    db: Database,
-    conn: Optional[Connection] = None,
-) -> Optional[int]:
-    row = await (conn or db).fetchone(
-        """
-        SELECT last from nostr WHERE type = :type
-        """,
-        {"type": "dm"},
-    )
-    return row[0] if row else None  # type: ignore
-
-
 async def get_seed_and_mnemonic(
     db: Database,
     conn: Optional[Connection] = None,
@@ -640,4 +617,4 @@ async def get_mint_by_url(
         """,
         {"url": url},
     )
-    return WalletMint.parse_obj(dict(row)) if row else None
+    return WalletMint.model_validate(dict(row)) if row else None
