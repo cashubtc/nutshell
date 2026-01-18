@@ -113,7 +113,7 @@ class BlinkWallet(LightningBackend):
                     balance = wallet_dict["balance"]  # type: ignore (cents)
             elif wallet_dict.get("walletCurrency") == "BTC":
                 self.wallet_ids[Unit.sat] = wallet_dict["id"]  # type: ignore
-                if self.unit in [Unit.sat, Unit.msat]:
+                if self.unit == Unit.sat or self.unit == Unit.msat:
                     balance = wallet_dict["balance"]  # type: ignore (sats)
 
         return StatusResponse(error_message=None, balance=Amount(self.unit, balance))
@@ -127,7 +127,38 @@ class BlinkWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
 
-        if self.unit == Unit.usd:
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            variables = {
+                "input": {
+                    "amount": str(amount.to(Unit.sat).amount),
+                    "recipientWalletId": self.wallet_ids[Unit.sat],
+                }
+            }
+            if description_hash:
+                variables["input"]["descriptionHash"] = description_hash.hex()
+            if memo:
+                variables["input"]["memo"] = memo
+
+            data = {
+                "query": """
+                mutation LnInvoiceCreateOnBehalfOfRecipient($input: LnInvoiceCreateOnBehalfOfRecipientInput!) {
+                    lnInvoiceCreateOnBehalfOfRecipient(input: $input) {
+                        invoice {
+                            paymentRequest
+                            paymentHash
+                            paymentSecret
+                            satoshis
+                        }
+                        errors {
+                            message path code
+                        }
+                    }
+                }
+                """,
+                "variables": variables,
+            }
+            response_key = "lnInvoiceCreateOnBehalfOfRecipient"
+        elif self.unit == Unit.usd:
             variables = {
                 "input": {
                     "amount": str(amount.to(Unit.usd).amount),
@@ -159,36 +190,7 @@ class BlinkWallet(LightningBackend):
             }
             response_key = "lnUsdInvoiceCreateOnBehalfOfRecipient"
         else:
-            variables = {
-                "input": {
-                    "amount": str(amount.to(Unit.sat).amount),
-                    "recipientWalletId": self.wallet_ids[Unit.sat],
-                }
-            }
-            if description_hash:
-                variables["input"]["descriptionHash"] = description_hash.hex()
-            if memo:
-                variables["input"]["memo"] = memo
-
-            data = {
-                "query": """
-                mutation LnInvoiceCreateOnBehalfOfRecipient($input: LnInvoiceCreateOnBehalfOfRecipientInput!) {
-                    lnInvoiceCreateOnBehalfOfRecipient(input: $input) {
-                        invoice {
-                            paymentRequest
-                            paymentHash
-                            paymentSecret
-                            satoshis
-                        }
-                        errors {
-                            message path code
-                        }
-                    }
-                }
-                """,
-                "variables": variables,
-            }
-            response_key = "lnInvoiceCreateOnBehalfOfRecipient"
+            raise Exception(f"Unsupported unit: {self.unit}")
 
         try:
             r = await self.client.post(
@@ -220,7 +222,13 @@ class BlinkWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        wallet_id = self.wallet_ids[Unit.usd] if self.unit == Unit.usd else self.wallet_ids[Unit.sat]
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            wallet_id = self.wallet_ids[Unit.sat]
+        elif self.unit == Unit.usd:
+            wallet_id = self.wallet_ids[Unit.usd]
+        else:
+            raise Exception(f"Unsupported unit: {self.unit}")
+
         variables = {
             "input": {
                 "paymentRequest": quote.request,
@@ -297,11 +305,13 @@ class BlinkWallet(LightningBackend):
 
         fee_amount: Union[None, Amount] = None
         if fee:
-            if self.unit == Unit.usd:
+            if self.unit == Unit.sat or self.unit == Unit.msat:
+                fee_amount = Amount(Unit.sat, fee)
+            elif self.unit == Unit.usd:
                 fee_cents = await self._sats_to_cents(fee)
                 fee_amount = Amount(Unit.usd, fee_cents)
             else:
-                fee_amount = Amount(Unit.sat, fee)
+                raise Exception(f"Unsupported unit: {self.unit}")
 
         return PaymentResponse(
             result=result,
@@ -351,7 +361,13 @@ class BlinkWallet(LightningBackend):
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         payment_hash = bolt11.decode(checking_id).payment_hash
-        wallet_id = self.wallet_ids[Unit.usd] if self.unit == Unit.usd else self.wallet_ids[Unit.sat]
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            wallet_id = self.wallet_ids[Unit.sat]
+        elif self.unit == Unit.usd:
+            wallet_id = self.wallet_ids[Unit.usd]
+        else:
+            raise Exception(f"Unsupported unit: {self.unit}")
+
         variables = {
             "paymentHash": payment_hash,
             "walletId": wallet_id,
@@ -441,11 +457,13 @@ class BlinkWallet(LightningBackend):
         fee = payment["settlementFee"]  # type: ignore
         preimage = payment["settlementVia"].get("preImage")  # type: ignore
 
-        if self.unit == Unit.usd:
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            fee_amount = Amount(Unit.sat, fee)
+        elif self.unit == Unit.usd:
             fee_cents = await self._sats_to_cents(fee)
             fee_amount = Amount(Unit.usd, fee_cents)
         else:
-            fee_amount = Amount(Unit.sat, fee)
+            raise Exception(f"Unsupported unit: {self.unit}")
 
         return PaymentStatus(
             result=result,
@@ -508,7 +526,28 @@ class BlinkWallet(LightningBackend):
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
 
-        if self.unit == Unit.usd:
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            variables = {
+                "input": {
+                    "paymentRequest": bolt11,
+                    "walletId": self.wallet_ids[Unit.sat],
+                }
+            }
+            data = {
+                "query": """
+                mutation lnInvoiceFeeProbe($input: LnInvoiceFeeProbeInput!) {
+                    lnInvoiceFeeProbe(input: $input) {
+                        amount
+                        errors {
+                            message path code
+                        }
+                    }
+                }
+                """,
+                "variables": variables,
+            }
+            response_key = "lnInvoiceFeeProbe"
+        elif self.unit == Unit.usd:
             variables = {
                 "input": {
                     "paymentRequest": bolt11,
@@ -530,26 +569,7 @@ class BlinkWallet(LightningBackend):
             }
             response_key = "lnUsdInvoiceFeeProbe"
         else:
-            variables = {
-                "input": {
-                    "paymentRequest": bolt11,
-                    "walletId": self.wallet_ids[Unit.sat],
-                }
-            }
-            data = {
-                "query": """
-                mutation lnInvoiceFeeProbe($input: LnInvoiceFeeProbeInput!) {
-                    lnInvoiceFeeProbe(input: $input) {
-                        amount
-                        errors {
-                            message path code
-                        }
-                    }
-                }
-                """,
-                "variables": variables,
-            }
-            response_key = "lnInvoiceFeeProbe"
+            raise Exception(f"Unsupported unit: {self.unit}")
 
         fees_response_msat = 0
         try:
@@ -588,7 +608,15 @@ class BlinkWallet(LightningBackend):
             ),
         )
 
-        if self.unit == Unit.usd:
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            fees = Amount(unit=Unit.msat, amount=fees_msat)
+            amount = Amount(unit=Unit.msat, amount=amount_msat)
+            return PaymentQuoteResponse(
+                checking_id=bolt11,
+                fee=fees.to(self.unit, round="up"),
+                amount=amount.to(self.unit, round="up"),
+            )
+        elif self.unit == Unit.usd:
             sats_per_usd = await self._get_sats_per_usd()
             amount_sats = amount_msat // 1000
             fees_sats = fees_msat // 1000
@@ -600,13 +628,7 @@ class BlinkWallet(LightningBackend):
                 amount=Amount(Unit.usd, amount_cents),
             )
         else:
-            fees = Amount(unit=Unit.msat, amount=fees_msat)
-            amount = Amount(unit=Unit.msat, amount=amount_msat)
-            return PaymentQuoteResponse(
-                checking_id=bolt11,
-                fee=fees.to(self.unit, round="up"),
-                amount=amount.to(self.unit, round="up"),
-            )
+            raise Exception(f"Unsupported unit: {self.unit}")
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore
         raise NotImplementedError("paid_invoices_stream not implemented")
