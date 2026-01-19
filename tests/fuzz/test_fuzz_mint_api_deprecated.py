@@ -46,12 +46,9 @@ proof_strategy = st.builds(
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(amount=st.integers())
 def test_fuzz_deprecated_mint_get(client, amount):
-    try:
-        response = client.get(f"/mint?amount={amount}")
-        # Expecting either success or valid error codes
-        assert response.status_code in [200, 400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.get(f"/mint?amount={amount}")
+    # Expecting either success or valid error codes
+    assert response.status_code in [200, 400, 404, 422, 503]
 
 # POST /mint
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
@@ -66,11 +63,8 @@ def test_fuzz_deprecated_mint_post(client, outputs, hash):
     if hash:
         params["hash"] = hash
     
-    try:
-        response = client.post("/mint", json=payload, params=params)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/mint", json=payload, params=params)
+    assert response.status_code in [400, 404, 422, 503]
 
 # POST /melt
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
@@ -88,11 +82,8 @@ def test_fuzz_deprecated_melt(client, pr, proofs, outputs):
         "proofs": inputs_json,
         "outputs": outputs_json
     }
-    try:
-        response = client.post("/melt", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/melt", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 # POST /check
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
@@ -103,11 +94,8 @@ def test_fuzz_deprecated_check(client, proofs):
     inputs_json = [p.model_dump(exclude={'dleq', 'witness'}) for p in proofs]
     payload = {"proofs": inputs_json}
     
-    try:
-        response = client.post("/check", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/check", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 # POST /split
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
@@ -127,11 +115,8 @@ def test_fuzz_deprecated_split(client, proofs, outputs, amount):
     if amount is not None:
         payload["amount"] = amount
 
-    try:
-        response = client.post("/split", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/split", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 # POST /restore
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
@@ -142,8 +127,5 @@ def test_fuzz_deprecated_restore(client, outputs):
     outputs_json = [o.model_dump() for o in outputs]
     payload = {"outputs": outputs_json}
     
-    try:
-        response = client.post("/restore", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/restore", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
