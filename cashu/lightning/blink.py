@@ -110,11 +110,11 @@ class BlinkWallet(LightningBackend):
             if wallet_dict.get("walletCurrency") == "USD":
                 self.wallet_ids[Unit.usd] = wallet_dict["id"]  # type: ignore
                 if self.unit == Unit.usd:
-                    balance = wallet_dict["balance"]  # type: ignore (cents)
+                    balance = wallet_dict["balance"]  # type: ignore
             elif wallet_dict.get("walletCurrency") == "BTC":
                 self.wallet_ids[Unit.sat] = wallet_dict["id"]  # type: ignore
                 if self.unit == Unit.sat or self.unit == Unit.msat:
-                    balance = wallet_dict["balance"]  # type: ignore (sats)
+                    balance = wallet_dict["balance"]  # type: ignore
 
         return StatusResponse(error_message=None, balance=Amount(self.unit, balance))
 
@@ -489,7 +489,7 @@ class BlinkWallet(LightningBackend):
         try:
             r = await self.client.post(
                 url=self.endpoint,
-                data=json.dumps(data),
+                data=json.dumps(data),  # type: ignore
             )
             r.raise_for_status()
         except Exception as e:

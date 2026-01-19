@@ -253,11 +253,9 @@ async def test_blink_get_payment_quote_backend_error():
 
 PRICE_RESPONSE = {
     "data": {
-        "realtimePrice": {
-            "btcSatPrice": {
-                "base": 10000000000,
-                "offset": 12,
-            }
+        "currencyConversionEstimation": {
+            "btcSatAmount": 100,
+            "usdCentAmount": 100,
         }
     }
 }
