@@ -67,11 +67,8 @@ def test_fuzz_mint_quote(client, unit, amount, description, pubkey):
         "description": description,
         "pubkey": pubkey
     }
-    try:
-        response = client.post("/v1/mint/quote/bolt11", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/mint/quote/bolt11", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -86,11 +83,8 @@ def test_fuzz_mint(client, quote, outputs, signature):
         "outputs": outputs_json,
         "signature": signature
     }
-    try:
-        response = client.post("/v1/mint/bolt11", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/mint/bolt11", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -104,11 +98,8 @@ def test_fuzz_melt_quote(client, unit, request, options):
         "request": request,
         "options": options
     }
-    try:
-        response = client.post("/v1/melt/quote/bolt11", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/melt/quote/bolt11", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -125,11 +116,8 @@ def test_fuzz_melt(client, quote, inputs, outputs):
         "inputs": inputs_json,
         "outputs": outputs_json
     }
-    try:
-        response = client.post("/v1/melt/bolt11", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/melt/bolt11", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -143,11 +131,8 @@ def test_fuzz_swap(client, inputs, outputs):
         "inputs": inputs_json,
         "outputs": outputs_json
     }
-    try:
-        response = client.post("/v1/swap", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/swap", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -157,11 +142,8 @@ def test_fuzz_checkstate(client, Ys):
     payload = {
         "Ys": Ys
     }
-    try:
-        response = client.post("/v1/checkstate", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/checkstate", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -172,40 +154,28 @@ def test_fuzz_restore(client, outputs):
     payload = {
         "outputs": outputs_json
     }
-    try:
-        response = client.post("/v1/restore", json=payload)
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.post("/v1/restore", json=payload)
+    assert response.status_code in [400, 404, 422, 503]
 
 # GET Endpoints - using url_safe_text and try/except
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(keyset_id=url_safe_text())
 def test_fuzz_keys_keyset_id(client, keyset_id):
-    try:
-        response = client.get(f"/v1/keys/{keyset_id}")
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.get(f"/v1/keys/{keyset_id}")
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(quote=url_safe_text(max_len=50))
 def test_fuzz_mint_quote_get(client, quote):
-    try:
-        response = client.get(f"/v1/mint/quote/bolt11/{quote}")
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.get(f"/v1/mint/quote/bolt11/{quote}")
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(quote=url_safe_text(max_len=50))
 def test_fuzz_melt_quote_get(client, quote):
-    try:
-        response = client.get(f"/v1/melt/quote/bolt11/{quote}")
-        assert response.status_code in [400, 404, 422, 503]
-    except Exception:
-        pass
+    response = client.get(f"/v1/melt/quote/bolt11/{quote}")
+    assert response.status_code in [400, 404, 422, 503]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=10)
 @given(st.none())
