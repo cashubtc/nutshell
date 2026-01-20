@@ -219,8 +219,7 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not found.")
             if any(
                 [
-                    quote.state == MeltQuoteState.pending
-                    or quote.state == MeltQuoteState.paid
+                    quote.state in [MeltQuoteState.pending, MeltQuoteState.paid]
                     for quote in quotes_db
                 ]
             ):
@@ -240,6 +239,8 @@ class DbWriteHelper:
         Args:
             quote (MeltQuote): Melt quote to unset as pending.
             state (MeltQuoteState): New state of the melt quote.
+        Raises:
+            TransactionError: If the melt quote is not found or not pending.
         """
         quote_copy = quote.model_copy()
         async with self.db.get_connection(lock_table="melt_quotes") as conn:
@@ -276,6 +277,15 @@ class DbWriteHelper:
         quote_id: str,
         state: MeltQuoteState,
     ):
+        """Updates the state of a melt quote.
+
+        Args:
+            quote_id (str): ID of the melt quote to update.
+            state (MeltQuoteState): New state of the melt quote.
+
+        Raises:
+            TransactionError: If the melt quote is not found.
+        """
         async with self.db.get_connection(lock_table="melt_quotes") as conn:
             melt_quote = await self.crud.get_melt_quote(
                 quote_id=quote_id, db=self.db, conn=conn
@@ -284,3 +294,31 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not found.")
             melt_quote.state = state
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
+
+    async def _store_melt_quote(self, quote: MeltQuote):
+        """Stores a melt quote in the database. Will fail if a quote with the same checking_id is already pending or paid.
+
+        Args:
+            quote (MeltQuote): Melt quote to store.
+
+        Raises:
+            TransactionError: If a quote with the same checking_id is already pending or paid.
+        """
+        async with self.db.get_connection(
+            lock_table="melt_quotes",
+            lock_select_statement=f"checking_id='{quote.checking_id}'",
+        ) as conn:
+            # get all melt quotes with same checking_id from db and check if there is one already pending or paid
+            quotes_db = await self.crud.get_melt_quotes_by_checking_id(
+                checking_id=quote.checking_id, db=self.db, conn=conn
+            )
+            if any(
+                [
+                    quote.state in [MeltQuoteState.pending, MeltQuoteState.paid]
+                    for quote in quotes_db
+                ]
+            ):
+                raise TransactionError("Melt quote already paid or pending.")
+
+            # store the melt quote
+            await self.crud.store_melt_quote(quote=quote, db=self.db, conn=conn)
