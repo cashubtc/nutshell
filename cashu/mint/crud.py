@@ -14,6 +14,7 @@ from ..core.base import (
     MintQuote,
     Proof,
     Unit,
+    Saga,
 )
 from ..core.db import (
     Connection,
@@ -289,6 +290,41 @@ class LedgerCrud(ABC):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[MeltQuote]: ...
+
+    @abstractmethod
+    async def store_saga_state(
+        self,
+        *,
+        db: Database,
+        saga: "Saga",
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_saga_state(
+        self,
+        *,
+        db: Database,
+        operation_id: str,
+        conn: Optional[Connection] = None,
+    ) -> Optional["Saga"]: ...
+
+    @abstractmethod
+    async def delete_saga_state(
+        self,
+        *,
+        db: Database,
+        operation_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_incomplete_sagas(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List["Saga"]: ...
 
     @abstractmethod
     async def get_melt_quote_by_request(
@@ -1054,3 +1090,70 @@ class LedgerCrudSqlite(LedgerCrud):
             {"checking_id": checking_id},
         )
         return [MeltQuote.from_row(row) for row in results]  # type: ignore
+
+    async def store_saga_state(
+        self,
+        *,
+        db: Database,
+        saga: Saga,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {db.table_with_schema('saga_state')}
+            (operation_id, state, data, created_at)
+            VALUES (:operation_id, :state, :data, :created_at)
+            ON CONFLICT(operation_id) DO UPDATE SET
+            state = :state, data = :data
+            """,
+            {
+                "operation_id": saga.operation_id,
+                "state": saga.state.value,
+                "data": saga.data,
+                "created_at": db.to_timestamp(db.timestamp_now_str()),
+            },
+        )
+
+    async def get_saga_state(
+        self,
+        *,
+        db: Database,
+        operation_id: str,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Saga]:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * FROM {db.table_with_schema('saga_state')}
+            WHERE operation_id = :operation_id
+            """,
+            {"operation_id": operation_id},
+        )
+        return Saga.from_row(row) if row else None  # type: ignore
+
+    async def delete_saga_state(
+        self,
+        *,
+        db: Database,
+        operation_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            DELETE FROM {db.table_with_schema('saga_state')}
+            WHERE operation_id = :operation_id
+            """,
+            {"operation_id": operation_id},
+        )
+
+    async def get_incomplete_sagas(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Saga]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * FROM {db.table_with_schema('saga_state')}
+            """
+        )
+        return [Saga.from_row(r) for r in rows]  # type: ignore

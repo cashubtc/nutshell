@@ -285,6 +285,38 @@ class MeltQuoteState(Enum):
         return self.name
 
 
+class MeltSagaState(Enum):
+    initial = "Initial"
+    setup_complete = "SetupComplete"
+    payment_attempted = "PaymentAttempted"
+    payment_confirmed = "PaymentConfirmed"
+
+    def __str__(self):
+        return self.name
+
+
+class Saga(BaseModel):
+    operation_id: str
+    state: MeltSagaState
+    data: str  # JSON encoded data
+    created_at: int
+
+    @classmethod
+    def from_row(cls, row: Row):
+        try:
+            created_at = int(row["created_at"]) if row["created_at"] else 0
+        except Exception:
+            created_at = (
+                int(row["created_at"].timestamp()) if row["created_at"] else 0
+            )
+        return cls(
+            operation_id=row["operation_id"],
+            state=MeltSagaState(row["state"]),
+            data=row["data"],
+            created_at=created_at,
+        )
+
+
 class MeltQuote(LedgerEvent):
     quote: str
     method: str
