@@ -418,6 +418,40 @@ class UpdateQuoteTtlRequest(google.protobuf.message.Message):
 global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
 
 @typing.final
+class GetQuoteTtlRequest(google.protobuf.message.Message):
+    """GetQuoteTtlRequest is an empty message used to retrieve the current Time-To-Live (TTL) for quotes."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___GetQuoteTtlRequest = GetQuoteTtlRequest
+
+@typing.final
+class GetQuoteTtlResponse(google.protobuf.message.Message):
+    """GetQuoteTtlResponse contains the current Time-To-Live (TTL) configuration for quotes."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    MINT_TTL_FIELD_NUMBER: builtins.int
+    MELT_TTL_FIELD_NUMBER: builtins.int
+    mint_ttl: builtins.int
+    """The TTL in seconds for minting (NUT-04) quotes."""
+    melt_ttl: builtins.int
+    """The TTL in seconds for melting (NUT-05) quotes."""
+    def __init__(
+        self,
+        *,
+        mint_ttl: builtins.int = ...,
+        melt_ttl: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> None: ...
+
+global___GetQuoteTtlResponse = GetQuoteTtlResponse
+
+@typing.final
 class Nut04Quote(google.protobuf.message.Message):
     """Nut04Quote represents a quote for minting (NUT-04)."""
 

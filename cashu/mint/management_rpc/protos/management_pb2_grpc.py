@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in management_pb2_grpc.py depends on'
+        + f' but the generated code in management_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -111,6 +111,11 @@ class MintStub(object):
                 '/cashu.Mint/UpdateQuoteTtl',
                 request_serializer=management__pb2.UpdateQuoteTtlRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
+                _registered_method=True)
+        self.GetQuoteTtl = channel.unary_unary(
+                '/cashu.Mint/GetQuoteTtl',
+                request_serializer=management__pb2.GetQuoteTtlRequest.SerializeToString,
+                response_deserializer=management__pb2.GetQuoteTtlResponse.FromString,
                 _registered_method=True)
         self.UpdateNut04Quote = channel.unary_unary(
                 '/cashu.Mint/UpdateNut04Quote',
@@ -250,6 +255,13 @@ class MintServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetQuoteTtl(self, request, context):
+        """GetQuoteTtl retrieves the current Time-To-Live (TTL) for minting and melting quotes.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def UpdateNut04Quote(self, request, context):
         """UpdateNut04Quote updates the state of a specific NUT-04 (minting) quote.
         """
@@ -362,6 +374,11 @@ def add_MintServicer_to_server(servicer, server):
                     servicer.UpdateQuoteTtl,
                     request_deserializer=management__pb2.UpdateQuoteTtlRequest.FromString,
                     response_serializer=management__pb2.UpdateResponse.SerializeToString,
+            ),
+            'GetQuoteTtl': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetQuoteTtl,
+                    request_deserializer=management__pb2.GetQuoteTtlRequest.FromString,
+                    response_serializer=management__pb2.GetQuoteTtlResponse.SerializeToString,
             ),
             'UpdateNut04Quote': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateNut04Quote,
@@ -797,6 +814,33 @@ class Mint(object):
             '/cashu.Mint/UpdateQuoteTtl',
             management__pb2.UpdateQuoteTtlRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetQuoteTtl(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/GetQuoteTtl',
+            management__pb2.GetQuoteTtlRequest.SerializeToString,
+            management__pb2.GetQuoteTtlResponse.FromString,
             options,
             channel_credentials,
             insecure,

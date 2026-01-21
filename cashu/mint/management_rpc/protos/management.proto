@@ -36,6 +36,8 @@ service Mint {
     rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
     // UpdateQuoteTtl updates the Time-To-Live (TTL) for minting and melting quotes.
     rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    // GetQuoteTtl retrieves the current Time-To-Live (TTL) for minting and melting quotes.
+    rpc GetQuoteTtl(GetQuoteTtlRequest) returns (GetQuoteTtlResponse) {}
     // UpdateNut04Quote updates the state of a specific NUT-04 (minting) quote.
     rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     // UpdateNut05Quote updates the state of a specific NUT-05 (melting) quote.
@@ -180,6 +182,18 @@ message UpdateQuoteTtlRequest {
     optional uint64 mint_ttl = 1;
     // Optional: The TTL in seconds for melting (NUT-05) quotes.
     optional uint64 melt_ttl = 2;
+}
+
+// GetQuoteTtlRequest is an empty message used to retrieve the current Time-To-Live (TTL) for quotes.
+message GetQuoteTtlRequest {
+}
+
+// GetQuoteTtlResponse contains the current Time-To-Live (TTL) configuration for quotes.
+message GetQuoteTtlResponse {
+    // The TTL in seconds for minting (NUT-04) quotes.
+    uint64 mint_ttl = 1;
+    // The TTL in seconds for melting (NUT-05) quotes.
+    uint64 melt_ttl = 2;
 }
 
 // Nut04Quote represents a quote for minting (NUT-04).
