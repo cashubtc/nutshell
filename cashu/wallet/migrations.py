@@ -334,3 +334,13 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
+
+async def m017_add_deleted_column_to_keysets(db: Database):
+    """
+    Add a deleted column to keysets. A deleted keyset is one that disappeared from the mint and
+    must no longer be loaded or used.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            "ALTER TABLE keysets ADD COLUMN deleted BOOL DEFAULT FALSE"
+        )
