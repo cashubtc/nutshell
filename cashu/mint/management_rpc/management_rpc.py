@@ -111,6 +111,13 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No quote ttl was specified")
         return management_pb2.UpdateResponse()
+    
+    async def GetQuoteTtl(self, request, _):
+        logger.debug("gRPC GetQuoteTtl has been called")
+        return management_pb2.GetQuoteTtlResponse(
+            mint_ttl=settings.mint_redis_cache_ttl,
+            melt_ttl=settings.mint_redis_cache_ttl,
+        )
 
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
