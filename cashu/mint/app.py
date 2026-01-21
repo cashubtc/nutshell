@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.requests import Request
 
-from ..core.errors import CashuError
+from ..core.errors import BackendConnectionError, CashuError
 from ..core.logging import configure_logger
 from ..core.settings import settings
 from .auth.router import auth_router
@@ -35,7 +35,14 @@ from .middleware import add_middlewares, request_validation_exception_handler
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    await start_mint()
+    try:
+        await start_mint()
+    except BackendConnectionError as e:
+        logger.error(f"Failed to start mint: {e}")
+        # We still need to yield to allow FastAPI to continue
+        # but the app will return errors for all endpoints
+        yield
+        # We don't need to shut down anything as startup failed
     if settings.mint_require_auth:
         await start_auth()
     if settings.mint_rpc_server_enable:
@@ -93,7 +100,21 @@ async def catch_exceptions(request: Request, call_next):
         except Exception:
             err_message = e.args[0] if e.args else "Unknown error"
 
-        if isinstance(e, CashuError) or isinstance(e.args[0], CashuError):
+        # Special handling for backend connection errors
+        if isinstance(e, BackendConnectionError):
+            logger.error(f"Backend connection error: {err_message}")
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "detail": "Failed to connect to the Lightning backend. Please check your configuration or try again later.",
+                    "code": e.code,
+                    "error": err_message,
+                },
+                headers=CORS_HEADERS,
+            )
+        elif isinstance(e, CashuError) or (
+            hasattr(e, "args") and e.args and isinstance(e.args[0], CashuError)
+        ):
             logger.error(f"CashuError: {err_message}")
             code = e.code if isinstance(e, CashuError) else e.args[0].code
             # return with cors headers

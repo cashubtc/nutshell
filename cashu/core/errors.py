@@ -185,6 +185,19 @@ class LightningPaymentFailedError(CashuError):
         super().__init__(detail or self.detail, code=self.code)
 
 
+class BackendConnectionError(LightningError):
+    detail = "Failed to connect to Lightning backend"
+    code = 20005
+
+    def __init__(self, backend_name: Optional[str] = None, error_message: Optional[str] = None):
+        detail = self.detail
+        if backend_name:
+            detail = f"Failed to connect to Lightning backend: {backend_name}"
+        if error_message:
+            detail = f"{detail}. Error: {error_message}"
+        super().__init__(detail, code=self.code)
+
+
 class QuoteSignatureInvalidError(CashuError):
     detail = "Signature for mint request invalid"
     code = 20008
