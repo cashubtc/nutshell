@@ -684,7 +684,6 @@ class Ledger(
             unit=quote.unit,
             request=quote.request,
             fee_reserve=quote.fee_reserve,
-            paid=quote.paid,  # deprecated
             state=quote.state.value,
             expiry=quote.expiry,
         )
