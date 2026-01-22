@@ -113,14 +113,19 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         return management_pb2.UpdateResponse()
     
     async def GetQuoteTtl(self, request, _):
+        """
+        Returns the currently configured quote TTL.
+
+        Note: Quote TTLs are currently backed by the shared
+        mint_redis_cache_ttl setting used by UpdateQuoteTtl.
+        """
         logger.debug("gRPC GetQuoteTtl has been called")
 
-        mint_ttl=settings.mint_redis_cache_ttl or 0
-        melt_ttl=settings.mint_redis_cache_ttl or 0
+        quote_ttl = settings.mint_redis_cache_ttl or 0
 
         return management_pb2.GetQuoteTtlResponse(
-            mint_ttl=mint_ttl,
-            melt_ttl=melt_ttl,
+            mint_ttl=quote_ttl,
+            melt_ttl=quote_ttl,
         )
 
     async def GetNut04Quote(self, request, _):
