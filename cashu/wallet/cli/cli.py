@@ -359,7 +359,7 @@ async def invoice(
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
-        assert amount % split == 0, "split must be divisor or amount"
+        assert amount % split == 0, "split must be divisor of amount"
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
         optional_split = [split] * n_splits
@@ -869,6 +869,85 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         print("To remove all pending tokens that are already spent use: cashu burn -a")
         print("To remove a specific pending token use: cashu burn <token>")
         print("To receive all pending tokens use: cashu receive -a")
+
+
+@cli.command("proofs", help="List raw proofs in wallet.")
+@click.option(
+    "--all", "-a", default=False, is_flag=True, help="Include reserved proofs."
+)
+@click.option(
+    "--no-dleq", default=False, is_flag=True, help="Do not include DLEQ proofs."
+)
+@click.option(
+    "--indent",
+    "-i",
+    default=2,
+    help="Number of spaces to indent JSON with.",
+    type=int,
+)
+@click.option(
+    "--keyset",
+    "-k",
+    default=None,
+    help="Filter by keyset ID.",
+    type=str,
+)
+@click.pass_context
+@coro
+async def proofs_command(
+    ctx: Context, all: bool, no_dleq: bool, indent: int, keyset: str
+):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs()
+
+    # Get proofs based on --all flag
+    if all:
+        # Include both available and reserved proofs
+        proofs = wallet.proofs
+    else:
+        # Only include available (non-reserved) proofs
+        proofs = [p for p in wallet.proofs if not p.reserved]
+
+    # Filter by keyset if specified
+    if keyset:
+        proofs = [p for p in proofs if p.id == keyset]
+
+    if not proofs:
+        if keyset:
+            print(f"No proofs found for keyset: {keyset}")
+        else:
+            print("No proofs found.")
+        return
+
+    # Convert proofs to dictionary format
+    include_dleq = not no_dleq
+    proofs_dict = []
+    for proof in proofs:
+        proof_dict = {
+            "id": proof.id,
+            "amount": proof.amount,
+            "secret": proof.secret,
+            "C": proof.C,
+        }
+
+        if include_dleq and proof.dleq:
+            proof_dict["dleq"] = {
+                "e": proof.dleq.e,
+                "s": proof.dleq.s,
+                "r": proof.dleq.r,
+            }
+
+        if proof.witness:
+            proof_dict["witness"] = proof.witness
+
+        proofs_dict.append(proof_dict)
+
+    # Print as JSON
+    proofs_json = json.dumps(
+        proofs_dict,
+        indent=indent,
+    )
+    print(proofs_json)
 
 
 @cli.command("lock", help="Generate receiving lock.")
