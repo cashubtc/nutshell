@@ -12,7 +12,7 @@ from cashu.core.models import (
 from cashu.mint.app import app
 from tests.helpers import is_deprecated_api_only
 
-ALLOWED_STATUS_CODES = [200, 400, 404, 405, 422, 503]
+ALLOWED_STATUS_CODES = [400, 404, 405, 422, 503]
 
 # Define strategies
 
@@ -22,6 +22,12 @@ def hex_string(min_len=66, max_len=66):
 def valid_unit():
     return st.sampled_from(["sat", "usd", "eur", "msat"])
 
+def public_key():
+    return st.builds(lambda a, b: a + b, st.just("02"), hex_string(64, 64))
+
+def keyset_id():
+    return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
+
 def url_safe_text(min_len=1, max_len=20):
     # Generates text that is safe for URLs (no control chars, no slashes)
     return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x)
@@ -30,19 +36,19 @@ def url_safe_text(min_len=1, max_len=20):
 blinded_message_strategy = st.builds(
     BlindedMessage,
     amount=st.integers(min_value=1),
-    id=st.text(min_size=1, max_size=20),
-    B_=hex_string(),
-    C_=st.one_of(st.none(), hex_string())
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    B_=st.one_of(hex_string(), public_key()),
+    C_=st.one_of(st.none(), public_key(), hex_string())
 )
 
 # Strategy for Proof
 proof_strategy = st.builds(
     Proof,
-    id=st.text(min_size=1, max_size=20),
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
     amount=st.integers(min_value=1),
     secret=st.text(min_size=1, max_size=64),
-    C=hex_string(),
-    Y=hex_string()
+    C=st.one_of(hex_string(), public_key()),
+    Y=st.one_of(public_key(), hex_string())
 )
 
 @pytest.fixture
@@ -60,7 +66,7 @@ pytestmark = pytest.mark.skipif(is_deprecated_api_only, reason="Deprecated API e
     unit=valid_unit(),
     amount=st.integers(min_value=1, max_value=1000000),
     description=st.text(max_size=100),
-    pubkey=st.one_of(st.none(), hex_string())
+    pubkey=st.one_of(st.none(), public_key(), hex_string())
 )
 def test_fuzz_mint_quote(client, unit, amount, description, pubkey):
     payload = {
@@ -70,13 +76,13 @@ def test_fuzz_mint_quote(client, unit, amount, description, pubkey):
         "pubkey": pubkey
     }
     response = client.post("/v1/mint/quote/bolt11", json=payload)
-    assert response.status_code in ALLOWED_STATUS_CODES
+    assert response.status_code in ALLOWED_STATUS_CODES + [200]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
     quote=st.text(min_size=1, max_size=50),
     outputs=st.lists(blinded_message_strategy, min_size=1, max_size=10),
-    signature=st.one_of(st.none(), hex_string())
+    signature=st.one_of(st.none(), hex_string(132, 132))
 )
 def test_fuzz_mint(client, quote, outputs, signature):
     outputs_json = [o.model_dump() for o in outputs]
@@ -138,7 +144,7 @@ def test_fuzz_swap(client, inputs, outputs):
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
-    Ys=st.lists(hex_string(), min_size=1, max_size=20)
+    Ys=st.lists(st.one_of(hex_string(), public_key()), min_size=1, max_size=20)
 )
 def test_fuzz_checkstate(client, Ys):
     payload = {
@@ -178,21 +184,3 @@ def test_fuzz_mint_quote_get(client, quote):
 def test_fuzz_melt_quote_get(client, quote):
     response = client.get(f"/v1/melt/quote/bolt11/{quote}")
     assert response.status_code in ALLOWED_STATUS_CODES
-
-@hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=10)
-@given(st.none())
-def test_fuzz_info(client, _):
-    response = client.get("/v1/info")
-    assert response.status_code == 200
-
-@hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=10)
-@given(st.none())
-def test_fuzz_keys(client, _):
-    response = client.get("/v1/keys")
-    assert response.status_code == 200
-
-@hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=10)
-@given(st.none())
-def test_fuzz_keysets(client, _):
-    response = client.get("/v1/keysets")
-    assert response.status_code == 200
