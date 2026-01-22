@@ -36,6 +36,8 @@ from .middleware import add_middlewares, request_validation_exception_handler
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await start_mint()
+    if settings.mint_redis_cache_enabled:
+        await redis.test_connection()
     if settings.mint_require_auth:
         await start_auth()
     if settings.mint_rpc_server_enable:
