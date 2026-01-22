@@ -15,6 +15,7 @@ from typing import Optional, Union
 
 import bolt11
 import click
+import httpx
 from click import Context
 from loguru import logger
 
@@ -27,6 +28,7 @@ from ...core.base import (
     TokenV4,
     Unit,
 )
+from ...core.nuts.nut18 import PaymentRequest, Transport
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -233,6 +235,101 @@ async def cli(
     await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
 
+async def pay_payment_request(ctx: Context, request: str, yes: bool):
+    wallet: Wallet = ctx.obj["WALLET"]
+    try:
+        req = PaymentRequest.deserialize(request)
+    except Exception as e:
+        print(f"Error decoding payment request: {e}")
+        return
+
+    print("Payment Request:")
+    print(f"  Amount: {req.a} {req.u if req.u else 'sat'}")
+    if req.d:
+        print(f"  Memo: {req.d}")
+    if req.m:
+        print(f"  Mints: {', '.join(req.m)}")
+    if req.t:
+        print(f"  Transports: {', '.join([f'{t.t}:{t.a}' for t in req.t])}")
+
+    if not req.a:
+        print("Error: Amount not specified in request.")
+        return
+
+    if req.m and wallet.url not in req.m:
+        print(
+            f"Warning: Current mint {wallet.url} is not in the trusted mints list:"
+            f" {req.m}"
+        )
+        if not yes:
+            click.confirm(
+                "Do you want to proceed with current mint anyway?",
+                abort=True,
+                default=False,
+            )
+
+    if not yes:
+        click.confirm(
+            f"Pay {req.a} {req.u if req.u else 'sat'}?", abort=True, default=True
+        )
+
+    await wallet.load_proofs()
+    # verify unit
+    if req.u and req.u != wallet.unit.name:
+        print(
+            f"Error: Wallet unit {wallet.unit.name} does not match request unit"
+            f" {req.u}"
+        )
+        return
+
+    # handle P2PK lock
+    secret_lock = None
+    if req.nut10:
+        if req.nut10.k == "P2PK":
+            pubkey = req.nut10.d
+            secret_lock = await wallet.create_p2pk_lock(
+                pubkey,
+                locktime_seconds=settings.locktime_delta_seconds,
+                sig_all=False,
+                n_sigs=1,
+            )
+        else:
+            print(f"Warning: Unsupported NUT-10 kind: {req.nut10.k}")
+
+    await wallet.load_mint()
+
+    if secret_lock:
+        _, send_proofs = await wallet.swap_to_send(
+            wallet.proofs, req.a, set_reserved=False, secret_lock=secret_lock
+        )
+    else:
+        send_proofs, fees = await wallet.select_to_send(wallet.proofs, req.a)
+
+    token = await wallet.serialize_proofs(send_proofs, memo=req.d)
+
+    if req.t:
+        for transport in req.t:
+            if transport.t == "post":
+                try:
+                    print(f"Sending token to {transport.a} ...", end="", flush=True)
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.post(transport.a, json={"token": token})
+                        resp.raise_for_status()
+                        print(" Success.")
+                except Exception as e:
+                    print(f" Failed: {e}")
+                    print("Token:")
+                    print(token)
+            else:
+                print(f"Unknown transport type: {transport.t}")
+                print(token)
+    else:
+        print(token)
+
+    await wallet.set_reserved_for_send(send_proofs, reserved=True)
+    await print_balance(ctx)
+
+
 @cli.command("pay", help="Pay Lightning invoice.")
 @click.argument("invoice", type=str)
 @click.argument(
@@ -249,6 +346,9 @@ async def cli(
 async def pay(
     ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
 ):
+    if invoice.startswith("creqA"):
+        await pay_payment_request(ctx, invoice, yes)
+        return
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
@@ -500,6 +600,51 @@ async def invoice(
     return
 
 
+@cli.command("creq", help="Create Payment Request.")
+@click.argument("amount", type=int)
+@click.option(
+    "--memo", "-m", default=None, help="Memo for the payment request.", type=str
+)
+@click.option("--mint", default=None, help="Mint URL to include.", type=str)
+@click.option(
+    "--transport",
+    "-t",
+    default=None,
+    help="Transport type and target (e.g. post:https://...)",
+    type=str,
+    multiple=True,
+)
+@click.pass_context
+@coro
+async def creq(ctx: Context, amount: int, memo: str, mint: str, transport: tuple):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+
+    transports = []
+    if transport:
+        for t in transport:
+            try:
+                type_, target = t.split(":", 1)
+                transports.append(Transport(t=type_, a=target))
+            except ValueError:
+                print(f"Error: Invalid transport format '{t}'. Expected type:target")
+                return
+
+    # If mint is not specified, use the current wallet's mint
+    mints = [mint] if mint else [wallet.url]
+
+    # PaymentRequest
+    req = PaymentRequest(
+        a=amount,
+        d=memo,
+        m=mints,
+        t=transports if transports else None,
+        u=wallet.unit.name,
+    )
+
+    print(req.serialize())
+
+
 @cli.command("swap", help="Swap funds between mints.")
 @click.pass_context
 @coro
@@ -738,6 +883,10 @@ async def receive_cli(
 def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
+        if token.startswith("creqA"):
+            creq = PaymentRequest.deserialize(token)
+            print(creq.json(indent=indent, exclude_none=True))
+            return
         token_obj = deserialize_token_from_string(token)
         token_json = json.dumps(
             token_obj.serialize_to_dict(include_dleq),
