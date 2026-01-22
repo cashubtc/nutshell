@@ -27,6 +27,19 @@ from cashu.core.secret import Secret, Tags
 def hex_string(min_len=66, max_len=66):
     return st.text(alphabet="0123456789abcdef", min_size=min_len, max_size=max_len)
 
+def valid_unit():
+    return st.sampled_from(["sat", "usd", "eur", "msat"])
+
+def public_key():
+    return st.builds(lambda a, b: a + b, st.just("02"), hex_string(64, 64))
+
+def keyset_id():
+    return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
+
+def url_safe_text(min_len=1, max_len=20):
+    # Generates text that is safe for URLs (no control chars, no slashes)
+    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x)
+
 # --- Secret Strategies ---
 @given(
     kind=st.text(min_size=1, max_size=20),
@@ -57,9 +70,9 @@ def test_fuzz_secret_serialization(kind, data, tags_list, nonce):
 
 @given(
     amount=st.integers(min_value=1),
-    id=st.text(min_size=1, max_size=20),
-    B_=hex_string(),
-    C_=st.one_of(st.none(), hex_string())
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    B_=st.one_of(hex_string(), public_key()),
+    C_=st.one_of(st.none(), public_key(), hex_string())
 )
 def test_fuzz_blinded_message(amount, id, B_, C_):
     bm = BlindedMessage(amount=amount, id=id, B_=B_, C_=C_)
@@ -74,9 +87,9 @@ def test_fuzz_blinded_message(amount, id, B_, C_):
     assert bm == bm2
 
 @given(
-    id=st.text(min_size=1, max_size=20),
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
     amount=st.integers(min_value=1),
-    C_=hex_string(),
+    C_=st.one_of(hex_string(), public_key()),
     dleq_e=hex_string(),
     dleq_s=hex_string()
 )
@@ -94,10 +107,10 @@ def test_fuzz_blinded_signature(id, amount, C_, dleq_e, dleq_s):
     assert bs == bs2
 
 @given(
-    id=st.text(min_size=1, max_size=20),
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
     amount=st.integers(min_value=1),
     secret=st.text(min_size=1, max_size=64),
-    C=hex_string(),
+    C=st.one_of(hex_string(), public_key()),
     dleq_e=hex_string(),
     dleq_s=hex_string(),
     dleq_r=hex_string()
@@ -136,7 +149,7 @@ def test_fuzz_proof(id, amount, secret, C, dleq_e, dleq_s, dleq_r):
     method=st.text(min_size=1, max_size=10),
     request=st.text(min_size=10, max_size=100),
     checking_id=st.text(min_size=1, max_size=50),
-    unit=st.sampled_from(["sat", "usd", "eur"]),
+    unit=valid_unit(),
     amount=st.integers(min_value=1),
     fee_reserve=st.integers(min_value=0),
     state=st.sampled_from(list(MeltQuoteState))
@@ -175,7 +188,7 @@ def test_fuzz_melt_quote(quote, method, request, checking_id, unit, amount, fee_
     method=st.text(min_size=1, max_size=10),
     request=st.text(min_size=10, max_size=100),
     checking_id=st.text(min_size=1, max_size=50),
-    unit=st.sampled_from(["sat", "usd", "eur"]),
+    unit=valid_unit(),
     amount=st.integers(min_value=1),
     state=st.sampled_from(list(MintQuoteState))
 )
@@ -226,7 +239,7 @@ def public_key_strategy(draw):
     seed=st.text(min_size=5, max_size=32),
     derivation_path=st.just("m/0'/0'/0'"),
     amounts=st.lists(st.integers(min_value=1, max_value=1000), min_size=1, max_size=5, unique=True),
-    unit=st.sampled_from(["sat", "usd", "eur"]),
+    unit=valid_unit(),
     input_fee_ppk=st.integers(min_value=0, max_value=1000)
 )
 def test_fuzz_mint_keyset(seed, derivation_path, amounts, unit, input_fee_ppk):
@@ -252,7 +265,7 @@ def test_fuzz_mint_keyset(seed, derivation_path, amounts, unit, input_fee_ppk):
 
 @given(
     id=st.text(min_size=1, max_size=12),
-    unit=st.sampled_from(["sat", "usd", "eur"]),
+    unit=valid_unit(),
     input_fee_ppk=st.integers(min_value=0, max_value=1000),
     public_keys_list=st.lists(public_key_strategy(), min_size=1, max_size=5)
 )
@@ -278,7 +291,7 @@ def test_fuzz_wallet_keyset(id, unit, input_fee_ppk, public_keys_list):
     assert isinstance(serialized, str)
 
 @given(
-    proofs=st.lists(st.builds(Proof, id=st.text(min_size=1, max_size=10), amount=st.integers(min_value=1), secret=st.text(min_size=1), C=hex_string()), min_size=1, max_size=5),
+    proofs=st.lists(st.builds(Proof, id=st.one_of(keyset_id(), hex_string(16, 16)), amount=st.integers(min_value=1), secret=st.text(min_size=1), C=st.one_of(hex_string(), public_key())), min_size=1, max_size=5),
     mint=st.text(min_size=1, max_size=50),
     memo=st.one_of(st.none(), st.text(min_size=1, max_size=50)),
     unit=st.sampled_from(["sat", "usd", "eur"])
@@ -306,7 +319,7 @@ def test_fuzz_token_v3(proofs, mint, memo, unit):
     assert deserialized.amount == token.amount
 
 @given(
-    proofs=st.lists(st.builds(Proof, id=hex_string(min_len=4, max_len=4), amount=st.integers(min_value=1), secret=st.text(min_size=1), C=hex_string()), min_size=1, max_size=5),
+    proofs=st.lists(st.builds(Proof, id=hex_string(min_len=8, max_len=8), amount=st.integers(min_value=1), secret=st.text(min_size=1), C=st.one_of(hex_string(), public_key())), min_size=1, max_size=5),
     mint=st.text(min_size=1, max_size=50),
     memo=st.one_of(st.none(), st.text(min_size=1, max_size=50)),
     unit=st.sampled_from(["sat", "usd", "eur"])

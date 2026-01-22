@@ -23,21 +23,36 @@ def client():
 def hex_string(min_len=66, max_len=66):
     return st.text(alphabet="0123456789abcdef", min_size=min_len, max_size=max_len)
 
+def valid_unit():
+    return st.sampled_from(["sat", "usd", "eur", "msat"])
+
+def public_key():
+    return st.builds(lambda a, b: a + b, st.just("02"), hex_string(64, 64))
+
+def keyset_id():
+    return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
+
+def url_safe_text(min_len=1, max_len=20):
+    # Generates text that is safe for URLs (no control chars, no slashes)
+    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x)
+
+# Strategy for BlindedMessage
 blinded_message_strategy = st.builds(
     BlindedMessage,
     amount=st.integers(min_value=1),
-    id=st.text(min_size=1, max_size=20),
-    B_=hex_string(),
-    C_=st.one_of(st.none(), hex_string())
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    B_=st.one_of(hex_string(), public_key()),
+    C_=st.one_of(st.none(), public_key(), hex_string())
 )
 
+# Strategy for Proof
 proof_strategy = st.builds(
     Proof,
-    id=st.text(min_size=1, max_size=20),
+    id=st.one_of(keyset_id(), hex_string(16, 16)),
     amount=st.integers(min_value=1),
     secret=st.text(min_size=1, max_size=64),
-    C=hex_string(),
-    Y=hex_string()
+    C=st.one_of(hex_string(), public_key()),
+    Y=st.one_of(public_key(), hex_string())
 )
 
 # Fuzzers for Deprecated API
