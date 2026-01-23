@@ -15,7 +15,6 @@ from ..core.logging import configure_logger
 from ..core.settings import settings
 from .auth.router import auth_router
 from .router import redis, router
-from .router_deprecated import router_deprecated
 from .startup import (
     shutdown_management_rpc,
     shutdown_mint,
@@ -116,11 +115,7 @@ async def catch_exceptions(request: Request, call_next):
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore
 
 # Add routers
-if settings.debug_mint_only_deprecated:
-    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
-else:
-    app.include_router(router=router, tags=["Mint"])
-    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+app.include_router(router=router, tags=["Mint"])
 
 if settings.mint_require_auth:
     app.include_router(auth_router, tags=["Auth"])
