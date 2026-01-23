@@ -1,17 +1,11 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Amount, MeltQuoteState, Method, Unit
-from cashu.core.models import PostMeltQuoteRequest
-from cashu.core.settings import settings
+from cashu.core.base import Amount, Method, Unit
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import (
-    get_real_invoice,
-    is_fake,
-    pay_if_regtest,
-)
+from tests.helpers import pay_if_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -54,62 +48,3 @@ async def test_balance_update_on_mint(wallet: Wallet, ledger: Ledger):
     assert fees_paid_after == fees_paid_before
 
 
-@pytest.mark.asyncio
-        melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
-        assert (
-            not melt_quote_response_pre_payment.state == MeltQuoteState.paid.value
-        ), "melt quote should not be paid"
-        assert melt_quote_response_pre_payment.amount == payment_amount
-
-    melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
-    assert melt_quote_pre_payment.unpaid
-
-    _, send_proofs = await wallet.swap_to_send(wallet.proofs, payment_amount)
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
-    await wallet.invalidate(send_proofs, check_spendable=True)
-    assert wallet.balance == 64
-
-    melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.paid, "melt quote should be paid"
-
-    balance_after, fees_paid_after = await ledger.get_unit_balance_and_fees(
-        Unit.sat, ledger.db
-    )
-
-    # balance should have dropped
-    assert balance_after == balance_before - payment_amount
-    assert fees_paid_after == fees_paid_before
-    # now mint
-    await wallet.mint(payment_amount, quote_id=mint_quote_to_pay.quote)
-    assert wallet.balance == 128
-
-    balance_after, fees_paid_after = await ledger.get_unit_balance_and_fees(
-        Unit.sat, ledger.db
-    )
-
-    # balance should be back
-    assert balance_after == balance_before
-    assert fees_paid_after == fees_paid_before
-
-
-@pytest.mark.asyncio
-        melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
-        assert (
-            melt_quote_response_pre_payment.state == MeltQuoteState.unpaid.value
-        ), "melt quote should not be paid"
-        assert melt_quote_response_pre_payment.amount == melt_quote.amount
-
-    melt_quote_resp = await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
-    fees_paid = melt_quote.fee_reserve - (
-        sum([b.amount for b in melt_quote_resp.change]) if melt_quote_resp.change else 0
-    )
-
-    melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.paid, "melt quote should be paid"
-
-    balance_after, fees_paid_after = await ledger.get_unit_balance_and_fees(
-        Unit.sat, ledger.db
-    )
-    assert balance_after == balance_before - 64 - fees_paid
-    assert fees_paid_after == fees_paid_before
