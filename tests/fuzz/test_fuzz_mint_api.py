@@ -29,8 +29,8 @@ def keyset_id():
     return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
 
 def url_safe_text(min_len=1, max_len=20):
-    # Generates text that is safe for URLs (no control chars, no slashes)
-    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x)
+    # Generates text that is safe for URLs (no control chars, no slashes, no #, no ?)
+    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x and "#" not in x and "?" not in x)
 
 # Strategy for BlindedMessage
 blinded_message_strategy = st.builds(
@@ -151,7 +151,13 @@ def test_fuzz_checkstate(client, Ys):
         "Ys": Ys
     }
     response = client.post("/v1/checkstate", json=payload)
-    assert response.status_code in ALLOWED_STATUS_CODES
+    if response.status_code == 200:
+        states = response.json()["states"]
+        assert len(states) == len(Ys)
+        for state in states:
+            assert state["state"] == "UNSPENT"
+    else:
+        assert response.status_code in ALLOWED_STATUS_CODES
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(
@@ -163,7 +169,12 @@ def test_fuzz_restore(client, outputs):
         "outputs": outputs_json
     }
     response = client.post("/v1/restore", json=payload)
-    assert response.status_code in ALLOWED_STATUS_CODES
+    if response.status_code == 200:
+        data = response.json()
+        assert data["outputs"] == []
+        assert data["signatures"] == []
+    else:
+        assert response.status_code in ALLOWED_STATUS_CODES
 
 # GET Endpoints - using url_safe_text and try/except
 
