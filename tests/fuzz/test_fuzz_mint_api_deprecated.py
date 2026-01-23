@@ -33,8 +33,8 @@ def keyset_id():
     return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
 
 def url_safe_text(min_len=1, max_len=20):
-    # Generates text that is safe for URLs (no control chars, no slashes)
-    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x)
+    # Generates text that is safe for URLs (no control chars, no slashes, no #, no ?)
+    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x and "#" not in x and "?" not in x)
 
 # Strategy for BlindedMessage
 blinded_message_strategy = st.builds(
@@ -110,7 +110,16 @@ def test_fuzz_deprecated_check(client, proofs):
     payload = {"proofs": inputs_json}
     
     response = client.post("/check", json=payload)
-    assert response.status_code in [400, 404, 422, 503]
+    if response.status_code == 200:
+        data = response.json()
+        # For random proofs (unknown to mint), they are considered UNSPENT
+        # So spendable should be True, pending should be False
+        assert len(data["spendable"]) == len(proofs)
+        assert len(data["pending"]) == len(proofs)
+        assert all(data["spendable"])
+        assert not any(data["pending"])
+    else:
+        assert response.status_code in [400, 404, 422, 503]
 
 # POST /split
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
@@ -143,4 +152,9 @@ def test_fuzz_deprecated_restore(client, outputs):
     payload = {"outputs": outputs_json}
     
     response = client.post("/restore", json=payload)
-    assert response.status_code in [400, 404, 422, 503]
+    if response.status_code == 200:
+        data = response.json()
+        assert data["outputs"] == []
+        assert data["signatures"] == []
+    else:
+        assert response.status_code in [400, 404, 422, 503]
