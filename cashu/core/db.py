@@ -354,9 +354,9 @@ class Database(Compat):
 
     def to_timestamp(
         self, timestamp: Union[str, datetime.datetime]
-    ) -> Union[str, datetime.datetime]:
+    ) -> Union[str, datetime.datetime, None]:
         if not timestamp:
-            timestamp = self.timestamp_now_str()
+            return None
         if self.type in {POSTGRES, COCKROACH}:
             # return datetime.datetime
             if isinstance(timestamp, datetime.datetime):

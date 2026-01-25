@@ -477,3 +477,34 @@ async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Led
     )
     assert len(quotes_2) == 1
     assert quotes_2[0].quote == "quote_id_diff_2"
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
+    import time
+    # Create a mint quote
+    mint_quote = await wallet.request_mint(128)
+    
+    # Check that paid_time is None initially
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote is not None
+    assert quote.unpaid
+    assert quote.paid_time is None
+    assert quote.created_time is not None
+
+    # Simulate payment
+    await pay_if_regtest(mint_quote.request)
+    
+    # Trigger check at mint (this updates the state in DB)
+    _ = await ledger.get_mint_quote(mint_quote.quote)
+
+    # Check that paid_time is now set
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote is not None
+    assert quote.paid
+    assert quote.paid_time is not None
+    assert isinstance(quote.paid_time, int)
+    assert quote.paid_time >= quote.created_time
+    # Ensure it's recent (within last minute)
+    assert quote.paid_time > int(time.time()) - 60
+

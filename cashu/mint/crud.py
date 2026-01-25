@@ -623,7 +623,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 ),
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
                 "pubkey": quote.pubkey or "",
             },
         )
@@ -691,7 +693,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
                 "quote": quote.quote,
             },
         )
@@ -724,7 +728,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 ),
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
                 "fee_paid": quote.fee_paid,
                 "proof": quote.payment_preimage,
                 "expiry": db.to_timestamp(
@@ -804,7 +810,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "fee_paid": quote.fee_paid,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
                 "proof": quote.payment_preimage,
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
