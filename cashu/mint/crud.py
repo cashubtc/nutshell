@@ -622,7 +622,7 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
                 "paid_time": db.to_timestamp(
-                    db.timestamp_from_seconds(quote.paid_time)
+                    db.timestamp_from_seconds(quote.paid_time) or ""
                 )
                 if quote.paid_time
                 else None,
@@ -692,7 +692,7 @@ class LedgerCrudSqlite(LedgerCrud):
             {
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(
-                    db.timestamp_from_seconds(quote.paid_time)
+                    db.timestamp_from_seconds(quote.paid_time) or ""
                 )
                 if quote.paid_time
                 else None,
@@ -727,7 +727,7 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
                 "paid_time": db.to_timestamp(
-                    db.timestamp_from_seconds(quote.paid_time)
+                    db.timestamp_from_seconds(quote.paid_time) or ""
                 )
                 if quote.paid_time
                 else None,
@@ -809,7 +809,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "state": quote.state.value,
                 "fee_paid": quote.fee_paid,
                 "paid_time": db.to_timestamp(
-                    db.timestamp_from_seconds(quote.paid_time)
+                    db.timestamp_from_seconds(quote.paid_time) or ""
                 )
                 if quote.paid_time
                 else None,
