@@ -139,7 +139,9 @@ class DbWriteHelper:
         if pending_proofs:
             raise ProofsArePendingError()
 
-    async def _set_mint_quote_pending(self, quote_id: str) -> MintQuote:
+    async def _set_mint_quote_pending(
+        self, quote_id: str, conn: Optional[Connection] = None
+    ) -> MintQuote:
         """Sets the mint quote as pending.
 
         Args:
@@ -147,7 +149,7 @@ class DbWriteHelper:
         """
         quote: Union[MintQuote, None] = None
         async with self.db.get_connection(
-            lock_table="mint_quotes", lock_select_statement=f"quote='{quote_id}'"
+            conn, lock_table="mint_quotes", lock_select_statement=f"quote='{quote_id}'"
         ) as conn:
             # get mint quote from db and check if it is already pending
             quote = await self.crud.get_mint_quote(
@@ -168,7 +170,7 @@ class DbWriteHelper:
         return quote
 
     async def _unset_mint_quote_pending(
-        self, quote_id: str, state: MintQuoteState
+        self, quote_id: str, state: MintQuoteState, conn: Optional[Connection] = None
     ) -> MintQuote:
         """Unsets the mint quote as pending.
 
@@ -177,7 +179,7 @@ class DbWriteHelper:
             state (MintQuoteState): New state of the mint quote.
         """
         quote: Union[MintQuote, None] = None
-        async with self.db.get_connection(lock_table="mint_quotes") as conn:
+        async with self.db.get_connection(conn, lock_table="mint_quotes") as conn:
             # get mint quote from db and check if it is pending
             quote = await self.crud.get_mint_quote(
                 quote_id=quote_id, db=self.db, conn=conn

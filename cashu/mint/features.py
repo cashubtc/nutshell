@@ -25,6 +25,7 @@ from ..core.nuts.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
+    BATCH_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
@@ -75,6 +76,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features = self.add_mpp_features(mint_features)
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
+        mint_features = self.add_batch_features(mint_features)
 
         return mint_features
 
@@ -228,4 +230,21 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                 cache_features["ttl"] = settings.mint_redis_cache_ttl
 
             mint_features[CACHE_NUT] = cache_features
+        return mint_features
+
+    def add_batch_features(
+        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+    ):
+        # advertise batch minting support
+        # we only support bolt11 for now
+        supported_methods = []
+        for method, unit_dict in self.backends.items():
+            if method.name == "bolt11":
+                supported_methods.append(method.name)
+        
+        if supported_methods:
+            mint_features[BATCH_NUT] = {
+                "max_batch_size": 100, # arbitrary limit for now
+                "methods": list(set(supported_methods))
+            }
         return mint_features

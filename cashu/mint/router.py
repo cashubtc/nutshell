@@ -1,5 +1,6 @@
 import asyncio
 import time
+from typing import List, Optional
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -20,6 +21,9 @@ from ..core.models import (
     PostMintQuoteResponse,
     PostMintRequest,
     PostMintResponse,
+    PostMintBatchRequest,
+    PostMintBatchResponse,
+    PostMintQuoteCheckRequest,
     PostRestoreRequest,
     PostRestoreResponse,
     PostSwapRequest,
@@ -206,6 +210,68 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
+
+
+@router.post(
+    "/v1/mint/quote/{method}/check",
+    name="Check mint quote status",
+    summary="Check the status of multiple mint quotes",
+    response_model=List[PostMintQuoteResponse],
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def check_mint_quotes(
+    request: Request,
+    method: str,
+    payload: PostMintQuoteCheckRequest,
+) -> List[PostMintQuoteResponse]:
+    """
+    Check the status of multiple mint quotes.
+    """
+    logger.trace(f"> POST /v1/mint/quote/{method}/check: payload={payload}")
+    quotes = await ledger.check_mint_quotes(payload.quotes)
+    resp = [
+        PostMintQuoteResponse(
+            quote=quote.quote,
+            request=quote.request,
+            amount=quote.amount,
+            unit=quote.unit,
+            paid=quote.paid,  # deprecated
+            state=quote.state.value,
+            expiry=quote.expiry,
+            pubkey=quote.pubkey,
+        )
+        for quote in quotes
+    ]
+    logger.trace(f"< POST /v1/mint/quote/{method}/check: {resp}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/{method}/batch",
+    name="Batch mint tokens",
+    summary="Mint tokens for multiple paid quotes in a batch.",
+    response_model=PostMintBatchResponse,
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_batch(
+    request: Request,
+    method: str,
+    payload: PostMintBatchRequest,
+) -> PostMintBatchResponse:
+    """
+    Requests the minting of tokens belonging to multiple paid payment requests.
+    """
+    logger.trace(f"> POST /v1/mint/{method}/batch: {payload}")
+
+    promises = await ledger.mint_batch(
+        outputs=payload.outputs,
+        quotes=payload.quotes,
+        quote_amounts=payload.quote_amounts,
+        signatures=payload.signatures,
+    )
+    blinded_signatures = PostMintBatchResponse(signatures=promises)
+    logger.trace(f"< POST /v1/mint/{method}/batch: {blinded_signatures}")
+    return blinded_signatures
 
 
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
