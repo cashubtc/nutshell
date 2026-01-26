@@ -143,7 +143,9 @@ class DbWriteHelper:
         if pending_proofs:
             raise ProofsArePendingError()
 
-    async def _set_mint_quote_pending(self, quote_id: str) -> MintQuote:
+    async def _set_mint_quote_pending(
+        self, quote_id: str, conn: Optional[Connection] = None
+    ) -> MintQuote:
         """Sets the mint quote as pending.
 
         Args:
@@ -151,6 +153,7 @@ class DbWriteHelper:
         """
         quote: Union[MintQuote, None] = None
         async with self.db.get_connection(
+            conn=conn,
             lock_table="mint_quotes",
             lock_select_statement="quote = :quote",
             lock_parameters={"quote": quote_id},
@@ -174,7 +177,7 @@ class DbWriteHelper:
         return quote
 
     async def _unset_mint_quote_pending(
-        self, quote_id: str, state: MintQuoteState
+        self, quote_id: str, state: MintQuoteState, conn: Optional[Connection] = None
     ) -> MintQuote:
         """Unsets the mint quote as pending.
 
@@ -184,6 +187,7 @@ class DbWriteHelper:
         """
         quote: Union[MintQuote, None] = None
         async with self.db.get_connection(
+            conn=conn,
             lock_table="mint_quotes",
             lock_select_statement="quote = :quote",
             lock_parameters={"quote": quote_id},
