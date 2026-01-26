@@ -244,7 +244,7 @@ class BlinkWallet(LightningBackend):
                     }
                     status
                     transaction {
-                        settlementAmount settlementFee status
+                        settlementAmount settlementFee settlementDisplayFee status
                     }
                 }
             }
@@ -289,13 +289,11 @@ class BlinkWallet(LightningBackend):
                 checking_id=quote.request,
             )
 
-        if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
-            fee = (
-                resp.get("data", {})
-                .get("lnInvoicePaymentSend", {})
-                .get("transaction", {})
-                .get("settlementFee")
-            )
+        transaction = (
+            resp.get("data", {})
+            .get("lnInvoicePaymentSend", {})
+            .get("transaction", {})
+        )
 
         checking_id = quote.request
         preimage: Union[None, str] = None
@@ -304,12 +302,17 @@ class BlinkWallet(LightningBackend):
             preimage = payment_status.preimage
 
         fee_amount: Union[None, Amount] = None
-        if fee:
+        if transaction:
             if self.unit == Unit.sat or self.unit == Unit.msat:
-                fee_amount = Amount(Unit.sat, fee)
+                fee = transaction.get("settlementFee")
+                if fee is not None:
+                    fee_amount = Amount(Unit.sat, fee)
             elif self.unit == Unit.usd:
-                fee_cents = await self._sats_to_cents(fee)
-                fee_amount = Amount(Unit.usd, fee_cents)
+                settlement_amount = transaction.get("settlementAmount")
+                if settlement_amount is not None:
+                    total_deducted = abs(int(settlement_amount))
+                    fee_cents = total_deducted - quote.amount
+                    fee_amount = Amount(Unit.usd, fee_cents)
             else:
                 raise Exception(f"Unsupported unit: {self.unit}")
 
@@ -381,6 +384,7 @@ class BlinkWallet(LightningBackend):
                             transactionsByPaymentHash(paymentHash: $paymentHash) {
                                 status
                                 direction
+                                settlementAmount
                                 settlementFee
                                 settlementVia {
                                     ... on SettlementViaIntraLedger {
@@ -454,14 +458,26 @@ class BlinkWallet(LightningBackend):
             )
 
         result = PAYMENT_RESULT_MAP[payment["status"]]  # type: ignore
-        fee = payment["settlementFee"]  # type: ignore
         preimage = payment["settlementVia"].get("preImage")  # type: ignore
 
         if self.unit == Unit.sat or self.unit == Unit.msat:
+            fee = payment["settlementFee"]  # type: ignore
             fee_amount = Amount(Unit.sat, fee)
         elif self.unit == Unit.usd:
-            fee_cents = await self._sats_to_cents(fee)
-            fee_amount = Amount(Unit.usd, fee_cents)
+            settlement_amount = payment.get("settlementAmount")
+            if settlement_amount is not None:
+                invoice_obj = decode(checking_id)
+                assert invoice_obj.amount_msat, "invoice has no amount."
+                invoice_amount_sats = int(invoice_obj.amount_msat) // 1000
+                sats_per_usd = await self._get_sats_per_usd()
+                invoice_amount_cents = self._sats_to_cents_with_rate(
+                    invoice_amount_sats, sats_per_usd
+                )
+                total_deducted = abs(int(settlement_amount))
+                fee_cents = total_deducted - invoice_amount_cents
+                fee_amount = Amount(Unit.usd, max(0, fee_cents))
+            else:
+                fee_amount = Amount(Unit.usd, 0)
         else:
             raise Exception(f"Unsupported unit: {self.unit}")
 
@@ -513,10 +529,6 @@ class BlinkWallet(LightningBackend):
 
     def _sats_to_cents_with_rate(self, sats: int, sats_per_usd: int) -> int:
         return math.ceil(sats * 100 / sats_per_usd)
-
-    async def _sats_to_cents(self, sats: int) -> int:
-        sats_per_usd = await self._get_sats_per_usd()
-        return self._sats_to_cents_with_rate(sats, sats_per_usd)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
