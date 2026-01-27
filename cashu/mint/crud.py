@@ -12,6 +12,7 @@ from ..core.base import (
     MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
+    MintQuoteState,
     Proof,
     Unit,
 )
@@ -266,6 +267,16 @@ class LedgerCrud(ABC):
         self,
         *,
         quote: MintQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def update_mint_quotes_state(
+        self,
+        *,
+        quote_ids: List[str],
+        state: MintQuoteState,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -723,6 +734,28 @@ class LedgerCrudSqlite(LedgerCrud):
                 if quote.paid_time
                 else None,
                 "quote": quote.quote,
+            },
+        )
+
+    async def update_mint_quotes_state(
+        self,
+        *,
+        quote_ids: List[str],
+        state: MintQuoteState,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        if not quote_ids:
+            return
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('mint_quotes')}
+            SET state = :state
+            WHERE quote IN ({','.join([f":quote_{i}" for i in range(len(quote_ids))])})
+            """,
+            {
+                "state": state.value,
+                **{f"quote_{i}": quote_ids[i] for i in range(len(quote_ids))},
             },
         )
 
