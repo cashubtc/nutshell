@@ -540,10 +540,7 @@ class Ledger(
         # Atomic execution
         async with self.db.get_connection() as conn:
             # set all pending
-            for quote in mint_quotes:
-                await self.db_write._set_mint_quote_pending(
-                    quote_id=quote.quote, conn=conn
-                )
+            await self.db_write._set_mint_quotes_pending(quote_ids=quotes, conn=conn)
 
             try:
                 await self._store_blinded_messages(
@@ -552,10 +549,9 @@ class Ledger(
                 promises = await self._sign_blinded_messages(outputs, conn=conn)
 
                 # Set all issued
-                for quote in mint_quotes:
-                    await self.db_write._unset_mint_quote_pending(
-                        quote_id=quote.quote, state=MintQuoteState.issued, conn=conn
-                    )
+                await self.db_write._unset_mint_quotes_pending(
+                    quote_ids=quotes, state=MintQuoteState.issued, conn=conn
+                )
 
             except Exception as e:
                 raise e
