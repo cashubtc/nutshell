@@ -10,6 +10,7 @@ from ..core.models import (
     MintMethodSetting,
 )
 from ..core.nuts.nuts import (
+    BATCH_NUT,
     BLIND_AUTH_NUT,
     CACHE_NUT,
     CLEAR_AUTH_NUT,
@@ -25,7 +26,6 @@ from ..core.nuts.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
-    BATCH_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey

@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -17,13 +17,13 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMintBatchRequest,
+    PostMintBatchResponse,
+    PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
     PostMintResponse,
-    PostMintBatchRequest,
-    PostMintBatchResponse,
-    PostMintQuoteCheckRequest,
     PostRestoreRequest,
     PostRestoreResponse,
     PostSwapRequest,

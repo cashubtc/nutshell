@@ -45,11 +45,9 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
-    PostMintBatchRequest,
 )
 from ..core.nuts import nut20
 from ..core.settings import settings
-
 from ..core.split import amount_split
 from ..lightning.base import (
     InvoiceResponse,
@@ -564,7 +562,7 @@ class Ledger(
 
                 # Verify signature
                 if not nut20.verify_mint_quote(
-                    quote.quote, outputs, quote.pubkey, signatures[i]
+                    quote.quote, outputs, quote.pubkey, signatures[i] or ""
                 ):
                     raise QuoteSignatureInvalidError()
 
