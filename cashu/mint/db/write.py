@@ -44,6 +44,7 @@ class DbWriteHelper:
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
         quote_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
     ) -> None:
         """
         Method to check if proofs are already spent. If they are not spent, we check if they are pending.
@@ -59,6 +60,7 @@ class DbWriteHelper:
         try:
             logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
+                conn=conn,
                 lock_table="proofs_pending",
                 lock_timeout=1,
             ) as conn:
@@ -197,7 +199,7 @@ class DbWriteHelper:
         await self.events.submit(quote)
         return quote
 
-    async def _set_melt_quote_pending(self, quote: MeltQuote) -> MeltQuote:
+    async def _set_melt_quote_pending(self, quote: MeltQuote, conn: Optional[Connection] = None) -> MeltQuote:
         """Sets the melt quote as pending.
 
         Args:
@@ -207,6 +209,7 @@ class DbWriteHelper:
         if not quote.checking_id:
             raise TransactionError("Melt quote doesn't have checking ID.")
         async with self.db.get_connection(
+            conn=conn,
             lock_table="melt_quotes",
             lock_select_statement=f"checking_id='{quote.checking_id}'",
         ) as conn:

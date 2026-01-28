@@ -255,6 +255,78 @@ async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_melt_race_orphaned_proofs(wallet, ledger: Ledger):
+    """Verify that if the same quote_id is used at the same time, with two different sets
+    of proofs, the second one doesn't lock the proofs in a state of pending.
+    """
+    import asyncio
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    # await pay_if_regtest(mint_quote1.request)
+    # await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    all_proofs = [proofs1, proofs2]
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets1,
+        change_rs1,
+        change_derivation_paths1,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs1, change_rs1 = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets1, change_rs1
+    )
+    (
+        change_secrets2,
+        change_rs2,
+        change_derivation_paths2,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs2, change_rs2 = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets2, change_rs2
+    )
+
+    # Force interleaving
+    original_verify = ledger.db_write._verify_spent_proofs_and_set_pending
+
+    async def slow_verify(*args, **kwargs):
+        await original_verify(*args, **kwargs)
+        await asyncio.sleep(0.5)
+
+    task1 = ledger.melt(
+        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs1
+    )
+    task2 = ledger.melt(
+        proofs=proofs2, quote=melt_quote1.quote, outputs=change_outputs2
+    )
+    results = await asyncio.gather(task1, task2, return_exceptions=True)
+    for i, res in enumerate(results):
+        current_proofs = all_proofs[i]
+        states = await ledger.db_read.get_proofs_states([p.Y for p in current_proofs])
+
+        if isinstance(res, Exception):
+            print(f"Melt {i+1} failed with: {res} and states are: {states}")
+            assert all(not s.pending for s in states)
+        else:
+            print(f"Melt {i+1} succeeded.")
+            assert all(s.pending or s.spent for s in states)
+
+    # expect that no pending tokens are in db anymore
+    melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
+        db=ledger.db
+    )
+
+    assert not melt_quotes
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_fakewallet_pending_quote_get_melt_quote_success(ledger: Ledger):
     """Startup routine test. Expects that a pending proofs are removed form the pending db

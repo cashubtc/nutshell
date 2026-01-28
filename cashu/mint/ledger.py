@@ -923,14 +923,16 @@ class Ledger(
         # We must have called _verify_outputs here already! (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
-        # set proofs to pending to avoid race conditions
-        await self.db_write._verify_spent_proofs_and_set_pending(
-            proofs, keysets=self.keysets, quote_id=melt_quote.quote
-        )
-        previous_state = melt_quote.state
-        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
-        if outputs:
-            await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
+        async with self.db.get_connection(lock_table="melt_quotes_bolt11") as conn:
+            # set proofs to pending to avoid race conditions
+            await self.db_write._verify_spent_proofs_and_set_pending(
+                proofs, keysets=self.keysets, quote_id=melt_quote.quote, conn=conn
+            )
+            previous_state = melt_quote.state
+
+            melt_quote = await self.db_write._set_melt_quote_pending(melt_quote, conn=conn)
+            if outputs:
+                await self._store_blinded_messages(outputs, melt_id=melt_quote.quote, conn=conn)
 
         # if the melt corresponds to an internal mint, mark both as paid
         melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
