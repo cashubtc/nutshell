@@ -923,7 +923,10 @@ class Ledger(
         # We must have called _verify_outputs here already! (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
-        async with self.db.get_connection(lock_table="melt_quotes_bolt11") as conn:
+        async with self.db.get_connection(
+            lock_table="melt_quotes_bolt11",
+            lock_timeout=1,
+        ) as conn:
             # set proofs to pending to avoid race conditions
             await self.db_write._verify_spent_proofs_and_set_pending(
                 proofs, keysets=self.keysets, quote_id=melt_quote.quote, conn=conn
