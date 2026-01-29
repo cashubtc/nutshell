@@ -783,7 +783,7 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     proofs2 = await wallet.mint(128, quote_id=mq2.quote)
 
     # Invoice for 64 sats (+2 fee = 66 sats needed)
-    invoice = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice = get_real_invoice(64) if is_regtest else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
     melt_quote1 = await wallet.melt_quote(invoice)
     melt_quote2 = await wallet.melt_quote(invoice)
 
