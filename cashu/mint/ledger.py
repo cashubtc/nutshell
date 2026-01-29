@@ -741,13 +741,7 @@ class Ledger(
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                async with self.db.get_connection() as conn:
-                    await self._invalidate_proofs(
-                        proofs=pending_proofs, quote_id=quote_id, conn=conn
-                    )
-                    await self.db_write._unset_proofs_pending(
-                        pending_proofs, keysets=self.keysets, conn=conn
-                    )
+
                 # change to compensate wallet for overpaid fees
                 melt_outputs = await self.crud.get_blinded_messages_melt_id(
                     melt_id=quote_id, db=self.db
@@ -766,22 +760,34 @@ class Ledger(
                         keyset=self.keysets[melt_outputs[0].id],
                     )
                     melt_quote.change = return_promises
-                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.events.submit(melt_quote)
+
+                # Calculate fees
+                proofs_by_keyset: Dict[str, List[Proof]] = {}
+                for p in pending_proofs:
+                    proofs_by_keyset.setdefault(p.id, []).append(p)
+                keyset_fees = {}
+                for keyset_id, keyset_proofs in proofs_by_keyset.items():
+                    keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
+
+                melt_quote = await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
+                    quote=melt_quote,
+                    proofs=pending_proofs,
+                    keysets=self.keysets,
+                    keyset_fees=keyset_fees,
+                )
+
             if status.failed or (rollback_unknown and status.unknown):
                 logger.debug(f"Setting quote {quote_id} as unpaid")
-                melt_quote.state = MeltQuoteState.unpaid
-                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.events.submit(melt_quote)
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                await self.db_write._unset_proofs_pending(
-                    pending_proofs, keysets=self.keysets
+                melt_quote = await self.db_write.unset_melt_quote_pending_and_proofs(
+                    quote=melt_quote,
+                    proofs=pending_proofs,
+                    keysets=self.keysets,
+                    state=MeltQuoteState.unpaid,
                 )
-                await self.crud.delete_blinded_messages_melt_id(
-                    melt_id=quote_id, db=self.db
-                )
+
 
         return melt_quote
 
@@ -930,12 +936,12 @@ class Ledger(
         # We must have called _verify_outputs here already! (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
-        # set proofs to pending to avoid race conditions
-        await self.db_write._verify_spent_proofs_and_set_pending(
-            proofs, keysets=self.keysets, quote_id=melt_quote.quote
+        # set quote and proofs to pending to avoid race conditions
+        melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
+            quote=melt_quote, proofs=proofs, keysets=self.keysets
         )
-        previous_state = melt_quote.state
-        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
+
+        # store the change outputs
         if outputs:
             await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
 
@@ -990,14 +996,11 @@ class Ledger(
                     match status.result:
                         case PaymentResult.FAILED | PaymentResult.UNKNOWN:
                             # Everything as expected. Payment AND a status check both agree on a failure. We roll back the transaction.
-                            await self.db_write._unset_proofs_pending(
-                                proofs, keysets=self.keysets
-                            )
-                            await self.db_write._unset_melt_quote_pending(
-                                quote=melt_quote, state=previous_state
-                            )
-                            await self.crud.delete_blinded_messages_melt_id(
-                                melt_id=melt_quote.quote, db=self.db
+                            await self.db_write.unset_melt_quote_pending_and_proofs(
+                                quote=melt_quote,
+                                proofs=proofs,
+                                keysets=self.keysets,
+                                state=MeltQuoteState.unpaid,
                             )
                             if status.error_message:
                                 logger.error(
@@ -1034,9 +1037,6 @@ class Ledger(
                     return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
         # melt was successful (either internal or via backend), invalidate proofs
-        await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
-        await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
-
         # prepare change to compensate wallet for overpaid fees
         return_promises: List[BlindedSignature] = []
         if outputs:
@@ -1050,10 +1050,23 @@ class Ledger(
 
         melt_quote.change = return_promises
 
-        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-        await self.events.submit(melt_quote)
+        # Calculate fees
+        proofs_by_keyset: Dict[str, List[Proof]] = {}
+        for p in proofs:
+            proofs_by_keyset.setdefault(p.id, []).append(p)
+        keyset_fees = {}
+        for keyset_id, keyset_proofs in proofs_by_keyset.items():
+            keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
+
+        melt_quote = await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
+            quote=melt_quote,
+            proofs=proofs,
+            keysets=self.keysets,
+            keyset_fees=keyset_fees,
+        )
 
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+
 
     async def swap(
         self,
