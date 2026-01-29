@@ -767,25 +767,26 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
 
 @pytest.mark.asyncio
-async def test_melt_race_condition_leaves_proofs_pending_repro(wallet: Wallet, ledger: Ledger):
+async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     import asyncio
     from unittest.mock import patch
-    
+
     # Setup: Get proofs and a melt quote
     # Mint set 1 (128 sat)
     mq1 = await wallet.request_mint(128)
     await ledger.get_mint_quote(mq1.quote)
     proofs1 = await wallet.mint(128, quote_id=mq1.quote)
-    
+
     # Mint set 2 (128 sat)
     mq2 = await wallet.request_mint(128)
     await ledger.get_mint_quote(mq2.quote)
     proofs2 = await wallet.mint(128, quote_id=mq2.quote)
-    
+
     # Invoice for 64 sats (+2 fee = 66 sats needed)
     invoice = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    melt_quote = await wallet.melt_quote(invoice)
-    
+    melt_quote1 = await wallet.melt_quote(invoice)
+    melt_quote2 = await wallet.melt_quote(invoice)
+
     # Force interleaving
     original_verify = ledger.db_write._verify_spent_proofs_and_set_pending
     async def slow_verify(*args, **kwargs):
@@ -795,21 +796,21 @@ async def test_melt_race_condition_leaves_proofs_pending_repro(wallet: Wallet, l
 
     with patch.object(ledger.db_write, '_verify_spent_proofs_and_set_pending', side_effect=slow_verify):
         responses = await asyncio.gather(
-            ledger.melt(proofs=proofs1, quote=melt_quote.quote),
-            ledger.melt(proofs=proofs2, quote=melt_quote.quote),
+            ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
+            ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
             return_exceptions=True
         )
-    
+
     failures = [r for r in responses if isinstance(r, Exception)]
     successes = [r for r in responses if not isinstance(r, Exception)]
-    
+
     assert len(successes) == 1
     assert len(failures) == 1
-    
+
     failed_proofs = proofs2 if responses[1] is failures[0] else proofs1
-    
+
     states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
-    
-    # We expect them to be pending if the bug exists
-    assert any(s.pending for s in states), "Proofs from failed melt request stuck in pending!"
+
+    # We expect them to NOT be pending if the bug is fixed
+    assert not any(s.pending for s in states), "Proofs from failed melt request stuck in pending!"
 
