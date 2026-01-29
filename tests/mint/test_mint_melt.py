@@ -806,6 +806,7 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
 
     assert len(successes) == 1
     assert len(failures) == 1
+    assert "Melt quote already paid or pending." in str(failures[0])
 
     failed_proofs = proofs2 if responses[1] is failures[0] else proofs1
 
