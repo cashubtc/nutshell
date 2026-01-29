@@ -774,12 +774,12 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     # Setup: Get proofs and a melt quote
     # Mint set 1 (128 sat)
     mq1 = await wallet.request_mint(128)
-    await ledger.get_mint_quote(mq1.quote)
+    await pay_if_regtest(mq1.request)
     proofs1 = await wallet.mint(128, quote_id=mq1.quote)
 
     # Mint set 2 (128 sat)
     mq2 = await wallet.request_mint(128)
-    await ledger.get_mint_quote(mq2.quote)
+    await pay_if_regtest(mq2.request)
     proofs2 = await wallet.mint(128, quote_id=mq2.quote)
 
     # Invoice for 64 sats (+2 fee = 66 sats needed)
