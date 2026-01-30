@@ -767,6 +767,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
 
 @pytest.mark.asyncio
+@pytest.skipif(is_deprecated_api_only, "Can't run on the deprecated API")
 async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     import asyncio
 
