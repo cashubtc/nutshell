@@ -769,7 +769,6 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
 @pytest.mark.asyncio
 async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     import asyncio
-    from unittest.mock import patch
 
     # Setup: Get proofs and a melt quote
     # Mint set 1 (128 sat)
