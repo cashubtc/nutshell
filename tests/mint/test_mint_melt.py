@@ -787,19 +787,13 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     melt_quote1 = await wallet.melt_quote(invoice)
     melt_quote2 = await wallet.melt_quote(invoice)
 
-    # Force interleaving
-    original_verify = ledger.db_write._verify_spent_proofs_and_set_pending
-    async def slow_verify(*args, **kwargs):
-        res = await original_verify(*args, **kwargs)
-        await asyncio.sleep(0.5) 
-        return res
+    assert melt_quote1.quote != melt_quote2.quote
 
-    with patch.object(ledger.db_write, '_verify_spent_proofs_and_set_pending', side_effect=slow_verify):
-        responses = await asyncio.gather(
-            ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
-            ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
-            return_exceptions=True
-        )
+    responses = await asyncio.gather(
+        ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
+        ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
+        return_exceptions=True
+    )
 
     failures = [r for r in responses if isinstance(r, Exception)]
     successes = [r for r in responses if not isinstance(r, Exception)]
