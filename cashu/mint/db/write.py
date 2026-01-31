@@ -381,6 +381,7 @@ class DbWriteHelper:
         """
         async with self.db.get_connection(
             lock_table="proofs_pending",
+            lock_timeout=1,
         ) as conn:
             await self._unset_proofs_pending(proofs, keysets, spent=False, conn=conn)
             quote = await self._unset_melt_quote_pending(quote, state, conn=conn)
@@ -410,6 +411,7 @@ class DbWriteHelper:
 
         async with self.db.get_connection(
             lock_table="proofs_pending",
+            lock_timeout=1,
         ) as conn:
             # 1. Unset proofs PENDING
             # This bumps balance back up.
