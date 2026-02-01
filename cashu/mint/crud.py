@@ -12,6 +12,7 @@ from ..core.base import (
     MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
+    MintQuoteState,
     Proof,
     Unit,
 )
@@ -244,6 +245,15 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
+    async def get_mint_quotes(
+        self,
+        *,
+        quote_ids: List[str],
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]: ...
+
+    @abstractmethod
     async def get_mint_quote_by_request(
         self,
         *,
@@ -257,6 +267,16 @@ class LedgerCrud(ABC):
         self,
         *,
         quote: MintQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def update_mint_quotes_state(
+        self,
+        *,
+        quote_ids: List[str],
+        state: MintQuoteState,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -662,6 +682,23 @@ class LedgerCrudSqlite(LedgerCrud):
             return None
         return MintQuote.from_row(row) if row else None  # type: ignore
 
+    async def get_mint_quotes(
+        self,
+        *,
+        quote_ids: List[str],
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]:
+        if not quote_ids:
+            return []
+        query = f"""
+            SELECT * from {db.table_with_schema('mint_quotes')}
+            WHERE quote IN ({','.join([f":quote_{i}" for i in range(len(quote_ids))])})
+            """
+        values = {f"quote_{i}": quote_ids[i] for i in range(len(quote_ids))}
+        rows = await (conn or db).fetchall(query, values)
+        return [MintQuote.from_row(row) for row in rows] if rows else []
+
     async def get_mint_quote_by_request(
         self,
         *,
@@ -693,6 +730,28 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
                 "quote": quote.quote,
+            },
+        )
+
+    async def update_mint_quotes_state(
+        self,
+        *,
+        quote_ids: List[str],
+        state: MintQuoteState,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        if not quote_ids:
+            return
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('mint_quotes')}
+            SET state = :state
+            WHERE quote IN ({','.join([f":quote_{i}" for i in range(len(quote_ids))])})
+            """,
+            {
+                "state": state.value,
+                **{f"quote_{i}": quote_ids[i] for i in range(len(quote_ids))},
             },
         )
 
