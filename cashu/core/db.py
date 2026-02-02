@@ -353,10 +353,15 @@ class Database(Compat):
         return timestamp
 
     def to_timestamp(
-        self, timestamp: Union[str, datetime.datetime]
+        self, timestamp: Union[str, datetime.datetime, int]
     ) -> Union[str, datetime.datetime]:
-        if not timestamp:
+        if timestamp is None or timestamp == "":
             timestamp = self.timestamp_now_str()
+        if isinstance(timestamp, int):
+            if self.type in {POSTGRES, COCKROACH}:
+                return datetime.datetime.fromtimestamp(timestamp)
+            elif self.type == SQLITE:
+                return str(timestamp)
         if self.type in {POSTGRES, COCKROACH}:
             # return datetime.datetime
             if isinstance(timestamp, datetime.datetime):
