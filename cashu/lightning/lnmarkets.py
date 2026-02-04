@@ -88,9 +88,17 @@ class LNMarketsWallet(LightningBackend):
         self.unit = unit
 
         self.endpoint = settings.mint_lnmarkets_endpoint
-        self.api_key = settings.mint_lnmarkets_key
-        self.api_secret = settings.mint_lnmarkets_secret
-        self.api_passphrase = settings.mint_lnmarkets_passphrase
+
+        if not settings.mint_lnmarkets_key:
+            raise ValueError("mint_lnmarkets_key is required")
+        if not settings.mint_lnmarkets_secret:
+            raise ValueError("mint_lnmarkets_secret is required")
+        if not settings.mint_lnmarkets_passphrase:
+            raise ValueError("mint_lnmarkets_passphrase is required")
+
+        self.api_key: str = settings.mint_lnmarkets_key
+        self.api_secret: str = settings.mint_lnmarkets_secret
+        self.api_passphrase: str = settings.mint_lnmarkets_passphrase
 
         self.currency = self.currency_map[self.unit]
 
