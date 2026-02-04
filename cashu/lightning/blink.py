@@ -308,11 +308,9 @@ class BlinkWallet(LightningBackend):
                 if fee is not None:
                     fee_amount = Amount(Unit.sat, fee)
             elif self.unit == Unit.usd:
-                settlement_amount = transaction.get("settlementAmount")
-                if settlement_amount is not None:
-                    total_deducted = abs(int(settlement_amount))
-                    fee_cents = total_deducted - quote.amount
-                    fee_amount = Amount(Unit.usd, fee_cents)
+                fee = transaction.get("settlementFee")
+                if fee is not None:
+                    fee_amount = Amount(Unit.usd, fee)
             else:
                 raise Exception(f"Unsupported unit: {self.unit}")
 
@@ -464,20 +462,8 @@ class BlinkWallet(LightningBackend):
             fee = payment["settlementFee"]  # type: ignore
             fee_amount = Amount(Unit.sat, fee)
         elif self.unit == Unit.usd:
-            settlement_amount = payment.get("settlementAmount")
-            if settlement_amount is not None:
-                invoice_obj = decode(checking_id)
-                assert invoice_obj.amount_msat, "invoice has no amount."
-                invoice_amount_sats = int(invoice_obj.amount_msat) // 1000
-                sats_per_usd = await self._get_sats_per_usd()
-                invoice_amount_cents = self._sats_to_cents_with_rate(
-                    invoice_amount_sats, sats_per_usd
-                )
-                total_deducted = abs(int(settlement_amount))
-                fee_cents = total_deducted - invoice_amount_cents
-                fee_amount = Amount(Unit.usd, max(0, fee_cents))
-            else:
-                fee_amount = Amount(Unit.usd, 0)
+            fee = payment["settlementFee"]
+            fee_amount = Amount(Unit.usd, fee)
         else:
             raise Exception(f"Unsupported unit: {self.unit}")
 

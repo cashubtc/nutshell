@@ -310,7 +310,7 @@ async def test_blink_pay_invoice_usd():
                 "status": "SUCCESS",
                 "transaction": {
                     "settlementAmount": -1010,
-                    "settlementFee": 1000,
+                    "settlementFee": 10,
                     "settlementVia": {"preImage": "abc123"},
                 },
             }
@@ -325,7 +325,7 @@ async def test_blink_pay_invoice_usd():
                             {
                                 "status": "SUCCESS",
                                 "settlementAmount": -1010,
-                                "settlementFee": 1000,
+                                "settlementFee": 10,
                                 "direction": "SEND",
                                 "settlementVia": {"preImage": "abc123"},
                             }
@@ -373,7 +373,7 @@ async def test_blink_get_payment_status_usd():
                             {
                                 "status": "SUCCESS",
                                 "settlementAmount": -1010,
-                                "settlementFee": 1000,
+                                "settlementFee": 10,
                                 "direction": "SEND",
                                 "settlementVia": {"preImage": "abc123"},
                             }
