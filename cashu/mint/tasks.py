@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import List
 
 from loguru import logger
@@ -59,6 +60,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
             # set the quote as paid
             if quote.unpaid:
                 quote.state = MintQuoteState.paid
+                quote.paid_time = int(time.time())
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 logger.trace(
                     f"Quote {quote.quote} with {MintQuoteState.unpaid} set as {quote.state.value}"
