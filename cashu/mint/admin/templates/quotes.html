@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Quotes — Nutshell Admin{% endblock %}
+{% block content %}
+<h2>Quotes</h2>
+
+{% if msg %}
+<div class="alert {% if 'Error' in msg or 'failed' in msg or 'Invalid' in msg %}alert-error{% else %}alert-success{% endif %}">{{ msg }}</div>
+{% endif %}
+
+<div class="card">
+    <h3>Look Up Quote</h3>
+    <form action="/quotes/lookup" method="post">
+        <div class="row">
+            <div>
+                <label for="quote_type">Type</label>
+                <select id="quote_type" name="quote_type">
+                    <option value="mint">Mint (NUT-04)</option>
+                    <option value="melt">Melt (NUT-05)</option>
+                </select>
+            </div>
+            <div style="flex:2">
+                <label for="quote_id">Quote ID</label>
+                <input type="text" id="quote_id" name="quote_id" placeholder="Enter quote ID..." required>
+            </div>
+            <button type="submit" class="btn btn-primary">Look Up</button>
+        </div>
+    </form>
+</div>
+
+{% if quote is defined and quote %}
+<div class="card">
+    <h3>Quote Details — {{ quote_type | title }}</h3>
+    <table>
+        <tr><th style="width:160px">Quote ID</th><td style="font-family:monospace">{{ quote.quote }}</td></tr>
+        <tr><th>Method</th><td>{{ quote.method }}</td></tr>
+        <tr><th>Unit</th><td>{{ quote.unit }}</td></tr>
+        <tr><th>Amount</th><td>{{ quote.amount }}</td></tr>
+        <tr><th>State</th><td><span class="badge badge-active">{{ quote.state }}</span></td></tr>
+        {% if quote.fee_reserve is defined %}
+        <tr><th>Fee Reserve</th><td>{{ quote.fee_reserve }}</td></tr>
+        {% endif %}
+        {% if quote.fee_paid is defined %}
+        <tr><th>Fee Paid</th><td>{{ quote.fee_paid }}</td></tr>
+        {% endif %}
+        {% if quote.created_time %}
+        <tr><th>Created</th><td>{{ quote.created_time | timestamp }}</td></tr>
+        {% endif %}
+        {% if quote.paid_time %}
+        <tr><th>Paid</th><td>{{ quote.paid_time | timestamp }}</td></tr>
+        {% endif %}
+        {% if quote.expiry %}
+        <tr><th>Expiry</th><td>{{ quote.expiry | timestamp }}</td></tr>
+        {% endif %}
+        {% if quote.payment_preimage %}
+        <tr><th>Preimage</th><td style="font-family:monospace;font-size:0.8rem;word-break:break-all">{{ quote.payment_preimage }}</td></tr>
+        {% endif %}
+    </table>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Update Quote State</h3>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">
+        Manually change the state of a quote. Use with caution — this can affect funds.
+    </p>
+    <form action="/quotes/update-state" method="post">
+        <div class="row">
+            <div>
+                <label>Type</label>
+                <select name="quote_type">
+                    <option value="mint">Mint (NUT-04)</option>
+                    <option value="melt">Melt (NUT-05)</option>
+                </select>
+            </div>
+            <div style="flex:2">
+                <label>Quote ID</label>
+                <input type="text" name="quote_id" placeholder="Quote ID..." required>
+            </div>
+            <div>
+                <label>New State</label>
+                <select name="state">
+                    <option value="PENDING">PENDING</option>
+                    <option value="UNPAID">UNPAID</option>
+                    <option value="PAID">PAID</option>
+                    <option value="ISSUED">ISSUED</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary"
+                    onclick="return confirm('Update this quote state?')">
+                Update
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

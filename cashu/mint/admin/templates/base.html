@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Nutshell Admin{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --accent: #f7931a;
+            --accent-hover: #e8850f;
+            --success: #3fb950;
+            --danger: #f85149;
+            --info: #58a6ff;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            min-height: 100vh;
+        }
+        nav {
+            width: 220px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem 0;
+            flex-shrink: 0;
+        }
+        nav .logo {
+            padding: 0 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        nav .logo h1 {
+            font-size: 1.1rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+        nav .logo span { color: var(--text-muted); font-size: 0.8rem; }
+        nav a {
+            display: block;
+            padding: 0.6rem 1.25rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.15s;
+        }
+        nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+        nav a.active { color: var(--accent); background: rgba(247,147,26,0.08); border-left: 3px solid var(--accent); }
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1100px;
+            overflow-y: auto;
+        }
+        h2 { font-size: 1.4rem; margin-bottom: 1.5rem; font-weight: 600; }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .card h3 { font-size: 1rem; color: var(--accent); margin-bottom: 0.75rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+        .stat { text-align: center; padding: 1rem; }
+        .stat .value { font-size: 2rem; font-weight: 700; color: var(--accent); }
+        .stat .label { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { color: var(--text-muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; }
+        form { margin: 0; }
+        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+        input, textarea, select {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        textarea { resize: vertical; min-height: 60px; }
+        button, .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background 0.15s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #da3633; }
+        .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+        .alert {
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+        .alert-success { background: rgba(63,185,80,0.1); border: 1px solid var(--success); color: var(--success); }
+        .alert-error { background: rgba(248,81,73,0.1); border: 1px solid var(--danger); color: var(--danger); }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-active { background: rgba(63,185,80,0.15); color: var(--success); }
+        .badge-inactive { background: rgba(139,148,158,0.15); color: var(--text-muted); }
+        .row { display: flex; gap: 0.75rem; align-items: flex-end; }
+        .row > * { flex: 1; }
+        .row > .btn { flex: none; margin-bottom: 0.75rem; }
+        .progress-bar {
+            height: 8px;
+            background: var(--bg);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .connected { color: var(--success); }
+        .disconnected { color: var(--danger); }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <h1>&#x26A1; Nutshell</h1>
+            <span>Mint Admin</span>
+        </div>
+        <a href="/" class="{% if page == 'dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="/settings" class="{% if page == 'settings' %}active{% endif %}">Settings</a>
+        <a href="/keysets" class="{% if page == 'keysets' %}active{% endif %}">Keysets</a>
+        <a href="/quotes" class="{% if page == 'quotes' %}active{% endif %}">Quotes</a>
+        <a href="/monitoring" class="{% if page == 'monitoring' %}active{% endif %}">Monitoring</a>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

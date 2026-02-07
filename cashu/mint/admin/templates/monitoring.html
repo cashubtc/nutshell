@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Monitoring — Nutshell Admin{% endblock %}
+{% block content %}
+<h2>Monitoring</h2>
+
+<div class="grid">
+    {% if sys_info.cpu_percent is defined %}
+    <div class="card stat">
+        <div class="value" id="cpu-val">{{ sys_info.cpu_percent }}%</div>
+        <div class="label">CPU Usage</div>
+        <div class="progress-bar">
+            <div class="fill" id="cpu-bar" style="width:{{ sys_info.cpu_percent }}%;background:{% if sys_info.cpu_percent > 80 %}var(--danger){% elif sys_info.cpu_percent > 50 %}var(--accent){% else %}var(--success){% endif %}"></div>
+        </div>
+    </div>
+    <div class="card stat">
+        <div class="value" id="mem-val">{{ sys_info.memory_percent }}%</div>
+        <div class="label">Memory ({{ sys_info.memory_used_mb }} / {{ sys_info.memory_total_mb }} MB)</div>
+        <div class="progress-bar">
+            <div class="fill" id="mem-bar" style="width:{{ sys_info.memory_percent }}%;background:{% if sys_info.memory_percent > 80 %}var(--danger){% elif sys_info.memory_percent > 50 %}var(--accent){% else %}var(--success){% endif %}"></div>
+        </div>
+    </div>
+    <div class="card stat">
+        <div class="value" id="disk-val">{{ sys_info.disk_percent }}%</div>
+        <div class="label">Disk ({{ sys_info.disk_used_gb }} / {{ sys_info.disk_total_gb }} GB)</div>
+        <div class="progress-bar">
+            <div class="fill" id="disk-bar" style="width:{{ sys_info.disk_percent }}%;background:{% if sys_info.disk_percent > 90 %}var(--danger){% elif sys_info.disk_percent > 70 %}var(--accent){% else %}var(--success){% endif %}"></div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <p style="color:var(--text-muted)">
+            Install <code>psutil</code> for system monitoring: <code>pip install psutil</code>
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>System Information</h3>
+    <table>
+        <tr><th style="width:160px">Platform</th><td>{{ sys_info.platform }}</td></tr>
+        <tr><th>Python</th><td>{{ sys_info.python }}</td></tr>
+    </table>
+</div>
+
+{% if mint_info and mint_info.error is not defined %}
+<div class="card">
+    <h3>Mint REST API (/v1/info)</h3>
+    <table>
+        {% for key, val in mint_info.items() %}
+        <tr>
+            <th style="width:200px">{{ key }}</th>
+            <td style="word-break:break-all">
+                {% if val is mapping %}
+                    <pre style="margin:0;font-size:0.8rem;color:var(--text-muted)">{{ val | tojson(indent=2) }}</pre>
+                {% elif val is iterable and val is not string %}
+                    <pre style="margin:0;font-size:0.8rem;color:var(--text-muted)">{{ val | tojson(indent=2) }}</pre>
+                {% else %}
+                    {{ val }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% elif mint_info and mint_info.error is defined %}
+<div class="alert alert-error">
+    Cannot reach mint REST API: {{ mint_info.error }}
+</div>
+{% endif %}
+
+{% if sys_info.cpu_percent is defined %}
+<script>
+function barColor(pct, thresholds) {
+    if (pct > thresholds[1]) return 'var(--danger)';
+    if (pct > thresholds[0]) return 'var(--accent)';
+    return 'var(--success)';
+}
+
+// Auto-refresh system stats every 5 seconds
+setInterval(async () => {
+    try {
+        const r = await fetch('/api/system');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+
+        document.getElementById('cpu-val').textContent = d.cpu_percent + '%';
+        document.getElementById('cpu-bar').style.width = d.cpu_percent + '%';
+        document.getElementById('cpu-bar').style.background = barColor(d.cpu_percent, [50, 80]);
+
+        document.getElementById('mem-val').textContent = d.memory_percent + '%';
+        document.getElementById('mem-bar').style.width = d.memory_percent + '%';
+        document.getElementById('mem-bar').style.background = barColor(d.memory_percent, [50, 80]);
+
+        document.getElementById('disk-val').textContent = d.disk_percent + '%';
+        document.getElementById('disk-bar').style.width = d.disk_percent + '%';
+        document.getElementById('disk-bar').style.background = barColor(d.disk_percent, [70, 90]);
+    } catch(e) {
+        document.getElementById('cpu-val').textContent = '--';
+        document.getElementById('mem-val').textContent = '--';
+        document.getElementById('disk-val').textContent = '--';
+    }
+}, 5000);
+</script>
+{% endif %}
+{% endblock %}
