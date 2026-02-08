@@ -218,53 +218,8 @@ class Ledger(
 
     # ------- ECASH -------
 
-    async def _invalidate_proofs(
-        self,
-        *,
-        proofs: List[Proof],
-        quote_id: Optional[str] = None,
-        conn: Optional[Connection] = None,
-    ) -> None:
-        """Adds proofs to the set of spent proofs and stores them in the db.
-
-        Args:
-            proofs (List[Proof]): Proofs to add to known secret table.
-            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
-        """
-        # Group proofs by keyset_id to calculate fees per keyset
-        proofs_by_keyset: Dict[str, List[Proof]] = {}
-        for p in proofs:
-            proofs_by_keyset.setdefault(p.id, []).append(p)
-
-        async with self.db.get_connection(conn) as conn:
-            # store in db
-            for p in proofs:
-                logger.trace(f"Invalidating proof {p.Y}")
-                await self.crud.invalidate_proof(
-                    proof=p, db=self.db, quote_id=quote_id, conn=conn
-                )
-                await self.crud.bump_keyset_balance(
-                    keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
-                )
-                await self.events.submit(
-                    ProofState(
-                        Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
-                    )
-                )
-
-            # Calculate and increment fees for each keyset separately
-            for keyset_id, keyset_proofs in proofs_by_keyset.items():
-                keyset_fees = self.get_fees_for_proofs(keyset_proofs)
-                if keyset_fees > 0:
-                    logger.trace(f"Adding fees {keyset_fees} to keyset {keyset_id}")
-                    await self.crud.bump_keyset_fees_paid(
-                        keyset=self.keysets[keyset_id],
-                        amount=keyset_fees,
-                        db=self.db,
-                        conn=conn,
-                    )
-
     async def _generate_change_promises(
+
         self,
         fee_provided: int,
         fee_paid: int,
@@ -1098,7 +1053,21 @@ class Ledger(
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
-                await self._invalidate_proofs(proofs=proofs, conn=conn)
+
+                # Calculate fees
+                proofs_by_keyset: Dict[str, List[Proof]] = {}
+                for p in proofs:
+                    proofs_by_keyset.setdefault(p.id, []).append(p)
+                keyset_fees = {}
+                for keyset_id, keyset_proofs in proofs_by_keyset.items():
+                    keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
+
+                await self.db_write.invalidate_proofs(
+                    proofs=proofs,
+                    keysets=self.keysets,
+                    keyset_fees=keyset_fees,
+                    conn=conn,
+                )
                 promises = await self._sign_blinded_messages(outputs, conn)
         except Exception as e:
             logger.trace(f"swap failed: {e}")

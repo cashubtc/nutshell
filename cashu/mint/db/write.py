@@ -392,6 +392,54 @@ class DbWriteHelper:
 
         return quote
 
+    async def invalidate_proofs(
+        self,
+        proofs: List[Proof],
+        keysets: Dict[str, MintKeyset],
+        quote_id: Optional[str] = None,
+        keyset_fees: Optional[Dict[str, int]] = None,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        """Invalidates proofs (spends them) and updates keyset balances and fees.
+
+        Args:
+            proofs (List[Proof]): Proofs to invalidate.
+            keysets (Dict[str, MintKeyset]): Keysets to update.
+            quote_id (Optional[str]): Melt quote ID if applicable.
+            keyset_fees (Optional[Dict[str, int]]): Fees paid per keyset.
+            conn (Optional[Connection]): Database connection.
+        """
+        async with self.db.get_connection(conn) as conn:
+            # Invalidate proofs (spend them)
+            # This bumps balance down.
+            for p in proofs:
+                logger.trace(f"Invalidating proof {p.Y}")
+                await self.crud.invalidate_proof(
+                    proof=p, db=self.db, quote_id=quote_id, conn=conn
+                )
+                await self.crud.bump_keyset_balance(
+                    db=self.db,
+                    keyset=keysets[p.id],
+                    amount=-p.amount,
+                    conn=conn,
+                )
+                await self.events.submit(
+                    ProofState(
+                        Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
+                    )
+                )
+
+            # Update fees
+            if keyset_fees:
+                for keyset_id, fee in keyset_fees.items():
+                    if fee > 0:
+                        await self.crud.bump_keyset_fees_paid(
+                            keyset=keysets[keyset_id],
+                            amount=fee,
+                            db=self.db,
+                            conn=conn,
+                        )
+
     async def set_melt_quote_paid_and_invalidate_proofs(
         self,
         quote: MeltQuote,
@@ -417,43 +465,23 @@ class DbWriteHelper:
             # This bumps balance back up.
             await self._unset_proofs_pending(proofs, keysets, spent=True, conn=conn)
 
-            # 2. Invalidate proofs (spend them)
-            # This bumps balance down.
-            for p in proofs:
-                logger.trace(f"Invalidating proof {p.Y}")
-                await self.crud.invalidate_proof(
-                    proof=p, db=self.db, quote_id=quote.quote, conn=conn
-                )
-                await self.crud.bump_keyset_balance(
-                    db=self.db,
-                    keyset=keysets[p.id],
-                    amount=-p.amount,
-                    conn=conn,
-                )
+            # 2. Invalidate proofs (spend them) and update fees
+            await self.invalidate_proofs(
+                proofs=proofs,
+                keysets=keysets,
+                quote_id=quote.quote,
+                keyset_fees=keyset_fees,
+                conn=conn,
+            )
 
-            # 3. Update fees
-            for keyset_id, fee in keyset_fees.items():
-                if fee > 0:
-                    await self.crud.bump_keyset_fees_paid(
-                        keyset=keysets[keyset_id],
-                        amount=fee,
-                        db=self.db,
-                        conn=conn,
-                    )
-
-            # 4. Update melt quote to PAID
+            # 3. Update melt quote to PAID
             if quote_copy.state != MeltQuoteState.paid:
                 quote_copy.state = MeltQuoteState.paid
                 quote_copy.paid_time = int(time.time())
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         # Events
-        for p in proofs:
-            await self.events.submit(
-                ProofState(
-                    Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
-                )
-            )
         await self.events.submit(quote_copy)
 
         return quote_copy
+
