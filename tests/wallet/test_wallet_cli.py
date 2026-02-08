@@ -584,3 +584,181 @@ def test_send_with_lock(mint, cli_prefix):
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
+
+
+def test_proofs_json_structure(cli_prefix):
+    """Test that proofs have correct JSON structure"""
+    runner = CliRunner(mix_stderr=False)
+
+    # First create some tokens
+    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
+    assert result.exception is None
+
+    # Verify wallet has balance
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 64
+
+    # Test proofs command
+    result = runner.invoke(cli, [*cli_prefix, "proofs"])
+    assert result.exception is None
+    assert result.exit_code == 0
+
+    # Parse JSON from stdout
+    import json
+
+    proofs = json.loads(result.stdout.strip())
+    assert len(proofs) > 0, "Should have proofs to test structure"
+
+    for proof in proofs:
+        # Check field types, the required fields according to NUT-00 spec
+        assert isinstance(proof["id"], str), "'id' should be string"
+        assert isinstance(proof["amount"], int), "'amount' should be integer"
+        assert isinstance(proof["secret"], str), "'secret' should be string"
+        assert isinstance(proof["C"], str), "'C' should be string"
+        assert "dleq" in proof.keys()  # will not be present if '--no-dleq' is passed
+
+
+def test_proofs_with_no_dleq_flag(cli_prefix):
+    """Test --no-dleq flag excludes DLEQ proofs"""
+    runner = CliRunner(mix_stderr=False)
+
+    # First create some tokens
+    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
+    assert result.exception is None
+
+    # Verify wallet has balance
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 64
+
+    # Get proofs with DLEQ
+    result_with_dleq = runner.invoke(cli, [*cli_prefix, "proofs"])
+    assert result_with_dleq.exception is None
+
+    # Get proofs without DLEQ
+    result_no_dleq = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
+    assert result_no_dleq.exception is None
+    assert result_no_dleq.exit_code == 0
+
+    # Parse JSON from both outputs
+    import json
+
+    proofs_with_dleq = json.loads(result_with_dleq.stdout.strip())
+    proofs_no_dleq = json.loads(result_no_dleq.stdout.strip())
+
+    # Should have same number of proofs
+    assert len(proofs_with_dleq) == len(proofs_no_dleq)
+    assert len(proofs_with_dleq) > 0, "Should have proofs to test"
+
+    # No DLEQ version should not have dleq field
+    for proof in proofs_no_dleq:
+        # Check field types, the required fields according to NUT-00 spec
+        assert isinstance(proof["id"], str), "'id' should be string"
+        assert isinstance(proof["amount"], int), "'amount' should be integer"
+        assert isinstance(proof["secret"], str), "'secret' should be string"
+        assert isinstance(proof["C"], str), "'C' should be string"
+        assert (
+            "dleq" not in proof
+        ), "proof should not contain 'dleq' field with --no-dleq"
+
+
+def test_proofs_with_keyset_filter(cli_prefix):
+    """Test --keyset flag filters proofs by keyset ID"""
+    runner = CliRunner(mix_stderr=False)
+
+    # First create some tokens
+    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
+    assert result.exception is None
+
+    # Verify wallet has balance
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 64
+
+    # Get all proofs to find a keyset ID
+    result_all = runner.invoke(cli, [*cli_prefix, "proofs"])
+    assert result_all.exception is None
+
+    import json
+
+    all_proofs = json.loads(result_all.stdout.strip())
+    assert len(all_proofs) > 0, "Should have proofs to test keyset filtering"
+
+    # Get a keyset ID from first proof
+    test_keyset = all_proofs[0]["id"]
+
+    # Filter by that keyset
+    result_filtered = runner.invoke(
+        cli, [*cli_prefix, "proofs", "--keyset", test_keyset]
+    )
+    assert result_filtered.exception is None
+    assert result_filtered.exit_code == 0
+
+    filtered_proofs = json.loads(result_filtered.stdout.strip())
+    assert len(filtered_proofs) > 0
+
+    # All filtered proofs should have the same keyset ID
+    for proof in filtered_proofs:
+        assert (
+            proof["id"] == test_keyset
+        ), f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+
+    # Filter with a non-existent keyset, to make sure nothing is returned
+    import secrets
+
+    nonexistent_keyset = "00" + secrets.token_hex(7)  # 16 hex chars (8 bytes)
+    result_filtered_again = runner.invoke(
+        cli, [*cli_prefix, "proofs", "--keyset", nonexistent_keyset]
+    )
+    assert result_filtered_again.exception is None
+    assert result_filtered_again.exit_code == 0
+    assert "No proofs found for keyset:" in result_filtered_again.stdout
+
+
+def test_proofs_invalid_keyset(cli_prefix):
+    """Test --keyset with non-existent keyset ID"""
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", "nonexistent"])
+
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No proofs found for keyset: nonexistent" in result.stdout
+
+
+def test_proofs_with_all_flag(cli_prefix):
+    """Test --all flag includes reserved proofs"""
+    runner = CliRunner(mix_stderr=False)
+
+    # Create some tokens first so we have proofs to list
+    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
+    assert result.exit_code == 0
+    # Send some, in order to 'reserve' the tokens such that they are only included if --all is passed
+    result = runner.invoke(cli, [*cli_prefix, "send", "12"])
+    assert result.exit_code == 0
+
+    # Get available proofs (default)
+    result_available = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
+    assert result_available.exception is None
+
+    # Get all proofs (including reserved)
+    result_all = runner.invoke(cli, [*cli_prefix, "proofs", "--all", "--no-dleq"])
+    assert result_all.exception is None
+    assert result_all.exit_code == 0
+
+    import json
+
+    available_proofs = json.loads(result_available.stdout.strip())
+    all_proofs = json.loads(result_all.stdout.strip())
+
+    # All proofs should include at least the same number as available proofs
+    assert len(all_proofs) > len(
+        available_proofs
+    ), "--all should have more proofs, as it includes the reserved proofs"
+
+    print(f"Available proofs: {len(available_proofs)}, All proofs: {len(all_proofs)}")
+
+    # All proofs in available should be in all_proofs
+    available_secrets = {proof["secret"] for proof in available_proofs}
+    all_secrets = {proof["secret"] for proof in all_proofs}
+
+    assert available_secrets.issubset(
+        all_secrets
+    ), "all available proofs should be included in --all"
