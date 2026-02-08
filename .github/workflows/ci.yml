@@ -59,24 +59,56 @@ jobs:
       poetry-version: ${{ matrix.poetry-version }}
       mint-database: ${{ matrix.mint-database }}
 
-  regtest-mint:
-    uses: ./.github/workflows/regtest-mint.yml
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
-        backend-wallet-class:
-          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
-        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-        # mint-database: ["./test_data/test_mint"]
-    with:
-      python-version: ${{ matrix.python-version }}
-      backend-wallet-class: ${{ matrix.backend-wallet-class }}
-      mint-database: ${{ matrix.mint-database }}
+  # Setup regtest environment for all tests
+  setup-regtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      regtest-ready: true
 
-  regtest-wallet:
-    uses: ./.github/workflows/regtest-wallet.yml
+    services:
+      regtest:
+        image: ghcr.io/callebtc/cashu-regtest-environment:sha-6160cb1214afb03e5f89c104f8e5f29c4637cf00
+        ports:
+          # Map all needed ports to make them accessible
+          - 5001:5001  # LNbits
+          - 8081:8081  # LND REST
+          - 10009:10009  # LND RPC
+          - 3001:3001  # CoreLightning REST
+          - 3010:3010  # CLN REST
+        options: >-
+          --name regtest-environment
+          --volume regtest-data:/regtest/data
+          --volume /var/run/docker.sock:/var/run/docker.sock
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Wait for regtest environment
+        run: |
+          # Wait for the regtest environment to be fully up
+          echo "Waiting for regtest environment to be ready..."
+          timeout 600 bash -c 'until curl -s http://localhost:5001 > /dev/null; do sleep 5; echo "Waiting..."; done'
+          echo "Regtest environment is ready"
+
+      - name: Export regtest data to shared location
+        run: |
+          # Create a directory to store the regtest data
+          mkdir -p /tmp/regtest-data
+          docker cp regtest-environment:/regtest/data /tmp/regtest-data
+          chmod -R 777 /tmp/regtest-data
+
+      - name: Upload regtest data as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: regtest-data
+          path: /tmp/regtest-data/data
+          retention-days: 1
+
+  # Run mint tests using the shared regtest environment
+  regtest-mint:
+    needs: setup-regtest
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -85,8 +117,156 @@ jobs:
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-        # mint-database: ["./test_data/test_mint"]
-    with:
-      python-version: ${{ matrix.python-version }}
-      backend-wallet-class: ${{ matrix.backend-wallet-class }}
-      mint-database: ${{ matrix.mint-database }}
+
+    steps:
+      - name: Start PostgreSQL service
+        if: contains(matrix.mint-database, 'postgres')
+        run: |
+          docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
+          until docker exec postgres pg_isready; do sleep 1; done
+
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ matrix.poetry-version }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev
+
+      - name: Download regtest data
+        uses: actions/download-artifact@v4
+        with:
+          name: regtest-data
+          path: ./regtest/data
+
+      - name: Prepare regtest data
+        run: |
+          mkdir -p regtest
+          chmod -R 777 regtest/data
+
+      - name: Run Mint Tests
+        env:
+          WALLET_NAME: test_wallet
+          MINT_HOST: localhost
+          MINT_PORT: 3337
+          MINT_TEST_DATABASE: ${{ matrix.mint-database }}
+          TOR: false
+          MINT_BACKEND_BOLT11_SAT: ${{ matrix.backend-wallet-class }}
+          # LNbits wallet
+          MINT_LNBITS_ENDPOINT: http://localhost:5001
+          MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
+          # LndRestWallet
+          MINT_LND_REST_ENDPOINT: https://localhost:8081/
+          MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # LndRPCWallet
+          MINT_LND_RPC_ENDPOINT: localhost:10009
+          MINT_LND_RPC_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_RPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # CoreLightningRestWallet
+          MINT_CORELIGHTNING_REST_URL: https://localhost:3001
+          MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
+          MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
+          # CLNRestWallet
+          MINT_CLNREST_URL: https://localhost:3010
+          MINT_CLNREST_RUNE: ./regtest/data/clightning-2/rune
+          MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
+        run: |
+          sudo chmod -R 777 .
+          poetry run make test-mint
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+
+  # Run wallet tests using the shared regtest environment
+  regtest-wallet:
+    needs: setup-regtest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10"]
+        poetry-version: ["1.8.5"]
+        backend-wallet-class:
+          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
+        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
+
+    steps:
+      - name: Start PostgreSQL service
+        if: contains(matrix.mint-database, 'postgres')
+        run: |
+          docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
+          until docker exec postgres pg_isready; do sleep 1; done
+
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: ${{ matrix.poetry-version }}
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev
+
+      - name: Download regtest data
+        uses: actions/download-artifact@v4
+        with:
+          name: regtest-data
+          path: ./regtest/data
+
+      - name: Prepare regtest data
+        run: |
+          mkdir -p regtest
+          chmod -R 777 regtest/data
+
+      - name: Run Wallet Tests
+        env:
+          WALLET_NAME: test_wallet
+          MINT_HOST: localhost
+          MINT_PORT: 3337
+          MINT_TEST_DATABASE: ${{ matrix.mint-database }}
+          TOR: false
+          MINT_BACKEND_BOLT11_SAT: ${{ matrix.backend-wallet-class }}
+          # LNbits wallet
+          MINT_LNBITS_ENDPOINT: http://localhost:5001
+          MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
+          # LndRestWallet
+          MINT_LND_REST_ENDPOINT: https://localhost:8081/
+          MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # LndRPCWallet
+          MINT_LND_RPC_ENDPOINT: localhost:10009
+          MINT_LND_RPC_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_RPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # CoreLightningRestWallet
+          MINT_CORELIGHTNING_REST_URL: https://localhost:3001
+          MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
+          MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
+          # CLNRestWallet
+          MINT_CLNREST_URL: https://localhost:3010
+          MINT_CLNREST_RUNE: ./regtest/data/clightning-2/rune
+          MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
+        run: |
+          sudo chmod -R 777 .
+          poetry run make test-wallet
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
