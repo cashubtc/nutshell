@@ -105,7 +105,7 @@ class DbWriteHelper:
             spent (bool): Whether the proofs have been spent or not. Defaults to True.
                 This should be False if the proofs were NOT invalidated before calling this function.
                 It is used to emit the unspent state for the proofs (otherwise the spent state is emitted
-                by the _invalidate_proofs function when the proofs are spent).
+                by the invalidate_proofs function when the proofs are spent).
             conn (Optional[Connection]): Connection to use. If not set, a new connection will be created.
         """
         async with self.db.get_connection(conn) as conn:

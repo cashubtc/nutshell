@@ -17,8 +17,6 @@ from ..core.base import (
     MintQuote,
     MintQuoteState,
     Proof,
-    ProofSpentState,
-    ProofState,
     Unit,
 )
 from ..core.crypto import b_dhke
