@@ -80,6 +80,7 @@ async def wallet1(mint):
     )
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -91,6 +92,7 @@ async def wallet2():
     )
     await wallet2.load_mint()
     yield wallet2
+    await wallet2.db.engine.dispose()
 
 
 @pytest.mark.asyncio
