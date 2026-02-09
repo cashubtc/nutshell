@@ -184,16 +184,16 @@ message UpdateQuoteTtlRequest {
     optional uint64 melt_ttl = 2;
 }
 
-// GetQuoteTtlRequest is an empty message used to retrieve the current Time-To-Live (TTL) for quotes.
+// GetQuoteTtlRequest is used to retrieve the expiry time of a specific quote.
 message GetQuoteTtlRequest {
+    // The ID of the quote to retrieve the expiry for.
+    string quote_id = 1;
 }
 
-// GetQuoteTtlResponse contains the current Time-To-Live (TTL) configuration for quotes.
+// GetQuoteTtlResponse contains the expiry time for a specific quote.
 message GetQuoteTtlResponse {
-    // The TTL in seconds for minting (NUT-04) quotes.
-    uint64 mint_ttl = 1;
-    // The TTL in seconds for melting (NUT-05) quotes.
-    uint64 melt_ttl = 2;
+    // The Unix timestamp when the quote expires.
+    int64 expiry = 1;
 }
 
 // Nut04Quote represents a quote for minting (NUT-04).

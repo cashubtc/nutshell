@@ -5,11 +5,10 @@ isort:skip_file
 
 import builtins
 import collections.abc
-import typing
-
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -419,35 +418,37 @@ global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
 
 @typing.final
 class GetQuoteTtlRequest(google.protobuf.message.Message):
-    """GetQuoteTtlRequest is an empty message used to retrieve the current Time-To-Live (TTL) for quotes."""
+    """GetQuoteTtlRequest is used to retrieve the expiry time of a specific quote."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    QUOTE_ID_FIELD_NUMBER: builtins.int
+    quote_id: builtins.str
+    """The ID of the quote to retrieve the expiry for."""
     def __init__(
         self,
+        *,
+        quote_id: builtins.str = ...,
     ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
 
 global___GetQuoteTtlRequest = GetQuoteTtlRequest
 
 @typing.final
 class GetQuoteTtlResponse(google.protobuf.message.Message):
-    """GetQuoteTtlResponse contains the current Time-To-Live (TTL) configuration for quotes."""
+    """GetQuoteTtlResponse contains the expiry time for a specific quote."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    MINT_TTL_FIELD_NUMBER: builtins.int
-    MELT_TTL_FIELD_NUMBER: builtins.int
-    mint_ttl: builtins.int
-    """The TTL in seconds for minting (NUT-04) quotes."""
-    melt_ttl: builtins.int
-    """The TTL in seconds for melting (NUT-05) quotes."""
+    EXPIRY_FIELD_NUMBER: builtins.int
+    expiry: builtins.int
+    """The Unix timestamp when the quote expires."""
     def __init__(
         self,
         *,
-        mint_ttl: builtins.int = ...,
-        melt_ttl: builtins.int = ...,
+        expiry: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["expiry", b"expiry"]) -> None: ...
 
 global___GetQuoteTtlResponse = GetQuoteTtlResponse
 
