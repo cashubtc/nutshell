@@ -109,7 +109,10 @@ async def test_update_mint_quote(cli_prefix):
     mint_quote = await wallet.request_mint(100)
     await asyncio.sleep(1)
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "mint-quote", mint_quote.quote, "ISSUED"])
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "update", "mint-quote", "--", mint_quote.quote, "ISSUED"],
+    )
     assert result.exception is None
     assert "Successfully updated!" in result.output
 
@@ -124,7 +127,10 @@ async def test_update_melt_quote(cli_prefix):
     assert melt_quote.quote
     await asyncio.sleep(1)
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "melt-quote", melt_quote.quote, "PAID"])
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "update", "melt-quote", "--", melt_quote.quote, "PAID"],
+    )
     assert result.exception is None
     assert "Successfully updated!" in result.output
 
@@ -134,7 +140,10 @@ async def test_get_mint_quote(cli_prefix):
     mint_quote = await wallet.request_mint(100)
     await asyncio.sleep(1)
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "get", "mint-quote", mint_quote.quote])
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "get", "mint-quote", "--", mint_quote.quote],
+    )
     assert result.exception is None
     assert "mint quote:" in result.output
 
@@ -148,7 +157,10 @@ async def test_get_melt_quote(cli_prefix):
     melt_quote = await wallet.melt_quote("lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj")
     await asyncio.sleep(1)
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "get", "melt-quote", melt_quote.quote])
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "get", "melt-quote", "--", melt_quote.quote],
+    )
     assert result.exception is None
     assert "melt quote:" in result.output
 
