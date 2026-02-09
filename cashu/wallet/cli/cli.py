@@ -243,11 +243,21 @@ async def cli(
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--prefer-async",
+    default=False,
+    is_flag=True,
+    help="Prefer async processing for melt.",
+)
 @click.pass_context
 @coro
 @init_auth_wallet
 async def pay(
-    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int] = None,
+    yes: bool = False,
+    prefer_async: bool = False,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
@@ -292,7 +302,11 @@ async def pay(
 
     try:
         melt_response = await wallet.melt(
-            send_proofs, invoice, quote.fee_reserve, quote.quote
+            send_proofs,
+            invoice,
+            quote.fee_reserve,
+            quote.quote,
+            prefer_async=prefer_async,
         )
     except Exception as e:
         print(f" Error paying invoice: {e}")
