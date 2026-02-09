@@ -281,6 +281,8 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     client.add_subscription(
         JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE, [quote.quote], "subId"
     )
+    await asyncio.sleep(0.1)
+    websocket_mock.send_text.reset_mock()
     quote_pending = await ledger.db_write._set_melt_quote_pending(quote)
     await asyncio.sleep(0.1)
     notification = JSONRPCNotification(
@@ -507,4 +509,3 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     assert quote.paid_time >= quote.created_time
     # Ensure it's recent (within last minute)
     assert quote.paid_time > int(time.time()) - 60
-
