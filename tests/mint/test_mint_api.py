@@ -1,3 +1,6 @@
+import asyncio
+from typing import Optional
+
 import bolt11
 import httpx
 import pytest
@@ -470,6 +473,60 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # check if DEPRECATED paid flag is also returned
     assert result["paid"] is True
     assert resp_quote.paid is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+async def test_melt_internal_prefer_async(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
+
+    mint_quote = await wallet.request_mint(64)
+    invoice_payment_request = mint_quote.request
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 64
+    assert quote.fee_reserve == 0
+
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+            "prefer_async": True,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    resp_quote = PostMeltQuoteResponse(**result)
+    assert resp_quote.quote == quote.quote
+    assert resp_quote.state == MeltQuoteState.pending.value
+
+    status: Optional[PostMeltQuoteResponse] = None
+    for _ in range(20):
+        await asyncio.sleep(0.1)
+        status_resp = httpx.get(
+            f"{BASE_URL}/v1/melt/quote/bolt11/{quote.quote}",
+        )
+        assert status_resp.status_code == 200
+        status = PostMeltQuoteResponse(**status_resp.json())
+        if status.state == MeltQuoteState.paid.value:
+            break
+
+    assert status is not None
+    assert status.state == MeltQuoteState.paid.value
 
 
 @pytest.mark.asyncio

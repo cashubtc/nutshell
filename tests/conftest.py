@@ -52,7 +52,7 @@ settings.mint_transaction_rate_limit_per_minute = 60
 settings.mint_lnd_enable_mpp = True
 settings.mint_clnrest_enable_mpp = True
 settings.mint_input_fee_ppk = 0
-settings.db_connection_pool = True
+settings.db_connection_pool = False
 settings.mint_require_auth = False
 settings.mint_watchdog_enabled = False
 

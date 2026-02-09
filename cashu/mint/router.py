@@ -333,7 +333,10 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
     resp = await ledger.melt(
-        proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+        proofs=payload.inputs,
+        quote=payload.quote,
+        outputs=payload.outputs,
+        prefer_async=payload.prefer_async,
     )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
