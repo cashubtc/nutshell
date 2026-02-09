@@ -486,12 +486,18 @@ class LedgerAPI(SupportsAuth):
         quote: str,
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]],
+        prefer_async: Optional[bool] = None,
     ) -> PostMeltQuoteResponse:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
-        payload = PostMeltRequest(quote=quote, inputs=proofs, outputs=outputs)
+        payload = PostMeltRequest(
+            quote=quote,
+            inputs=proofs,
+            outputs=outputs,
+            prefer_async=prefer_async,
+        )
 
         def _meltrequest_include_fields(
             proofs: List[Proof], outputs: List[BlindedMessage]
@@ -499,11 +505,14 @@ class LedgerAPI(SupportsAuth):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "witness"}
             outputs_include = {"id", "amount", "B_"}
-            return {
+            payload_fields = {
                 "quote": ...,
                 "inputs": {i: proofs_include for i in range(len(proofs))},
                 "outputs": {i: outputs_include for i in range(len(outputs))},
             }
+            if prefer_async is not None:
+                payload_fields["prefer_async"] = ...
+            return payload_fields
 
         resp = await self._request(
             POST,
