@@ -35,7 +35,7 @@ from .base import (
 class FakeWallet(LightningBackend):
     unit: Unit
     fake_btc_price = 1e8 / 1337
-    paid_invoices_queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
+    paid_invoices_queue: asyncio.Queue[Bolt11]
     payment_secrets: Dict[str, str] = dict()
     created_invoices: List[Bolt11] = []
     paid_invoices_outgoing: List[Bolt11] = []
@@ -63,6 +63,7 @@ class FakeWallet(LightningBackend):
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
+        self.paid_invoices_queue = asyncio.Queue(0)
 
     async def status(self) -> StatusResponse:
         return StatusResponse(
