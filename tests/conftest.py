@@ -96,6 +96,14 @@ async def ledger():
         # clear postgres database
         db = Database("mint", settings.mint_database)
         async with db.connect() as conn:
+            await conn.execute(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = current_database()
+                AND pid <> pg_backend_pid();
+                """
+            )
             # drop all tables
             await conn.execute("DROP SCHEMA public CASCADE;")
             await conn.execute("CREATE SCHEMA public;")
