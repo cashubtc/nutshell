@@ -11,7 +11,7 @@ from ..core.base import (
     P2PKWitness,
     Proof,
 )
-from ..core.crypto.secp import PrivateKey
+from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.p2pk import (
     P2PKSecret,
@@ -54,6 +54,10 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         Returns:
             P2PKSecret: P2PK secret with the given pubkeys, locktime, tags, and signature flag.
         """
+        try:
+            PublicKey(bytes.fromhex(data))
+        except Exception as exc:
+            raise ValueError("Invalid pubkey") from exc
         logger.debug(f"Provided tags: {tags}")
         if not tags:
             tags = Tags()
