@@ -1,6 +1,7 @@
 
 import os
 
+import bolt11
 import grpc
 from loguru import logger
 
@@ -115,37 +116,47 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetQuoteTtl(self, request, context):
         """
         Returns the expiry timestamp for a specific quote.
-        Expiry is computed as created_time + quote TTL.
         """
-        logger.debug(f"gRPC GetQuoteTtl has been called for quote_id: {request.quote_id}")
+        logger.debug(
+            f"gRPC GetQuoteTtl has been called for quote_id: {request.quote_id}"
+        )
 
-        # Try to get the quote as a mint quote first
         mint_quote = await self.ledger.crud.get_mint_quote(
             quote_id=request.quote_id, db=self.ledger.db
         )
         if mint_quote:
             expiry = mint_quote.expiry
-            if expiry is None and mint_quote.created_time:
-                expiry = mint_quote.created_time + (settings.mint_redis_cache_ttl or 0)
 
-            if expiry:
-                return management_pb2.GetQuoteTtlResponse(expiry=expiry)
+            # expiry not stored in mint_quotes → recompute from invoice
+            if expiry is None and mint_quote.request:
+                try:
+                    invoice_obj = bolt11.decode(mint_quote.request)
+                    if invoice_obj.expiry is not None:
+                        expiry = invoice_obj.date + invoice_obj.expiry
+                except Exception:
+                    expiry = None
+
+            if expiry is not None:
+                return management_pb2.GetQuoteTtlResponse(expiry=int(expiry))
 
         # If not found, try to get it as a melt quote
         melt_quote = await self.ledger.crud.get_melt_quote(
             quote_id=request.quote_id, db=self.ledger.db
         )
-        if melt_quote:
-            expiry = melt_quote.expiry
-            if expiry is None and melt_quote.created_time:
-                expiry = melt_quote.created_time + (settings.mint_redis_cache_ttl or 0)
+        if melt_quote and melt_quote.expiry is not None:
+            return management_pb2.GetQuoteTtlResponse(
+                expiry=int(melt_quote.expiry)
+            )
 
-            if expiry:
-                return management_pb2.GetQuoteTtlResponse(expiry=expiry)
+        logger.warning(
+            f"Quote {request.quote_id} not found or has no expiry"
+        )
+        await context.abort(
+        grpc.StatusCode.NOT_FOUND,
+        "Quote not found or has no expiry",
+        )
+        raise Exception("Quote not found or has no expiry")
 
-        # Quote not found
-        logger.warning(f"Quote {request.quote_id} not found")
-        context.abort(grpc.StatusCode.NOT_FOUND, "Quote not found")
 
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
