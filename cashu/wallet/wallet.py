@@ -624,7 +624,7 @@ class Wallet(
         await update_bolt11_mint_quote(
             db=self.db,
             quote=quote_id,
-            state=MintQuoteState.paid,
+            state=MintQuoteState.issued,
             paid_time=int(time.time()),
         )
         # store the mint_id in proofs
