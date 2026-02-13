@@ -1,11 +1,13 @@
 from typing import Any, Dict, List, Optional
 
 import httpx
+import time
 
 from cashu.core.base import MintQuoteState
+from cashu.core.errors import CashuError, QuoteAlreadyIssuedError
 from cashu.core.nostr import create_nip98_header, derive_nostr_keypair, get_npub
 from cashu.core.settings import settings
-from cashu.wallet.crud import get_bolt11_mint_quote
+from cashu.wallet.crud import get_bolt11_mint_quote, update_bolt11_mint_quote
 from cashu.wallet.wallet import Wallet
 
 # Constant holding the npub cash hostname
@@ -185,6 +187,16 @@ class NpubCash:
                 proofs = await self.wallet.mint(amount, quote_id=quote_id)
                 minted_proofs.extend(proofs)
             except Exception as e:
+                # If the mint returns an error that the quote is already issued, we assume it is issued
+                if "Code: 11000" in str(e) or (isinstance(e, CashuError) and e.code == 11000):
+                    print(f"Quote {quote_id} already issued (mint). Updating local state.")
+                    await update_bolt11_mint_quote(
+                        db=self.wallet.db,
+                        quote=quote_id,
+                        state=MintQuoteState.issued,
+                        paid_time=int(time.time()),
+                    )
+                    continue
                 print(f"Failed to mint quote {quote_id}: {e}")
                 pass
                 
