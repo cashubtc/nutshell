@@ -8,7 +8,6 @@ from cashu.core.settings import settings
 from cashu.wallet.crud import get_bolt11_mint_quote
 from cashu.wallet.wallet import Wallet
 
-
 # Constant holding the npub cash hostname
 NPUB_CASH = settings.npub_cash_hostname
 
