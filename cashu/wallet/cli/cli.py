@@ -1298,6 +1298,21 @@ async def lnurl_create(ctx: Context, mint: Optional[str]):
         print(f"Error: {e}")
 
 
+@lnurl.command("set-mint", help="Update the mint URL for the LNURL.")
+@click.option("--mint", "-m", default=None, help="Mint URL to use.")
+@click.pass_context
+@coro
+async def lnurl_set_mint(ctx: Context, mint: Optional[str]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        lnurl_addr = await npc.update_mint_url(mint_url=mint)
+        print(f"Updated mint URL for LNURL: {lnurl_addr}")
+        print(f"New mint: {mint or wallet.url}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 @lnurl.command("get", help="Get LNURL.")
 @click.pass_context
 @coro

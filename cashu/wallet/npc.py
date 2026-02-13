@@ -105,6 +105,18 @@ class NpubCash:
         
         return await self.get_lnurl()
 
+    async def update_mint_url(self, mint_url: Optional[str] = None) -> str:
+        """Updates the mint URL for the LNURL."""
+        if not self.npub:
+            self._derive_keys()
+            
+        mint_to_use = mint_url or self.wallet.url
+        if not mint_to_use:
+             raise ValueError("No mint URL provided or found in wallet")
+
+        await self._request("PATCH", "/user/mint", body={"mint_url": mint_to_use})
+        return await self.get_lnurl()
+
     async def check_quotes(self) -> List[Dict]:
         """Fetches all paid quotes from the API."""
         if not self.privkey_hex:
@@ -137,7 +149,10 @@ class NpubCash:
         for quote in quotes:
             # quote['mintUrl'] contains the mint URL used for this quote
             quote_mint = quote.get("mintUrl") or quote.get("mint")
-            if quote_mint != self.wallet.url:
+            if not quote_mint:
+                continue
+
+            if quote_mint.rstrip("/") != self.wallet.url.rstrip("/"):
                 continue
             
             quote_id = quote.get("quoteId") or quote.get("id")
