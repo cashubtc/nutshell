@@ -1380,7 +1380,7 @@ async def lnurl_mint(ctx: Context):
             print(f"Successfully minted {len(proofs)} tokens.")
             await print_balance(ctx)
         else:
-            print("No tokens minted (maybe different mint or error).")
+            print("No tokens minted.")
     except Exception as e:
         print(f"Error minting quotes: {e}")
 
