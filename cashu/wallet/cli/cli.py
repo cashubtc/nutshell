@@ -58,6 +58,7 @@ from ..helpers import (
     receive,
     send,
 )
+from ..lnurl import handle_lnurl
 from ..subscriptions import SubscriptionManager
 
 
@@ -252,6 +253,14 @@ async def pay(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
+
+    if invoice.lower().startswith("lnurl") or "@" in invoice:
+        print(f"Resolving LNURL {invoice}...", end="", flush=True)
+        invoice = await handle_lnurl(invoice, amount)
+        if not invoice:
+            return
+        print(f" Resolved.")
+
     payment_hash = bolt11.decode(invoice).payment_hash
     # we assume `amount` to be in sats
     amount_mpp_msat = amount * 1000 if amount else None
