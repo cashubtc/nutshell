@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from cashu.core.nostr import derive_nostr_keypair, create_nip98_header, get_npub
 from cashu.core.settings import settings
 from cashu.wallet.wallet import Wallet
-from cashu.core.base import Proof
+from cashu.core.base import Proof, MintQuoteState
 
 class NpubCash:
     """Client for npub.cash API"""
@@ -166,7 +166,10 @@ class NpubCash:
                 # Mint tokens
                 # For v2, we are minting the quote ID that NPC created.
                 # Ensure we have the quote in the database
-                await self.wallet.get_mint_quote(quote_id)
+                quote = await self.wallet.get_mint_quote(quote_id)
+                if quote.state == MintQuoteState.issued:
+                    print(f"Quote {quote_id} already minted.")
+                    continue
                 proofs = await self.wallet.mint(amount, quote_id=quote_id)
                 minted_proofs.extend(proofs)
             except Exception as e:
