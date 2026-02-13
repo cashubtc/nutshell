@@ -59,8 +59,8 @@ from ..helpers import (
     send,
 )
 from ..lnurl import handle_lnurl
+from ..npc import NpubCash
 from ..subscriptions import SubscriptionManager
-
 
 class NaturalOrderGroup(click.Group):
     """For listing commands in help in order of definition"""
@@ -1277,4 +1277,78 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
         new_proofs = await auth_wallet.mint_blind_auth()
         print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
-    print(f"Auth balance: {auth_wallet.available_balance}")
+
+@cli.group(cls=NaturalOrderGroup)
+def lnurl():
+    """LNURL commands."""
+    pass
+
+
+@lnurl.command("create", help="Create LNURL.")
+@click.option("--mint", "-m", default=None, help="Mint URL to use.")
+@click.pass_context
+@coro
+async def lnurl_create(ctx: Context, mint: Optional[str]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        lnurl_addr = await npc.create_lnurl(mint_url=mint)
+        print(f"Created LNURL: {lnurl_addr}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@lnurl.command("get", help="Get LNURL.")
+@click.pass_context
+@coro
+async def lnurl_get(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    print(f"LNURL: {await npc.get_lnurl()}")
+
+
+@lnurl.command("check", help="Check for paid quotes.")
+@click.pass_context
+@coro
+async def lnurl_check(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        quotes = await npc.check_quotes()
+        if not quotes:
+            print("No paid quotes found.")
+            return
+
+        print(f"Found {len(quotes)} paid quotes:")
+        for q in quotes:
+            print(
+                f"- Amount: {q.get('amount')} sats, ID: {q.get('id')}, Mint:"
+                f" {q.get('mint')}"
+            )
+    except Exception as e:
+        print(f"Error checking quotes: {e}")
+
+
+@lnurl.command("mint", help="Mint paid quotes.")
+@click.pass_context
+@coro
+async def lnurl_mint(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        print("Checking for paid quotes...")
+        quotes = await npc.check_quotes()
+        if not quotes:
+            print("No paid quotes found.")
+            return
+
+        print(f"Found {len(quotes)} paid quotes. Minting...")
+        proofs = await npc.mint_quotes()
+        if proofs:
+            print(f"Successfully minted {len(proofs)} tokens.")
+            await print_balance(ctx)
+        else:
+            print("No tokens minted (maybe different mint or error).")
+    except Exception as e:
+        print(f"Error minting quotes: {e}")
+
