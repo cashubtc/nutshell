@@ -1,10 +1,10 @@
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
-import time
 
 from cashu.core.base import MintQuoteState
-from cashu.core.errors import CashuError, QuoteAlreadyIssuedError
+from cashu.core.errors import CashuError
 from cashu.core.nostr import create_nip98_header, derive_nostr_keypair, get_npub
 from cashu.core.settings import settings
 from cashu.wallet.crud import get_bolt11_mint_quote, update_bolt11_mint_quote
