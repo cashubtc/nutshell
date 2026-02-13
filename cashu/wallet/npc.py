@@ -153,6 +153,7 @@ class NpubCash:
                 continue
 
             if quote_mint.rstrip("/") != self.wallet.url.rstrip("/"):
+                print(f"Skipping quote {quote.get('id', 'unknown')} from different mint: {quote_mint} (Wallet: {self.wallet.url})")
                 continue
             
             quote_id = quote.get("quoteId") or quote.get("id")
@@ -164,10 +165,12 @@ class NpubCash:
             try:
                 # Mint tokens
                 # For v2, we are minting the quote ID that NPC created.
-                proofs = await self.wallet.mint(amount, id=quote_id)
+                # Ensure we have the quote in the database
+                await self.wallet.get_mint_quote(quote_id)
+                proofs = await self.wallet.mint(amount, quote_id=quote_id)
                 minted_proofs.extend(proofs)
             except Exception as e:
-                # print(f"Failed to mint quote {quote_id}: {e}")
+                print(f"Failed to mint quote {quote_id}: {e}")
                 pass
                 
         return minted_proofs

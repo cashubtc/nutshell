@@ -260,6 +260,8 @@ async def pay(
         if not invoice:
             return
         print(f" Resolved.")
+        # we used the amount to resolve the LNURL, so we don't need to pass it to the mint
+        amount = None
 
     payment_hash = bolt11.decode(invoice).payment_hash
     # we assume `amount` to be in sats
@@ -1349,6 +1351,7 @@ async def lnurl_check(ctx: Context):
 @coro
 async def lnurl_mint(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
     npc = NpubCash(wallet)
     try:
         print("Checking for paid quotes...")

@@ -110,4 +110,4 @@ async def test_mint_quotes(npc, mock_wallet):
         proofs = await npc.mint_quotes()
         
         assert len(proofs) == 1
-        mock_wallet.mint.assert_called_once_with(100, id="q1")
+        mock_wallet.mint.assert_called_once_with(100, quote_id="q1")
