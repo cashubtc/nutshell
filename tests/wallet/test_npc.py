@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -90,7 +90,9 @@ async def test_check_quotes(npc):
 
 @pytest.mark.asyncio
 async def test_mint_quotes(npc, mock_wallet):
-    with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client:
+    with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client, \
+         patch("cashu.wallet.npc.get_bolt11_mint_quote", new_callable=AsyncMock) as mock_get_quote:
+        
         mock_instance = mock_client.return_value.__aenter__.return_value
         
         # Mock quotes response
@@ -107,8 +109,16 @@ async def test_mint_quotes(npc, mock_wallet):
         }
         mock_instance.get.return_value = mock_resp
         
+        # Mock local DB quote (not found)
+        mock_get_quote.return_value = None
+
+        # Mock wallet.get_mint_quote (return quote with state != issued)
+        mock_mint_quote = MagicMock()
+        mock_mint_quote.state = "PAID"  # Not MintQuoteState.issued
+        mock_wallet.get_mint_quote = AsyncMock(return_value=mock_mint_quote)
+        
         # Mock wallet mint
-        mock_wallet.mint.return_value = [Proof(id="1", amount=100, C="C", secret="s")]
+        mock_wallet.mint = AsyncMock(return_value=[Proof(id="1", amount=100, C="C", secret="s")])
 
         proofs = await npc.mint_quotes()
         
