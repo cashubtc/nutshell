@@ -12,6 +12,7 @@ def mock_wallet():
     wallet = MagicMock(spec=Wallet)
     wallet.seed = bytes.fromhex("000102030405060708090a0b0c0d0e0f")
     wallet.url = "https://mint.example.com"
+    wallet.db = MagicMock()
     return wallet
 
 @pytest.fixture
