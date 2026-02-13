@@ -1,12 +1,13 @@
-import hashlib
-import time
 import base64
+import hashlib
 import json
+import time
 from typing import Optional, Tuple
-from coincurve import PrivateKey
+
 from bech32 import bech32_encode, convertbits
 from bip32 import BIP32
-from cashu.core.settings import settings
+from coincurve import PrivateKey
+
 
 def derive_nostr_keypair(seed_bytes: bytes) -> Tuple[str, str]:
     """
@@ -28,6 +29,7 @@ def get_npub(pubkey_hex: str) -> str:
     """Encodes a hex public key to npub format."""
     data = bytes.fromhex(pubkey_hex)
     five_bit_data = convertbits(data, 8, 5)
+    assert five_bit_data is not None
     return bech32_encode("npub", five_bit_data)
 
 def sign_event(event: dict, privkey_hex: str) -> dict:
@@ -44,7 +46,9 @@ def sign_event(event: dict, privkey_hex: str) -> dict:
     ], separators=(',', ':'), ensure_ascii=False)
     
     event_id = hashlib.sha256(serialized_event.encode('utf-8')).hexdigest()
-    sig = pk.sign_schnorr(bytes.fromhex(event_id), None).hex()
+    # Mypy expects bytes for aux_random_data, pass 32 random bytes
+    import os
+    sig = pk.sign_schnorr(bytes.fromhex(event_id), os.urandom(32)).hex()
     
     event['id'] = event_id
     event['sig'] = sig
@@ -71,7 +75,8 @@ def create_nip98_header(url: str, method: str, privkey_hex: str, body: Optional[
     if body:
         body_str = json.dumps(body, separators=(',', ':'), ensure_ascii=False)
         body_hash = hashlib.sha256(body_str.encode('utf-8')).hexdigest()
-        event['tags'].append(["payload", body_hash])
+        if isinstance(event['tags'], list):
+            event['tags'].append(["payload", body_hash])
 
     signed_event = sign_event(event, privkey_hex)
     token = base64.b64encode(json.dumps(signed_event).encode('utf-8')).decode('utf-8')

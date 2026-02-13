@@ -1,12 +1,11 @@
-import httpx
-import json
-import time
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from cashu.core.nostr import derive_nostr_keypair, create_nip98_header, get_npub
-from cashu.core.settings import settings
+import httpx
+
+from cashu.core.base import MintQuoteState
+from cashu.core.nostr import create_nip98_header, derive_nostr_keypair, get_npub
 from cashu.wallet.wallet import Wallet
-from cashu.core.base import Proof, MintQuoteState
+
 
 class NpubCash:
     """Client for npub.cash API"""
@@ -16,9 +15,9 @@ class NpubCash:
 
     def __init__(self, wallet: Wallet):
         self.wallet = wallet
-        self.privkey_hex = None
-        self.pubkey_hex = None
-        self.npub = None
+        self.privkey_hex: Optional[str] = None
+        self.pubkey_hex: Optional[str] = None
+        self.npub: Optional[str] = None
         if self.wallet.seed:
             self._derive_keys()
 
@@ -27,12 +26,13 @@ class NpubCash:
         if not self.wallet.seed:
              raise ValueError("Wallet seed not initialized")
         self.privkey_hex, self.pubkey_hex = derive_nostr_keypair(self.wallet.seed)
+        assert self.pubkey_hex
         self.npub = get_npub(self.pubkey_hex)
 
     async def _request(self, method: str, path: str, body: Optional[Dict] = None, auth: bool = True) -> Any:
         """Executes an HTTP request with optional NIP-98 authentication."""
         url = f"{self.API_URL}{path}"
-        headers = {}
+        headers: Dict[str, str] = {}
         
         if auth:
             if not self.privkey_hex:
@@ -64,7 +64,7 @@ class NpubCash:
                     error_data = e.response.json()
                     if error_data.get("error"):
                         raise Exception(error_data.get("message", str(e)))
-                except:
+                except Exception:
                     pass
                 raise e
 
@@ -146,18 +146,18 @@ class NpubCash:
         quotes = await self.check_quotes()
         minted_proofs = []
         
-        for quote in quotes:
+        for quote_dict in quotes:
             # quote['mintUrl'] contains the mint URL used for this quote
-            quote_mint = quote.get("mintUrl") or quote.get("mint")
+            quote_mint = quote_dict.get("mintUrl") or quote_dict.get("mint")
             if not quote_mint:
                 continue
 
             if quote_mint.rstrip("/") != self.wallet.url.rstrip("/"):
-                print(f"Skipping quote {quote.get('id', 'unknown')} from different mint: {quote_mint} (Wallet: {self.wallet.url})")
+                print(f"Skipping quote {quote_dict.get('id', 'unknown')} from different mint: {quote_mint} (Wallet: {self.wallet.url})")
                 continue
             
-            quote_id = quote.get("quoteId") or quote.get("id")
-            amount = quote.get("amount")
+            quote_id = quote_dict.get("quoteId") or quote_dict.get("id")
+            amount = quote_dict.get("amount")
             
             if not quote_id or not amount:
                 continue

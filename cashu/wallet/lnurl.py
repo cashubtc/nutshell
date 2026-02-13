@@ -1,8 +1,9 @@
 import json
 from typing import Optional
 
-import httpx
 import bech32
+import httpx
+
 
 async def get_lnurl_response(url: str) -> dict:
     async with httpx.AsyncClient() as client:
@@ -14,7 +15,11 @@ def decode_lnurl(lnurl: str) -> Optional[str]:
     hrp, data = bech32.bech32_decode(lnurl)
     if not hrp or hrp != "lnurl":
         return None
+    if data is None:
+        return None
     decoded_data = bech32.convertbits(data, 5, 8, False)
+    if decoded_data is None:
+        return None
     return bytes(decoded_data).decode("utf-8")
 
 def resolve_lightning_address(address: str) -> Optional[str]:
@@ -64,11 +69,12 @@ async def handle_lnurl(lnurl: str, amount: Optional[int]) -> Optional[str]:
             return None
     else:
         try:
-            meta = json.loads(metadata)
-            description = next((item[1] for item in meta if item[0] == 'text/plain'), "")
-            if description:
-                print(f"Description: {description}")
-        except:
+            if metadata and isinstance(metadata, str):
+                meta = json.loads(metadata)
+                description = next((item[1] for item in meta if item[0] == 'text/plain'), "")
+                if description:
+                    print(f"Description: {description}")
+        except Exception:
             pass
             
         print(f"Amount range: {int(min_sendable/1000)} - {int(max_sendable/1000)} sats")

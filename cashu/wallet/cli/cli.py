@@ -62,6 +62,7 @@ from ..lnurl import handle_lnurl
 from ..npc import NpubCash
 from ..subscriptions import SubscriptionManager
 
+
 class NaturalOrderGroup(click.Group):
     """For listing commands in help in order of definition"""
 
@@ -270,10 +271,11 @@ async def pay(
 
     if invoice.lower().startswith("lnurl") or "@" in invoice:
         print(f"Resolving LNURL {invoice}...", end="", flush=True)
-        invoice = await handle_lnurl(invoice, amount)
-        if not invoice:
+        resolved_invoice = await handle_lnurl(invoice, amount)
+        if not resolved_invoice:
             return
-        print(f" Resolved.")
+        print(" Resolved.")
+        invoice = resolved_invoice
         # we used the amount to resolve the LNURL, so we don't need to pass it to the mint
         amount = None
 
