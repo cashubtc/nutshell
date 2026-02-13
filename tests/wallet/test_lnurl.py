@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from cashu.wallet.lnurl import handle_lnurl, decode_lnurl, resolve_lightning_address
+
+from cashu.wallet.lnurl import decode_lnurl, handle_lnurl, resolve_lightning_address
+
 
 def test_decode_lnurl():
     # Test valid LNURL (lnurl1dp68gurn8ghj7etcv9khqmr99e3k7mf0d3h82unvq257ls decodes to https://example.com/lnurl)

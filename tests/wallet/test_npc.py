@@ -1,8 +1,11 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+
+from cashu.core.base import Proof
 from cashu.wallet.npc import NpubCash
 from cashu.wallet.wallet import Wallet
-from cashu.core.base import Proof
+
 
 @pytest.fixture
 def mock_wallet():
