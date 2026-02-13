@@ -58,6 +58,8 @@ from ..helpers import (
     receive,
     send,
 )
+from ..lnurl import handle_lnurl
+from ..npc import NpubCash
 from ..subscriptions import SubscriptionManager
 
 
@@ -147,6 +149,13 @@ def init_auth_wallet(func):
     help="Run in test mode (don't ask for CLI inputs)",
 )
 @click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip user confirmation and inputs.",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -156,7 +165,13 @@ def init_auth_wallet(func):
 @click.pass_context
 @coro
 async def cli(
-    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+    ctx: Context,
+    host: str,
+    walletname: str,
+    unit: str,
+    tests: bool,
+    yes: bool,
+    verbose: bool,
 ):
     if settings.debug:
         configure_logger()
@@ -190,6 +205,7 @@ async def cli(
     ctx.obj["UNIT"] = unit or settings.wallet_unit
     unit = ctx.obj["UNIT"]
     ctx.obj["WALLET_NAME"] = walletname
+    ctx.obj["YES"] = yes
     settings.wallet_name = walletname
     settings.wallet_verbose_requests = verbose
     ctx.obj["VERBOSE"] = verbose
@@ -252,6 +268,17 @@ async def pay(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
+
+    if invoice.lower().startswith("lnurl") or "@" in invoice:
+        print(f"Resolving LNURL {invoice}...", end="", flush=True)
+        resolved_invoice = await handle_lnurl(invoice, amount)
+        if not resolved_invoice:
+            return
+        print(" Resolved.")
+        invoice = resolved_invoice
+        # we used the amount to resolve the LNURL, so we don't need to pass it to the mint
+        amount = None
+
     payment_hash = bolt11.decode(invoice).payment_hash
     # we assume `amount` to be in sats
     amount_mpp_msat = amount * 1000 if amount else None
@@ -260,7 +287,7 @@ async def pay(
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs
     ecash_fees = wallet.coinselect_fee(wallet.proofs, total_amount)
-    if not yes:
+    if not yes and not ctx.obj.get("YES"):
         potential = (
             f" ({wallet.unit.str(total_amount + ecash_fees)} with potential fees)"
             if quote.fee_reserve or ecash_fees
@@ -711,7 +738,7 @@ async def receive_cli(
             auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
         )
-        await verify_mint(mint_wallet, mint_url)
+        await verify_mint(ctx, mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
     # receive all pending outgoing tokens back to the wallet
@@ -1268,4 +1295,94 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
         new_proofs = await auth_wallet.mint_blind_auth()
         print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
-    print(f"Auth balance: {auth_wallet.available_balance}")
+
+@cli.group(cls=NaturalOrderGroup)
+def lnurl():
+    """LNURL commands."""
+    pass
+
+
+@lnurl.command("create", help="Create LNURL.")
+@click.option("--mint", "-m", default=None, help="Mint URL to use.")
+@click.pass_context
+@coro
+async def lnurl_create(ctx: Context, mint: Optional[str]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        lnurl_addr = await npc.create_lnurl(mint_url=mint)
+        print(f"Created LNURL: {lnurl_addr}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@lnurl.command("set-mint", help="Update the mint URL for the LNURL.")
+@click.option("--mint", "-m", default=None, help="Mint URL to use.")
+@click.pass_context
+@coro
+async def lnurl_set_mint(ctx: Context, mint: Optional[str]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        lnurl_addr = await npc.update_mint_url(mint_url=mint)
+        print(f"Updated mint URL for LNURL: {lnurl_addr}")
+        print(f"New mint: {mint or wallet.url}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@lnurl.command("get", help="Get LNURL.")
+@click.pass_context
+@coro
+async def lnurl_get(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    print(f"LNURL: {await npc.get_lnurl()}")
+
+
+@lnurl.command("check", help="Check for paid quotes.")
+@click.pass_context
+@coro
+async def lnurl_check(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        quotes = await npc.check_quotes()
+        if not quotes:
+            print("No paid quotes found.")
+            return
+
+        print(f"Found {len(quotes)} paid quotes:")
+        for q in quotes:
+            print(
+                f"- Amount: {q.get('amount')} sats, ID: {q.get('id')}, Mint:"
+                f" {q.get('mint')}"
+            )
+    except Exception as e:
+        print(f"Error checking quotes: {e}")
+
+
+@lnurl.command("mint", help="Mint paid quotes.")
+@click.pass_context
+@coro
+async def lnurl_mint(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    npc = NpubCash(wallet)
+    try:
+        print("Checking for paid quotes...")
+        quotes = await npc.check_quotes()
+        if not quotes:
+            print("No paid quotes found.")
+            return
+
+        print(f"Found {len(quotes)} paid quotes. Minting...")
+        proofs = await npc.mint_quotes()
+        if proofs:
+            print(f"Successfully minted {len(proofs)} tokens.")
+            await print_balance(ctx)
+        else:
+            print("No tokens minted.")
+    except Exception as e:
+        print(f"Error minting quotes: {e}")
+

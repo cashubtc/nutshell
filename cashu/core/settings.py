@@ -245,6 +245,7 @@ class WalletSettings(CashuSettings):
     wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
+    npub_cash_hostname: str = Field(default="npubx.cash")
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
     proofs_batch_size: int = Field(default=200)
