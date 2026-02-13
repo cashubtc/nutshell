@@ -4,14 +4,19 @@ import httpx
 
 from cashu.core.base import MintQuoteState
 from cashu.core.nostr import create_nip98_header, derive_nostr_keypair, get_npub
+from cashu.core.settings import settings
+from cashu.wallet.crud import get_bolt11_mint_quote
 from cashu.wallet.wallet import Wallet
 
+
+# Constant holding the npub cash hostname
+NPUB_CASH = settings.npub_cash_hostname
 
 class NpubCash:
     """Client for npub.cash API"""
     
-    API_URL = "https://npubx.cash/api/v2"
-    LNURL_BASE = "https://npubx.cash/.well-known/lnurlp"
+    API_URL = f"https://{NPUB_CASH}/api/v2"
+    LNURL_BASE = f"https://{NPUB_CASH}/.well-known/lnurlp"
 
     def __init__(self, wallet: Wallet):
         self.wallet = wallet
@@ -72,7 +77,7 @@ class NpubCash:
         """Returns the Lightning Address."""
         if not self.npub:
             self._derive_keys()
-        return f"{self.npub}@npubx.cash"
+        return f"{self.npub}@{NPUB_CASH}"
 
     async def create_lnurl(self, mint_url: Optional[str] = None) -> str:
         """
@@ -88,7 +93,7 @@ class NpubCash:
             data = await self._request("GET", "/user/info")
             user = data.get("user", {})
             if user.get("mintUrl"):
-                 raise Exception(f"LNURL already created: {self.npub}@npubx.cash")
+                 raise Exception(f"LNURL already created: {self.npub}@{NPUB_CASH}")
         except Exception as e:
             if "LNURL already created" in str(e):
                 raise e
@@ -165,11 +170,19 @@ class NpubCash:
             try:
                 # Mint tokens
                 # For v2, we are minting the quote ID that NPC created.
-                # Ensure we have the quote in the database
-                quote = await self.wallet.get_mint_quote(quote_id)
-                if quote.state == MintQuoteState.issued:
+                # Check if we have the quote in the database and if it is already issued
+                quote = await get_bolt11_mint_quote(db=self.wallet.db, quote=quote_id)
+                if quote and quote.state == MintQuoteState.issued:
                     print(f"Quote {quote_id} already minted.")
                     continue
+
+                # Ensure we have the quote in the database
+                if not quote:
+                    quote = await self.wallet.get_mint_quote(quote_id)
+                    if quote.state == MintQuoteState.issued:
+                        print(f"Quote {quote_id} already minted.")
+                        continue
+
                 proofs = await self.wallet.mint(amount, quote_id=quote_id)
                 minted_proofs.extend(proofs)
             except Exception as e:
