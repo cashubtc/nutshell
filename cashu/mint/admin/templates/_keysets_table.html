@@ -1,0 +1,22 @@
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Unit</th>
+        <th>Status</th>
+        <th>Input Fee (ppk)</th>
+    </tr>
+    {% for ks in keysets.keysets %}
+    <tr>
+        <td style="font-family:monospace;font-size:0.85rem">{{ ks.id }}</td>
+        <td>{{ ks.unit }}</td>
+        <td>
+            {% if ks.active %}
+                <span class="badge badge-active">active</span>
+            {% else %}
+                <span class="badge badge-inactive">inactive</span>
+            {% endif %}
+        </td>
+        <td>{{ ks.input_fee_ppk | default(0) }}</td>
+    </tr>
+    {% endfor %}
+</table>
