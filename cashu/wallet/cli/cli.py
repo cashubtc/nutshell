@@ -148,6 +148,13 @@ def init_auth_wallet(func):
     help="Run in test mode (don't ask for CLI inputs)",
 )
 @click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip user confirmation and inputs.",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -157,7 +164,13 @@ def init_auth_wallet(func):
 @click.pass_context
 @coro
 async def cli(
-    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+    ctx: Context,
+    host: str,
+    walletname: str,
+    unit: str,
+    tests: bool,
+    yes: bool,
+    verbose: bool,
 ):
     if settings.debug:
         configure_logger()
@@ -191,6 +204,7 @@ async def cli(
     ctx.obj["UNIT"] = unit or settings.wallet_unit
     unit = ctx.obj["UNIT"]
     ctx.obj["WALLET_NAME"] = walletname
+    ctx.obj["YES"] = yes
     settings.wallet_name = walletname
     settings.wallet_verbose_requests = verbose
     ctx.obj["VERBOSE"] = verbose
@@ -271,7 +285,7 @@ async def pay(
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs
     ecash_fees = wallet.coinselect_fee(wallet.proofs, total_amount)
-    if not yes:
+    if not yes and not ctx.obj.get("YES"):
         potential = (
             f" ({wallet.unit.str(total_amount + ecash_fees)} with potential fees)"
             if quote.fee_reserve or ecash_fees
@@ -722,7 +736,7 @@ async def receive_cli(
             auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
         )
-        await verify_mint(mint_wallet, mint_url)
+        await verify_mint(ctx, mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
     # receive all pending outgoing tokens back to the wallet
