@@ -1157,3 +1157,19 @@ async def m029_remove_overlong_witness_values(db: Database):
             f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
             "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
         )
+
+
+async def m030_create_saga_state_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema('saga_state')} (
+                    operation_id TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    created_at TIMESTAMP,
+
+                    UNIQUE (operation_id)
+                );
+            """
+        )
