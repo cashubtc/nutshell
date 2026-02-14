@@ -31,6 +31,7 @@ from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
+from ...core.nuts.nut18 import PaymentRequest
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -765,6 +766,16 @@ async def receive_cli(
 def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
+        if token.startswith("creqA"):
+            pr = PaymentRequest.deserialize(token)
+            print(
+                json.dumps(
+                    pr.model_dump(exclude_none=True),
+                    indent=indent,
+                )
+            )
+            return
+
         token_obj = deserialize_token_from_string(token)
         token_json = json.dumps(
             token_obj.serialize_to_dict(include_dleq),
