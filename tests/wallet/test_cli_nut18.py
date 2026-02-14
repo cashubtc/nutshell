@@ -1,7 +1,7 @@
 import pytest
 from click.testing import CliRunner
 
-from cashu.core.nuts.nut18 import PaymentRequest
+from cashu.core.nuts.nut18 import NUT10Option, PaymentRequest
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from tests.helpers import is_fake
@@ -12,6 +12,7 @@ def cli_prefix():
     # Use a unique wallet for this test
     return ["--wallet", "test_nut18_cli", "--host", settings.mint_url, "--tests"]
 
+
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
 def test_pay_nut18_low_balance(mint, cli_prefix):
     """
@@ -19,23 +20,23 @@ def test_pay_nut18_low_balance(mint, cli_prefix):
     (We expect low balance error since we didn't mint funds, but that proves it parses)
     """
     runner = CliRunner()
-    
+
     # Create a request for 1337 sats (specific amount to grep)
     pr = PaymentRequest(a=1337, u="sat", d="Test Descr")
     creq = pr.serialize()
-    
+
     result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
-    
+
     print("\n--- OUTPUT ---")
     print(result.output)
     print("--------------\n")
-    
+
     # Assertions
     # 1. Detected request
     assert "Payment Request: Test Descr" in result.output
     # 2. Detected amount
     assert "1337" in result.output
-    
+
     # 3. Executed wallet logic (balance check)
     # Since we have 0 balance, send() raises an exception.
     if result.exception:
@@ -43,3 +44,21 @@ def test_pay_nut18_low_balance(mint, cli_prefix):
     else:
         # If we somehow had funds (e.g. reused wallet), we see a token
         assert "cashuB" in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_unsupported_lock(mint, cli_prefix):
+    """
+    Test that the CLI rejects NUT-18 requests with unsupported lock kinds (safety).
+    """
+    runner = CliRunner()
+
+    # Request with "HTLC" kind (unsupported by this CLI flow for now)
+    pr = PaymentRequest(a=10, u="sat", nut10=NUT10Option(k="HTLC", d="hash"))
+    creq = pr.serialize()
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "Unsupported lock kind 'HTLC'" in result.output
+    # Should not print token (no payment made)
+    assert "cashuB" not in result.output

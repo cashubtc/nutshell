@@ -296,10 +296,19 @@ async def pay(
 
         lock = ""
         if pr.nut10:
-            # Simplistic P2PK lock construction
-            # We assume secret data (d) is the pubkey
-            lock = f"P2PK:{pr.nut10.d}"
-            print(f"Applying lock: {lock}")
+            # Robust check for lock kind
+            if pr.nut10.k == "P2PK":
+                # Check for sigall tag? (Standard might define a tag for this)
+                # For now we use standard P2PK.
+                lock = f"P2PK:{pr.nut10.d}"
+                # TODO: Check if tags imply P2PK-SIGALL
+                print(f"Applying P2PK lock: {lock}")
+            else:
+                print(
+                    f"Error: Unsupported lock kind '{pr.nut10.k}' requested. Aborting"
+                    " for safety."
+                )
+                return
 
         # Send token
         # This will print the token to stdout
