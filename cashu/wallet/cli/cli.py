@@ -15,6 +15,7 @@ from typing import Optional, Union
 
 import bolt11
 import click
+import httpx
 from click import Context
 from loguru import logger
 
@@ -269,6 +270,97 @@ async def pay(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
+
+    # NUT-18 Payment Request support
+    if invoice.startswith("creqA"):
+        try:
+            pr = PaymentRequest.deserialize(invoice)
+        except Exception as e:
+            print(f"Error decoding payment request: {e}")
+            return
+
+        print(f"Payment Request: {pr.d or 'No description'}")
+        if pr.a:
+            print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
+
+        if pr.m and wallet.url not in pr.m:
+            print(f"Warning: Request asks for mints {pr.m}, but current wallet uses {wallet.url}.")
+            if not yes and not click.confirm("Continue with current mint?", default=True):
+                return
+
+        amount_to_pay = pr.a
+        if not amount_to_pay:
+            # TODO: Handle amounts not specified in request (ask user)
+            print("Error: Amount not specified in payment request.")
+            return
+
+        lock = None
+        if pr.nut10:
+            # Simplistic P2PK lock construction
+            # We assume secret data (d) is the pubkey
+            lock = f"P2PK:{pr.nut10.d}"
+            print(f"Applying lock: {lock}")
+
+        # Send token
+        # This will print the token to stdout
+        _, token = await send(
+            wallet,
+            amount=amount_to_pay,
+            lock=lock,
+            legacy=False,
+            offline=False,
+            include_dleq=True,
+            include_fees=False,
+            memo=pr.d,  # Use description as memo
+        )
+
+        # Handle Transport
+        if pr.t:
+            # Sort/select transport. We prefer POST.
+            # (In reality we should filter for supported types and prompt if multiple)
+            # Just grab the first POST one for now.
+            post_transports = [t for t in pr.t if t.t == "post"]
+            if post_transports:
+                transport = post_transports[0]
+                url = transport.a
+                print(f"Sending token via POST to {url}...", end="", flush=True)
+
+                token_obj = deserialize_token_from_string(token)
+                # The payload expects 'token' (list) usually? Or proofs?
+                # NUT-18: "proofs: Array<Proof>"
+                # We need to extract proofs. send() gave us the serialized tokenV4 string (creqA... or cashuA...)
+                # TokenV4 has .token list -> element has .proofs
+                # Assuming single mint token here.
+                
+                # NUT-18 payload fields: id, memo, mint, unit, proofs
+                # We use token_obj values.
+                
+                # Careful: token_obj might have multiple mints if multi-mint send?
+                # But send() usually targets the current wallet mint.
+                
+                proofs = []
+                for t in token_obj.token:
+                    proofs.extend(t.proofs)
+
+                payload = {
+                    "id": pr.i,
+                    "memo": pr.d, 
+                    "mint": token_obj.token[0].mint, # Use first mint
+                    "unit": token_obj.unit,
+                    "proofs": [p.to_dict() for p in proofs]
+                }
+
+                try:
+                     async with httpx.AsyncClient() as client:
+                        r = await client.post(url, json=payload, timeout=10)
+                        r.raise_for_status()
+                     print(f" Done (Status: {r.status_code}).")
+                except Exception as e:
+                    print(f" Failed: {e}")
+                    print(f"Manual Token: {token}")
+
+        await print_balance(ctx)
+        return
 
     if invoice.lower().startswith("lnurl") or "@" in invoice:
         print(f"Resolving LNURL {invoice}...", end="", flush=True)
