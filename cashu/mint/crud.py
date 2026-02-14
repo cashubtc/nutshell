@@ -349,7 +349,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')}
+            INSERT INTO {db.table_with_schema("promises")}
             (amount, b_, id, created, mint_quote, melt_quote, swap_id)
             VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id)
             """,
@@ -373,7 +373,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('promises')}
+            SELECT * from {db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id AND c_ IS NULL
             """,
             {"melt_id": melt_id},
@@ -389,7 +389,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[BlindedSignature]:
         rows = await (conn or db).fetchall(
             f"""
-                SELECT * from {db.table_with_schema('promises')}
+                SELECT * from {db.table_with_schema("promises")}
                 WHERE melt_quote = :melt_id AND c_ IS NOT NULL
                 """,
             {"melt_id": melt_id},
@@ -406,7 +406,7 @@ class LedgerCrudSqlite(LedgerCrud):
         """Deletes a blinded message (promise) that has not been signed yet (c_ is NULL) with the given quote ID."""
         await (conn or db).execute(
             f"""
-            DELETE FROM {db.table_with_schema('promises')}
+            DELETE FROM {db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id AND c_ IS NULL
             """,
             {
@@ -427,7 +427,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         existing = await (conn or db).fetchone(
             f"""
-                SELECT * from {db.table_with_schema('promises')}
+                SELECT * from {db.table_with_schema("promises")}
                 WHERE b_ = :b_
                 """,
             {"b_": str(b_)},
@@ -437,7 +437,7 @@ class LedgerCrudSqlite(LedgerCrud):
 
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('promises')}
+            UPDATE {db.table_with_schema("promises")}
             SET amount = :amount, c_ = :c_, dleq_e = :dleq_e, dleq_s = :dleq_s, signed_at = :signed_at
             WHERE b_ = :b_;
             """,
@@ -460,7 +460,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[BlindedSignature]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('promises')}
+            SELECT * from {db.table_with_schema("promises")}
             WHERE b_ = :b_ AND c_ IS NOT NULL
             """,
             {"b_": str(b_)},
@@ -476,8 +476,8 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])})
+            SELECT * from {db.table_with_schema("promises")}
+            WHERE b_ IN ({",".join([f":b_{i}" for i in range(len(b_s))])})
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
@@ -494,7 +494,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_used')}
+            INSERT INTO {db.table_with_schema("proofs_used")}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
             """,
@@ -518,7 +518,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[MeltQuote]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema('proofs_pending')})
+            SELECT * from {db.table_with_schema("melt_quotes")} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema("proofs_pending")})
             """
         )
         return [MeltQuote.from_row(r) for r in rows]  # type: ignore
@@ -532,7 +532,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('proofs_pending')}
+            SELECT * from {db.table_with_schema("proofs_pending")}
             WHERE melt_quote = :quote_id
             """,
             {"quote_id": quote_id},
@@ -547,8 +547,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
         query = f"""
-        SELECT * from {db.table_with_schema('proofs_pending')}
-        WHERE y IN ({','.join([f":y_{i}" for i in range(len(Ys))])})
+        SELECT * from {db.table_with_schema("proofs_pending")}
+        WHERE y IN ({",".join([f":y_{i}" for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
@@ -564,7 +564,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_pending')}
+            INSERT INTO {db.table_with_schema("proofs_pending")}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
             """,
@@ -589,7 +589,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            DELETE FROM {db.table_with_schema('proofs_pending')}
+            DELETE FROM {db.table_with_schema("proofs_pending")}
             WHERE secret = :secret
             """,
             {"secret": proof.secret},
@@ -604,7 +604,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('mint_quotes')}
+            INSERT INTO {db.table_with_schema("mint_quotes")}
             (quote, method, request, checking_id, unit, amount, paid, issued, state, created_time, paid_time, pubkey)
             VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :paid, :issued, :state, :created_time, :paid_time, :pubkey)
             """,
@@ -655,7 +655,7 @@ class LedgerCrudSqlite(LedgerCrud):
         where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('mint_quotes')}
+            SELECT * from {db.table_with_schema("mint_quotes")}
             {where}
             """,
             values,
@@ -673,7 +673,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[MintQuote]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('mint_quotes')}
+            SELECT * from {db.table_with_schema("mint_quotes")}
             WHERE request = :request
             """,
             {"request": request},
@@ -709,7 +709,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('melt_quotes')}
+            INSERT INTO {db.table_with_schema("melt_quotes")}
             (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, expiry)
             VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :expiry)
             """,
@@ -764,7 +764,7 @@ class LedgerCrudSqlite(LedgerCrud):
         where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('melt_quotes')}
+            SELECT * from {db.table_with_schema("melt_quotes")}
             {where}
             """,
             values,
@@ -787,7 +787,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[MeltQuote]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('melt_quotes')}
+            SELECT * from {db.table_with_schema("melt_quotes")}
             WHERE request = :request
             """,
             {"request": request},
@@ -803,7 +803,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id WHERE quote = :quote
+            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -828,7 +828,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('keysets')}
+            INSERT INTO {db.table_with_schema("keysets")}
             (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts, balance)
             VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts, :balance)
             """,
@@ -864,7 +864,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('keysets')}
+            UPDATE {db.table_with_schema("keysets")}
             SET balance = balance + :amount
             WHERE id = :id
             """,
@@ -881,7 +881,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('keysets')}
+            UPDATE {db.table_with_schema("keysets")}
             SET fees_paid = fees_paid + :amount
             WHERE id = :id
             """,
@@ -896,7 +896,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Tuple[Amount, Amount]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT balance, fees_paid FROM {db.table_with_schema('keysets')}
+            SELECT balance, fees_paid FROM {db.table_with_schema("keysets")}
             WHERE id = :id
             """,
             {
@@ -945,7 +945,7 @@ class LedgerCrudSqlite(LedgerCrud):
 
         rows = await (conn or db).fetchall(  # type: ignore
             f"""
-            SELECT * from {db.table_with_schema('keysets')}
+            SELECT * from {db.table_with_schema("keysets")}
             {where}
             """,
             values,
@@ -962,7 +962,7 @@ class LedgerCrudSqlite(LedgerCrud):
         logger.debug(f"Updating keyset {keyset.id}, which has {keyset.active = }")
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('keysets')}
+            UPDATE {db.table_with_schema("keysets")}
             SET seed = :seed, encrypted_seed = :encrypted_seed, seed_encryption_method = :seed_encryption_method, derivation_path = :derivation_path, valid_from = :valid_from, valid_to = :valid_to, first_seen = :first_seen, active = :active, version = :version, unit = :unit, input_fee_ppk = :input_fee_ppk
             WHERE id = :id
             """,
@@ -972,13 +972,15 @@ class LedgerCrudSqlite(LedgerCrud):
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
-                "valid_from": db.to_timestamp(
-                    keyset.valid_from or db.timestamp_now_str()
-                ),
-                "valid_to": db.to_timestamp(keyset.valid_to or db.timestamp_now_str()),
-                "first_seen": db.to_timestamp(
-                    keyset.first_seen or db.timestamp_now_str()
-                ),
+                "valid_from": db.to_timestamp(keyset.valid_from)
+                if keyset.valid_from is not None
+                else db.timestamp_now_str(),
+                "valid_to": db.to_timestamp(keyset.valid_to)
+                if keyset.valid_to is not None
+                else db.timestamp_now_str(),
+                "first_seen": db.to_timestamp(keyset.first_seen)
+                if keyset.first_seen is not None
+                else db.timestamp_now_str(),
                 "active": keyset.active,
                 "version": keyset.version,
                 "unit": keyset.unit.name,
@@ -995,8 +997,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
         query = f"""
-        SELECT * from {db.table_with_schema('proofs_used')}
-        WHERE y IN ({','.join([f":y_{i}" for i in range(len(Ys))])})
+        SELECT * from {db.table_with_schema("proofs_used")}
+        WHERE y IN ({",".join([f":y_{i}" for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
@@ -1015,7 +1017,7 @@ class LedgerCrudSqlite(LedgerCrud):
 
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('balance_log')}
+            INSERT INTO {db.table_with_schema("balance_log")}
             (unit, backend_balance, keyset_balance, keyset_fees_paid, time)
             VALUES (:unit, :backend_balance, :keyset_balance, :keyset_fees_paid, :time)
             """,
@@ -1037,7 +1039,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> MintBalanceLogEntry | None:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('balance_log')}
+            SELECT * from {db.table_with_schema("balance_log")}
             WHERE unit = :unit
             ORDER BY time DESC
             LIMIT 1
@@ -1056,7 +1058,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[MeltQuote]:
         results = await (conn or db).fetchall(
             f"""
-            SELECT * FROM {db.table_with_schema('melt_quotes')}
+            SELECT * FROM {db.table_with_schema("melt_quotes")}
             WHERE checking_id = :checking_id
             """,
             {"checking_id": checking_id},
