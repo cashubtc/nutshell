@@ -62,3 +62,21 @@ def test_pay_nut18_unsupported_lock(mint, cli_prefix):
     assert "Unsupported lock kind 'HTLC'" in result.output
     # Should not print token (no payment made)
     assert "cashuB" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_wrong_mint(mint, cli_prefix):
+    """
+    Test that the CLI rejects NUT-18 requests if the current mint is not in the allowed list.
+    """
+    runner = CliRunner()
+
+    # Request specifying a DIFFERENT mint
+    pr = PaymentRequest(a=10, u="sat", m=["https://other.mint/"])
+    creq = pr.serialize()
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "Error: Current mint" in result.output
+    assert "not accepted" in result.output
+    assert "cashuB" not in result.output

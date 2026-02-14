@@ -284,9 +284,9 @@ async def pay(
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
         if pr.m and wallet.url not in pr.m:
-            print(f"Warning: Request asks for mints {pr.m}, but current wallet uses {wallet.url}.")
-            if not yes and not click.confirm("Continue with current mint?", default=True):
-                return
+            print(f"Error: Current mint {wallet.url} is not accepted by the receiver.")
+            print(f"Accepted mints: {pr.m}")
+            return
 
         amount_to_pay = pr.a
         if not amount_to_pay:
