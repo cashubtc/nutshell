@@ -12,7 +12,9 @@ We use [Ruff](https://docs.astral.sh/ruff/formatter/) for formatting. To make su
 
 ## Setting up your environment
 
-We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10.4` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, activate the environment with `poetry env activate` (or install the optional poetry-plugin-shell if you prefer `poetry shell`). Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
+We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10.4` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, activate the environment with `poetry env activate` (or install the optional poetry-plugin-shell if you prefer `poetry shell`).
+
+Ensure you have created a `.env` file and set `MINT_PRIVATE_KEY`, as per the Configuration section of the README.md. Now you can execute `poetry run cashu --help` to use the wallet or `poetry run mint` to run the mint.
 
 ### Precommit hook
 
