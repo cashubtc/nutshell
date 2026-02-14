@@ -1,7 +1,9 @@
-from typing import List, Optional
 import base64
+from typing import List, Optional
+
 import cbor2
 from pydantic import BaseModel
+
 
 class Transport(BaseModel):
     t: str  # type

@@ -294,7 +294,7 @@ async def pay(
             print("Error: Amount not specified in payment request.")
             return
 
-        lock = None
+        lock = ""
         if pr.nut10:
             # Simplistic P2PK lock construction
             # We assume secret data (d) is the pubkey
@@ -326,28 +326,29 @@ async def pay(
                 print(f"Sending token via POST to {url}...", end="", flush=True)
 
                 token_obj = deserialize_token_from_string(token)
+                assert isinstance(
+                    token_obj, TokenV4
+                ), "Only TokenV4 supported for POST transport"
                 # The payload expects 'token' (list) usually? Or proofs?
                 # NUT-18: "proofs: Array<Proof>"
                 # We need to extract proofs. send() gave us the serialized tokenV4 string (creqA... or cashuA...)
                 # TokenV4 has .token list -> element has .proofs
                 # Assuming single mint token here.
-                
+
                 # NUT-18 payload fields: id, memo, mint, unit, proofs
                 # We use token_obj values.
-                
+
                 # Careful: token_obj might have multiple mints if multi-mint send?
                 # But send() usually targets the current wallet mint.
-                
-                proofs = []
-                for t in token_obj.token:
-                    proofs.extend(t.proofs)
+
+                proofs = token_obj.proofs
 
                 payload = {
                     "id": pr.i,
-                    "memo": pr.d, 
-                    "mint": token_obj.token[0].mint, # Use first mint
+                    "memo": pr.d,
+                    "mint": token_obj.mint,
                     "unit": token_obj.unit,
-                    "proofs": [p.to_dict() for p in proofs]
+                    "proofs": [p.to_dict() for p in proofs],
                 }
 
                 try:
@@ -696,7 +697,7 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset

@@ -1,9 +1,11 @@
 import pytest
 from click.testing import CliRunner
+
+from cashu.core.nuts.nut18 import PaymentRequest
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
-from cashu.core.nuts.nut18 import PaymentRequest
 from tests.helpers import is_fake
+
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
