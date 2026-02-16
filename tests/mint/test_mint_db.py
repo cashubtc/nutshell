@@ -516,13 +516,16 @@ async def test_get_mint_quotes(wallet: Wallet, ledger: Ledger):
     quote2 = await wallet.request_mint(200)
     quote3 = await wallet.request_mint(300)
 
+    # Request in reverse order - the implementation MUST preserve this order
     fetched_quotes = await ledger.crud.get_mint_quotes(
-        quote_ids=[quote1.quote, quote2.quote, quote3.quote], db=ledger.db
+        quote_ids=[quote3.quote, quote1.quote, quote2.quote], db=ledger.db
     )
 
     assert len(fetched_quotes) == 3
-    fetched_ids = {q.quote for q in fetched_quotes}
-    assert fetched_ids == {quote1.quote, quote2.quote, quote3.quote}
+    # Verify order is preserved (per NUT-333 spec)
+    assert fetched_quotes[0].quote == quote3.quote
+    assert fetched_quotes[1].quote == quote1.quote
+    assert fetched_quotes[2].quote == quote2.quote
 
 
 @pytest.mark.asyncio
