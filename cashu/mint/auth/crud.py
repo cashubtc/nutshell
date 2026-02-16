@@ -388,8 +388,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, state, created_time, paid_time, pubkey)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :issued, :state, :created_time, :paid_time, :pubkey)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, pubkey)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :pubkey)
             """,
             {
                 "quote": quote.quote,
@@ -398,7 +398,6 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "checking_id": quote.checking_id,
                 "unit": quote.unit,
                 "amount": quote.amount,
-                "issued": quote.issued,
                 "state": quote.state.name,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
@@ -468,9 +467,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET issued = :issued, state = :state, paid_time = :paid_time, pubkey = :pubkey WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, pubkey = :pubkey WHERE quote = :quote",
             {
-                "issued": quote.issued,
                 "state": quote.state.name,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
