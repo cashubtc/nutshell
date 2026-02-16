@@ -2,7 +2,7 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from bip32 import BIP32
 from loguru import logger
@@ -633,6 +633,137 @@ class Wallet(
                 p.mint_id = quote_id
                 await update_proof(p, mint_id=quote_id, conn=conn)
         return proofs
+
+    async def check_mint_quotes(
+        self, quotes: List[str], method: str = "bolt11"
+    ) -> Dict[str, str]:
+        """Check the status of multiple mint quotes at once.
+        
+        Args:
+            quotes: List of quote IDs to check
+            method: Payment method (default: bolt11)
+            
+        Returns:
+            Dict mapping quote IDs to their states
+        """
+        return await super().check_mint_quotes(quotes, method)
+
+    async def mint_batch(
+        self,
+        quote_ids: List[str],
+        method: str = "bolt11",
+    ) -> List[Proof]:
+        """Mint tokens for multiple quotes at once using batch endpoint.
+        
+        Args:
+            quote_ids: List of quote IDs to mint
+            method: Payment method (default: bolt11)
+            
+        Returns:
+            List[Proof]: All minted proofs from all quotes
+        """
+        if not quote_ids:
+            return []
+            
+        # Collect outputs for each quote
+        quotes_with_outputs: List[Dict[str, Any]] = []
+        for quote_id in quote_ids:
+            # Get quote from DB to check amount
+            quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+            if not quote:
+                print(f"Quote {quote_id} not found in DB, skipping.")
+                continue
+            if quote.state == MintQuoteState.issued:
+                print(f"Quote {quote_id} already issued, skipping.")
+                continue
+                
+            amount = quote.amount
+            
+            # Generate outputs for this amount
+            amounts = self.split_wallet_state(amount)
+            secrets, rs, derivation_paths = await self.generate_n_secrets(
+                len(amounts), skip_bump=True
+            )
+            await self._check_used_secrets(secrets)
+            outputs, rs = self._construct_outputs(amounts, secrets, rs)
+            
+            # Check for NUT-20 signature
+            signature = None
+            if quote.privkey:
+                signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
+            
+            quotes_with_outputs.append({
+                "quote_id": quote_id,
+                "outputs": outputs,
+                "secrets": secrets,
+                "rs": rs,
+                "derivation_paths": derivation_paths,
+                "amounts": amounts,
+                "signature": signature,
+            })
+        
+        if not quotes_with_outputs:
+            return []
+            
+        # Call batch mint API
+        api_quotes = [
+            (q["quote_id"], q["outputs"]) 
+            for q in quotes_with_outputs
+        ]
+        
+        try:
+            result = await super().mint_batch(api_quotes, method)
+        except Exception as e:
+            print(f"Batch mint failed: {e}. Falling back to sequential.")
+            # Fall back to sequential
+            proofs = []
+            for q in quotes_with_outputs:
+                try:
+                    promises = await super().mint(q["outputs"], q["quote_id"], q["signature"])
+                    proof = await self._construct_proofs(
+                        promises, q["secrets"], q["rs"], q["derivation_paths"]
+                    )
+                    proofs.extend(proof)
+                except Exception as eq:
+                    print(f"Mint failed for quote {q['quote_id']}: {eq}")
+            return proofs
+        
+        # Process results
+        all_proofs = []
+        for q in quotes_with_outputs:
+            quote_id = q["quote_id"]
+            try:
+                signatures = result.get("quotes", {}).get(quote_id, {}).get("signatures", [])
+                if signatures:
+                    promises = [self._signature_to_promise(s) for s in signatures]
+                    proofs = await self._construct_proofs(
+                        promises, q["secrets"], q["rs"], q["derivation_paths"]
+                    )
+                    all_proofs.extend(proofs)
+                    
+                    # Update DB
+                    await update_bolt11_mint_quote(
+                        db=self.db,
+                        quote=quote_id,
+                        state=MintQuoteState.issued,
+                        paid_time=int(time.time()),
+                    )
+                    async with self.db.connect() as conn:
+                        for p in proofs:
+                            p.mint_id = quote_id
+                            await update_proof(p, mint_id=quote_id, conn=conn)
+            except Exception as e:
+                print(f"Failed to process quote {quote_id}: {e}")
+        
+        return all_proofs
+
+    def _signature_to_promise(self, sig_dict: Dict) -> BlindedSignature:
+        """Convert a signature dict to a BlindedSignature."""
+        return BlindedSignature(
+            id=sig_dict.get("id", ""),
+            amount=sig_dict.get("amount", 0),
+            C_=sig_dict.get("C_", ""),
+        )
 
     async def redeem(
         self,
