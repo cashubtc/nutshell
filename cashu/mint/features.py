@@ -244,7 +244,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         
         if supported_methods:
             mint_features[BATCH_NUT] = {
-                "max_batch_size": 100, # arbitrary limit for now
+                "max_batch_size": settings.mint_max_batch_size,
                 "methods": list(set(supported_methods))
             }
         return mint_features

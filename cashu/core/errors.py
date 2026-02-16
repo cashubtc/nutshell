@@ -169,6 +169,18 @@ class QuoteNotPaidError(CashuError):
         super().__init__(self.detail, code=self.code)
 
 
+class QuoteNotFoundError(CashuError):
+    detail = "quote not found"
+    code = 20010
+
+    def __init__(self, quote_ids=None):
+        if quote_ids:
+            detail = f"quote not found: {', '.join(quote_ids)}"
+        else:
+            detail = self.detail
+        super().__init__(detail, code=self.code)
+
+
 class QuoteAlreadyIssuedError(CashuError):
     detail = "quote already issued"
     code = 20002

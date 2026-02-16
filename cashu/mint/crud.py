@@ -693,9 +693,15 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[MintQuote]:
         if not quote_ids:
             return []
+        # Use ORDER BY CASE to preserve the requested order (per NUT-333 spec)
+        order_case = " ".join([
+            f"WHEN quote = :quote_{i} THEN {i}"
+            for i in range(len(quote_ids))
+        ])
         query = f"""
             SELECT * from {db.table_with_schema('mint_quotes')}
             WHERE quote IN ({','.join([f":quote_{i}" for i in range(len(quote_ids))])})
+            ORDER BY CASE quote {order_case} END
             """
         values = {f"quote_{i}": quote_ids[i] for i in range(len(quote_ids))}
         rows = await (conn or db).fetchall(query, values)

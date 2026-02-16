@@ -35,6 +35,7 @@ from ..core.errors import (
     LightningPaymentFailedError,
     NotAllowedError,
     QuoteAlreadyIssuedError,
+    QuoteNotFoundError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
@@ -468,10 +469,29 @@ class Ledger(
         return quote
 
     async def check_mint_quotes(self, quotes: List[str]) -> List[MintQuote]:
-        """Checks multiple mint quotes and updates their status if paid."""
+        """Checks multiple mint quotes and updates their status if paid.
+
+        Per NUT-333, this endpoint uses all-or-nothing error handling:
+        - If any quote_id is not known by the mint, the mint MUST reject the entire request
+        - If any quote_id cannot be parsed (invalid format), the mint MUST reject the entire request
+        """
+        if not quotes:
+            raise TransactionError("no quotes provided")
+        if len(quotes) > settings.mint_max_batch_size:
+            raise TransactionError(
+                f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
+            )
+
         # fetch all quotes
         mint_quotes = await self.crud.get_mint_quotes(quote_ids=quotes, db=self.db)
-        
+
+        # All-or-nothing: check if all requested quotes were found
+        if len(mint_quotes) != len(quotes):
+            found_quotes = {q.quote for q in mint_quotes}
+            requested = set(quotes)
+            missing = requested - found_quotes
+            raise QuoteNotFoundError(list(missing))
+
         # for each quote, if it is not paid, check the backend
         result_quotes = []
         for quote in mint_quotes:
@@ -482,7 +502,7 @@ class Ledger(
                 except Exception as e:
                     logger.debug(f"Could not check quote {quote.quote}: {e}")
             result_quotes.append(quote)
-            
+
         return result_quotes
 
 
@@ -498,6 +518,10 @@ class Ledger(
             raise TransactionError("no quotes provided")
         if len(quotes) != len(set(quotes)):
             raise TransactionError("duplicate quotes")
+        if len(quotes) > settings.mint_max_batch_size:
+            raise TransactionError(
+                f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
+            )
 
         await self._verify_outputs(outputs)
 
