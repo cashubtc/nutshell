@@ -1,6 +1,6 @@
 import json
 from posixpath import join
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import bolt11
 import httpx
@@ -431,6 +431,70 @@ class LedgerAPI(SupportsAuth):
         logger.trace(f"Lightning invoice checked. POST {self.api_prefix}/mint/bolt11")
         promises = PostMintResponse.model_validate(response_dict).signatures
         return promises
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def check_mint_quotes(
+        self, quotes: List[str], method: str = "bolt11"
+    ) -> Dict[str, str]:
+        """Check the status of multiple mint quotes at once.
+        
+        Args:
+            quotes: List of quote IDs to check
+            method: Payment method (default: bolt11)
+            
+        Returns:
+            Dict mapping quote IDs to their states
+        """
+        logger.trace(f"Checking mint quotes: {quotes}")
+        payload = {"quote_ids": quotes, "method": method}
+        resp = await self._request(
+            POST,
+            f"mint/quote/{method}/check",
+            json=payload,
+        )
+        self.raise_on_unsupported_version(resp, "POST /v1/mint/quote/bolt11/check")
+        return resp.json()
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def mint_batch(
+        self,
+        quotes: List[tuple[str, List[BlindedMessage]]],
+        method: str = "bolt11",
+        signature: Optional[str] = None,
+    ) -> Dict[str, List[BlindedSignature]]:
+        """Mint tokens for multiple quotes at once.
+        
+        Args:
+            quotes: List of (quote_id, outputs) tuples
+            method: Payment method (default: bolt11)
+            signature: Optional NUT-19 signature
+            
+        Returns:
+            Dict mapping quote IDs to lists of blinded signatures
+        """
+        payload: Dict[str, Any] = {"method": method, "quotes": {}}
+        
+        for quote_id, outputs in quotes:
+            # Build outputs include fields
+            outputs_include = {"id", "amount", "B_"}
+            payload["quotes"][quote_id] = {
+                "outputs": {i: outputs_include for i in range(len(outputs))}
+            }
+            if signature:
+                payload["quotes"][quote_id]["signature"] = ...
+        
+        if signature:
+            payload["signature"] = signature
+            
+        resp = await self._request(
+            POST,
+            f"mint/{method}/batch",
+            json=payload,
+        )
+        self.raise_on_unsupported_version(resp, f"POST /v1/mint/{method}/batch")
+        return resp.json()
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
