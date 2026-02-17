@@ -298,10 +298,22 @@ async def pay(
         if pr.nut10:
             # Robust check for lock kind
             if pr.nut10.k == "P2PK":
-                # Check for sigall tag? (Standard might define a tag for this)
-                # For now we use standard P2PK.
+                # check if there are any tags
+                if pr.nut10.t:
+                    print(
+                        f"Error: Unsupported lock tags '{pr.nut10.t}' requested. Aborting"
+                        " for safety."
+                    )
+                    return
+                # check if the data is a valid pubkey (33 bytes hex)
+                if len(pr.nut10.d) != 66:
+                    print(
+                        f"Error: Unsupported lock data length '{len(pr.nut10.d)}' requested."
+                        " Aborting for safety."
+                    )
+                    return
+
                 lock = f"P2PK:{pr.nut10.d}"
-                # TODO: Check if tags imply P2PK-SIGALL
                 print(f"Applying P2PK lock: {lock}")
             else:
                 print(
@@ -319,14 +331,13 @@ async def pay(
             legacy=False,
             offline=False,
             include_dleq=True,
-            include_fees=False,
+            include_fees=True,
             memo=pr.d,  # Use description as memo
         )
 
         # Handle Transport
         if pr.t:
             # Sort/select transport. We prefer POST.
-            # (In reality we should filter for supported types and prompt if multiple)
             # Just grab the first POST one for now.
             post_transports = [t for t in pr.t if t.t == "post"]
             if post_transports:
@@ -338,17 +349,6 @@ async def pay(
                 assert isinstance(
                     token_obj, TokenV4
                 ), "Only TokenV4 supported for POST transport"
-                # The payload expects 'token' (list) usually? Or proofs?
-                # NUT-18: "proofs: Array<Proof>"
-                # We need to extract proofs. send() gave us the serialized tokenV4 string (creqA... or cashuA...)
-                # TokenV4 has .token list -> element has .proofs
-                # Assuming single mint token here.
-
-                # NUT-18 payload fields: id, memo, mint, unit, proofs
-                # We use token_obj values.
-
-                # Careful: token_obj might have multiple mints if multi-mint send?
-                # But send() usually targets the current wallet mint.
 
                 proofs = token_obj.proofs
 
