@@ -15,6 +15,7 @@ from typing import Optional, Union
 
 import bolt11
 import click
+import httpx
 from click import Context
 from loguru import logger
 
@@ -31,6 +32,7 @@ from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
+from ...core.nuts.nut18 import PaymentRequest
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -268,6 +270,107 @@ async def pay(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
+
+    # NUT-18 Payment Request support
+    if invoice.startswith("creqA"):
+        try:
+            pr = PaymentRequest.deserialize(invoice)
+        except Exception as e:
+            print(f"Error decoding payment request: {e}")
+            return
+
+        print(f"Payment Request: {pr.d or 'No description'}")
+        if pr.a:
+            print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
+
+        if pr.m and wallet.url not in pr.m:
+            print(f"Error: Current mint {wallet.url} is not accepted by the receiver.")
+            print(f"Accepted mints: {pr.m}")
+            return
+
+        amount_to_pay = pr.a
+        if not amount_to_pay:
+            # TODO: Handle amounts not specified in request (ask user)
+            print("Error: Amount not specified in payment request.")
+            return
+
+        lock = ""
+        if pr.nut10:
+            # Robust check for lock kind
+            if pr.nut10.k == "P2PK":
+                # check if there are any tags
+                if pr.nut10.t:
+                    print(
+                        f"Error: Unsupported lock tags '{pr.nut10.t}' requested. Aborting"
+                        " for safety."
+                    )
+                    return
+                # check if the data is a valid pubkey (33 bytes hex)
+                if len(pr.nut10.d) != 66:
+                    print(
+                        f"Error: Unsupported lock data length '{len(pr.nut10.d)}' requested."
+                        " Aborting for safety."
+                    )
+                    return
+
+                lock = f"P2PK:{pr.nut10.d}"
+                print(f"Applying P2PK lock: {lock}")
+            else:
+                print(
+                    f"Error: Unsupported lock kind '{pr.nut10.k}' requested. Aborting"
+                    " for safety."
+                )
+                return
+
+        # Send token
+        # This will print the token to stdout
+        _, token = await send(
+            wallet,
+            amount=amount_to_pay,
+            lock=lock,
+            legacy=False,
+            offline=False,
+            include_dleq=True,
+            include_fees=True,
+            memo=pr.d,  # Use description as memo
+        )
+
+        # Handle Transport
+        if pr.t:
+            # Sort/select transport. We prefer POST.
+            # Just grab the first POST one for now.
+            post_transports = [t for t in pr.t if t.t == "post"]
+            if post_transports:
+                transport = post_transports[0]
+                url = transport.a
+                print(f"Sending token via POST to {url}...", end="", flush=True)
+
+                token_obj = deserialize_token_from_string(token)
+                assert isinstance(
+                    token_obj, TokenV4
+                ), "Only TokenV4 supported for POST transport"
+
+                proofs = token_obj.proofs
+
+                payload = {
+                    "id": pr.i,
+                    "memo": pr.d,
+                    "mint": token_obj.mint,
+                    "unit": token_obj.unit,
+                    "proofs": [p.to_dict() for p in proofs],
+                }
+
+                try:
+                     async with httpx.AsyncClient() as client:
+                        r = await client.post(url, json=payload, timeout=10)
+                        r.raise_for_status()
+                     print(f" Done (Status: {r.status_code}).")
+                except Exception as e:
+                    print(f" Failed: {e}")
+                    print(f"Manual Token: {token}")
+
+        await print_balance(ctx)
+        return
 
     if invoice.lower().startswith("lnurl") or "@" in invoice:
         print(f"Resolving LNURL {invoice}...", end="", flush=True)
@@ -603,7 +706,7 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -765,6 +868,16 @@ async def receive_cli(
 def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
+        if token.startswith("creqA"):
+            pr = PaymentRequest.deserialize(token)
+            print(
+                json.dumps(
+                    pr.model_dump(exclude_none=True),
+                    indent=indent,
+                )
+            )
+            return
+
         token_obj = deserialize_token_from_string(token)
         token_json = json.dumps(
             token_obj.serialize_to_dict(include_dleq),
