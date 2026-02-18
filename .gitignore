@@ -131,6 +131,7 @@ dmypy.json
 
 # Tor PID
 tor.pid
+tor-data
 
 # Default data directory
 /data

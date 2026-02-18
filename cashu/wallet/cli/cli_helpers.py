@@ -50,18 +50,22 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
             unit = k
             print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
         print("")
-        unit_nr_str = input(
-            f"Select unit [1-{len(unit_balances)}] or "
-            f"press enter for your default '{Unit[settings.wallet_unit]}': "
-        )
-        if not unit_nr_str:  # default unit
+
+        if ctx.obj.get("YES"):
             unit = Unit[settings.wallet_unit]
-        elif unit_nr_str.isdigit() and int(unit_nr_str) <= len(
-            unit_balances
-        ):  # specific unit
-            unit = list(unit_balances.keys())[int(unit_nr_str) - 1]
         else:
-            raise Exception("invalid input.")
+            unit_nr_str = input(
+                f"Select unit [1-{len(unit_balances)}] or "
+                f"press enter for your default '{Unit[settings.wallet_unit]}': "
+            )
+            if not unit_nr_str:  # default unit
+                unit = Unit[settings.wallet_unit]
+            elif unit_nr_str.isdigit() and int(unit_nr_str) <= len(
+                unit_balances
+            ):  # specific unit
+                unit = list(unit_balances.keys())[int(unit_nr_str) - 1]
+            else:
+                raise Exception("invalid input.")
 
         print(f"Selected unit: {unit}")
         print("")
@@ -95,18 +99,21 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
         nr_max = list(mint_balances).index(url_max) + 1
 
-        mint_nr_str = input(
-            f"Select mint [1-{len(mint_balances)}] or "
-            f"press enter for mint with largest balance (Mint {nr_max}): "
-        )
-        if not mint_nr_str:  # largest balance
+        if ctx.obj.get("YES"):
             mint_url = url_max
-        elif mint_nr_str.isdigit() and int(mint_nr_str) <= len(
-            mint_balances
-        ):  # specific mint
-            mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
         else:
-            raise Exception("invalid input.")
+            mint_nr_str = input(
+                f"Select mint [1-{len(mint_balances)}] or "
+                f"press enter for mint with largest balance (Mint {nr_max}): "
+            )
+            if not mint_nr_str:  # largest balance
+                mint_url = url_max
+            elif mint_nr_str.isdigit() and int(mint_nr_str) <= len(
+                mint_balances
+            ):  # specific mint
+                mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
+            else:
+                raise Exception("invalid input.")
     elif ctx.obj["HOST"] and ctx.obj["HOST"] not in mint_balances.keys():
         mint_url = ctx.obj["HOST"]
     elif len(mint_balances) == 1:
@@ -155,7 +162,7 @@ async def print_mint_balances(
         print("")
 
 
-async def verify_mint(mint_wallet: Wallet, url: str):
+async def verify_mint(ctx: Context, mint_wallet: Wallet, url: str):
     """A helper function that asks the user if they trust the mint if the user
     has not encountered the mint before (there is no entry in the database).
 
@@ -168,6 +175,8 @@ async def verify_mint(mint_wallet: Wallet, url: str):
     mint_keysets = await get_keysets(mint_url=url, db=mint_wallet.db)
     if mint_keysets is None:
         # we encountered a new mint and ask for a user confirmation
+        if ctx.obj.get("YES"):
+            return
         print("")
         print("Warning: Tokens are from a mint you don't know yet.")
         print("\n")
@@ -201,7 +210,7 @@ async def receive_all_pending(ctx: Context, wallet: Wallet):
             )
             # verify that we trust the mint of this token
             # ask the user if they want to trust the mint
-            await verify_mint(mint_wallet, mint_url)
+            await verify_mint(ctx, mint_wallet, mint_url)
 
             token = await mint_wallet.serialize_proofs(proofs)
             token_obj = deserialize_token_from_string(token)

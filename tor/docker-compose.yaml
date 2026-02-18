@@ -1,0 +1,25 @@
+services:
+  mint:
+    image: cashubtc/nutshell:0.19.0
+  #  build:
+  #   context: ..
+  #   dockerfile: Dockerfile
+    container_name: mint
+    ports:
+      - "3338:3338"
+    environment:
+      - MINT_BACKEND_BOLT11_SAT=FakeWallet
+      # - MINT_PRIVATE_KEY=YOU MUST SET YOUR OWN SECURE PRIVATE KEY. GENERATE WITH: openssl rand -hex 32
+      - MINT_LISTEN_HOST=0.0.0.0
+      - MINT_INPUT_FEE_PPK=0
+      - MINT_LISTEN_PORT=3338
+    command: ["poetry", "run", "mint"]
+  tor:
+    build: .
+    container_name: tor
+    restart: unless-stopped
+    volumes:
+      - ./tor-data:/var/lib/tor/mint
+      - ./torrc:/etc/tor/torrc
+    depends_on:
+      - mint

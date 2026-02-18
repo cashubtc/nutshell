@@ -116,7 +116,7 @@ async def ledger():
     }
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
-        seed=settings.mint_private_key,
+        seed=settings.mint_private_key or "",
         derivation_path=settings.mint_derivation_path,
         backends=backends,
         crud=LedgerCrudSqlite(),
