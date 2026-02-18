@@ -118,6 +118,11 @@ async def test_mint_quotes(npc, mock_wallet):
         mock_mint_quote.state = "PAID"  # Not MintQuoteState.issued
         mock_wallet.get_mint_quote = AsyncMock(return_value=mock_mint_quote)
         
+        # Disable batch minting support to force sequential minting
+        mock_mint_info = MagicMock()
+        mock_mint_info.supports_batch_mint.return_value = False
+        mock_wallet.mint_info = mock_mint_info
+        
         # Mock wallet mint
         mock_wallet.mint = AsyncMock(return_value=[Proof(id="1", amount=100, C="C", secret="s")])
 
