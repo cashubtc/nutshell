@@ -37,6 +37,11 @@ jobs:
             echo "::set-output name=latest_tag::latest"
           fi
 
+      - name: Verify Versions
+        if: github.event_name == 'release'
+        run: |
+          python3 scripts/check_version.py "${{ steps.get_tags.outputs.version_tag }}"
+
       - name: Build and push on release
         uses: docker/build-push-action@v5
         with:
