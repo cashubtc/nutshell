@@ -1140,7 +1140,6 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         # recreate the balance views
         await create_balance_views(db, conn)
 
-
 async def m029_remove_overlong_witness_values(db: Database):
     """
     Delete any witness values longer than 1024 characters in proofs tables.
@@ -1164,3 +1163,16 @@ async def m030_remove_overlong_witness_values(db: Database):
     Repeat m029 after limiting all new witness values to 1024 characters.
     """
     await m029_remove_overlong_witness_values(db)
+
+
+async def m031_add_final_expiry_to_keysets(db: Database):
+    """
+    Add final_expiry column to keysets table for keysets v2 support.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('keysets')}
+                ADD COLUMN final_expiry INTEGER NULL
+            """
+        )

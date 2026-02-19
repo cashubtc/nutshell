@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
-VERSION = "0.19.0"
+VERSION = "0.20.0"
 
 
 def find_env_file():
@@ -90,7 +90,6 @@ class MintWatchdogSettings(MintSettings):
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
-
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated

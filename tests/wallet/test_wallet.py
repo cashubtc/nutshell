@@ -101,7 +101,7 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    assert keyset.id == "009a1f293253e41e"
+    assert keyset.id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -546,9 +546,9 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == ["009a1f293253e41e"]
+    assert list(wallet1.keysets.keys()) == ["01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
-    await wallet1.activate_keyset(keyset_id="009a1f293253e41e")
+    await wallet1.activate_keyset(keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc")
     # expect deprecated keyset id to be present
     await assert_err(
         wallet1.activate_keyset(keyset_id="nonexistent"),
