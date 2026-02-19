@@ -962,7 +962,7 @@ class MintKeyset:
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
-        elif self.version_tuple < (0, 19):
+        elif self.version_tuple < (0, 20):
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )
