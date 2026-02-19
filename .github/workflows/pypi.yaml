@@ -21,6 +21,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ matrix.poetry-version }}
 
+      - name: Verify Versions
+        if: github.event_name == 'release'
+        run: |
+          python3 scripts/check_version.py "${{ github.event.release.tag_name }}"
+
       - name: Build package
         run: |
           poetry build
