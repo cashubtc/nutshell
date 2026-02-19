@@ -3,6 +3,7 @@ import re
 import sys
 from pathlib import Path
 
+
 def get_nutshell_version():
     settings_path = Path("cashu/core/settings.py")
     try:
