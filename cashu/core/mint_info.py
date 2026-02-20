@@ -6,7 +6,13 @@ from pydantic import BaseModel
 
 from .base import Method, Unit
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
-from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+from .nuts.nuts import (
+    BATCH_NUT,
+    BLIND_AUTH_NUT,
+    CLEAR_AUTH_NUT,
+    MPP_NUT,
+    WEBSOCKETS_NUT,
+)
 
 
 class MintInfo(BaseModel):
@@ -48,6 +54,32 @@ class MintInfo(BaseModel):
                 return True
 
         return False
+
+    def supports_batch_mint(self, method: str) -> bool:
+        """Check if the mint supports batch minting for a given payment method.
+        
+        Args:
+            method: The payment method (e.g., "bolt11", "bolt12")
+            
+        Returns:
+            bool: True if batch minting is supported for this method
+        """
+        if not self.nuts or not self.supports_nut(BATCH_NUT):
+            return False
+        batch_nut = self.nuts.get(BATCH_NUT)
+        if not batch_nut or not batch_nut.get("methods"):
+            return False
+        return method in batch_nut["methods"]
+
+    def get_max_batch_size(self) -> int:
+        """Get the maximum batch size supported by the mint.
+        
+        Returns:
+            int: Maximum number of quotes in a batch, or 0 if not specified
+        """
+        if not self.nuts or not self.supports_nut(BATCH_NUT):
+            return 0
+        return self.nuts.get(BATCH_NUT, {}).get("max_batch_size", 0)
 
     def supports_websocket_mint_quote(self, method: Method, unit: Unit) -> bool:
         if not self.nuts or not self.supports_nut(WEBSOCKETS_NUT):

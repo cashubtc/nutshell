@@ -35,6 +35,7 @@ from ..core.errors import (
     LightningPaymentFailedError,
     NotAllowedError,
     QuoteAlreadyIssuedError,
+    QuoteNotFoundError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
@@ -46,6 +47,7 @@ from ..core.models import (
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
 )
+from ..core.nuts import nut20
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -466,7 +468,167 @@ class Ledger(
 
         return quote
 
+    async def check_mint_quotes(self, quotes: List[str]) -> List[MintQuote]:
+        """Checks multiple mint quotes and updates their status if paid.
+
+        Per NUT-333, this endpoint uses all-or-nothing error handling:
+        - If any quote_id is not known by the mint, the mint MUST reject the entire request
+        - If any quote_id cannot be parsed (invalid format), the mint MUST reject the entire request
+        """
+        if not quotes:
+            raise TransactionError("no quotes provided")
+        if len(quotes) > settings.mint_max_batch_size:
+            raise TransactionError(
+                f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
+            )
+
+        # fetch all quotes
+        mint_quotes = await self.crud.get_mint_quotes(quote_ids=quotes, db=self.db)
+
+        # All-or-nothing: check if all requested quotes were found
+        if len(mint_quotes) != len(quotes):
+            found_quotes = {q.quote for q in mint_quotes}
+            requested = set(quotes)
+            missing = requested - found_quotes
+            raise QuoteNotFoundError(list(missing))
+
+        # for each quote, if it is not paid, check the backend
+        result_quotes = []
+        for quote in mint_quotes:
+            if quote.unpaid:
+                try:
+                    # we re-use get_mint_quote which handles the backend check and db update
+                    quote = await self.get_mint_quote(quote.quote)
+                except Exception as e:
+                    logger.debug(f"Could not check quote {quote.quote}: {e}")
+            result_quotes.append(quote)
+
+        return result_quotes
+
+
+    async def mint_batch(
+        self,
+        *,
+        outputs: List[BlindedMessage],
+        quotes: List[str],
+        quote_amounts: Optional[List[int]] = None,
+        signatures: Optional[List[Optional[str]]] = None,
+    ) -> List[BlindedSignature]:
+        if not quotes:
+            raise TransactionError("no quotes provided")
+        if len(quotes) != len(set(quotes)):
+            raise TransactionError("duplicate quotes")
+        if len(quotes) > settings.mint_max_batch_size:
+            raise TransactionError(
+                f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
+            )
+
+        await self._verify_outputs(outputs)
+
+        # Fetch all quotes
+        mint_quotes = await self.crud.get_mint_quotes(quote_ids=quotes, db=self.db)
+        if len(mint_quotes) != len(quotes):
+            raise Exception("one or more quotes not found")
+
+        # For any quote that is not PAID/ISSUED, check the backend status
+        # This ensures we have the latest state before proceeding
+        for i, quote in enumerate(mint_quotes):
+            if quote.unpaid:
+                try:
+                    # get_mint_quote handles backend check and DB update
+                    updated_quote = await self.get_mint_quote(quote.quote)
+                    mint_quotes[i] = updated_quote
+                except Exception as e:
+                    logger.debug(f"Could not check quote {quote.quote}: {e}")
+
+        # Map for easy access
+        quotes_map = {q.quote: q for q in mint_quotes}
+
+        # Check consistency and state
+        first_quote = mint_quotes[0]
+        output_unit = self.keysets[outputs[0].id].unit
+
+        total_quote_amount = 0
+
+        for i, quote_id in enumerate(quotes):
+            quote = quotes_map[quote_id]
+
+            # Method/Unit check
+            if quote.unit != first_quote.unit or quote.method != first_quote.method:
+                raise TransactionError("mixed methods/units in batch")
+
+            if quote.unit != output_unit.name:
+                raise TransactionError("quote unit does not match output unit")
+
+            # State check
+            if quote.pending:
+                raise TransactionError(f"quote {quote_id} pending")
+            if quote.issued:
+                raise QuoteAlreadyIssuedError()
+            if not quote.paid:
+                raise QuoteNotPaidError()
+            if quote.expiry and quote.expiry < int(time.time()):
+                raise TransactionError(f"quote {quote_id} expired")
+
+            # Amount check
+            amount_to_mint = quote.amount
+            if quote_amounts:
+                amount_to_mint = quote_amounts[i]
+
+            total_quote_amount += amount_to_mint
+
+            # NUT-20 Signature check
+            if signatures and i < len(signatures) and signatures[i]:
+                if not quote.pubkey:
+                    raise TransactionError(
+                        f"signature provided for unlocked quote {quote_id}"
+                    )
+
+                # Verify signature
+                if not nut20.verify_mint_quote(
+                    quote.quote, outputs, quote.pubkey, signatures[i] or ""
+                ):
+                    raise QuoteSignatureInvalidError()
+
+            elif quote.pubkey:
+                raise QuoteSignatureInvalidError()
+
+        sum_outputs = sum([o.amount for o in outputs])
+        
+        if sum_outputs > total_quote_amount:
+            raise TransactionError(
+                f"output amount {sum_outputs} exceeds quote amount {total_quote_amount}"
+            )
+        
+        if sum_outputs != total_quote_amount:
+            raise TransactionError(
+                f"output amount {sum_outputs} does not match quote amount {total_quote_amount}"
+            )
+
+        # Atomic execution
+        async with self.db.get_connection() as conn:
+            # set all pending
+            await self.db_write._set_mint_quotes_pending(quote_ids=quotes, conn=conn)
+
+            try:
+                await self._store_blinded_messages(
+                    outputs, mint_id=quotes[0], conn=conn
+                )
+                promises = await self._sign_blinded_messages(outputs, conn=conn)
+
+                # Set all issued
+                await self.db_write._unset_mint_quotes_pending(
+                    quote_ids=quotes, state=MintQuoteState.issued, conn=conn
+                )
+
+            except Exception as e:
+                raise e
+
+        return promises
+
+
     async def mint(
+
         self,
         *,
         outputs: List[BlindedMessage],
