@@ -81,6 +81,13 @@ class SecretTooLongError(TransactionError):
         super().__init__(detail, code=self.code)
 
 
+class WitnessTooLongError(TransactionError):
+    code = 11004
+
+    def __init__(self, detail="witness too long"):
+        super().__init__(detail, code=self.code)
+
+
 class NoSecretInProofsError(TransactionError):
     detail = "no secret in proofs"
     code = 10001

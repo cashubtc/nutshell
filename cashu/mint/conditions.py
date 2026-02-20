@@ -189,6 +189,12 @@ class LedgerSpendingConditions:
             logger.trace(f"secret: {secret}")
         except Exception:
             # secret is not a spending condition so we treat is a normal secret
+
+            # no spending conditions means no witness allowed
+            if proof.witness is not None:
+                raise TransactionError(
+                    "witness data not allowed without a spending condition."
+                )
             return True
 
         # P2PK

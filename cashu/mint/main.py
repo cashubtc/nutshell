@@ -4,7 +4,7 @@ import click
 import uvicorn
 from click import Context
 
-from ..core.settings import settings
+from ..core.settings import VERSION, settings
 
 
 @click.command(
@@ -13,6 +13,7 @@ from ..core.settings import settings
         allow_extra_args=True,
     )
 )
+@click.version_option(version=VERSION, prog_name="Nutshell")
 @click.option("--port", default=settings.mint_listen_port, help="Port to listen on")
 @click.option("--host", default=settings.mint_listen_host, help="Host to run mint on")
 @click.option("--ssl-keyfile", default=None, help="Path to SSL keyfile")
