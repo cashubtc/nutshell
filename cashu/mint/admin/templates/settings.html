@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Settings — Nutshell Admin{% endblock %}
+{% block content %}
+<h2>Settings</h2>
+
+{% if msg %}
+<div class="alert {% if 'Error' in msg %}alert-error{% else %}alert-success{% endif %}">{{ msg }}</div>
+{% endif %}
+
+{% if not info.connected %}
+<div class="alert alert-error">
+    &#x2717; Cannot connect to mint gRPC interface. Settings changes require an active connection.
+</div>
+{% else %}
+
+<div class="card">
+    <h3>Mint Identity</h3>
+    <form action="/settings/name" method="post">
+        <label for="name">Name</label>
+        <div class="row">
+            <input type="text" id="name" name="name" value="{{ info.name }}" placeholder="My Cashu Mint">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+    <form action="/settings/description" method="post">
+        <label for="description">Short Description</label>
+        <div class="row">
+            <input type="text" id="description" name="description" value="{{ info.description }}" placeholder="A short description">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+    <form action="/settings/long-description" method="post">
+        <label for="long_description">Long Description</label>
+        <div class="row">
+            <textarea id="long_description" name="long_description" placeholder="Detailed description...">{{ info.long_description }}</textarea>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+    <form action="/settings/icon-url" method="post">
+        <label for="icon_url">Icon URL</label>
+        <div class="row">
+            <input type="url" id="icon_url" name="icon_url" value="{{ info.icon_url }}" placeholder="https://example.com/icon.png">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+    <form action="/settings/motd" method="post">
+        <label for="motd">Message of the Day</label>
+        <div class="row">
+            <input type="text" id="motd" name="motd" value="{{ info.motd }}" placeholder="Welcome message...">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Lightning Fees</h3>
+    <form action="/settings/lightning-fee" method="post">
+        <div class="row">
+            <div>
+                <label for="fee_percent">Fee Percent</label>
+                <input type="number" id="fee_percent" name="fee_percent" step="0.01" placeholder="1.0">
+            </div>
+            <div>
+                <label for="fee_min_reserve">Min Reserve (msat)</label>
+                <input type="number" id="fee_min_reserve" name="fee_min_reserve" placeholder="2000">
+            </div>
+            <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Quote TTL</h3>
+    <form action="/settings/quote-ttl" method="post">
+        <div class="row">
+            <div>
+                <label for="mint_ttl">Mint Quote TTL (seconds)</label>
+                <input type="number" id="mint_ttl" name="mint_ttl" placeholder="604800">
+            </div>
+            <div>
+                <label for="melt_ttl">Melt Quote TTL (seconds)</label>
+                <input type="number" id="melt_ttl" name="melt_ttl" placeholder="604800">
+            </div>
+            <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>URLs</h3>
+    {% if info.urls %}
+    <table style="margin-bottom:1rem">
+        <tr><th>URL</th><th style="width:80px"></th></tr>
+        {% for u in info.urls %}
+        <tr>
+            <td>{{ u }}</td>
+            <td>
+                <form action="/settings/url/remove" method="post" style="display:inline">
+                    <input type="hidden" name="url" value="{{ u }}">
+                    <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+    <form action="/settings/url/add" method="post">
+        <div class="row">
+            <input type="url" name="url" placeholder="https://mint.example.com">
+            <button type="submit" class="btn btn-primary">Add URL</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Contact Information</h3>
+    {% if info.contact %}
+    <table style="margin-bottom:1rem">
+        <tr><th>Method</th><th>Info</th><th style="width:80px"></th></tr>
+        {% for c in info.contact %}
+        <tr>
+            <td>{{ c.method }}</td>
+            <td>{{ c.info }}</td>
+            <td>
+                <form action="/settings/contact/remove" method="post" style="display:inline">
+                    <input type="hidden" name="method" value="{{ c.method }}">
+                    <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+    <form action="/settings/contact/add" method="post">
+        <div class="row">
+            <div>
+                <label>Method</label>
+                <input type="text" name="method" placeholder="email, twitter, telegram...">
+            </div>
+            <div>
+                <label>Info</label>
+                <input type="text" name="info" placeholder="contact@example.com">
+            </div>
+            <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+    </form>
+</div>
+
+{% endif %}
+{% endblock %}
