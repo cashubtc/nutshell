@@ -1,7 +1,6 @@
 
 import os
 
-import bolt11
 import grpc
 from loguru import logger
 
