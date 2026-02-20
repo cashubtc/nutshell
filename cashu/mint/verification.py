@@ -26,6 +26,7 @@ from ..core.errors import (
     TransactionMultipleUnitsError,
     TransactionUnitError,
     TransactionUnitMismatchError,
+    WitnessTooLongError,
 )
 from ..core.nuts import nut20
 from ..core.settings import settings
@@ -70,6 +71,9 @@ class LedgerVerification(
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
             raise TransactionError("secrets do not match criteria.")
+        # Verify witness criteria
+        if not all([self._verify_input_witness_criteria(p) for p in proofs]):
+            raise TransactionError("input witness data does not match criteria.")
         # verify that only unique proofs were used
         if not self._verify_no_duplicate_proofs(proofs):
             raise TransactionDuplicateInputsError()
@@ -173,6 +177,17 @@ class LedgerVerification(
         if len(proof.secret) > settings.mint_max_secret_length:
             raise SecretTooLongError(
                 f"secret too long. max: {settings.mint_max_secret_length}"
+            )
+        return True
+
+    def _verify_input_witness_criteria(self, proof: Proof) -> Literal[True]:
+        """Verifies max length of input witness data"""
+        if (
+            proof.witness is not None
+            and len(proof.witness) > settings.mint_max_witness_length
+        ):
+            raise WitnessTooLongError(
+                f"input witness data too long. max: {settings.mint_max_witness_length}"
             )
         return True
 
