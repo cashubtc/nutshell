@@ -1,4 +1,5 @@
 import base64
+import time
 from typing import Dict, List, Optional
 
 from loguru import logger
@@ -105,10 +106,11 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
 
         logger.debug(f"De-activating keyset {selected_keyset.id}...")
         selected_keyset.active = False
+        selected_keyset.valid_to = str(int(time.time()))
         await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
         self.keysets[selected_keyset.id] = selected_keyset
 
-        logger.debug(f"Keyset {keyset.id} was de-activated")
+        logger.debug(f"Keyset {selected_keyset.id} was de-activated")
         return new_keyset
 
     async def activate_keyset(
