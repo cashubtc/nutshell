@@ -271,3 +271,13 @@ poetry run pytest tests
 # Contributing
 
 Developers are invited to contribute to Nutshell. Please see the [contribution guide](CONTRIBUTING.md).
+
+## Experimental admin monitor endpoint
+
+Nutshell now exposes an optional admin-only monitoring endpoint:
+
+- `GET /v1/admin/monitor`
+- authentication: `X-Admin-Key` header
+- enable by setting `MINT_ADMIN_API_KEY` in your environment
+
+If `MINT_ADMIN_API_KEY` is not set, the endpoint is disabled.

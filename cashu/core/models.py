@@ -384,3 +384,32 @@ class PostAuthBlindMintRequest(BaseModel):
 
 class PostAuthBlindMintResponse(BaseModel):
     signatures: List[BlindedSignature] = []
+
+
+# ------- API: ADMIN -------
+class AdminDbCounts(BaseModel):
+    promises: int
+    proofs_used: int
+    proofs_pending: int
+    mint_quotes: int
+    melt_quotes: int
+
+
+class AdminRequestVolume(BaseModel):
+    mint_quotes_last_24h: int
+    melt_quotes_last_24h: int
+
+
+class AdminHostMetrics(BaseModel):
+    disk_total_bytes: int
+    disk_free_bytes: int
+    cpu_load_1m: Optional[float] = None
+    cpu_load_5m: Optional[float] = None
+    cpu_load_15m: Optional[float] = None
+    process_cpu_seconds: float
+
+
+class AdminMonitorResponse(BaseModel):
+    db: AdminDbCounts
+    requests: AdminRequestVolume
+    host: AdminHostMetrics

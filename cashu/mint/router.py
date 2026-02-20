@@ -1,11 +1,12 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
+    AdminMonitorResponse,
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -27,6 +28,7 @@ from ..core.models import (
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
+from .admin import get_admin_monitor_snapshot, require_admin_key
 from .cache import RedisCache
 from .limit import limit_websocket, limiter
 
@@ -58,6 +60,17 @@ async def info() -> GetInfoResponse:
         motd=mint_info.motd,
         time=int(time.time()),
     )
+
+
+@router.get(
+    "/v1/admin/monitor",
+    name="Admin monitor snapshot",
+    summary="Admin-only monitoring snapshot for mint and host metrics.",
+    response_model=AdminMonitorResponse,
+)
+async def admin_monitor(_: None = Depends(require_admin_key)) -> AdminMonitorResponse:
+    logger.trace("> GET /v1/admin/monitor")
+    return AdminMonitorResponse.model_validate(await get_admin_monitor_snapshot())
 
 
 @router.get(
