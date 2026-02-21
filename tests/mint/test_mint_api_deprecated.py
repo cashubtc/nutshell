@@ -348,12 +348,12 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
         json=payload.model_dump(),
     )
     data = response.json()
-    assert "promises" in data
+    assert "signatures" in data
     assert "outputs" in data
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     response = PostRestoreResponse.model_validate(response.json())
     assert response
-    assert response.promises
-    assert len(response.promises) == 1
+    assert response.signatures
+    assert len(response.signatures) == 1
     assert len(response.outputs) == 1
     assert response.outputs == outputs
