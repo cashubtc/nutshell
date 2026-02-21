@@ -70,7 +70,7 @@ async def test_mint_quote(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.amount == 128
     assert quote.unit == "sat"
-    assert not quote.paid
+    assert quote.state != MintQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
 
@@ -80,7 +80,7 @@ async def test_mint_quote_state_transitions(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(128)
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
-    assert quote.unpaid
+    assert quote.state == MintQuoteState.unpaid
 
     # set pending again
     async def set_state(quote, state):
@@ -133,7 +133,7 @@ async def test_get_mint_quote_by_request(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.amount == 128
     assert quote.unit == "sat"
-    assert not quote.paid
+    assert quote.state != MintQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
 
@@ -149,7 +149,7 @@ async def test_melt_quote(wallet: Wallet, ledger: Ledger):
     assert quote.quote == melt_quote.quote
     assert quote.amount == 128
     assert quote.unit == "sat"
-    assert not quote.paid
+    assert quote.state != MeltQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
 
@@ -165,7 +165,7 @@ async def test_melt_quote_set_pending(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.quote == melt_quote.quote
-    assert quote.unpaid
+    assert quote.state == MeltQuoteState.unpaid
     previous_state = quote.state
     await ledger.db_write._set_melt_quote_pending(quote)
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
@@ -188,7 +188,7 @@ async def test_melt_quote_state_transitions(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.quote == melt_quote.quote
-    assert quote.unpaid
+    assert quote.state == MeltQuoteState.unpaid
 
     # set pending
     quote.state = MeltQuoteState.pending
@@ -216,7 +216,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
         quote_id=mint_quote.quote, db=ledger.db
     )
     assert mint_quote is not None
-    assert mint_quote.unpaid
+    assert mint_quote.state == MintQuoteState.unpaid
 
     # pay_if_regtest pays on regtest, get_mint_quote pays on FakeWallet
     await pay_if_regtest(mint_quote.request)
@@ -224,7 +224,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
 
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
-    assert quote.paid
+    assert quote.state == MintQuoteState.paid
 
     previous_state = MintQuoteState.paid
     await ledger.db_write._set_mint_quote_pending(quote.quote)
@@ -243,7 +243,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.state == previous_state
-    assert quote.paid
+    assert quote.state == MintQuoteState.paid
 
     # # set paid and mint again
     # quote.state = MintQuoteState.paid
@@ -268,7 +268,7 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.quote == melt_quote.quote
-    assert quote.unpaid
+    assert quote.state == MeltQuoteState.unpaid
 
     # add event client
     websocket_mock = AsyncMock(spec=WebSocket)
