@@ -636,6 +636,6 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     assert after == 1
     assert after <= before
 
-    # Assert that the old keyset (if disappeared) is marked deleted in DB
+    # Assert that the retained keyset is not marked as deleted in DB
     all_keysets_db = await get_keysets(db=wallet1.db, id=old_keyset_id)
-    assert all_keysets_db[0].deleted is False  # the one we kept is not deleted
+    assert all_keysets_db[0].deleted_at is None  # the one we kept is not deleted

@@ -310,7 +310,8 @@ class Wallet(
             logger.debug(
                 f"Keyset {key_id} no longer reported by mint, marking as deleted"
             )
-            ks.deleted = True
+            if ks.deleted_at is None:
+                ks.deleted_at = int(time.time())
             await update_keyset(keyset=ks, db=self.db)
 
         # db is empty, get all keys from the mint and store them
@@ -369,7 +370,9 @@ class Wallet(
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
         keysets_active_unit = [
-            k for k in keysets_in_db if k.unit == self.unit and k.active and not k.deleted
+            k
+            for k in keysets_in_db
+            if k.unit == self.unit and k.active and k.deleted_at is None
         ]
         self.keysets = {k.id: k for k in keysets_active_unit}
         logger.trace(

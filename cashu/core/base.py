@@ -716,7 +716,7 @@ class WalletKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
-    deleted: bool = False 
+    deleted_at: Union[int, str, None] = None
     input_fee_ppk: int = 0
 
     def __init__(
@@ -729,14 +729,14 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
-        deleted=False,
+        deleted_at=None,
         input_fee_ppk=0,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = bool(active)
-        self.deleted = bool(deleted)
+        self.deleted_at = deleted_at
         self.mint_url = mint_url
         self.input_fee_ppk = input_fee_ppk
 
@@ -782,7 +782,7 @@ class WalletKeyset:
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
             active=row["active"],
-            deleted=dict(row).get("deleted", False), # use existing value, or false if column doesn't exist of older DB.
+            deleted_at=row["deleted_at"],
             input_fee_ppk=row["input_fee_ppk"],
         )
 
