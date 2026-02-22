@@ -37,12 +37,16 @@ jobs:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
 
-      - name: Setup Regtest
+      - name: Download regtest data
+        uses: actions/download-artifact@v4
+        with:
+          name: regtest-data
+          path: ./regtest/data
+
+      - name: Prepare regtest data
         run: |
-          git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
-          cd regtest
-          chmod -R 777 .
-          bash ./start.sh
+          mkdir -p regtest
+          chmod -R 777 regtest
 
       - name: Run Tests
         env:
