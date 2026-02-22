@@ -716,7 +716,7 @@ class WalletKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
-    deleted_at: Union[int, str, None] = None
+    deleted_at: Optional[int] = None
     input_fee_ppk: int = 0
 
     def __init__(
@@ -729,7 +729,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
-        deleted_at=None,
+        deleted_at: Optional[int] = None,
         input_fee_ppk=0,
     ):
         self.valid_from = valid_from
