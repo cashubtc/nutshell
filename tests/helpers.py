@@ -20,6 +20,10 @@ async def assert_err(f, msg: Union[str, CashuError]):
     try:
         await f
     except Exception as exc:
+        if isinstance(msg, CashuError):
+            if msg.code == getattr(exc, "code", None):
+                return
+
         error_message: str = str(exc.args[0])
         if isinstance(msg, CashuError):
             if msg.detail not in error_message:

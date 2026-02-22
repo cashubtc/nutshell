@@ -1157,3 +1157,10 @@ async def m029_remove_overlong_witness_values(db: Database):
             f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
             "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
         )
+
+
+async def m030_remove_overlong_witness_values(db: Database):
+    """
+    Repeat m029 after limiting all new witness values to 1024 characters.
+    """
+    await m029_remove_overlong_witness_values(db)
