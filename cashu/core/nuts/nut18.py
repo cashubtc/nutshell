@@ -32,10 +32,20 @@ class PaymentRequest(BaseModel):
         encoded = base64.urlsafe_b64encode(data).decode().rstrip("=")
         return "creqA" + encoded
 
+    def serialize_bech32m(self) -> str:
+        """Serialize to NUT-26 Bech32m + TLV format."""
+        from .nut26 import serialize as _serialize_bech32m
+        return _serialize_bech32m(self)
+
     @classmethod
     def deserialize(cls, creq: str) -> "PaymentRequest":
+        if creq.lower().startswith("creqb1"):
+            from .nut26 import deserialize as _deserialize_bech32m
+            return _deserialize_bech32m(creq)
+
         if not creq.startswith("creqA"):
             raise ValueError("Invalid prefix, expected 'creqA'")
+
         data_str = creq[5:]
         # Restore padding if needed
         padded = data_str + "=" * (-len(data_str) % 4)

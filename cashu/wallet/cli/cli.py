@@ -271,8 +271,8 @@ async def pay(
     await wallet.load_mint()
     await print_balance(ctx)
 
-    # NUT-18 Payment Request support
-    if invoice.startswith("creqA"):
+    # NUT-18 / NUT-26 Payment Request support
+    if invoice.startswith("creqA") or invoice.lower().startswith("creqb1"):
         try:
             pr = PaymentRequest.deserialize(invoice)
         except Exception as e:
@@ -868,7 +868,7 @@ async def receive_cli(
 def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
-        if token.startswith("creqA"):
+        if token.startswith("creqA") or token.lower().startswith("creqb1"):
             pr = PaymentRequest.deserialize(token)
             print(
                 json.dumps(
