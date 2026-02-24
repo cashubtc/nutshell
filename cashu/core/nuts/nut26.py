@@ -4,10 +4,12 @@ from typing import List, Optional, Tuple
 from bech32 import (
     CHARSET,
     bech32_decode,
-    bech32_encode as _bech32_encode,
     bech32_hrp_expand,
     bech32_polymod,
     convertbits,
+)
+from bech32 import (
+    bech32_encode as _bech32_encode,
 )
 
 from .nut18 import NUT10Option, PaymentRequest, Transport
