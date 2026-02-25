@@ -1,10 +1,11 @@
 import asyncio
 import os
+import random
 import shutil
 import tempfile
-import random
 
 from cashu.wallet.wallet import Wallet
+
 
 async def run_wallet_ops(wallet_id: int, mint_url: str):
     # Use different temporary locations for each wallet
