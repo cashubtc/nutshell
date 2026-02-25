@@ -2,6 +2,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+import tomllib
 
 
 def get_nutshell_version():
@@ -20,18 +21,17 @@ def get_nutshell_version():
 def get_pyproject_version():
     pyproject_path = Path("pyproject.toml")
     try:
-        content = pyproject_path.read_text()
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+
+        version = data["tool"]["poetry"]["version"]
+        return version
     except FileNotFoundError:
         print(f"File not found: {pyproject_path}")
         sys.exit(1)
-
-    # limiting search to [tool.poetry] section is harder with regex, 
-    # but usually version is early in the file.
-    # We look for 'version = "..."'
-    match = re.search(r'^version = "(.*?)"', content, re.MULTILINE)
-    if match:
-        return match.group(1)
-    raise ValueError("Could not find version in pyproject.toml")
+    except KeyError:
+        print(f"version not found inside {pyproject_path}")
+        sys.exit(1)
 
 def get_setuptools_version():
     setup_path = Path("setup.py")
