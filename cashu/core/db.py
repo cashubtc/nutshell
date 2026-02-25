@@ -270,7 +270,8 @@ class Database(Compat):
         if lock_select_statement:
             assert (
                 len(re.findall(r"^[^=]+='[^']+'$", lock_select_statement)) == 1
-            ), "lock_select_statement must have exactly one {column}='{value}' pattern."
+                or " IN " in lock_select_statement.upper()
+            ), "lock_select_statement must have exactly one {column}='{value}' pattern or use an IN clause."
         try:
             logger.trace(
                 f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)}"

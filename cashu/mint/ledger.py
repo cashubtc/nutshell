@@ -1083,7 +1083,12 @@ class Ledger(
             proofs, keysets=self.keysets
         )
         try:
-            async with self.db.get_connection(lock_table="proofs_pending") as conn:
+            Ys = [p.Y for p in proofs]
+            ys_list = ", ".join(f"'{y}'" for y in Ys)
+            async with self.db.get_connection(
+                lock_table="proofs_pending",
+                lock_select_statement=f"y IN ({ys_list})"
+            ) as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._sign_blinded_messages(outputs, conn)
