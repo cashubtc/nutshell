@@ -107,7 +107,7 @@ class MintBackends(MintSettings):
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
-        default=False, title="Rate limit", description="IP-based rate limiter."
+        default=True, title="Rate limit", description="IP-based rate limiter."
     )
     mint_global_rate_limit_per_minute: int = Field(
         default=60,
