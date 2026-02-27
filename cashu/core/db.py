@@ -152,7 +152,6 @@ class Database(Compat):
                     cursor = dbapi_connection.cursor()
                     cursor.execute("PRAGMA foreign_keys=ON;")
                     cursor.execute("PRAGMA journal_mode=WAL;")
-                    cursor.execute("PRAGMA busy_timeout=5000;")
                     cursor.close()
                 except Exception as e:
                     logger.warning(f"Could not enable SQLite PRAGMAs: {e}")
