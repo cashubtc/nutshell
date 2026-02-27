@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
         matrix:
-          python-version: ["3.10"]
+          python-version: ["3.11"]
           poetry-version: ["1.8.5"]
     steps:
       - name: Checkout
@@ -20,6 +20,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ matrix.poetry-version }}
+
+      - name: Verify Versions
+        if: github.event_name == 'release'
+        run: |
+          python3 scripts/check_version.py "${{ github.event.release.tag_name }}"
 
       - name: Build package
         run: |
