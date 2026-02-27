@@ -107,7 +107,30 @@ class MintBackends(MintSettings):
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
-        default=False, title="Rate limit", description="IP-based rate limiter."
+        default=True,
+        title="Rate limit",
+        description="IP-based rate limiter.",
+    )
+    mint_rate_limit_proxy_trust: bool = Field(
+        default=True,
+        title="Trust proxy headers for rate limiting",
+        description=(
+            "Extract client IP from proxy headers (X-Forwarded-For,"
+            " CF-Connecting-IP) for rate limiting. Enable this if the mint"
+            " is behind a reverse proxy (Caddy, nginx) or CDN (Cloudflare)."
+            " Disable if the mint is directly exposed to the internet to"
+            " prevent clients from spoofing their IP via headers."
+        ),
+    )
+    mint_forwarded_allow_ips: str = Field(
+        default="127.0.0.1",
+        title="Forwarded-allow IPs",
+        description=(
+            "Comma-separated list of proxy IPs to trust for X-Forwarded-For"
+            " headers at the uvicorn level, or '*' to trust all."
+            " Only relevant when mint_rate_limit_proxy_trust is enabled."
+            " Set to '*' if your proxy's IP is dynamic or unknown."
+        ),
     )
     mint_global_rate_limit_per_minute: int = Field(
         default=60,
