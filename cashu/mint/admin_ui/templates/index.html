@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cashu Mint Admin</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1 { color: #f39c12; margin-bottom: 20px; font-size: 2rem; }
+        h2 { color: #e74c3c; margin: 20px 0 10px; font-size: 1.3rem; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .card { background: #16213e; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        .stat { background: #0f3460; padding: 15px; border-radius: 6px; text-align: center; }
+        .stat-value { font-size: 1.8rem; font-weight: bold; color: #f39c12; }
+        .stat-label { color: #888; font-size: 0.9rem; margin-top: 5px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #aaa; }
+        input, textarea, select { width: 100%; padding: 10px; background: #0f3460; border: 1px solid #333; border-radius: 4px; color: #eee; }
+        button { background: #e74c3c; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 1rem; margin-right: 10px; margin-bottom: 10px; }
+        button:hover { background: #c0392b; }
+        button.success { background: #27ae60; }
+        button.success:hover { background: #229954; }
+        .tab-nav { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-btn { background: #0f3460; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; color: #aaa; }
+        .tab-btn.active { background: #e74c3c; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .row .form-group { flex: 1; min-width: 150px; }
+        .alert { padding: 10px; border-radius: 4px; margin-bottom: 15px; display: none; }
+        .alert.success { background: #27ae60; }
+        .alert.error { background: #e74c3c; }
+        @media (max-width: 768px) { .container { padding: 10px; } h1 { font-size: 1.5rem; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Cashu Mint Admin</h1>
+        
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+            <button class="tab-btn" onclick="showTab('settings')">Settings</button>
+            <button class="tab-btn" onclick="showTab('keysets')">Keysets</button>
+            <button class="tab-btn" onclick="showTab('fees')">Fees</button>
+        </div>
+        
+        <div id="overview" class="tab-content active">
+            <div class="card">
+                <h2>System Statistics</h2>
+                <div class="grid">
+                    <div class="stat">
+                        <div class="stat-value" id="stat-proofs">-</div>
+                        <div class="stat-label">Proofs in DB</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-mint-quotes">-</div>
+                        <div class="stat-label">Mint Quotes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-melt-quotes">-</div>
+                        <div class="stat-label">Melt Quotes</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-cpu">-</div>
+                        <div class="stat-label">CPU Usage</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-memory">-</div>
+                        <div class="stat-label">Memory (MB)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="stat-disk">-</div>
+                        <div class="stat-label">Disk Free (GB)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Mint Info</h2>
+                <div id="mint-info">
+                    <p>Loading...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="settings" class="tab-content">
+            <div class="card">
+                <h2>Mint Settings</h2>
+                <div id="settings-alert" class="alert"></div>
+                <div class="form-group">
+                    <label>Mint Name</label>
+                    <input type="text" id="setting-name" placeholder="My Cashu Mint">
+                </div>
+                <div class="form-group">
+                    <label>Short Description</label>
+                    <input type="text" id="setting-description" placeholder="A Cashu mint">
+                </div>
+                <div class="form-group">
+                    <label>Long Description</label>
+                    <textarea id="setting-description-long" rows="4" placeholder="Full description of your mint..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Icon URL</label>
+                    <input type="text" id="setting-icon-url" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label>Message of the Day (MOTD)</label>
+                    <textarea id="setting-motd" rows="2" placeholder="Welcome message for users..."></textarea>
+                </div>
+                <button class="success" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+        
+        <div id="keysets" class="tab-content">
+            <div class="card">
+                <h2>Keyset Management</h2>
+                <div id="keyset-alert" class="alert"></div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Unit</label>
+                        <select id="keyset-unit">
+                            <option value="sat">sat</option>
+                            <option value="usd">usd</option>
+                            <option value="eur">eur</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Input Fee (ppk)</label>
+                        <input type="number" id="keyset-fee" placeholder="Optional">
+                    </div>
+                </div>
+                <button onclick="rotateKeyset()">Rotate Keyset</button>
+            </div>
+        </div>
+        
+        <div id="fees" class="tab-content">
+            <div class="card">
+                <h2>Lightning Fees</h2>
+                <div id="fee-alert" class="alert"></div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Fee Percent (%)</label>
+                        <input type="number" id="fee-percent" step="0.1" placeholder="e.g. 1.0">
+                    </div>
+                    <div class="form-group">
+                        <label>Min Reserve (sats)</label>
+                        <input type="number" id="fee-min-reserve" placeholder="e.g. 100">
+                    </div>
+                </div>
+                <button class="success" onclick="updateFees()">Update Fees</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const stats = await res.json();
+                document.getElementById('stat-proofs').textContent = stats.db_proofs_count || 0;
+                document.getElementById('stat-mint-quotes').textContent = stats.db_mint_quotes_count || 0;
+                document.getElementById('stat-melt-quotes').textContent = stats.db_melt_quotes_count || 0;
+                document.getElementById('stat-cpu').textContent = (stats.cpu_percent || 0).toFixed(1) + '%';
+                document.getElementById('stat-memory').textContent = (stats.memory_used_mb || 0).toFixed(0);
+                document.getElementById('stat-disk').textContent = ((stats.disk_free_bytes || 0) / 1e9).toFixed(1);
+            } catch(e) { console.error(e); }
+        }
+        
+        async function loadMintInfo() {
+            try {
+                const res = await fetch('/api/info');
+                const info = await res.json();
+                if (info.error) {
+                    document.getElementById('mint-info').innerHTML = '<p style="color: #e74c3c">Error: ' + info.error + '</p>';
+                    return;
+                }
+                document.getElementById('mint-info').innerHTML = `
+                    <p><strong>Name:</strong> ${info.name || 'N/A'}</p>
+                    <p><strong>Description:</strong> ${info.description || 'N/A'}</p>
+                    <p><strong>URLs:</strong> ${(info.urls || []).join(', ') || 'N/A'}</p>
+                    <p><strong>Contact:</strong> ${(info.contact || []).map(c => c.join(': ')).join(', ') || 'N/A'}</p>
+                    <p><strong>MOTD:</strong> ${info.motd || 'N/A'}</p>
+                `;
+                document.getElementById('setting-name').value = info.name || '';
+                document.getElementById('setting-description').value = info.description || '';
+                document.getElementById('setting-description-long').value = info.description_long || '';
+                document.getElementById('setting-icon-url').value = info.icon_url || '';
+                document.getElementById('setting-motd').value = info.motd || '';
+            } catch(e) { console.error(e); }
+        }
+        
+        async function saveSettings() {
+            const alert = document.getElementById('settings-alert');
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: document.getElementById('setting-name').value,
+                        description: document.getElementById('setting-description').value,
+                        description_long: document.getElementById('setting-description-long').value,
+                        icon_url: document.getElementById('setting-icon-url').value,
+                        motd: document.getElementById('setting-motd').value
+                    })
+                });
+                const data = await res.json();
+                alert.textContent = 'Settings saved successfully!';
+                alert.className = 'alert success';
+            } catch(e) {
+                alert.textContent = 'Error: ' + e.message;
+                alert.className = 'alert error';
+            }
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 3000);
+        }
+        
+        async function rotateKeyset() {
+            const alert = document.getElementById('keyset-alert');
+            try {
+                const res = await fetch('/api/keyset/rotate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        unit: document.getElementById('keyset-unit').value,
+                        input_fee_ppk: document.getElementById('keyset-fee').value || null
+                    })
+                });
+                const data = await res.json();
+                alert.textContent = 'Keyset rotated! New ID: ' + data.new_keyset_id;
+                alert.className = 'alert success';
+            } catch(e) {
+                alert.textContent = 'Error: ' + e.message;
+                alert.className = 'alert error';
+            }
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 5000);
+        }
+        
+        async function updateFees() {
+            const alert = document.getElementById('fee-alert');
+            try {
+                const body = {};
+                const feePercent = document.getElementById('fee-percent').value;
+                const feeReserve = document.getElementById('fee-min-reserve').value;
+                if (feePercent) body.fee_percent = parseFloat(feePercent);
+                if (feeReserve) body.fee_min_reserve = parseInt(feeReserve);
+                
+                const res = await fetch('/api/fees', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+                alert.textContent = 'Fees updated successfully!';
+                alert.className = 'alert success';
+            } catch(e) {
+                alert.textContent = 'Error: ' + e.message;
+                alert.className = 'alert error';
+            }
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 3000);
+        }
+        
+        loadStats();
+        loadMintInfo();
+        setInterval(loadStats, 30000);
+    </script>
+</body>
+</html>
