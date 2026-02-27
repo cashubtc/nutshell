@@ -508,3 +508,157 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     # Ensure it's recent (within last minute)
     assert quote.paid_time > int(time.time()) - 60
 
+
+@pytest.mark.asyncio
+async def test_get_mint_quotes(wallet: Wallet, ledger: Ledger):
+    """Test retrieving multiple mint quotes by IDs."""
+    quote1 = await wallet.request_mint(100)
+    quote2 = await wallet.request_mint(200)
+    quote3 = await wallet.request_mint(300)
+
+    # Request in reverse order - the implementation MUST preserve this order
+    fetched_quotes = await ledger.crud.get_mint_quotes(
+        quote_ids=[quote3.quote, quote1.quote, quote2.quote], db=ledger.db
+    )
+
+    assert len(fetched_quotes) == 3
+    # Verify order is preserved (per NUT-333 spec)
+    assert fetched_quotes[0].quote == quote3.quote
+    assert fetched_quotes[1].quote == quote1.quote
+    assert fetched_quotes[2].quote == quote2.quote
+
+
+@pytest.mark.asyncio
+async def test_update_mint_quotes_state(wallet: Wallet, ledger: Ledger):
+    """Test updating the state of multiple mint quotes."""
+    quote1 = await wallet.request_mint(100)
+    quote2 = await wallet.request_mint(200)
+
+    # Initially unpaid
+    q1 = await ledger.crud.get_mint_quote(quote_id=quote1.quote, db=ledger.db)
+    q2 = await ledger.crud.get_mint_quote(quote_id=quote2.quote, db=ledger.db)
+    assert q1.state == MintQuoteState.unpaid
+    assert q2.state == MintQuoteState.unpaid
+
+    # Update to PAID
+    await ledger.crud.update_mint_quotes_state(
+        quote_ids=[quote1.quote, quote2.quote],
+        state=MintQuoteState.paid,
+        db=ledger.db,
+    )
+
+    q1 = await ledger.crud.get_mint_quote(quote_id=quote1.quote, db=ledger.db)
+    q2 = await ledger.crud.get_mint_quote(quote_id=quote2.quote, db=ledger.db)
+    assert q1.state == MintQuoteState.paid
+    assert q2.state == MintQuoteState.paid
+
+
+@pytest.mark.asyncio
+async def test_set_mint_quotes_pending_success(wallet: Wallet, ledger: Ledger):
+    """Test setting multiple mint quotes as pending atomically (success case)."""
+    quote1 = await wallet.request_mint(100)
+    quote2 = await wallet.request_mint(200)
+
+    # Manually mark as paid first (required before setting pending)
+    await ledger.crud.update_mint_quotes_state(
+        quote_ids=[quote1.quote, quote2.quote],
+        state=MintQuoteState.paid,
+        db=ledger.db,
+    )
+
+    updated_quotes = await ledger.db_write._set_mint_quotes_pending(
+        quote_ids=[quote1.quote, quote2.quote]
+    )
+
+    assert len(updated_quotes) == 2
+    assert all(q.pending for q in updated_quotes)
+
+    # Verify in DB
+    q1 = await ledger.crud.get_mint_quote(quote_id=quote1.quote, db=ledger.db)
+    q2 = await ledger.crud.get_mint_quote(quote_id=quote2.quote, db=ledger.db)
+    assert q1.pending
+    assert q2.pending
+
+
+@pytest.mark.asyncio
+async def test_set_mint_quotes_pending_failures(wallet: Wallet, ledger: Ledger):
+    """Test failure cases for setting mint quotes pending."""
+    quote1 = await wallet.request_mint(100)
+
+    # 1. Fail if not paid
+    await assert_err(
+        ledger.db_write._set_mint_quotes_pending([quote1.quote]),
+        "is not paid yet",
+    )
+
+    # Mark as paid
+    await ledger.crud.update_mint_quotes_state(
+        quote_ids=[quote1.quote],
+        state=MintQuoteState.paid,
+        db=ledger.db,
+    )
+
+    # 2. Success first time
+    await ledger.db_write._set_mint_quotes_pending([quote1.quote])
+
+    # 3. Fail if already pending
+    await assert_err(
+        ledger.db_write._set_mint_quotes_pending([quote1.quote]),
+        "already pending",
+    )
+    
+    # 4. Fail if quote not found
+    await assert_err(
+        ledger.db_write._set_mint_quotes_pending(["non_existent_id"]),
+        "Mint quotes not found",
+    )
+
+
+@pytest.mark.asyncio
+async def test_unset_mint_quotes_pending_success(wallet: Wallet, ledger: Ledger):
+    """Test unsetting multiple mint quotes pending state (success case)."""
+    quote1 = await wallet.request_mint(100)
+    quote2 = await wallet.request_mint(200)
+
+    # Setup: paid and pending
+    await ledger.crud.update_mint_quotes_state(
+        quote_ids=[quote1.quote, quote2.quote],
+        state=MintQuoteState.paid,
+        db=ledger.db,
+    )
+    await ledger.db_write._set_mint_quotes_pending([quote1.quote, quote2.quote])
+
+    # Unset pending -> Issued
+    updated_quotes = await ledger.db_write._unset_mint_quotes_pending(
+        quote_ids=[quote1.quote, quote2.quote],
+        state=MintQuoteState.issued
+    )
+
+    assert len(updated_quotes) == 2
+    assert all(q.issued for q in updated_quotes)
+    
+    # Verify in DB
+    q1 = await ledger.crud.get_mint_quote(quote_id=quote1.quote, db=ledger.db)
+    q2 = await ledger.crud.get_mint_quote(quote_id=quote2.quote, db=ledger.db)
+    assert q1.issued
+    assert q2.issued
+
+
+@pytest.mark.asyncio
+async def test_unset_mint_quotes_pending_failures(wallet: Wallet, ledger: Ledger):
+    """Test failure cases for unsetting mint quotes pending state."""
+    quote1 = await wallet.request_mint(100)
+
+    # 1. Fail if not pending (it is unpaid/paid)
+    await ledger.crud.update_mint_quotes_state(
+        quote_ids=[quote1.quote],
+        state=MintQuoteState.paid,
+        db=ledger.db,
+    )
+    
+    await assert_err(
+        ledger.db_write._unset_mint_quotes_pending(
+            [quote1.quote], state=MintQuoteState.issued
+        ),
+        "not pending",
+    )

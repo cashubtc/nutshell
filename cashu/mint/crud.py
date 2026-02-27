@@ -12,6 +12,7 @@ from ..core.base import (
     MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
+    MintQuoteState,
     Proof,
     Unit,
 )
@@ -244,6 +245,15 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
+    async def get_mint_quotes(
+        self,
+        *,
+        quote_ids: List[str],
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]: ...
+
+    @abstractmethod
     async def get_mint_quote_by_request(
         self,
         *,
@@ -257,6 +267,16 @@ class LedgerCrud(ABC):
         self,
         *,
         quote: MintQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def update_mint_quotes_state(
+        self,
+        *,
+        quote_ids: List[str],
+        state: MintQuoteState,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -664,6 +684,28 @@ class LedgerCrudSqlite(LedgerCrud):
             return None
         return MintQuote.from_row(row) if row else None  # type: ignore
 
+    async def get_mint_quotes(
+        self,
+        *,
+        quote_ids: List[str],
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]:
+        if not quote_ids:
+            return []
+        query = f"""
+            SELECT * from {db.table_with_schema('mint_quotes')}
+            WHERE quote IN ({','.join([f":quote_{i}" for i in range(len(quote_ids))])})
+            """
+        values = {f"quote_{i}": quote_ids[i] for i in range(len(quote_ids))}
+        rows = await (conn or db).fetchall(query, values)
+        if not rows:
+            return []
+        
+        # Build a map and preserve order from request
+        quote_map = {MintQuote.from_row(row).quote: MintQuote.from_row(row) for row in rows}
+        return [quote_map[qid] for qid in quote_ids if qid in quote_map]
+
     async def get_mint_quote_by_request(
         self,
         *,
@@ -697,6 +739,28 @@ class LedgerCrudSqlite(LedgerCrud):
                 if quote.paid_time
                 else None,
                 "quote": quote.quote,
+            },
+        )
+
+    async def update_mint_quotes_state(
+        self,
+        *,
+        quote_ids: List[str],
+        state: MintQuoteState,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        if not quote_ids:
+            return
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('mint_quotes')}
+            SET state = :state
+            WHERE quote IN ({','.join([f":quote_{i}" for i in range(len(quote_ids))])})
+            """,
+            {
+                "state": state.value,
+                **{f"quote_{i}": quote_ids[i] for i in range(len(quote_ids))},
             },
         )
 

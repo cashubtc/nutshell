@@ -145,32 +145,90 @@ class NpubCash:
         """
         Mints all paid quotes associated with the current wallet's mint.
         Returns a list of minted proofs.
+        
+        Uses batch minting if the mint supports NUT-333.
         """
         if not self.wallet.url:
              raise ValueError("Wallet mint URL not set")
              
         quotes = await self.check_quotes()
-        minted_proofs = []
+        if not quotes:
+            return []
         
+        # Filter quotes for our mint
+        mint_quotes = []
         for quote_dict in quotes:
-            # quote['mintUrl'] contains the mint URL used for this quote
             quote_mint = quote_dict.get("mintUrl") or quote_dict.get("mint")
             if not quote_mint:
                 continue
-
             if quote_mint.rstrip("/") != self.wallet.url.rstrip("/"):
                 print(f"Skipping quote {quote_dict.get('id', 'unknown')} from different mint: {quote_mint} (Wallet: {self.wallet.url})")
                 continue
             
             quote_id = quote_dict.get("quoteId") or quote_dict.get("id")
             amount = quote_dict.get("amount")
-            
             if not quote_id or not amount:
                 continue
-                
+            mint_quotes.append((quote_dict, quote_id, amount))
+        
+        if not mint_quotes:
+            return []
+        
+        # Check if mint supports batch minting
+        await self.wallet.load_mint_info()
+        supports_batch = self.wallet.mint_info and self.wallet.mint_info.supports_batch_mint("bolt11")
+        
+        if supports_batch:
+            return await self._mint_batch(mint_quotes)
+        else:
+            return await self._mint_sequential(mint_quotes)
+
+    async def _mint_batch(self, mint_quotes: List[tuple]) -> List[Any]:
+        """Mint quotes using batch endpoint (NUT-333)."""
+        # Collect quote IDs that need minting
+        quote_ids = []
+        for quote_dict, quote_id, amount in mint_quotes:
             try:
-                # Mint tokens
-                # For v2, we are minting the quote ID that NPC created.
+                # Check if already issued in our DB
+                quote = await get_bolt11_mint_quote(db=self.wallet.db, quote=quote_id)
+                if quote and quote.state == MintQuoteState.issued:
+                    print(f"Quote {quote_id} already minted.")
+                    continue
+                    
+                # Ensure we have the quote in the database
+                if not quote:
+                    quote = await self.wallet.get_mint_quote(quote_id)
+                    if quote.state == MintQuoteState.issued:
+                        print(f"Quote {quote_id} already minted.")
+                        continue
+                        
+                quote_ids.append(quote_id)
+            except Exception as e:
+                print(f"Error checking quote {quote_id}: {e}")
+                continue
+        
+        if not quote_ids:
+            print("No quotes to mint.")
+            return []
+        
+        print(f"Minting {len(quote_ids)} quotes in batch...")
+        
+        # Let wallet.mint_batch handle the full workflow
+        try:
+            proofs = await self.wallet.mint_batch(quote_ids)
+            if proofs:
+                print(f"Successfully minted {len(proofs)} tokens in batch.")
+            return proofs
+        except Exception as e:
+            print(f"Batch mint failed: {e}. Falling back to sequential.")
+            return await self._mint_sequential(mint_quotes)
+
+    async def _mint_sequential(self, mint_quotes: List[tuple]) -> List[Any]:
+        """Mint quotes one at a time (fallback when batch not supported)."""
+        minted_proofs = []
+        
+        for quote_dict, quote_id, amount in mint_quotes:
+            try:
                 # Check if we have the quote in the database and if it is already issued
                 quote = await get_bolt11_mint_quote(db=self.wallet.db, quote=quote_id)
                 if quote and quote.state == MintQuoteState.issued:
