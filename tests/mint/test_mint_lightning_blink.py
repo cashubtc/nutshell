@@ -9,6 +9,7 @@ from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet  # type: ignore
 
 settings.mint_blink_key = "123"
 blink = BlinkWallet(unit=Unit.sat)
+blink_usd = BlinkWallet(unit=Unit.usd)
 payment_request = (
     "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
     "p575z0n39w2j7zgnpqtdlrgz9rycner4eptjm3lz363dzylnrm3h4s9qyyssqfz8jglcshnlcf0zkw4qu8fyr564lg59x5al724kms3h6gpuhx9xrfv27tgx3l3u3cyf6"
@@ -248,3 +249,171 @@ async def test_blink_get_payment_quote_backend_error():
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.sat, 1000)  # sat
     assert quote.fee == Amount(Unit.sat, MINIMUM_FEE_MSAT // 1000)  # msat
+
+
+PRICE_RESPONSE = {
+    "data": {
+        "currencyConversionEstimation": {
+            "btcSatAmount": 100,
+            "usdCentAmount": 100,
+        }
+    }
+}
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blink_status_usd():
+    mock_response = {
+        "data": {
+            "me": {
+                "defaultAccount": {
+                    "wallets": [
+                        {"walletCurrency": "USD", "id": "usd-wallet-123", "balance": 10000},
+                        {"walletCurrency": "BTC", "id": "btc-wallet-456", "balance": 100000},
+                    ]
+                }
+            }
+        }
+    }
+    respx.post(blink_usd.endpoint).mock(return_value=Response(200, json=mock_response))
+    status = await blink_usd.status()
+    assert status.balance.amount == 10000
+    assert status.balance.unit == Unit.usd
+    assert blink_usd.wallet_ids[Unit.usd] == "usd-wallet-123"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blink_create_invoice_usd():
+    blink_usd.wallet_ids[Unit.usd] = "usd-wallet-123"
+    mock_response = {
+        "data": {
+            "lnUsdInvoiceCreateOnBehalfOfRecipient": {
+                "invoice": {"paymentRequest": payment_request}
+            }
+        }
+    }
+    respx.post(blink_usd.endpoint).mock(return_value=Response(200, json=mock_response))
+    invoice = await blink_usd.create_invoice(Amount(Unit.usd, 1000))
+    assert invoice.checking_id == invoice.payment_request
+    assert invoice.ok
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blink_pay_invoice_usd():
+    blink_usd.wallet_ids[Unit.usd] = "usd-wallet-123"
+    payment_response = {
+        "data": {
+            "lnInvoicePaymentSend": {
+                "status": "SUCCESS",
+                "transaction": {
+                    "settlementAmount": -1010,
+                    "settlementFee": 10,
+                    "settlementVia": {"preImage": "abc123"},
+                },
+            }
+        }
+    }
+    status_response = {
+        "data": {
+            "me": {
+                "defaultAccount": {
+                    "walletById": {
+                        "transactionsByPaymentHash": [
+                            {
+                                "status": "SUCCESS",
+                                "settlementAmount": -1010,
+                                "settlementFee": 10,
+                                "direction": "SEND",
+                                "settlementVia": {"preImage": "abc123"},
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    respx.post(blink_usd.endpoint).mock(
+        side_effect=[
+            Response(200, json=payment_response),
+            Response(200, json=status_response),
+            Response(200, json=PRICE_RESPONSE),
+        ]
+    )
+    quote = MeltQuote(
+        request=payment_request,
+        quote="asd",
+        method="bolt11",
+        checking_id=payment_request,
+        unit="usd",
+        amount=1000,
+        fee_reserve=100,
+        state=MeltQuoteState.unpaid,
+    )
+    payment = await blink_usd.pay_invoice(quote, 1000)
+    assert payment.settled
+    assert payment.fee
+    assert payment.fee.unit == Unit.usd
+    assert payment.fee.amount == 10
+    assert payment.error_message is None
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blink_get_payment_status_usd():
+    blink_usd.wallet_ids[Unit.usd] = "usd-wallet-123"
+    status_response = {
+        "data": {
+            "me": {
+                "defaultAccount": {
+                    "walletById": {
+                        "transactionsByPaymentHash": [
+                            {
+                                "status": "SUCCESS",
+                                "settlementAmount": -1010,
+                                "settlementFee": 10,
+                                "direction": "SEND",
+                                "settlementVia": {"preImage": "abc123"},
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    respx.post(blink_usd.endpoint).mock(
+        side_effect=[
+            Response(200, json=status_response),
+            Response(200, json=PRICE_RESPONSE),
+        ]
+    )
+    status = await blink_usd.get_payment_status(payment_request)
+    assert status.settled
+    assert status.fee
+    assert status.fee.unit == Unit.usd
+    assert status.fee.amount == 10
+    assert status.preimage == "abc123"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blink_get_payment_quote_usd():
+    blink_usd.wallet_ids[Unit.usd] = "usd-wallet-123"
+    fee_probe_response = {"data": {"lnUsdInvoiceFeeProbe": {"amount": 10}}}
+    respx.post(blink_usd.endpoint).mock(
+        side_effect=[
+            Response(200, json=fee_probe_response),
+            Response(200, json=PRICE_RESPONSE),
+        ]
+    )
+    melt_quote_request = PostMeltQuoteRequest(
+        unit=Unit.usd.name, request=payment_request
+    )
+    quote = await blink_usd.get_payment_quote(melt_quote_request)
+    assert quote.checking_id == payment_request
+    assert quote.amount.unit == Unit.usd
+    assert quote.fee.unit == Unit.usd
+    assert quote.amount.amount == 1000
+    assert quote.fee.amount == 10
