@@ -291,14 +291,28 @@ class Wallet(
 
     async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.
-
         Then loads all keysets from the database for the active mint and active unit into self.keysets.
         """
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-        # load all keysets of thisd mint from the db
+
+        # load all keysets of this mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+
+        # mark keysets that disappeared from mint as deleted
+        active_ids = set(mint_keysets_dict.keys())
+        local_ids = {key.id for key in keysets_in_db}
+        keysets_in_db_dict = {k.id: k for k in keysets_in_db}
+
+        for key_id in (local_ids - active_ids):
+            ks = keysets_in_db_dict[key_id]
+            logger.debug(
+                f"Keyset {key_id} no longer reported by mint, marking as deleted"
+            )
+            if ks.deleted_at is None:
+                ks.deleted_at = int(time.time())
+            await update_keyset(keyset=ks, db=self.db)
 
         # db is empty, get all keys from the mint and store them
         if not keysets_in_db:
@@ -352,7 +366,18 @@ class Wallet(
 
         await self.inactivate_base64_keysets(force_old_keysets)
 
-        await self.load_keysets_from_db()
+        # RE-FETCH after all DB updates so we see the final active 
+        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+
+        keysets_active_unit = [
+            k
+            for k in keysets_in_db
+            if k.unit == self.unit and k.active and k.deleted_at is None
+        ]
+        self.keysets = {k.id: k for k in keysets_active_unit}
+        logger.trace(
+            f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
+        )
 
     async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
         """Activates a keyset by setting self.keyset_id. Either activates a specific keyset

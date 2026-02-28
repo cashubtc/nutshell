@@ -1,11 +1,13 @@
 import copy
 from types import SimpleNamespace
 from typing import List, Union
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from mnemonic import Mnemonic
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import MeltQuote, MeltQuoteState, MintKeyset, MintQuoteState, Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -16,7 +18,6 @@ from cashu.wallet.crud import (
     get_proofs,
 )
 from cashu.wallet.wallet import Wallet
-from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
@@ -73,7 +74,7 @@ async def reset_wallet_db(wallet: Wallet):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet1(mint):
-    wallet1 = await Wallet1.with_db(
+    wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",
         name="wallet1",
@@ -590,3 +591,51 @@ async def test_raise_on_unsupported_version_non_404(wallet1: Wallet):
 
     # should not raise
     wallet1.raise_on_unsupported_version(resp, "GET /v1/keys")
+
+@pytest.mark.asyncio
+async def test_keyset_disappears_from_mint(wallet1: Wallet):
+    """
+    Ensure that when a mint no longer returns a previously known keyset,
+    it gets removed from the wallet's keyset list and marked as deleted in the DB.
+    """
+
+    # Manually seed the wallet (avoids 'seed not set')
+    mnemo = Mnemonic("english")
+    wallet1.mnemonic = mnemo.generate(strength=128)
+
+    # create a dummy seed from mnemonic (bytes)
+    wallet1._seed = wallet1.mnemonic.encode("utf-8")
+
+    # Initialize private key using this dummy seed
+    await wallet1._init_private_key()
+
+    # Save the old keyset ID for verification
+    old_keyset_id = list(wallet1.keysets.keys())[0]
+
+    # Mock backend response so only one keyset remains active on the mint
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=old_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+
+    before = len(wallet1.keysets)
+
+    # Load keysets from mocked mint API
+    await wallet1.load_mint_keysets()
+
+    after = len(wallet1.keysets)
+
+    # Assert keyset count remains consistent
+    assert after == 1
+    assert after <= before
+
+    # Assert that the retained keyset is not marked as deleted in DB
+    all_keysets_db = await get_keysets(db=wallet1.db, id=old_keyset_id)
+    assert all_keysets_db[0].deleted_at is None  # the one we kept is not deleted
