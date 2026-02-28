@@ -47,8 +47,8 @@ async def run_wallet_ops(wallet_id: int, mint_url: str):
 
 async def main():
     mint_url = "http://127.0.0.1:3338"
-    num_wallets = 20
-    print(f"Starting 20 {num_wallets}...")
+    num_wallets = 30
+    print(f"Starting {num_wallets} wallets...")
     tasks = []
     for i in range(num_wallets):
         tasks.append(asyncio.create_task(run_wallet_ops(i, mint_url)))
