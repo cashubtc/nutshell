@@ -208,7 +208,7 @@ class PostMeltRequestOptionMpp(BaseModel):
 
 
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
 
 
 class PostMeltQuoteRequest(BaseModel):
@@ -270,6 +270,7 @@ class PostMeltRequest(BaseModel):
     outputs: Union[List[BlindedMessage], None] = Field(
         None, max_length=settings.mint_max_request_length
     )
+    prefer_async: Optional[bool] = False
 
 
 class PostMeltResponse_deprecated(BaseModel):

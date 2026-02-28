@@ -331,9 +331,13 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    logger.trace(f"> POST /v1/melt/bolt11: {payload}")
+    prefer_async = False
+    if payload.prefer_async:
+        prefer_async = True
+    logger.trace(f"> POST /v1/melt/bolt11: {payload}" + (f" with prefer_async={prefer_async}" if prefer_async else ""))
     resp = await ledger.melt(
-        proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+        proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs,
+        prefer_async=prefer_async
     )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
