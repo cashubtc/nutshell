@@ -180,6 +180,13 @@ class MintLimits(MintSettings):
         title="Websocket read timeout",
         description="Timeout for reading from a websocket.",
     )
+    mint_admin_api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional API key to enable admin-only HTTP monitoring endpoints. "
+            "If unset, admin endpoints are disabled."
+        ),
+    )
 
 
 class FakeWalletSettings(MintSettings):
