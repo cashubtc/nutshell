@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import os
-import re
 import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
@@ -167,6 +166,7 @@ class Database(Compat):
         conn: Optional[Connection] = None,
         lock_table: Optional[str] = None,
         lock_select_statement: Optional[str] = None,
+        lock_parameters: Optional[dict] = None,
         lock_timeout: Optional[float] = None,
     ):
         """Either yield the existing database connection (passthrough) or create a new one.
@@ -175,6 +175,7 @@ class Database(Compat):
             conn (Optional[Connection], optional): Connection object. Defaults to None.
             lock_table (Optional[str], optional): Table to lock. Defaults to None.
             lock_select_statement (Optional[str], optional): Lock select statement. Defaults to None.
+            lock_parameters (Optional[dict], optional): Parameters for the lock select statement. Defaults to None.
             lock_timeout (Optional[float], optional): Lock timeout. Defaults to None.
 
         Yields:
@@ -187,7 +188,7 @@ class Database(Compat):
         else:
             logger.trace("get_connection: Creating new connection")
             async with self.connect(
-                lock_table, lock_select_statement, lock_timeout
+                lock_table, lock_select_statement, lock_parameters, lock_timeout
             ) as new_conn:
                 yield new_conn
 
@@ -196,6 +197,7 @@ class Database(Compat):
         self,
         lock_table: Optional[str] = None,
         lock_select_statement: Optional[str] = None,
+        lock_parameters: Optional[dict] = None,
         lock_timeout: Optional[float] = None,
     ):
         async def _handle_lock_retry(retry_delay, timeout, start_time) -> float:
@@ -224,7 +226,7 @@ class Database(Compat):
                     wconn = Connection(session, txn, self.type, self.name, self.schema)
                     if lock_table:
                         await self.acquire_lock(
-                            wconn, lock_table, lock_select_statement
+                            wconn, lock_table, lock_select_statement, lock_parameters
                         )
                     logger.trace(
                         f"> Yielding connection. Lock: {lock_table} - trial {trial} ({random_int})"
@@ -255,6 +257,7 @@ class Database(Compat):
         wconn: Connection,
         lock_table: str,
         lock_select_statement: Optional[str] = None,
+        lock_parameters: Optional[dict] = None,
     ):
         """Acquire a lock on a table or a row in a table.
 
@@ -262,20 +265,15 @@ class Database(Compat):
             wconn (Connection): Connection object.
             lock_table (str): Table to lock.
             lock_select_statement (Optional[str], optional):
-            lock_timeout (Optional[float], optional):
-
-        Raises:
-            Exception: _description_
+            lock_parameters (Optional[dict], optional): Parameters to pass to the lock select query.
         """
-        if lock_select_statement:
-            assert (
-                len(re.findall(r"^[^=]+='[^']+'$", lock_select_statement)) == 1
-            ), "lock_select_statement must have exactly one {column}='{value}' pattern."
         try:
             logger.trace(
-                f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)}"
+                f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)} parameters: {lock_parameters}"
             )
-            await wconn.execute(self.lock_table(lock_table, lock_select_statement))
+            await wconn.execute(
+                self.lock_table(lock_table, lock_select_statement), lock_parameters or {}
+            )
             logger.trace(f"Success: Acquired lock on {lock_table}")
             return
         except Exception as e:
