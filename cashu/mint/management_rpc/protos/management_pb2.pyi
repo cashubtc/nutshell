@@ -418,6 +418,42 @@ class UpdateQuoteTtlRequest(google.protobuf.message.Message):
 global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
 
 @typing.final
+class GetQuoteTtlRequest(google.protobuf.message.Message):
+    """GetQuoteTtlRequest is used to retrieve the expiry time of a specific quote."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_ID_FIELD_NUMBER: builtins.int
+    quote_id: builtins.str
+    """The ID of the quote to retrieve the expiry for."""
+    def __init__(
+        self,
+        *,
+        quote_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+
+global___GetQuoteTtlRequest = GetQuoteTtlRequest
+
+@typing.final
+class GetQuoteTtlResponse(google.protobuf.message.Message):
+    """GetQuoteTtlResponse contains the expiry time for a specific quote."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EXPIRY_FIELD_NUMBER: builtins.int
+    expiry: builtins.int
+    """The Unix timestamp when the quote expires."""
+    def __init__(
+        self,
+        *,
+        expiry: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["expiry", b"expiry"]) -> None: ...
+
+global___GetQuoteTtlResponse = GetQuoteTtlResponse
+
+@typing.final
 class Nut04Quote(google.protobuf.message.Message):
     """Nut04Quote represents a quote for minting (NUT-04)."""
 

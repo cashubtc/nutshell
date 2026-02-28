@@ -111,6 +111,31 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No quote ttl was specified")
         return management_pb2.UpdateResponse()
+    
+    async def GetQuoteTtl(self, request, context):
+        logger.debug(
+            f"gRPC GetQuoteTtl has been called for quote_id: {request.quote_id}"
+        )
+
+        mint_quote = await self.ledger.crud.get_mint_quote(
+            quote_id=request.quote_id, db=self.ledger.db
+        )
+        if mint_quote and mint_quote.expiry is not None:
+            return management_pb2.GetQuoteTtlResponse(expiry=mint_quote.expiry)
+
+        melt_quote = await self.ledger.crud.get_melt_quote(
+            quote_id=request.quote_id, db=self.ledger.db
+        )
+        if melt_quote and melt_quote.expiry is not None:
+            return management_pb2.GetQuoteTtlResponse(expiry=melt_quote.expiry)
+
+        logger.warning(f"Quote {request.quote_id} not found or has no expiry")
+        await context.abort(
+            grpc.StatusCode.NOT_FOUND,
+            "Quote not found or has no expiry",
+        )
+        raise Exception("Quote not found or has no expiry")
+
 
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
