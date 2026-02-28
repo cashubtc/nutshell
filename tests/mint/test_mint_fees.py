@@ -3,6 +3,7 @@ from typing import Optional
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import MeltQuoteState
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.split import amount_split
@@ -214,12 +215,12 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
-    assert not melt_quote.paid
+    assert melt_quote.state != MeltQuoteState.paid
     assert melt_quote.amount == 64
     assert melt_quote.fee_reserve == 0
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
 
     # let's first try to melt without enough funds
     send_proofs, fees = await wallet1.select_to_send(wallet1.proofs, 64)
@@ -239,7 +240,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
 
 
 @pytest.mark.asyncio
@@ -267,10 +268,10 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     )
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
 
-    assert not melt_quote.paid, "melt quote should not be paid"
+    assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"

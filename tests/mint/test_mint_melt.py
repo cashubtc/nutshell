@@ -3,7 +3,7 @@ from typing import List, Tuple
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, Proof
+from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
 from cashu.core.errors import (
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
@@ -525,13 +525,13 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
         quote_request=PostMintQuoteRequest(amount=amount, unit="sat")
     )
     sat_invoice = sat_mint_quote.request
-    assert sat_mint_quote.paid is False
+    assert sat_mint_quote.state != MintQuoteState.paid
 
     # melt quote in usd
     usd_melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="usd", request=sat_invoice)
     )
-    assert usd_melt_quote.paid is False
+    assert usd_melt_quote.state != MeltQuoteState.paid
 
     # pay melt quote with usd
     await ledger.melt(proofs=wallet.proofs, quote=usd_melt_quote.quote)
