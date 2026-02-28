@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Keysets — Nutshell Admin{% endblock %}
+{% block content %}
+<h2>Keysets</h2>
+
+{% if msg %}
+<div class="alert {% if 'Error' in msg or 'failed' in msg %}alert-error{% else %}alert-success{% endif %}">{{ msg }}</div>
+{% endif %}
+
+{% if keysets and keysets.keysets is defined %}
+<div class="card">
+    <h3>Active Keysets</h3>
+    {% include "_keysets_table.html" %}
+</div>
+{% elif keysets and keysets.error is defined %}
+<div class="alert alert-error">Cannot fetch keysets: {{ keysets.error }}</div>
+{% else %}
+<div class="alert alert-error">No keyset data available. Is the mint running?</div>
+{% endif %}
+
+<div class="card">
+    <h3>Rotate Keyset</h3>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">
+        Create a new keyset for the specified unit. The current keyset will be deactivated
+        and a new one will become active. This is an irreversible operation.
+    </p>
+    <form action="/keysets/rotate" method="post">
+        <div class="row">
+            <div>
+                <label for="unit">Unit</label>
+                <select id="unit" name="unit">
+                    <option value="sat">sat</option>
+                    <option value="msat">msat</option>
+                    <option value="usd">usd</option>
+                    <option value="eur">eur</option>
+                </select>
+            </div>
+            <div>
+                <label for="input_fee_ppk">Input Fee (ppk, optional)</label>
+                <input type="number" id="input_fee_ppk" name="input_fee_ppk" placeholder="0">
+            </div>
+            <button type="submit" class="btn btn-primary"
+                    onclick="return confirm('Rotate keyset? This deactivates the current keyset.')">
+                Rotate
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

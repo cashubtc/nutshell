@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Nutshell Admin{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+
+{% if info.connected %}
+<div class="card">
+    <h3>Mint Status</h3>
+    <p class="connected">&#x2713; Connected to gRPC management interface</p>
+    <table style="margin-top:0.75rem">
+        <tr><th style="width:160px">Name</th><td>{{ info.name }}</td></tr>
+        <tr><th>Version</th><td>{{ info.version }}</td></tr>
+        <tr><th>Description</th><td>{{ info.description }}</td></tr>
+        <tr><th>MOTD</th><td>{{ info.motd or '—' }}</td></tr>
+        <tr><th>Public Key</th><td style="font-family:monospace;font-size:0.8rem;word-break:break-all">{{ info.pubkey }}</td></tr>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-error">
+    &#x2717; Cannot connect to mint gRPC interface. {{ info.error | default('') }}
+    <br><small>Make sure the mint is running with <code>MINT_RPC_SERVER_ENABLE=TRUE</code>.</small>
+</div>
+{% endif %}
+
+<div class="grid">
+    <div class="card stat">
+        <div class="value">
+            {% if keysets and keysets.keysets is defined %}
+                {{ keysets.keysets | length }}
+            {% else %}
+                —
+            {% endif %}
+        </div>
+        <div class="label">Active Keysets</div>
+    </div>
+    <div class="card stat">
+        <div class="value">
+            {% if info.connected %}
+                {{ info.urls | length }}
+            {% else %}
+                —
+            {% endif %}
+        </div>
+        <div class="label">Configured URLs</div>
+    </div>
+    <div class="card stat">
+        <div class="value">
+            {% if sys_info.cpu_percent is defined %}
+                {{ sys_info.cpu_percent }}%
+            {% else %}
+                —
+            {% endif %}
+        </div>
+        <div class="label">CPU Usage</div>
+    </div>
+    <div class="card stat">
+        <div class="value">
+            {% if sys_info.memory_percent is defined %}
+                {{ sys_info.memory_percent }}%
+            {% else %}
+                —
+            {% endif %}
+        </div>
+        <div class="label">Memory Usage</div>
+    </div>
+</div>
+
+{% if keysets and keysets.keysets is defined %}
+<div class="card">
+    <h3>Keysets</h3>
+    {% include "_keysets_table.html" %}
+</div>
+{% endif %}
+
+{% if info.connected and info.contact %}
+<div class="card">
+    <h3>Contact Information</h3>
+    <table>
+        <tr><th>Method</th><th>Info</th></tr>
+        {% for c in info.contact %}
+        <tr><td>{{ c.method }}</td><td>{{ c.info }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if info.connected and info.urls %}
+<div class="card">
+    <h3>URLs</h3>
+    <table>
+        <tr><th>URL</th></tr>
+        {% for u in info.urls %}
+        <tr><td>{{ u }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+{% endblock %}
