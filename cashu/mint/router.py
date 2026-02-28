@@ -278,7 +278,7 @@ async def melt_quote(
     Request a quote for melting tokens.
     """
     logger.trace(f"> POST /v1/melt/quote/bolt11: {payload}")
-    quote = await ledger.melt_quote(payload)  # TODO
+    quote = await ledger.melt_quote(payload)
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
     return quote
 
@@ -302,7 +302,6 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         unit=melt_quote.unit,
         request=melt_quote.request,
         fee_reserve=melt_quote.fee_reserve,
-        paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
         payment_preimage=melt_quote.payment_preimage,
