@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import os
-import re
 import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
