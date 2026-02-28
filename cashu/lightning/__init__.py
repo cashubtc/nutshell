@@ -7,6 +7,7 @@ from .fake import FakeWallet  # noqa: F401
 from .lnbits import LNbitsWallet  # noqa: F401
 from .lnd_grpc.lnd_grpc import LndRPCWallet  # noqa: F401
 from .lndrest import LndRestWallet  # noqa: F401
+from .lnmarkets import LNMarketsWallet  # noqa: F401
 from .strike import StrikeWallet  # noqa: F401
 
 backend_settings = [
