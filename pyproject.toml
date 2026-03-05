@@ -8,6 +8,7 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.10"
 SQLAlchemy = {version = "^2.0.35", extras = ["asyncio"]}
+greenlet = ">=3.0.0"
 click = "^8.1.7"
 pydantic = "^2.5.3"
 pydantic-settings = "^2.1.0"
