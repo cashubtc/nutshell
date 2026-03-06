@@ -416,4 +416,4 @@ async def test_blink_get_payment_quote_usd():
     assert quote.amount.unit == Unit.usd
     assert quote.fee.unit == Unit.usd
     assert quote.amount.amount == 1000
-    assert quote.fee.amount == 10
+    assert quote.fee.amount == 110

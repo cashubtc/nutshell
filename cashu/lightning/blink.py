@@ -26,6 +26,9 @@ from .base import (
 BLINK_MAX_FEE_PERCENT = 0.5
 # according to https://github.com/GaloyMoney/blink/blob/7e79cc27304de9b9c2e7d7f4fdd3bac09df23aac/core/api/src/domain/bitcoin/index.ts#L60C1-L60C41
 MINIMUM_FEE_MSAT = 10_000
+# Margin for worst-case BTC/USD price swing between quote and payment.
+# Blink has no rate-locking mechanism, so the fee reserve must cover this.
+PRICE_SWING_MARGIN_PERCENT = 10
 
 DIRECTION_SEND = "SEND"
 DIRECTION_RECEIVE = "RECEIVE"
@@ -60,6 +63,13 @@ class BlinkWallet(LightningBackend):
     supported_units = {Unit.sat, Unit.msat, Unit.usd}
     supports_description: bool = True
     unit = Unit.sat
+
+    def _fee_unit(self) -> Unit:
+        if self.unit == Unit.sat or self.unit == Unit.msat:
+            return Unit.sat
+        elif self.unit == Unit.usd:
+            return Unit.usd
+        raise Exception(f"Unsupported unit: {self.unit}")
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -303,16 +313,9 @@ class BlinkWallet(LightningBackend):
 
         fee_amount: Union[None, Amount] = None
         if transaction:
-            if self.unit == Unit.sat or self.unit == Unit.msat:
-                fee = transaction.get("settlementFee")
-                if fee is not None:
-                    fee_amount = Amount(Unit.sat, fee)
-            elif self.unit == Unit.usd:
-                fee = transaction.get("settlementFee")
-                if fee is not None:
-                    fee_amount = Amount(Unit.usd, fee)
-            else:
-                raise Exception(f"Unsupported unit: {self.unit}")
+            fee = transaction.get("settlementFee")
+            if fee is not None:
+                fee_amount = Amount(self._fee_unit(), fee)
 
         return PaymentResponse(
             result=result,
@@ -458,14 +461,8 @@ class BlinkWallet(LightningBackend):
         result = PAYMENT_RESULT_MAP[payment["status"]]  # type: ignore
         preimage = payment["settlementVia"].get("preImage")  # type: ignore
 
-        if self.unit == Unit.sat or self.unit == Unit.msat:
-            fee = payment["settlementFee"]  # type: ignore
-            fee_amount = Amount(Unit.sat, fee)
-        elif self.unit == Unit.usd:
-            fee = payment["settlementFee"]
-            fee_amount = Amount(Unit.usd, fee)
-        else:
-            raise Exception(f"Unsupported unit: {self.unit}")
+        fee = payment["settlementFee"]  # type: ignore
+        fee_amount = Amount(self._fee_unit(), fee)
 
         return PaymentStatus(
             result=result,
@@ -620,9 +617,13 @@ class BlinkWallet(LightningBackend):
             fees_sats = fees_msat // 1000
             amount_cents = self._sats_to_cents_with_rate(amount_sats, sats_per_usd)
             fees_cents = self._sats_to_cents_with_rate(fees_sats, sats_per_usd)
+            price_swing_cents = math.ceil(
+                amount_cents * PRICE_SWING_MARGIN_PERCENT / 100
+            )
+            fee_reserve_cents = fees_cents + price_swing_cents
             return PaymentQuoteResponse(
                 checking_id=bolt11,
-                fee=Amount(Unit.usd, fees_cents),
+                fee=Amount(Unit.usd, fee_reserve_cents),
                 amount=Amount(Unit.usd, amount_cents),
             )
         else:
