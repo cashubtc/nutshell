@@ -5,16 +5,19 @@ on:
   release:
     types: [released]
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     strategy:
         matrix:
           python-version: ["3.11"]
-          poetry-version: ["1.8.5"]
+          poetry-version: ["2.3.2"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - uses: ./.github/actions/prepare
         with:
