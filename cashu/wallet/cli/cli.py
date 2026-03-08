@@ -361,10 +361,10 @@ async def pay(
                 }
 
                 try:
-                     async with httpx.AsyncClient() as client:
+                    async with httpx.AsyncClient() as client:
                         r = await client.post(url, json=payload, timeout=10)
                         r.raise_for_status()
-                     print(f" Done (Status: {r.status_code}).")
+                    print(f" Done (Status: {r.status_code}).")
                 except Exception as e:
                     print(f" Failed: {e}")
                     print(f"Manual Token: {token}")
@@ -745,6 +745,14 @@ async def balance(ctx: Context, verbose):
 )
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
 @click.option(
+    "--refund",
+    "-r",
+    default=None,
+    multiple=True,
+    help="Refund public key (can be specified multiple times).",
+    type=str,
+)
+@click.option(
     "--dleq",
     "-d",
     default=False,
@@ -754,7 +762,6 @@ async def balance(ctx: Context, verbose):
 )
 @click.option(
     "--legacy",
-    "-l",
     default=False,
     is_flag=True,
     help="Print legacy TokenV3 format.",
@@ -792,6 +799,7 @@ async def send_command(
     amount: int,
     memo: str,
     lock: str,
+    refund: tuple,
     dleq: bool,
     legacy: bool,
     offline: bool,
@@ -810,6 +818,7 @@ async def send_command(
         include_fees=include_fees,
         memo=memo,
         force_swap=force_swap,
+        refund_pubkeys=list(refund) if refund else None,
     )
     await print_balance(ctx)
 
@@ -1011,10 +1020,31 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         print("To receive all pending tokens use: cashu receive -a")
 
 
-@cli.command("lock", help="Generate receiving lock.")
+@cli.group(cls=NaturalOrderGroup)
+def lock():
+    """Generate receiving locks."""
+    pass
+
+
+@lock.command("p2pk", help="Generate a P2PK lock with optional timelock and refund.")
+@click.option(
+    "--timelock",
+    "-t",
+    default=None,
+    help="Locktime in seconds after which the refund pubkey can claim the tokens.",
+    type=int,
+)
+@click.option(
+    "--refund",
+    "-r",
+    default=None,
+    multiple=True,
+    help="Refund public key (can be specified multiple times).",
+    type=str,
+)
 @click.pass_context
 @coro
-async def lock(ctx: Context):
+async def lock_p2pk(ctx: Context, timelock: Optional[int], refund: tuple):
     wallet: Wallet = ctx.obj["WALLET"]
 
     pubkey = await wallet.create_p2pk_pubkey()
@@ -1025,9 +1055,21 @@ async def lock(ctx: Context):
     print("")
     print(f"Public receiving lock: {lock_str}")
     print("")
-    print(
-        f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock {lock_str}"
-    )
+
+    if timelock:
+        print(f"Timelock: {timelock} seconds")
+    if refund:
+        for r in refund:
+            print(f"Refund pubkey: {r}")
+    if timelock or refund:
+        print("")
+
+    send_cmd = f"cashu send <amount> --lock {lock_str}"
+    if refund:
+        for r in refund:
+            send_cmd += f" --refund {r}"
+
+    print(f"Anyone can send tokens to this lock:\n\n{send_cmd}")
     print("")
     print("Only you can receive tokens from this lock: cashu receive <token>")
 
@@ -1498,4 +1540,3 @@ async def lnurl_mint(ctx: Context):
             print("No tokens minted.")
     except Exception as e:
         print(f"Error minting quotes: {e}")
-

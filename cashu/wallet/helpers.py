@@ -1,6 +1,6 @@
 import hashlib
 import os
-from typing import Optional
+from typing import List, Optional
 
 from loguru import logger
 
@@ -8,6 +8,7 @@ from ..core.base import Token, TokenV3, TokenV4
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
+from ..core.secret import Tags
 from ..core.settings import settings
 from ..wallet import migrations
 from ..wallet.crud import get_keysets
@@ -121,6 +122,7 @@ async def send(
     include_fees: bool = False,
     memo: Optional[str] = None,
     force_swap: bool = False,
+    refund_pubkeys: Optional[List[str]] = None,
 ):
     """
     Prints token to send to stdout.
@@ -137,11 +139,16 @@ async def send(
             logger.debug(
                 f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
             )
+            tags = None
+            if refund_pubkeys:
+                tags = Tags()
+                tags["refund"] = refund_pubkeys
             secret_lock = await wallet.create_p2pk_lock(
                 lock.split(":")[1],
                 locktime_seconds=settings.locktime_delta_seconds,
                 sig_all=sigall,
                 n_sigs=1,
+                tags=tags,
             )
             logger.debug(f"Secret lock: {secret_lock}")
         else:
