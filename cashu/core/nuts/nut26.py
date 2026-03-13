@@ -200,7 +200,7 @@ def _decode_transport(data: bytes) -> Transport:
 def _encode_nut10(opt: NUT10Option) -> bytes:
     kind = NUT10_KINDS.get(opt.k)
     if kind is None:
-        raise ValueError(f"Unknown NUT-10 kind: {opt.k}")
+        kind = int(opt.k)
 
     inner = _tlv_entry(0x01, bytes([kind]))
     inner += _tlv_entry(0x02, opt.d.encode())

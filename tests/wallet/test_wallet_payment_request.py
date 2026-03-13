@@ -1,4 +1,4 @@
-from cashu.core.nuts.nut18 import PaymentRequest, Transport
+from cashu.core.nuts.nut18 import NUT10Option, PaymentRequest, Transport
 
 
 def test_nut18_serialization_example():
@@ -51,3 +51,171 @@ def test_nut18_round_trip():
     assert decoded.m == ["https://mint.example.com"]
     assert decoded.d == "Coffee"
     assert decoded.i is None
+
+
+# ─── NUT-26 Tests ────────────────────────────────────────────────────
+def test_nut26_spec_example():
+    """Test the example from the NUT-26 spec."""
+    expected = (
+        "CREQB1QYQQWER9D4HNZV3NQGQQSQQQQQQQQQQRAQPSQQGQQSQQZQG9QQ"
+        "VXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5RQQRJRDANXVET9YP"
+        "CXZ7TDV4H8GXHR3TQ"
+    )
+    req = PaymentRequest(
+        i="demo123",
+        a=1000,
+        u="sat",
+        s=True,
+        m=["https://mint.example.com"],
+        d="Coffee payment",
+    )
+    encoded = req.serialize_bech32m()
+    assert encoded == expected
+
+
+def test_nut26_spec_example_deserialize():
+    """Deserialize the NUT-26 spec example."""
+    token = (
+        "CREQB1QYQQWER9D4HNZV3NQGQQSQQQQQQQQQQRAQPSQQGQQSQQZQG9QQ"
+        "VXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5RQQRJRDANXVET9YP"
+        "CXZ7TDV4H8GXHR3TQ"
+    )
+    pr = PaymentRequest.deserialize(token)
+    assert pr.i == "demo123"
+    assert pr.a == 1000
+    assert pr.u == "sat"
+    assert pr.s is True
+    assert pr.m == ["https://mint.example.com"]
+    assert pr.d == "Coffee payment"
+
+
+def test_nut26_round_trip_simple():
+    req = PaymentRequest(
+        a=100,
+        u="usd",
+        m=["https://mint.example.com"],
+        d="Coffee",
+    )
+    serialized = req.serialize_bech32m()
+    assert serialized.startswith("CREQB1")
+
+    decoded = PaymentRequest.deserialize(serialized)
+    assert decoded.a == 100
+    assert decoded.u == "usd"
+    assert decoded.m == ["https://mint.example.com"]
+    assert decoded.d == "Coffee"
+    assert decoded.i is None
+
+
+def test_nut26_round_trip_sat_unit():
+    """'sat' should encode compactly as 0x00."""
+    req = PaymentRequest(a=21000, u="sat")
+    serialized = req.serialize_bech32m()
+    decoded = PaymentRequest.deserialize(serialized)
+    assert decoded.a == 21000
+    assert decoded.u == "sat"
+
+
+def test_nut26_round_trip_multiple_mints():
+    req = PaymentRequest(
+        a=500,
+        u="sat",
+        m=["https://mint1.example.com", "https://mint2.example.com"],
+    )
+    decoded = PaymentRequest.deserialize(req.serialize_bech32m())
+    assert decoded.m == ["https://mint1.example.com", "https://mint2.example.com"]
+
+
+def test_nut26_round_trip_nut10():
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        nut10=NUT10Option(k="P2PK", d="abcdef1234567890" * 4),
+    )
+    decoded = PaymentRequest.deserialize(req.serialize_bech32m())
+    assert decoded.nut10 is not None
+    assert decoded.nut10.k == "P2PK"
+    assert decoded.nut10.d == "abcdef1234567890" * 4
+
+
+def test_nut26_case_insensitive_decode():
+    """Bech32m decoding must accept both upper and lower case."""
+    req = PaymentRequest(a=1, u="sat")
+    upper = req.serialize_bech32m()  # uppercase by default
+    lower = upper.lower()
+    pr_upper = PaymentRequest.deserialize(upper)
+    pr_lower = PaymentRequest.deserialize(lower)
+    assert pr_upper.a == pr_lower.a == 1
+    assert pr_upper.u == pr_lower.u == "sat"
+
+
+def test_nut26_minimal_empty_request():
+    """A payment request with no fields should round-trip."""
+    req = PaymentRequest()
+    decoded = PaymentRequest.deserialize(req.serialize_bech32m())
+    assert decoded.a is None
+    assert decoded.u is None
+    assert decoded.m is None
+
+
+# ─── NUT-26 Validation Tests ────────────────────────────────────────
+def test_nut26_bech32m_rejects_invalid_checksum():
+    """bech32m_decode must reject strings with an invalid checksum."""
+    from cashu.core.nuts.nut26 import bech32m_decode
+
+    valid = PaymentRequest(a=1, u="sat").serialize_bech32m()
+    # Flip the last data character to corrupt the checksum
+    corrupted = valid[:-1] + ("Q" if valid[-1] != "Q" else "P")
+    hrp, data = bech32m_decode(corrupted)
+    assert hrp is None and data is None
+
+
+def test_nut26_bech32m_rejects_mixed_case():
+    """bech32m_decode must reject mixed-case input."""
+    from cashu.core.nuts.nut26 import bech32m_decode
+
+    # "Creqb1..." is mixed case — must be rejected
+    valid_upper = PaymentRequest(a=1, u="sat").serialize_bech32m()
+    mixed = "c" + valid_upper[1:]  # lowercase first char, rest uppercase
+    hrp, data = bech32m_decode(mixed)
+    assert hrp is None and data is None
+
+
+def test_nut26_deserialize_rejects_wrong_hrp():
+    """deserialize must raise ValueError for non-creqb HRP."""
+    import pytest
+
+    with pytest.raises(ValueError):
+        PaymentRequest.deserialize("creqx1qqqqqqqq")
+
+
+def test_nut26_round_trip_id_only():
+    """Minimal request with only an id field."""
+    pr = PaymentRequest(i="demo123")
+    decoded = PaymentRequest.deserialize(pr.serialize_bech32m())
+    assert decoded.i == "demo123"
+    assert decoded.a is None
+
+
+def test_nut26_spec_example_full_round_trip():
+    """Full spec example: encode, verify exact string, decode lowercase."""
+    expected = (
+        "CREQB1QYQQWER9D4HNZV3NQGQQSQQQQQQQQQQRAQPSQQGQQSQQZQG9QQ"
+        "VXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5RQQRJRDANXVET9YP"
+        "CXZ7TDV4H8GXHR3TQ"
+    )
+    pr = PaymentRequest(
+        i="demo123", a=1000, u="sat", s=True,
+        m=["https://mint.example.com"], d="Coffee payment",
+    )
+    encoded = pr.serialize_bech32m()
+    assert encoded.startswith("CREQB1")
+    assert encoded == expected
+    # lowercase must also decode identically
+    decoded = PaymentRequest.deserialize(encoded.lower())
+    assert decoded.i == pr.i
+    assert decoded.a == pr.a
+    assert decoded.u == pr.u
+    assert decoded.s == pr.s
+    assert decoded.m == pr.m
+    assert decoded.d == pr.d
