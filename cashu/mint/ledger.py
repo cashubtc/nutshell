@@ -849,6 +849,14 @@ class Ledger(
         melt_quote.state = MeltQuoteState.paid
         melt_quote.paid_time = int(time.time())
 
+        method = Method[melt_quote.method]
+        unit = Unit[melt_quote.unit]
+
+        status: PaymentStatus = await self.backends[method][
+            unit
+        ].get_invoice_status(mint_quote.checking_id)
+        melt_quote.payment_preimage = status.preimage
+
         mint_quote.state = MintQuoteState.paid
         mint_quote.paid_time = melt_quote.paid_time
 
