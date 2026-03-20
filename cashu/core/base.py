@@ -24,6 +24,7 @@ from .crypto.keys import (
     derive_keys_deprecated_pre_0_15,
     derive_keyset_id,
     derive_keyset_id_deprecated,
+    derive_keyset_id_v2,
     derive_pubkeys,
 )
 from .crypto.secp import PrivateKey, PublicKey
@@ -465,7 +466,7 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=mint_quote_resp.unit 
+            unit=mint_quote_resp.unit
             or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=mint_quote_resp.amount
             or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
@@ -554,11 +555,11 @@ class Unit(Enum):
         elif self == Unit.msat:
             return f"{amount} msat"
         elif self == Unit.usd:
-            return f"${amount/100:.2f} USD"
+            return f"${amount / 100:.2f} USD"
         elif self == Unit.eur:
-            return f"{amount/100:.2f} EUR"
+            return f"{amount / 100:.2f} EUR"
         elif self == Unit.btc:
-            return f"{amount/1e8:.8f} BTC"
+            return f"{amount / 1e8:.8f} BTC"
         elif self == Unit.auth:
             return f"{amount} AUTH"
         else:
@@ -619,18 +620,18 @@ class Amount:
     def sat_to_btc(self) -> str:
         if self.unit != Unit.sat:
             raise Exception("Amount must be in satoshis")
-        return f"{self.amount/1e8:.8f}"
+        return f"{self.amount / 1e8:.8f}"
 
     def msat_to_btc(self) -> str:
         if self.unit != Unit.msat:
             raise Exception("Amount must be in msat")
         sat_amount = Amount(Unit.msat, self.amount).to(Unit.sat, round="up")
-        return f"{sat_amount.amount/1e8:.8f}"
+        return f"{sat_amount.amount / 1e8:.8f}"
 
     def cents_to_usd(self) -> str:
         if self.unit != Unit.usd and self.unit != Unit.eur:
             raise Exception("Amount must be in cents")
-        return f"{self.amount/100:.2f}"
+        return f"{self.amount / 100:.2f}"
 
     def str(self) -> str:
         return self.unit.str(self.amount)
@@ -800,6 +801,7 @@ class MintKeyset:
     version: Optional[str] = None
     amounts: List[int]
     balance: int
+    final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -821,6 +823,7 @@ class MintKeyset:
         id: str = "",
         balance: int = 0,
         fees_paid: int = 0,
+        final_expiry: Optional[int] = None,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -856,6 +859,7 @@ class MintKeyset:
         self.balance = balance
         self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
+        self.final_expiry = final_expiry
 
         if self.input_fee_ppk < 0:
             raise Exception("Input fee must be non-negative.")
@@ -910,14 +914,14 @@ class MintKeyset:
             amounts=json.loads(row["amounts"]),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
+            final_expiry=row["final_expiry"],
         )
 
     @property
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
         return {
-            int(amount): key.format().hex()
-            for amount, key in self.public_keys.items()
+            int(amount): key.format().hex() for amount, key in self.public_keys.items()
         }
 
     def generate_keys(self):
@@ -953,12 +957,38 @@ class MintKeyset:
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+        elif self.version_tuple < (0, 20):
+            self.private_keys = derive_keys(
+                self.seed, self.derivation_path, self.amounts
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
+
+            if id_in_db:
+                # If loading from DB, preserve existing ID
+                self.id = id_in_db
+            else:
+                assert self.public_keys is not None
+                self.id = derive_keyset_id(self.public_keys)
+                logger.info(f"Generated keyset v1 ID: {self.id}")
         else:
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
+
+            # KEYSETS V2: Use new keyset ID derivation
+            if id_in_db:
+                # If loading from DB, preserve existing ID
+                self.id = id_in_db
+            else:
+                assert self.public_keys is not None
+                self.id = derive_keyset_id_v2(
+                    self.public_keys,
+                    self.unit.name,
+                    self.final_expiry,
+                    self.input_fee_ppk,
+                )
+                logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
 # ------- TOKEN -------

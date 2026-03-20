@@ -15,7 +15,9 @@ from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
-pytestmark = pytest.mark.skip(reason="Wallet v0 / deprecated mint API removed in https://github.com/cashubtc/nutshell/pull/814")
+pytestmark = pytest.mark.skip(
+    reason="Wallet v0 / deprecated mint API removed in https://github.com/cashubtc/nutshell/pull/814"
+)
 
 BASE_URL = "http://localhost:3337"
 
@@ -60,7 +62,9 @@ async def test_api_keysets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/keys/009a1f293253e41e")
+    response = httpx.get(
+        f"{BASE_URL}/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     assert response.json() == {
@@ -148,7 +152,10 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["promises"]) == 2
     assert result["promises"][0]["amount"] == 32
     assert result["promises"][1]["amount"] == 32
-    assert result["promises"][0]["id"] == "009a1f293253e41e"
+    assert (
+        result["promises"][0]["id"]
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert result["promises"][0]["dleq"]
     assert "e" in result["promises"][0]["dleq"]
     assert "s" in result["promises"][0]["dleq"]

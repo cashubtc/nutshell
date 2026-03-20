@@ -39,9 +39,9 @@ settings.fakewallet_delay_incoming_payment = 1
 settings.fakewallet_stochastic_invoice = False
 settings.lightning_fee_percent = 2.0
 settings.lightning_reserve_fee_min = 2000  # msat
-assert (
-    settings.mint_test_database != settings.mint_database
-), "Test database is the same as the main database"
+assert settings.mint_test_database != settings.mint_database, (
+    "Test database is the same as the main database"
+)
 settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = ["m/0'/2'/0'"]  # USD
@@ -116,7 +116,7 @@ async def ledger():
     }
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
-        seed=settings.mint_private_key,
+        seed=settings.mint_private_key or "",
         derivation_path=settings.mint_derivation_path,
         backends=backends,
         crud=LedgerCrudSqlite(),
