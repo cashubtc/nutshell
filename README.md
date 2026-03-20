@@ -84,10 +84,10 @@ curl https://pyenv.run | bash
 pyenv init
 
 # restart your shell (or source your .rc file), then install python:
-pyenv install 3.10.4
+pyenv install 3.10
 
 # install poetry
-curl -sSL https://install.python-poetry.org | python3 - --version 1.8.5
+curl -sSL https://install.python-poetry.org | python3 - --version 2.3.2
 echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
 ```
@@ -99,7 +99,7 @@ source ~/.bashrc
 git clone https://github.com/cashubtc/nutshell.git nutshell
 cd nutshell
 git checkout <latest_tag>
-pyenv local 3.10.4
+pyenv local 3.10
 poetry install
 ```
 
@@ -201,7 +201,7 @@ This command runs the mint on your local computer. Skip this step if you want to
 Run the mint using the pre-built Docker image. This method sets environment variables directly and works reliably regardless of local `.env` files:
 
 ```bash
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.19.2 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.20.0 poetry run mint
 ```
 
 ## From this repository
