@@ -458,9 +458,6 @@ class MintQuote(LedgerEvent):
 
     @classmethod
     def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
-        # BACKWARDS COMPATIBILITY: default to unpaid if state missing
-        resp_state = mint_quote_resp.state or MintQuoteState.unpaid
-
         return cls(
             quote=mint_quote_resp.quote,
             method="bolt11",
@@ -470,7 +467,7 @@ class MintQuote(LedgerEvent):
             or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=mint_quote_resp.amount
             or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            state=MintQuoteState(resp_state),
+            state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
             created_time=int(time.time()),
