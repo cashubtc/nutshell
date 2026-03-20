@@ -313,6 +313,17 @@ def get_melt_quote(ctx: Context, quote_id: str):
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
 
+@get.command("quote-ttl", help="Get the expiry timestamp for a quote by id.")
+@click.argument("quote_id")
+@click.pass_context
+def get_quote_ttl(ctx: Context, quote_id: str):
+    stub = ctx.obj['STUB']
+    try:
+        response = stub.GetQuoteTtl(management_pb2.GetQuoteTtlRequest(quote_id=quote_id))
+        click.echo(f"Quote expiry: {response.expiry}")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
 
 @cli.command("next-keyset", help="Rotate to the next keyset for the specified unit.")
 @click.argument("unit")

@@ -156,6 +156,42 @@ async def test_get_melt_quote(cli_prefix):
     assert result.exception is None
     assert "melt quote:" in result.output
 
+@pytest.mark.asyncio
+async def test_get_quote_ttl_mint_quote(cli_prefix):
+    """Mint quotes do not persist expiry, so GetQuoteTtl should return NOT_FOUND."""
+    wallet = await init_wallet()
+    mint_quote = await wallet.request_mint(100)
+    await asyncio.sleep(1)
+    runner = CliRunner()
+    # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
+    result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "--", mint_quote.quote])
+    assert result.exception is None
+    # Mint quotes don't store expiry; the handler returns NOT_FOUND
+    assert "Error:" in result.output
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_deprecated_api_only,
+    reason=("Deprecated API"),
+)
+async def test_get_quote_ttl_melt_quote(cli_prefix):
+    """Melt quotes persist expiry; GetQuoteTtl should return the expiry timestamp."""
+    wallet = await init_wallet()
+    melt_quote = await wallet.melt_quote("lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj")
+    await asyncio.sleep(1)
+    runner = CliRunner()
+    # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
+    result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "--", melt_quote.quote])
+    assert result.exception is None
+    assert "Quote expiry:" in result.output
+
+def test_get_quote_ttl_invalid_id(cli_prefix):
+    """A non-existent quote ID should result in a NOT_FOUND error from the handler."""
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "nonexistent-quote-id-00000"])
+    assert result.exception is None
+    assert "Error:" in result.output
+
 '''
 @pytest.mark.asyncio
 async def test_rotate_next_keyset(cli_prefix):
