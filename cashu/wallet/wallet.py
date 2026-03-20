@@ -366,18 +366,14 @@ class Wallet(
 
         await self.inactivate_base64_keysets(force_old_keysets)
 
-        # RE-FETCH after all DB updates so we see the final active 
-        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+        # RE-FETCH after all DB updates using the centralized method
+        self.keysets = {}
+        await self.load_keysets_from_db()
 
-        keysets_active_unit = [
-            k
-            for k in keysets_in_db
-            if k.unit == self.unit and k.active and k.deleted_at is None
-        ]
-        self.keysets = {k.id: k for k in keysets_active_unit}
-        logger.trace(
-            f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
-        )
+        # for minting/swapping, only keep active keysets,
+        self.keysets = {
+            k_id: k for k_id, k in self.keysets.items() if k.active
+        }
 
     async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
         """Activates a keyset by setting self.keyset_id. Either activates a specific keyset
@@ -461,7 +457,9 @@ class Wallet(
     async def load_keysets_from_db(
         self, url: Union[str, None] = "", unit: Union[str, None] = ""
     ):
-        """Load all keysets of the selected mint and unit from the database into self.keysets."""
+        """Load all keysets of the selected mint and unit from the database into self.keysets.
+        Excludes keysets that have been marked as deleted (no longer reported by the mint).
+        """
         # so that the caller can set unit = None, otherwise use defaults
         if unit == "":
             unit = self.unit.name
@@ -469,7 +467,8 @@ class Wallet(
             url = self.url
         keysets = await get_keysets(mint_url=url, unit=unit, db=self.db)
         for keyset in keysets:
-            self.keysets[keyset.id] = keyset
+            if keyset.deleted_at is None:
+                self.keysets[keyset.id] = keyset
         logger.trace(
             f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
         )
