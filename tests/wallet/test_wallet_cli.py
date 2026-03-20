@@ -585,3 +585,103 @@ def test_send_with_lock(mint, cli_prefix):
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
+
+
+def test_lock_p2pk(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "lock", "p2pk"],
+    )
+    assert result.exception is None
+    print("test_lock_p2pk", result.output)
+    assert "P2PK:" in result.output
+    assert "Pay to public key (P2PK)" in result.output
+    assert result.exit_code == 0
+
+
+def test_lock_p2pk_with_timelock(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "lock", "p2pk", "--timelock", "3600"],
+    )
+    assert result.exception is None
+    print("test_lock_p2pk_with_timelock", result.output)
+    assert "P2PK:" in result.output
+    assert "Timelock: 3600 seconds" in result.output
+    assert result.exit_code == 0
+
+
+def test_lock_p2pk_with_refund(cli_prefix):
+    fake_refund_pubkey = "02" + "ab" * 32
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "lock", "p2pk", "--refund", fake_refund_pubkey],
+    )
+    assert result.exception is None
+    print("test_lock_p2pk_with_refund", result.output)
+    assert "P2PK:" in result.output
+    assert f"Refund pubkey: {fake_refund_pubkey}" in result.output
+    assert f"--refund {fake_refund_pubkey}" in result.output
+    assert result.exit_code == 0
+
+
+def test_lock_p2pk_with_timelock_and_refund(cli_prefix):
+    fake_refund_pubkey = "02" + "cd" * 32
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            *cli_prefix,
+            "lock",
+            "p2pk",
+            "--timelock",
+            "7200",
+            "--refund",
+            fake_refund_pubkey,
+        ],
+    )
+    assert result.exception is None
+    print("test_lock_p2pk_with_timelock_and_refund", result.output)
+    assert "P2PK:" in result.output
+    assert "Timelock: 7200 seconds" in result.output
+    assert f"Refund pubkey: {fake_refund_pubkey}" in result.output
+    assert result.exit_code == 0
+
+
+def test_send_with_lock_and_refund(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    lock = None
+    for word in result.output.split(" "):
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+
+    fake_refund_pubkey = "02" + "ef" * 32
+    result = runner.invoke(
+        cli,
+        [
+            *cli_prefix,
+            "send",
+            "10",
+            "--lock",
+            lock,
+            "--refund",
+            fake_refund_pubkey,
+        ],
+    )
+    assert result.exception is None
+    print("test_send_with_lock_and_refund", result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    assert fake_refund_pubkey in token.token[0].proofs[0].secret

@@ -151,9 +151,10 @@ class Database(Compat):
                 try:
                     cursor = dbapi_connection.cursor()
                     cursor.execute("PRAGMA foreign_keys=ON;")
+                    cursor.execute("PRAGMA journal_mode=WAL;")
                     cursor.close()
                 except Exception as e:
-                    logger.warning(f"Could not enable SQLite PRAGMA foreign_keys: {e}")
+                    logger.warning(f"Could not enable SQLite PRAGMAs: {e}")
 
         self.async_session = sessionmaker(
             self.engine,  # type: ignore
