@@ -508,3 +508,35 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     # Ensure it's recent (within last minute)
     assert quote.paid_time > int(time.time()) - 60
 
+
+@pytest.mark.asyncio
+async def test_db_lock_parameters_single(ledger: Ledger):
+    """Test that parameterized row locks work for a single parameter."""
+    try:
+        async with ledger.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": "test_quote_id"},
+        ) as conn:
+            assert conn is not None
+    except Exception as e:
+        pytest.fail(f"Parameterized lock execution failed: {e}")
+
+
+@pytest.mark.asyncio
+async def test_db_lock_parameters_multiple_in_clause(ledger: Ledger):
+    """Test that parameterized row locks work for an IN clause with multiple parameters."""
+    Ys = ["y1", "y2", "y3"]
+    lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
+    ys_list = ", ".join(f":y{i}" for i in range(len(Ys)))
+    
+    try:
+        async with ledger.db.get_connection(
+            lock_table="proofs_pending",
+            lock_select_statement=f"y IN ({ys_list})",
+            lock_parameters=lock_parameters,
+        ) as conn:
+            assert conn is not None
+    except Exception as e:
+        pytest.fail(f"Parameterized IN clause lock execution failed: {e}")
+
