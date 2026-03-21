@@ -1,6 +1,6 @@
 import pytest
 
-from cashu.core.base import TokenV3, TokenV4, Unit
+from cashu.core.base import AuthProof, TokenV3, TokenV4, Unit
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.split import amount_split
@@ -312,3 +312,54 @@ def test_secret_set_dict():
         ]
         == "test"
     )
+
+
+def test_authproof_serialize_roundtrip():
+    """Test that AuthProof serialization round-trips correctly."""
+    auth_proof = AuthProof(
+        id="000e479673849bf6",
+        secret="secret123",
+        C="024ec000e31e230e4c59760def29601557c0b1650617dc8f38d3b2cfd21ad0351b",
+    )
+    serialized = auth_proof.to_base64()
+    assert serialized.startswith("authA")
+    # to_base64 should strip padding
+    assert not serialized.endswith("=")
+    deserialized = AuthProof.from_base64(serialized)
+    assert deserialized.id == auth_proof.id
+    assert deserialized.secret == auth_proof.secret
+    assert deserialized.C == auth_proof.C
+
+
+def test_authproof_from_base64_with_padding():
+    """Mints MUST accept padded base64url (NUT-22)."""
+    auth_proof = AuthProof(
+        id="000e479673849bf6",
+        secret="secret123",
+        C="024ec000e31e230e4c59760def29601557c0b1650617dc8f38d3b2cfd21ad0351b",
+    )
+    serialized = auth_proof.to_base64()
+    # Manually add padding to simulate a padded token
+    base64_part = serialized[len(AuthProof.prefix) :]
+    padding = "=" * (-len(base64_part) % 4)
+    padded_serialized = AuthProof.prefix + base64_part + padding
+    deserialized = AuthProof.from_base64(padded_serialized)
+    assert deserialized.id == auth_proof.id
+    assert deserialized.secret == auth_proof.secret
+    assert deserialized.C == auth_proof.C
+
+
+def test_authproof_from_base64_without_padding():
+    """Mints MUST accept unpadded base64url (NUT-22)."""
+    auth_proof = AuthProof(
+        id="000e479673849bf6",
+        secret="secret123",
+        C="024ec000e31e230e4c59760def29601557c0b1650617dc8f38d3b2cfd21ad0351b",
+    )
+    serialized = auth_proof.to_base64()
+    # Ensure no padding
+    unpadded = serialized.rstrip("=")
+    deserialized = AuthProof.from_base64(unpadded)
+    assert deserialized.id == auth_proof.id
+    assert deserialized.secret == auth_proof.secret
+    assert deserialized.C == auth_proof.C
