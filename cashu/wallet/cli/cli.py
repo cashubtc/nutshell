@@ -32,7 +32,7 @@ from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
-from ...core.nuts.nut18 import PaymentRequest
+from ...core.nuts.nut18 import deserialize as deserialize_payment_request
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -274,7 +274,7 @@ async def pay(
     # NUT-18 / NUT-26 Payment Request support
     if invoice.startswith("creqA") or invoice.lower().startswith("creqb1"):
         try:
-            pr = PaymentRequest.deserialize(invoice)
+            pr = deserialize_payment_request(invoice)
         except Exception as e:
             print(f"Error decoding payment request: {e}")
             return
@@ -878,7 +878,7 @@ def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
         if token.startswith("creqA") or token.lower().startswith("creqb1"):
-            pr = PaymentRequest.deserialize(token)
+            pr = deserialize_payment_request(token)
             print(
                 json.dumps(
                     pr.model_dump(exclude_none=True),
