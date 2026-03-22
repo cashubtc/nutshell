@@ -635,12 +635,6 @@ class LedgerAPI(SupportsAuth):
         response_dict = resp.json()
         returnObj = PostRestoreResponse.model_validate(response_dict)
 
-        # BEGIN backwards compatibility < 0.15.1
-        # if the mint returns promises, duplicate into signatures
-        if returnObj.promises:
-            returnObj.signatures = returnObj.promises
-        # END backwards compatibility < 0.15.1
-
         return returnObj.outputs, returnObj.signatures
 
     @async_set_httpx_client
