@@ -287,8 +287,7 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId",
-            payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump(),
+            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump()
         ).model_dump(),
     )
 
@@ -484,10 +483,9 @@ async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Led
 @pytest.mark.asyncio
 async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     import time
-
     # Create a mint quote
     mint_quote = await wallet.request_mint(128)
-
+    
     # Check that paid_time is None initially
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
@@ -497,10 +495,9 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
 
     # Simulate payment
     await pay_if_regtest(mint_quote.request)
-
+    
     # Trigger check at mint (this updates the state in DB)
     _ = await ledger.get_mint_quote(mint_quote.quote)
-
     # Check that paid_time is now set
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
@@ -510,3 +507,4 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     assert quote.paid_time >= quote.created_time
     # Ensure it's recent (within last minute)
     assert quote.paid_time > int(time.time()) - 60
+
