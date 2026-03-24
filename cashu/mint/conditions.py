@@ -118,6 +118,9 @@ class LedgerSpendingConditions:
         signatures: List[str],
         n_sigs_required: int,
     ) -> bool:
+        pubkeys = [p.lower() for p in pubkeys]
+        signatures = [s.lower() for s in signatures]
+
         if len(set(pubkeys)) != len(pubkeys):
             raise TransactionError("pubkeys must be unique.")
         logger.trace(f"pubkeys: {pubkeys}")
@@ -331,6 +334,8 @@ class LedgerSpendingConditions:
             [p.secret for p in proofs] + [o.B_ for o in outputs]
         )
 
+        pubkeys = [p.lower() for p in pubkeys]
+
         # validation
         if len(set(pubkeys)) != len(pubkeys):
             raise TransactionError("pubkeys must be unique.")
@@ -344,6 +349,7 @@ class LedgerSpendingConditions:
         if not first_proof.witness:
             raise TransactionError("no witness in proof.")
         signatures = P2PKWitness.from_witness(first_proof.witness).signatures
+        signatures = [s.lower() for s in signatures]
 
         # verify that signatures are present
         if not signatures:
