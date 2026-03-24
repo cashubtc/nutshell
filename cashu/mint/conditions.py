@@ -118,6 +118,9 @@ class LedgerSpendingConditions:
         signatures: List[str],
         n_sigs_required: int,
     ) -> bool:
+        pubkeys = [p.lower() for p in pubkeys]
+        signatures = [s.lower() for s in signatures]
+
         if len(set(pubkeys)) != len(pubkeys):
             raise TransactionError("pubkeys must be unique.")
         logger.trace(f"pubkeys: {pubkeys}")

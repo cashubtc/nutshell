@@ -214,11 +214,13 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # attach unlock signatures to proofs
         assert len(proofs) == len(signatures), "wrong number of signatures"
         for p, s in zip(proofs, signatures):
+            s_lower = s.lower()
             if Secret.deserialize(p.secret).kind == SecretKind.P2PK.value:
                 # if there are already signatures, append
                 if p.witness and P2PKWitness.from_witness(p.witness).signatures:
                     proof_signatures = P2PKWitness.from_witness(p.witness).signatures
-                    if proof_signatures and s not in proof_signatures:
+                    proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                    if proof_signatures and s_lower not in proof_signatures_lower:
                         p.witness = P2PKWitness(
                             signatures=proof_signatures + [s]
                         ).model_dump_json()
@@ -229,10 +231,12 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 if p.witness and HTLCWitness.from_witness(p.witness).signatures:
                     witness = HTLCWitness.from_witness(p.witness)
                     proof_signatures = witness.signatures
-                    if proof_signatures and s not in proof_signatures:
-                        p.witness = HTLCWitness(
-                            preimage=witness.preimage, signatures=proof_signatures + [s]
-                        ).model_dump_json()
+                    if proof_signatures:
+                        proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                        if s_lower not in proof_signatures_lower:
+                            p.witness = HTLCWitness(
+                                preimage=witness.preimage, signatures=proof_signatures + [s]
+                            ).model_dump_json()
                 else:
                     if p.witness:
                         witness = HTLCWitness.from_witness(p.witness)
@@ -250,7 +254,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         """This method assumes that secrets are all P2PK!"""
         # filter proofs that require our pubkey
         assert self.private_key.public_key
-        our_pubkey = self.private_key.public_key.format().hex()
+        our_pubkey = self.private_key.public_key.format().hex().lower()
         our_pubkey_proofs = []
         for p in proofs:
             secret = P2PKSecret.deserialize(p.secret)
@@ -259,7 +263,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 + secret.tags.get_tag_all("pubkeys")
                 + secret.tags.get_tag_all("refund")
             )
-            if our_pubkey in pubkeys:
+            pubkeys_lower = [pk.lower() for pk in pubkeys]
+            if our_pubkey in pubkeys_lower:
                 # we are one of the signers
                 our_pubkey_proofs.append(p)
         logger.debug(
