@@ -28,7 +28,7 @@ def assert_amt(proofs: List[Proof], expected: int):
 
 @pytest.mark.asyncio
 async def test_pubkeys(ledger: Ledger):
-    assert ledger.keyset.public_keys
+    assert ledger.keyset.public_keys, "Ledger keyset public keys should not be empty"
     assert (
         ledger.keyset.public_keys[1].format().hex()
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
@@ -41,7 +41,7 @@ async def test_pubkeys(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_privatekeys(ledger: Ledger):
-    assert ledger.keyset.private_keys
+    assert ledger.keyset.private_keys, "Ledger keyset private keys should not be empty"
     assert (
         ledger.keyset.private_keys[1].to_hex()
         == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
@@ -54,8 +54,8 @@ async def test_privatekeys(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_keysets(ledger: Ledger):
-    assert len(ledger.keysets)
-    assert len(list(ledger.keysets.keys()))
+    assert len(ledger.keysets) > 0, "Ledger should have at least one keyset"
+    assert len(list(ledger.keysets.keys())) > 0, "Ledger keyset IDs should not be empty"
     assert ledger.keyset.id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 
 
@@ -78,7 +78,7 @@ async def test_mint(ledger: Ledger):
         )
     ]
     promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
-    assert len(promises)
+    assert len(promises) > 0, "Mint should return at least one promise"
     assert promises[0].amount == 8
     assert (
         promises[0].C_
@@ -222,9 +222,8 @@ async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledg
 async def test_get_balance(ledger: Ledger):
     unit = Unit["sat"]
     balance, fees_paid = await ledger.get_balance(unit)
-    assert balance == 0
-    assert fees_paid == 0
-
+    assert balance == 0, f"Expected initial balance 0, got {balance}"
+    assert fees_paid == 0, f"Expected initial fees 0, got {fees_paid}"
 
 @pytest.mark.asyncio
 async def test_maximum_balance(ledger: Ledger):
@@ -345,13 +344,13 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
         keyset=ledger.keyset,
     )
 
-    assert promises == []
+    assert promises == [], f"Expected no promises for zero fee, got {len(promises)}"
 
     remaining_unsigned = await ledger.crud.get_blinded_messages_melt_id(
         db=ledger.db, melt_id=melt_id
     )
     # With zero fee nothing is signed or deleted; blanks stay pending.
-    assert len(remaining_unsigned) == n_blank
+    assert len(remaining_unsigned) == n_blank, "Unsigned blanks should remain pending when no fee is paid"
 
     async with ledger.db.connect() as conn:
         rows = await conn.fetchall(

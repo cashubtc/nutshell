@@ -20,28 +20,20 @@ def test_hash_to_curve():
             "0000000000000000000000000000000000000000000000000000000000000000"
         )
     )
-    assert (
-        result.format().hex()
-        == "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"
-    )
+    assert result.format().hex() == "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"
     result = hash_to_curve(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
         )
     )
-    assert (
-        result.format().hex()
-        == "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"
-    )
+    assert result.format().hex() == "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"
     result = hash_to_curve(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000002"
         )
     )
-    assert (
-        result.format().hex()
-        == "026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f"
-    )
+    assert result.format().hex() == "026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f"
+    
 
 
 def test_step1():
@@ -59,7 +51,7 @@ def test_step1():
         B_.format().hex()
         == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
     )
-    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001"
+    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001", "Blinding factor mismatch in Step 1"
 
 
 def test_step2():
@@ -237,8 +229,7 @@ def test_dleq_alice_verify_dleq():
         )
     )
 
-    assert alice_verify_dleq(B_, C_, e, s, A)
-
+    assert alice_verify_dleq(B_, C_, e, s, A), "Alice failed to verify Dleq proof"
 
 def test_dleq_alice_direct_verify_dleq():
     # ----- test again with B_ and C_ as per step1 and step2
@@ -283,11 +274,10 @@ def test_dleq_carol_verify_from_bob():
     )
     B_, _ = step1_alice(secret_msg, r)
     C_, e, s = step2_bob(B_, a)
-    assert alice_verify_dleq(B_, C_, e, s, A)
+    assert alice_verify_dleq(B_, C_, e, s, A), "Alice verification failed in Carol's test flow"
     C = step3_alice(C_, r, A)
     # carol does not know B_ and C_, but she receives C and r from Alice
-    assert carol_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A)
-
+    assert carol_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A), "Carol failed to verify Dleq proof from Bob"
 
 def test_dleq_carol_on_proof():
     A = PublicKey(
@@ -308,7 +298,7 @@ def test_dleq_carol_on_proof():
             },
         }
     )
-    assert proof.dleq
+    assert proof.dleq, "Proof should contain Dleq data"
 
     assert carol_verify_dleq(
         secret_msg=proof.secret,
