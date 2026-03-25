@@ -51,7 +51,7 @@ async def test_balance_update_on_mint(wallet: Wallet, ledger: Ledger):
         Unit.sat, ledger.db
     )
     assert balance_after == balance_before + 64
-    assert fees_paid_after, "Watchdog failed to mark fees as paid after processing"
+    assert fees_paid, "Watchdog: Mint fees were not correctly settled"
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")

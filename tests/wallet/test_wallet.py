@@ -204,7 +204,7 @@ async def test_mint_amounts(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(sum(amts))
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(amount=sum(amts), split=amts, quote_id=mint_quote.quote)
-    assert wallet1.balance == 27
+    assert wallet1.balance == 27, f"Wallet balance error: expected 27, got {wallet1.balance}"
     assert wallet1.proof_amounts == amts
 
 
@@ -493,8 +493,7 @@ async def test_invalidate_all_proofs(wallet1: Wallet):
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     await wallet1.invalidate(wallet1.proofs)
-    assert wallet1.balance == 0
-
+    assert wallet1.balance == 0, f"Wallet balance should be empty, but found {wallet1.balance}"
 
 @pytest.mark.asyncio
 async def test_invalidate_unspent_proofs_with_checking(wallet1: Wallet):

@@ -245,7 +245,7 @@ async def test_mint_quote(ledger: Ledger):
     # deserialize the response
     resp_quote = PostMintQuoteResponse(**result2)
     assert resp_quote.quote == result["quote"]
-    assert resp_quote.state == MintQuoteState.paid.value
+    assert resp_quote.state == MintQuoteState.paid.value, "Mint quote state should be PAID"
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
@@ -467,7 +467,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice, no preimage, no change
     assert resp_quote.payment_preimage is None
     assert resp_quote.change == []
-    assert resp_quote.state == MeltQuoteState.paid.value
+    assert resp_quote.state == MeltQuoteState.paid.value, "Melt quote state should be PAID after payment"
     assert resp_quote.amount == 64
     assert resp_quote.unit == "sat"
     assert resp_quote.request == invoice_payment_request

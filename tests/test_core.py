@@ -325,8 +325,8 @@ def test_authproof_serialize_roundtrip():
     assert not serialized.endswith("=")
     deserialized = AuthProof.from_base64(serialized)
     assert deserialized.id == auth_proof.id, "AuthProof ID mismatch after base64 roundtrip"
-    assert deserialized.secret == auth_proof.secret
-    assert deserialized.C == auth_proof.C
+    assert deserialized.secret == auth_proof.secret, "Deserialization failed: Secret mismatch"
+    assert deserialized.C == auth_proof.C, "Deserialization failed: Public key C mismatch"
 
 
 def test_authproof_from_base64_with_padding():
