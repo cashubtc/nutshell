@@ -2,28 +2,23 @@ name: shadow_tests
 
 on:
   push:
-    branches: [ main, dev, security/harden-test-assertions ]
+    branches: [ security/harden-test-assertions ]
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # Usamos 3.12 y 3.13 que es lo que tienes en Termux
-        python-version: ["3.12", "3.13"]
-
     steps:
       - name: 📂 Checkout Código
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python ${{ matrix.python-version }}
+      - name: 🐍 Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11" # Forzamos 3.11 por estabilidad de grpcio/secp256k1
           cache: 'pip'
 
-      - name: 📦 Instalar Dependencias de Sistema
+      - name: 📦 Instalar Dependencias de Sistema (Hardened)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -32,19 +27,21 @@ jobs:
             libsecp256k1-dev \
             pkg-config \
             libffi-dev \
-            libssl-dev
+            libssl-dev \
+            g++ \
+            cmake
 
-      - name: 📦 Instalar Dependencias de Python
+      - name: 📦 Instalar Python Deps
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # Instalamos los requisitos del archivo que me pasaste
+          # Instalamos primero lo más difícil de compilar por separado
+          pip install grpcio==1.69.0 coincurve==20.0.0
+          # Ahora el resto
           pip install -r requirements.txt
-          # Instalamos herramientas de test
           pip install pytest pytest-asyncio
-          # Instalamos nutshell en modo editable
           pip install -e .
 
-      - name: 🧪 Ejecutar Suite de Tests (ShadowRoot Mode)
+      - name: 🧪 Ejecutar Tests
         run: |
           python -m pytest -v
 
