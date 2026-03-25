@@ -56,12 +56,12 @@ class RedisCache:
                         except (json.JSONDecodeError, TypeError) as e:
                             logger.warning(f"Invalid JSON in cache, deleting entry: {e}")
                             await self.redis.delete(key)
-                            return None
-                        if not isinstance(data, dict):
-                            logger.warning(f"Unexpected cache data type: {type(data).__name__}, deleting entry")
-                            await self.redis.delete(key)
-                            return None
-                        return data
+                        else:
+                            if not isinstance(data, dict):
+                                logger.warning(f"Unexpected cache data type: {type(data).__name__}, deleting entry")
+                                await self.redis.delete(key)
+                            else:
+                                return data
                 result = await func(request, payload)
                 await self.redis.set(name=key, value=result.model_dump_json(), ex=settings.mint_redis_cache_ttl)
                 return result
