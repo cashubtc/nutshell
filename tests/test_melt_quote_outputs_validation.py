@@ -55,19 +55,19 @@ class TestOutputsValidation:
         quote = MeltQuote.from_row(row)
         assert quote.outputs is None
 
-    def test_invalid_json_outputs_rejected(self):
+    def test_invalid_json_outputs_sets_none(self):
         from cashu.core.base import MeltQuote
 
         row = make_melt_quote_row(outputs="not valid json{{{")
-        with pytest.raises(ValueError, match="Corrupted outputs data"):
-            MeltQuote.from_row(row)
+        quote = MeltQuote.from_row(row)
+        assert quote.outputs is None
 
-    def test_non_list_outputs_rejected(self):
+    def test_non_list_outputs_sets_none(self):
         from cashu.core.base import MeltQuote
 
         row = make_melt_quote_row(outputs=json.dumps({"malicious": True}))
-        with pytest.raises(ValueError, match="outputs must be a list"):
-            MeltQuote.from_row(row)
+        quote = MeltQuote.from_row(row)
+        assert quote.outputs is None
 
     def test_empty_list_outputs_accepted(self):
         from cashu.core.base import MeltQuote
