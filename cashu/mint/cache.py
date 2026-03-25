@@ -45,7 +45,7 @@ class RedisCache:
             async def wrapper(request: Request, payload: BaseModel):
                 logger.trace(f"cache wrapper on route {func.__name__}")
                 key = request.url.path + payload.model_dump_json()
-                logger.trace(f"KEY: {key}")
+                logger.trace(f"Cache lookup for route: {request.url.path}")
                 # Check if we have a value under this key
                 if await self.redis.exists(key):
                     logger.trace("Returning a cached response...")
@@ -54,17 +54,14 @@ class RedisCache:
                         try:
                             data = json.loads(resp)
                         except (json.JSONDecodeError, TypeError) as e:
-                            logger.error(f"Invalid JSON in cache for key {key}: {e}")
-                            # Invalidate corrupted cache entry
+                            logger.warning(f"Invalid JSON in cache, deleting entry: {e}")
                             await self.redis.delete(key)
-                            raise ValueError(f"Corrupted cache entry for key {key}")
+                            return None
                         if not isinstance(data, dict):
-                            logger.error(f"Unexpected cache data type for key {key}: {type(data)}")
+                            logger.warning(f"Unexpected cache data type: {type(data).__name__}, deleting entry")
                             await self.redis.delete(key)
-                            raise ValueError(f"Invalid cache data type for key {key}")
+                            return None
                         return data
-                    else:
-                        raise Exception(f"Found no cached response for key {key}")
                 result = await func(request, payload)
                 await self.redis.set(name=key, value=result.model_dump_json(), ex=settings.mint_redis_cache_ttl)
                 return result

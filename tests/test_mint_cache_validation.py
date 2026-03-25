@@ -6,8 +6,8 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_cache_rejects_invalid_json():
-    """Cache should handle corrupted JSON data gracefully."""
+async def test_cache_returns_none_on_invalid_json():
+    """Cache should return None on corrupted JSON and delete the entry."""
     from cashu.mint.cache import RedisCache
 
     with patch("cashu.mint.cache.settings") as mock_settings:
@@ -30,15 +30,14 @@ async def test_cache_rejects_invalid_json():
         mock_payload = MagicMock()
         mock_payload.model_dump_json.return_value = "{}"
 
-        with pytest.raises(ValueError, match="Corrupted cache entry"):
-            await dummy_route(mock_request, mock_payload)
-
+        result = await dummy_route(mock_request, mock_payload)
+        assert result is None
         cache.redis.delete.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_cache_rejects_non_dict_data():
-    """Cache should reject non-dict deserialized data."""
+async def test_cache_returns_none_on_non_dict_data():
+    """Cache should return None for non-dict data and delete the entry."""
     from cashu.mint.cache import RedisCache
 
     with patch("cashu.mint.cache.settings") as mock_settings:
@@ -61,8 +60,9 @@ async def test_cache_rejects_non_dict_data():
         mock_payload = MagicMock()
         mock_payload.model_dump_json.return_value = "{}"
 
-        with pytest.raises(ValueError, match="Invalid cache data type"):
-            await dummy_route(mock_request, mock_payload)
+        result = await dummy_route(mock_request, mock_payload)
+        assert result is None
+        cache.redis.delete.assert_called_once()
 
 
 @pytest.mark.asyncio
