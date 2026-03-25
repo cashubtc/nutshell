@@ -34,11 +34,11 @@ jobs:
       - name: 📦 Instalar Python Deps
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # Instalamos primero lo más difícil de compilar por separado
-          pip install grpcio==1.69.0 coincurve==20.0.0
-          # Ahora el resto
+          # Instalamos las dependencias base
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
+          # Instalamos las dependencias de TEST que faltan en el server
+          pip install pytest pytest-asyncio respx pytest-httpx
+          # Instalamos el paquete actual
           pip install -e .
 
       - name: 🧪 Ejecutar Tests
