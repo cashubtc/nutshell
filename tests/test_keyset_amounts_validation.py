@@ -1,32 +1,8 @@
 """Tests for keyset amounts deserialization validation (Issue #928)."""
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
-
-
-def make_keyset_row(**overrides):
-    """Create a minimal keyset row dict for testing."""
-    defaults = {
-        "id": "test_id",
-        "derivation_path": "m/0/0/0",
-        "seed": "testseed",
-        "encrypted_seed": "",
-        "seed_encryption_method": "",
-        "valid_from": "2024-01-01",
-        "valid_to": "2025-01-01",
-        "first_seen": "2024-01-01",
-        "active": 1,
-        "unit": "sat",
-        "version": "1.0.0",
-        "input_fee_ppk": 0,
-        "amounts": json.dumps([1, 2, 4, 8, 16]),
-        "balance": 0,
-        "fees_paid": 0,
-        "final_expiry": None,
-    }
-    defaults.update(overrides)
-    return defaults
 
 
 class TestAmountsValidation:
@@ -72,3 +48,19 @@ class TestAmountsValidation:
 
         with pytest.raises(ValueError, match="amounts must be a list"):
             MintKeyset._validate_amounts("not a list")
+
+    def test_parse_amounts_handles_json_decode_error(self):
+        """_parse_amounts should fall back to defaults on invalid JSON."""
+        from cashu.core.base import MintKeyset
+
+        with patch("cashu.core.base.settings") as mock_settings:
+            mock_settings.max_order = 5
+            result = MintKeyset._parse_amounts("not valid json{{{")
+            assert result == [1, 2, 4, 8, 16]
+
+    def test_parse_amounts_handles_valid_json(self):
+        """_parse_amounts should parse valid JSON amounts."""
+        from cashu.core.base import MintKeyset
+
+        result = MintKeyset._parse_amounts(json.dumps([1, 2, 4]))
+        assert result == [1, 2, 4]

@@ -910,6 +910,15 @@ class MintKeyset:
         return amounts_data
 
     @classmethod
+    def _parse_amounts(cls, raw_amounts: str):
+        try:
+            amounts_data = json.loads(raw_amounts)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse keyset amounts: {e}")
+            return [2**i for i in range(settings.max_order)]
+        return cls._validate_amounts(amounts_data)
+
+    @classmethod
     def from_row(cls, row: Row):
         return cls(
             id=row["id"],
@@ -924,7 +933,7 @@ class MintKeyset:
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
-            amounts=cls._validate_amounts(json.loads(row["amounts"])),
+            amounts=cls._parse_amounts(row["amounts"]),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
             final_expiry=row["final_expiry"],
