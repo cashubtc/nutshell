@@ -1,0 +1,39 @@
+name: shadow_tests
+
+on:
+  push:
+    branches: [ main, dev, security/harden-test-assertions ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Probamos en las versiones más relevantes para Cashu
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: 📂 Checkout Código
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          # Esto cachea las dependencias de pip automáticamente
+          cache: 'pip' 
+
+      - name: 📦 Instalar Dependencias
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio # Aseguramos herramientas de test
+
+      - name: 🧪 Ejecutar Suite de Tests (Harden Assertions)
+        run: |
+          # Usamos -v para ver los mensajes de error detallados que escribiste
+          # Usamos -n auto si tienes muchos tests y quieres paralelismo
+          pytest -v
+
