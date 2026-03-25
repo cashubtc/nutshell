@@ -51,7 +51,18 @@ class RedisCache:
                     logger.trace("Returning a cached response...")
                     resp = await self.redis.get(key)
                     if resp:
-                        return json.loads(resp)
+                        try:
+                            data = json.loads(resp)
+                        except (json.JSONDecodeError, TypeError) as e:
+                            logger.error(f"Invalid JSON in cache for key {key}: {e}")
+                            # Invalidate corrupted cache entry
+                            await self.redis.delete(key)
+                            raise ValueError(f"Corrupted cache entry for key {key}")
+                        if not isinstance(data, dict):
+                            logger.error(f"Unexpected cache data type for key {key}: {type(data)}")
+                            await self.redis.delete(key)
+                            raise ValueError(f"Invalid cache data type for key {key}")
+                        return data
                     else:
                         raise Exception(f"Found no cached response for key {key}")
                 result = await func(request, payload)
