@@ -78,8 +78,8 @@ async def test_mint(ledger: Ledger):
         )
     ]
     promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
-    assert len(promises) > 0, "Mint should return at least one promise"
-    assert promises[0].amount == 8
+    assert len(promises) > 0, "Mint failed to return any promises"
+    assert promises[0].amount == 8, f"Mint promise amount mismatch: expected 8, got {promises[0].amount}"
     assert (
         promises[0].C_
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
@@ -131,10 +131,10 @@ async def test_generate_promises(ledger: Ledger):
     await ledger._store_blinded_messages(blinded_messages_mock)
     promises = await ledger._sign_blinded_messages(blinded_messages_mock)
     assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
-    )
-    assert promises[0].amount == 8
+    promises[0].C_
+    == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
+    ), f"Promise C_ mismatch: expected ...ba6e, got {promises[0].C_}"
+    assert promises[0].amount == 8, f"Signed promise amount mismatch: expected 8, got {promises[0].amount}"
     assert promises[0].id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 
     # DLEQ proof present
@@ -170,8 +170,8 @@ async def test_generate_change_promises(ledger: Ledger):
         fee_provided=fee_reserve, fee_paid=actual_fee, outputs=outputs
     )
 
-    assert len(promises) == expected_returned_promises
-    assert sum([promise.amount for promise in promises]) == expected_returned_fees
+    assert len(promises) == expected_returned_promises, f"Expected {expected_returned_promises} change promises, got {len(promises)}"
+    assert sum([p.amount for p in promises]) == expected_returned_fees, f"Change fee amount mismatch: expected {expected_returned_fees}, got {sum([p.amount for p in promises])}"
 
 
 @pytest.mark.asyncio

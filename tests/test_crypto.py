@@ -228,8 +228,8 @@ def test_dleq_alice_verify_dleq():
             "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
         )
     )
+    assert alice_verify_dleq(B_, C_, e, s, A), "Alice DLEQ verification failed: proof is not valid for the given keys"
 
-    assert alice_verify_dleq(B_, C_, e, s, A), "Alice failed to verify Dleq proof"
 
 def test_dleq_alice_direct_verify_dleq():
     # ----- test again with B_ and C_ as per step1 and step2
@@ -250,7 +250,7 @@ def test_dleq_alice_direct_verify_dleq():
         ),
     )
     C_, e, s = step2_bob(B_, a)
-    assert alice_verify_dleq(B_, C_, e, s, A)
+    assert alice_verify_dleq(B_, C_, e, s, A), "Direct DLEQ verification from Step 2 failed"
 
 
 def test_dleq_carol_verify_from_bob():
@@ -298,7 +298,7 @@ def test_dleq_carol_on_proof():
             },
         }
     )
-    assert proof.dleq, "Proof should contain Dleq data"
+    assert proof.dleq, "DLEQ data missing in proof model"
 
     assert carol_verify_dleq(
         secret_msg=proof.secret,
@@ -307,7 +307,7 @@ def test_dleq_carol_on_proof():
         e=PrivateKey(bytes.fromhex(proof.dleq.e)),
         s=PrivateKey(bytes.fromhex(proof.dleq.s)),
         A=A,
-    )
+    ), "Carol DLEQ verification failed for the provided proof"
 
 
 # TESTS FOR DEPRECATED HASH TO CURVE

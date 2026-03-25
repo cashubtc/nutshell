@@ -182,7 +182,9 @@ async def test_mint(wallet1: Wallet):
 
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    assert wallet1.balance == 64
+    assert wallet1.balance == 64, f"Balance mismatch after mint: expected 64, got {wallet1.balance}"
+    assert wallet1.balance == 64, f"Total balance mismatch: expected 64, got {wallet1.balance}"
+    assert wallet1.available_balance == 32, f"Available balance mismatch: expected 32, got {wallet1.available_balance}"
 
     # verify that proofs in proofs_used db have the same mint_id as the invoice in the db
     mint_quote_2 = await get_bolt11_mint_quote(db=wallet1.db, quote=mint_quote.quote)
@@ -361,8 +363,8 @@ async def test_melt(wallet1: Wallet):
     assert all([p.melt_id == melt_quote_db.quote for p in proofs_used]), "Wrong melt_id"
 
     # the payment was without fees so we need to remove it from the total amount
-    assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
-    assert wallet1.balance == 64, "Wrong balance"
+    assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), f"Balance mismatch after melt: expected {128 - (total_amount - quote.fee_reserve)}, got {wallet1.balance}"
+    assert wallet1.balance == 64, f"Final balance mismatch: expected 64, got {wallet1.balance}"
 
 
 @pytest.mark.asyncio
