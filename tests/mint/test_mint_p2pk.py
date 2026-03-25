@@ -1,3 +1,4 @@
+import pytest
 import pytest_asyncio
 
 from cashu.core.base import P2PKWitness
