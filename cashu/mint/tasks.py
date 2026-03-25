@@ -51,8 +51,11 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                 checking_id=checking_id, db=self.db, conn=conn
             )
             if not quote:
-                logger.error(f"Quote not found for {checking_id}")
-                return
+                logger.warning(
+                    f"Quote not found for checking_id={checking_id}. "
+                    "This may indicate a race condition or invalid callback."
+                )
+                raise ValueError(f"Quote not found for checking_id={checking_id}")
 
             logger.trace(
                 f"Invoice callback dispatcher: quote {quote} trying to set as {MintQuoteState.paid}"
