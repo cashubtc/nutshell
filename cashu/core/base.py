@@ -901,6 +901,15 @@ class MintKeyset:
         logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
 
     @classmethod
+    def _validate_amounts(cls, amounts_data):
+        if not isinstance(amounts_data, list):
+            raise ValueError(f"amounts must be a list, got {type(amounts_data).__name__}")
+        for amount in amounts_data:
+            if not isinstance(amount, int) or amount < 0:
+                raise ValueError(f"Invalid amount value: {amount}")
+        return amounts_data
+
+    @classmethod
     def from_row(cls, row: Row):
         return cls(
             id=row["id"],
@@ -915,7 +924,7 @@ class MintKeyset:
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
-            amounts=json.loads(row["amounts"]),
+            amounts=cls._validate_amounts(json.loads(row["amounts"])),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
             final_expiry=row["final_expiry"],
