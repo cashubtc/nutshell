@@ -164,10 +164,6 @@ async def test_rotate_next_keyset(rpc_servicer):
     assert response.final_expiry == 86400
     assert response.max_order > 0
 
-
-
-
-
 @pytest.mark.asyncio
 async def test_nut04_quote(rpc_servicer):
     quote_id = "test-mint-quote-123"
