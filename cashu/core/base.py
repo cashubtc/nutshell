@@ -321,7 +321,16 @@ class MeltQuote(LedgerEvent):
 
         outputs = None
         if "outputs" in row.keys() and row["outputs"]:
-            outputs = json.loads(row["outputs"])
+            try:
+                outputs_data = json.loads(row["outputs"])
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.error(f"Invalid JSON in outputs: {e}")
+                raise ValueError("Corrupted outputs data in database") from e
+            if not isinstance(outputs_data, list):
+                raise ValueError(
+                    f"outputs must be a list, got {type(outputs_data).__name__}"
+                )
+            outputs = outputs_data
 
         return cls(
             quote=row["quote"],
