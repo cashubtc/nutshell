@@ -295,19 +295,19 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 ### Target files
 
-- [ ] Add `tests/mint/test_mint_management_rpc_server.py`
+- [x] Add `tests/mint/test_mint_management_rpc_server.py`
 
 ### Cases to cover
 
-- [ ] Metadata update RPCs (`UpdateMotd`, `UpdateName`, `AddUrl`, `RemoveUrl`, contacts) mutate settings correctly.
-- [ ] Quote getter/update RPCs serialize quote state correctly.
-- [ ] `RotateNextKeyset` forwards expected arguments and response fields.
-- [ ] `UpdateLightningFee` and `UpdateAuthLimits` reject missing inputs.
-- [ ] `serve` chooses insecure vs mTLS startup path and validates missing file errors.
+- [x] Metadata update RPCs (`UpdateMotd`, `UpdateName`, `AddUrl`, `RemoveUrl`, contacts) mutate settings correctly.
+- [x] Quote getter/update RPCs serialize quote state correctly.
+- [x] `RotateNextKeyset` forwards expected arguments and response fields.
+- [x] `UpdateLightningFee` and `UpdateAuthLimits` reject missing inputs.
+- [x] `serve` chooses insecure vs mTLS startup path and validates missing file errors.
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/mint/test_mint_management_rpc_server.py`
+- [x] Run `poetry run pytest tests/mint/test_mint_management_rpc_server.py`
 
 ## Phase 12 - Expand migration and DB concurrency safety tests
 
