@@ -45,30 +45,30 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 ## Phase 0 - Planning and guardrails
 
 - [x] Create this implementation plan with ranked opportunities.
-- [ ] Keep all new tests focused on current behavior (no behavior changes).
-- [ ] Do not add tests for backward compatibility branches.
+- [x] Keep all new tests focused on current behavior (no behavior changes).
+- [x] Do not add tests for backward compatibility branches.
 
 ## Phase 1 - Add direct unit tests for mint spending conditions
 
 ### Target files
 
-- [ ] Add `tests/mint/test_mint_conditions.py`
+- [x] Add `tests/mint/test_mint_conditions.py`
 
 ### Cases to cover
 
-- [ ] `_verify_p2pk_signatures` happy path (valid signature threshold).
-- [ ] Duplicate pubkeys/signatures rejection.
-- [ ] Missing signatures and threshold mismatch errors.
-- [ ] `_verify_p2pk_sig_inputs` behavior for `SIG_INPUTS` and non-input sigflags.
-- [ ] Refund-path behavior after locktime with refund keys.
-- [ ] `_inputs_require_sigall`, `_check_at_least_one_sig_all` correctness.
-- [ ] `_verify_all_secrets_equal_and_return` success/failure.
-- [ ] `_verify_sigall_spending_conditions` success/failure paths excluding backward-compat logic.
-- [ ] `_verify_input_spending_conditions` witness-without-condition rejection.
+- [x] `_verify_p2pk_signatures` happy path (valid signature threshold).
+- [x] Duplicate pubkeys/signatures rejection.
+- [x] Missing signatures and threshold mismatch errors.
+- [x] `_verify_p2pk_sig_inputs` behavior for `SIG_INPUTS` and non-input sigflags.
+- [x] Refund-path behavior after locktime with refund keys.
+- [x] `_inputs_require_sigall`, `_check_at_least_one_sig_all` correctness.
+- [x] `_verify_all_secrets_equal_and_return` success/failure.
+- [x] `_verify_sigall_spending_conditions` success/failure paths excluding backward-compat logic.
+- [x] `_verify_input_spending_conditions` witness-without-condition rejection.
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/mint/test_mint_conditions.py`
+- [x] Run `poetry run pytest tests/mint/test_mint_conditions.py`
 
 ## Phase 2 - Add focused unit tests for wallet v1 API client
 
