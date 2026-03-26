@@ -114,6 +114,7 @@ async def ledger():
             Unit.usd: lightning_backend_usd,
         },
     }
+    assert settings.mint_private_key is not None
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
         seed=settings.mint_private_key,
