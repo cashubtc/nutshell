@@ -257,20 +257,20 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 ### Target files
 
-- [ ] Add `tests/mint/test_mint_app_router.py`
+- [x] Add `tests/mint/test_mint_app_router.py`
 
 ### Cases to cover
 
-- [ ] `create_app` metadata and router registration expectations.
-- [ ] `catch_exceptions` maps `CashuError` and generic exceptions into JSON responses.
-- [ ] `request_validation_exception_handler` includes query params in the response detail.
-- [ ] `CompressionMiddleware` compression precedence and streaming bypass behavior.
-- [ ] `/v1/info`, `/v1/keys`, `/v1/keysets`, and `/v1/keys/{keyset_id}` happy/error paths using in-process ASGI.
-- [ ] `/v1/checkstate` and `/v1/restore` non-regtest happy/error paths.
+- [x] `create_app` metadata and router registration expectations.
+- [x] `catch_exceptions` maps `CashuError` and generic exceptions into JSON responses.
+- [x] `request_validation_exception_handler` logs query params alongside validation errors.
+- [x] `CompressionMiddleware` compression precedence and streaming bypass behavior.
+- [x] `/v1/info`, `/v1/keys`, `/v1/keysets`, and `/v1/keys/{keyset_id}` happy/error paths using in-process ASGI.
+- [x] `/v1/checkstate` and `/v1/restore` non-regtest happy/error paths.
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/mint/test_mint_app_router.py`
+- [x] Run `poetry run pytest tests/mint/test_mint_app_router.py`
 
 ## Phase 10 - Add websocket and subscription protocol robustness tests
 
