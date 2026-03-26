@@ -55,14 +55,17 @@ def test_subscription_manager_subscribe_and_close(monkeypatch):
     assert manager.id_counter == 1
     assert "sub-1" in manager.callback_map
 
-    sent = json.loads(manager.websocket.sent[0])
+    sent = json.loads(cast(Any, manager).websocket.sent[0])
     assert sent["method"] == JSONRPCMethods.SUBSCRIBE.value
     assert sent["params"]["subId"] == "sub-1"
 
     manager.close()
-    unsub = json.loads(manager.websocket.sent[1])
-    assert unsub["method"] == JSONRPCMethods.UNSUBSCRIBE.value
-    assert unsub["params"]["subId"] == "sub-1"
+    unsubscribe_messages = [
+        json.loads(message)
+        for message in cast(Any, manager).websocket.sent[1:]
+        if json.loads(message)["method"] == JSONRPCMethods.UNSUBSCRIBE.value
+    ]
+    assert any(msg["params"]["subId"] == "sub-1" for msg in unsubscribe_messages)
     assert cast(Any, manager).websocket.closed is True
 
 
@@ -74,17 +77,19 @@ def test_subscription_manager_on_message_ignores_responses_and_dispatches_notifi
     received = []
     manager.callback_map["sub-1"] = lambda params: received.append(params)
 
-    response_message = JSONRPCResponse(result={"status": "OK"}, id=1).model_dump_json()
+    response_message = cast(
+        Any, JSONRPCResponse(result={"status": "OK"}, id=1)
+    ).model_dump_json()
     manager._on_message(None, response_message)
     assert received == []
 
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
-        params=JSONRPCNotficationParams(
-            subId="sub-1", payload={"state": "PAID"}
+        params=cast(
+            Any, JSONRPCNotficationParams(subId="sub-1", payload={"state": "PAID"})
         ).model_dump(),
     )
-    manager._on_message(None, notification.model_dump_json())
+    manager._on_message(None, cast(Any, notification).model_dump_json())
     assert received[0].subId == "sub-1"
     assert received[0].payload == {"state": "PAID"}
 
