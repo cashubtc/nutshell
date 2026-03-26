@@ -319,9 +319,29 @@ class MeltQuote(LedgerEvent):
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
 
+        # SECURITY FIX: Validate JSON deserialization to prevent data manipulation
+        # Issue: #927 - Unsafe JSON Deserialization in Core Base
         outputs = None
         if "outputs" in row.keys() and row["outputs"]:
-            outputs = json.loads(row["outputs"])
+            try:
+                outputs_data = json.loads(row["outputs"])
+                # Validate structure: outputs must be a list
+                if not isinstance(outputs_data, list):
+                    logger.warning(f"Invalid outputs type: expected list, got {type(outputs_data).__name__}")
+                    raise ValueError("outputs must be a list")
+                # Validate each output has required fields
+                for output in outputs_data:
+                    if not isinstance(output, dict):
+                        raise ValueError("Each output must be a dict")
+                    if "amount" not in output:
+                        raise ValueError("Output missing required 'amount' field")
+                outputs = outputs_data
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in outputs: {e}")
+                raise
+            except ValueError as e:
+                logger.error(f"Outputs validation failed: {e}")
+                raise
 
         return cls(
             quote=row["quote"],
