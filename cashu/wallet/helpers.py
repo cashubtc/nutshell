@@ -146,6 +146,7 @@ async def send(
     Prints token to send to stdout.
     """
     secret_lock = None
+    p2pk_e = None
     if lock:
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
@@ -169,8 +170,26 @@ async def send(
                 tags=tags,
             )
             logger.debug(f"Secret lock: {secret_lock}")
+        elif lock.startswith("P2BK:") or lock.startswith("P2BK-SIGALL:"):
+            sigall = lock.startswith("P2BK-SIGALL:")
+            logger.debug(f"Locking token with P2BK to: {lock}")
+            logger.debug(
+                f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
+            )
+            tags = None
+            if refund_pubkeys:
+                tags = Tags()
+                tags["refund"] = refund_pubkeys
+            secret_lock, p2pk_e = await wallet.create_p2bk_lock(
+                lock.split(":")[1],
+                locktime_seconds=settings.locktime_delta_seconds,
+                sig_all=sigall,
+                n_sigs=1,
+                tags=tags,
+            )
+            logger.debug(f"P2BK secret lock: {secret_lock}, ephemeral pubkey: {p2pk_e}")
         else:
-            raise Exception("Error: lock has to start with P2PK: or P2PK-SIGALL:")
+            raise Exception("Error: lock has to start with P2PK:, P2PK-SIGALL:, P2BK:, or P2BK-SIGALL:")
 
     await wallet.load_proofs()
 
@@ -181,6 +200,7 @@ async def send(
             amount,
             set_reserved=False,  # we set reserved later
             secret_lock=secret_lock,
+            p2pk_e=p2pk_e,
         )
     else:
         send_proofs, fees = await wallet.select_to_send(
