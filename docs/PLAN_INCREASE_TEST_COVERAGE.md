@@ -93,22 +93,22 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 ### Target files
 
-- [ ] Add `tests/wallet/test_wallet_crud_unit.py`
+- [x] Add `tests/wallet/test_wallet_crud_unit.py`
 
 ### Cases to cover
 
-- [ ] `store_proof` + `get_proofs` filters (`id`, `mint_id`, `melt_id`).
-- [ ] `update_proof` field updates and timestamp behavior.
-- [ ] `invalidate_proof` moves proof from `proofs` to `proofs_used`.
-- [ ] `store_keyset` / `get_keysets` / `update_keyset`.
-- [ ] Mint quote + melt quote store/get/update lifecycle.
-- [ ] `bump_secret_derivation` and `set_secret_derivation` edge behavior.
-- [ ] `store_seed_and_mnemonic` + `get_seed_and_mnemonic`.
-- [ ] `store_mint` / `update_mint` / `get_mint_by_url`.
+- [x] `store_proof` + `get_proofs` filters (`id`, `mint_id`, `melt_id`).
+- [x] `update_proof` field updates and timestamp behavior.
+- [x] `invalidate_proof` moves proof from `proofs` to `proofs_used`.
+- [x] `store_keyset` / `get_keysets` / `update_keyset`.
+- [x] Mint quote + melt quote store/get/update lifecycle.
+- [x] `bump_secret_derivation` and `set_secret_derivation` edge behavior.
+- [x] `store_seed_and_mnemonic` + `get_seed_and_mnemonic`.
+- [x] `store_mint` / `update_mint` / `get_mint_by_url`.
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/wallet/test_wallet_crud_unit.py`
+- [x] Run `poetry run pytest tests/wallet/test_wallet_crud_unit.py`
 
 ## Phase 4 - Add tests for Tor timeout helper
 
