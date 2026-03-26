@@ -126,6 +126,24 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 - [x] Run `poetry run pytest tests/test_tor_timeout.py`
 
+## Phase 5 - Add focused unit tests for mint rate limiting helpers
+
+### Target files
+
+- [x] Add `tests/mint/test_mint_limit.py`
+
+### Cases to cover
+
+- [x] `_rate_limit_exceeded_handler` returns HTTP 429 JSON response.
+- [x] `get_remote_address_excluding_local` strips localhost but keeps remote IPs.
+- [x] `assert_limit` success and failure behavior using mocked limiter backend.
+- [x] `get_ws_remote_address` fallback behavior when client/host missing.
+- [x] `limit_websocket` bypass for localhost and enforcement for remote clients.
+
+### Validation
+
+- [x] Run `poetry run pytest tests/mint/test_mint_limit.py`
+
 ## Commit strategy
 
 - After each phase:
