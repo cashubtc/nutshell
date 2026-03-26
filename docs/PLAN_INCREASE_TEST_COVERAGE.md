@@ -114,17 +114,17 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 ### Target files
 
-- [ ] Add `tests/test_tor_timeout.py`
+- [x] Add `tests/test_tor_timeout.py`
 
 ### Cases to cover
 
-- [ ] Argument validation assertions.
-- [ ] Positive timeout flow invokes `Popen`, `terminate`, `wait`, `kill`, and child `os.kill` calls.
-- [ ] No real process operations (fully mocked).
+- [x] Argument validation assertions.
+- [x] Positive timeout flow invokes `Popen`, `terminate`, `wait`, `kill`, and child `os.kill` calls.
+- [x] No real process operations (fully mocked).
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/test_tor_timeout.py`
+- [x] Run `poetry run pytest tests/test_tor_timeout.py`
 
 ## Commit strategy
 
