@@ -230,6 +230,10 @@ async def test_regtest_pay_mpp_cancel_payment(wallet: Wallet, ledger: Ledger):
 async def test_regtest_pay_mpp_cancel_payment_pay_partial_invoice(
     wallet: Wallet, ledger: Ledger
 ):
+    # make sure that mpp is supported by the bolt11-sat backend
+    if not ledger.backends[Method["bolt11"]][wallet.unit].supports_mpp:
+        pytest.skip("backend does not support mpp")
+
     # create a hold invoice that we can cancel
     preimage, invoice_dict = get_hold_invoice(64)
     invoice_payment_request = str(invoice_dict.get("payment_request", ""))
