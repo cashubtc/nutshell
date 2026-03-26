@@ -231,6 +231,103 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 - [x] Run `poetry run pytest tests/lightning/test_lightning_backends_mocked.py`
 
+## Phase 8 - Add focused auth and security tests for mint and wallet
+
+### Target files
+
+- [x] Add `tests/mint/test_mint_auth_server_unit.py`
+- [x] Add `tests/mint/test_mint_auth_middleware.py`
+
+### Cases to cover
+
+- [x] `AuthLedger._verify_oicd_issuer` success and issuer mismatch failure.
+- [x] `AuthLedger._get_user` returns existing users and creates missing users.
+- [x] `verify_clear_auth` maps invalid JWT flows to `ClearAuthFailedError`.
+- [x] `verify_clear_auth` maps rate-limit failures to `BlindAuthRateLimitExceededError`.
+- [x] `mint_blind_auth` enforces max blind token count and updates user last access.
+- [x] `verify_blind_auth` invalidates proofs on success and unsets pending in `finally`.
+- [x] `ClearAuthMiddleware` requires `clear-auth` headers only on protected paths.
+- [x] `BlindAuthMiddleware` requires `blind-auth` headers only on protected paths.
+
+### Validation
+
+- [x] Run `poetry run pytest tests/mint/test_mint_auth_server_unit.py tests/mint/test_mint_auth_middleware.py`
+
+## Phase 9 - Add in-process mint app, router, and middleware tests
+
+### Target files
+
+- [ ] Add `tests/mint/test_mint_app_router.py`
+
+### Cases to cover
+
+- [ ] `create_app` metadata and router registration expectations.
+- [ ] `catch_exceptions` maps `CashuError` and generic exceptions into JSON responses.
+- [ ] `request_validation_exception_handler` includes query params in the response detail.
+- [ ] `CompressionMiddleware` compression precedence and streaming bypass behavior.
+- [ ] `/v1/info`, `/v1/keys`, `/v1/keysets`, and `/v1/keys/{keyset_id}` happy/error paths using in-process ASGI.
+- [ ] `/v1/checkstate` and `/v1/restore` non-regtest happy/error paths.
+
+### Validation
+
+- [ ] Run `poetry run pytest tests/mint/test_mint_app_router.py`
+
+## Phase 10 - Add websocket and subscription protocol robustness tests
+
+### Target files
+
+- [ ] Add `tests/mint/test_mint_websocket_protocol.py`
+- [ ] Add `tests/wallet/test_wallet_subscription_unit.py`
+
+### Cases to cover
+
+- [ ] `LedgerEventClientManager` parse errors, invalid request errors, method-not-found errors, and unsubscribe failures.
+- [ ] Subscription add/remove limits and initialization behavior for quote and proof-state subscriptions.
+- [ ] `LedgerEventManager.submit` only dispatches to matching subscribers.
+- [ ] `SubscriptionManager` websocket URL formation for http/https and port handling.
+- [ ] `SubscriptionManager._on_message` ignores responses, dispatches notifications, and ignores malformed payloads.
+
+### Validation
+
+- [ ] Run `poetry run pytest tests/mint/test_mint_websocket_protocol.py tests/wallet/test_wallet_subscription_unit.py`
+
+## Phase 11 - Add management RPC server unit tests
+
+### Target files
+
+- [ ] Add `tests/mint/test_mint_management_rpc_server.py`
+
+### Cases to cover
+
+- [ ] Metadata update RPCs (`UpdateMotd`, `UpdateName`, `AddUrl`, `RemoveUrl`, contacts) mutate settings correctly.
+- [ ] Quote getter/update RPCs serialize quote state correctly.
+- [ ] `RotateNextKeyset` forwards expected arguments and response fields.
+- [ ] `UpdateLightningFee` and `UpdateAuthLimits` reject missing inputs.
+- [ ] `serve` chooses insecure vs mTLS startup path and validates missing file errors.
+
+### Validation
+
+- [ ] Run `poetry run pytest tests/mint/test_mint_management_rpc_server.py`
+
+## Phase 12 - Expand migration and DB concurrency safety tests
+
+### Target files
+
+- [ ] Add `tests/mint/test_mint_migrations_matrix.py`
+- [ ] Add `tests/wallet/test_wallet_migrations_matrix.py`
+- [ ] Add `tests/mint/test_mint_db_concurrency_edges.py`
+
+### Cases to cover
+
+- [ ] Re-running migrations is idempotent on already-upgraded databases.
+- [ ] Critical schema/data migrations preserve rows and expected state transitions.
+- [ ] Pending-proof and quote update flows behave deterministically under concurrent access.
+- [ ] SQLite-specific lock and retry behavior is exercised where practical.
+
+### Validation
+
+- [ ] Run the new migration and DB edge test slices.
+
 ## Commit strategy
 
 - After each phase:
