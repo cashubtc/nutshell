@@ -276,20 +276,20 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 ### Target files
 
-- [ ] Add `tests/mint/test_mint_websocket_protocol.py`
-- [ ] Add `tests/wallet/test_wallet_subscription_unit.py`
+- [x] Add `tests/mint/test_mint_websocket_protocol.py`
+- [x] Add `tests/wallet/test_wallet_subscription_unit.py`
 
 ### Cases to cover
 
-- [ ] `LedgerEventClientManager` parse errors, invalid request errors, method-not-found errors, and unsubscribe failures.
-- [ ] Subscription add/remove limits and initialization behavior for quote and proof-state subscriptions.
-- [ ] `LedgerEventManager.submit` only dispatches to matching subscribers.
-- [ ] `SubscriptionManager` websocket URL formation for http/https and port handling.
-- [ ] `SubscriptionManager._on_message` ignores responses, dispatches notifications, and ignores malformed payloads.
+- [x] `LedgerEventClientManager` parse errors, invalid request errors, method-not-found errors, and unsubscribe failures.
+- [x] Subscription add/remove limits and initialization behavior for quote and proof-state subscriptions.
+- [x] `LedgerEventManager.submit` only dispatches to matching subscribers.
+- [x] `SubscriptionManager` websocket URL formation for http/https and port handling.
+- [x] `SubscriptionManager._on_message` ignores responses, dispatches notifications, and ignores malformed payloads.
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/mint/test_mint_websocket_protocol.py tests/wallet/test_wallet_subscription_unit.py`
+- [x] Run `poetry run pytest tests/mint/test_mint_websocket_protocol.py tests/wallet/test_wallet_subscription_unit.py`
 
 ## Phase 11 - Add management RPC server unit tests
 
