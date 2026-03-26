@@ -4,7 +4,7 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from cashu.core.base import Proof
+from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.settings import settings
@@ -273,3 +273,291 @@ async def test_get_keys_raises_when_endpoint_not_supported(monkeypatch, api: Led
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     with pytest.raises(Exception, match="does not support endpoint Get /v1/keys"):
         await api._get_keys()
+
+
+@pytest.mark.asyncio
+async def test_init_sets_tor_proxy_when_enabled(monkeypatch, api: LedgerAPI):
+    created_kwargs = {}
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            created_kwargs.update(kwargs)
+
+    class FakeTorProxy:
+        run_calls = 0
+
+        def __init__(self, timeout=False):
+            self.timeout = timeout
+
+        def check_platform(self):
+            return True
+
+        def run_daemon(self, verbose=True):
+            FakeTorProxy.run_calls += 1
+
+    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("cashu.wallet.v1_api.TorProxy", FakeTorProxy)
+    monkeypatch.setattr(settings, "tor", True)
+    monkeypatch.setattr(settings, "socks_proxy", None)
+    monkeypatch.setattr(settings, "http_proxy", None)
+
+    await api._init_s()
+
+    assert created_kwargs["proxies"] == {"all://": "socks5://localhost:9050"}
+    assert FakeTorProxy.run_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_init_uses_configured_socks_proxy(monkeypatch, api: LedgerAPI):
+    created_kwargs = {}
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            created_kwargs.update(kwargs)
+
+    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(settings, "tor", False)
+    monkeypatch.setattr(settings, "socks_proxy", "127.0.0.1:19050")
+    monkeypatch.setattr(settings, "http_proxy", None)
+
+    await api._init_s()
+
+    assert created_kwargs["proxies"] == {"all://": "socks5://127.0.0.1:19050"}
+
+
+@pytest.mark.asyncio
+async def test_request_verbose_logging_prints_payload_and_response(
+    monkeypatch, capsys, api: LedgerAPI
+):
+    monkeypatch.setattr(settings, "wallet_verbose_requests", True)
+    cast(Any, api).httpx = DummyHTTPXClient(_response(200, {"ok": True}))
+    await api._request("POST", "swap", json={"a": 1})
+
+    out = capsys.readouterr().out
+    assert "Request:" in out
+    assert "Payload" in out
+    assert "Response: 200" in out
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: LedgerAPI):
+    load_calls = 0
+    called_path = ""
+
+    async def fake_load_mint():
+        nonlocal load_calls
+        load_calls += 1
+        cast(Any, api).keysets = {"loaded": object()}
+
+    async def fake_request(self, method, path, **kwargs):
+        nonlocal called_path
+        called_path = path
+        assert method == "POST"
+        assert kwargs["json"]["unit"] == "sat"
+        assert kwargs["json"]["amount"] == 21
+        return _response(
+            200,
+            {
+                "quote": "q-1",
+                "request": "lnbc1",
+                "amount": 21,
+                "unit": "sat",
+                "state": "UNPAID",
+                "expiry": 123,
+            },
+        )
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    cast(Any, api).load_mint = fake_load_mint
+    cast(Any, api).keysets = {}
+
+    quote = await api.mint_quote(21, Unit.sat, memo="memo", pubkey="02" * 33)
+    assert load_calls == 1
+    assert called_path == "mint/quote/bolt11"
+    assert quote.quote == "q-1"
+
+
+@pytest.mark.asyncio
+async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: LedgerAPI):
+    output = BlindedMessage(id="kid", amount=1, B_="ab")
+    proof = Proof(
+        id="kid", amount=1, C=PrivateKey().public_key.format().hex(), secret="s1"
+    )
+    cast(Any, api).keysets = {"kid": object()}
+
+    requests = []
+
+    async def fake_request(self, method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        if path == "mint/bolt11":
+            return _response(
+                200,
+                {
+                    "signatures": [
+                        {
+                            "id": "kid",
+                            "amount": 1,
+                            "C_": PrivateKey().public_key.format().hex(),
+                        }
+                    ]
+                },
+            )
+        if path == "swap":
+            return _response(
+                200,
+                {
+                    "signatures": [
+                        {
+                            "id": "kid",
+                            "amount": 1,
+                            "C_": PrivateKey().public_key.format().hex(),
+                        }
+                    ]
+                },
+            )
+        if path == "checkstate":
+            return _response(
+                200,
+                {"states": [{"Y": proof.Y, "state": "UNSPENT"}]},
+            )
+        if path == "restore":
+            return _response(
+                200,
+                {
+                    "outputs": [{"id": "kid", "amount": 1, "B_": "ab"}],
+                    "signatures": [
+                        {
+                            "id": "kid",
+                            "amount": 1,
+                            "C_": PrivateKey().public_key.format().hex(),
+                        }
+                    ],
+                },
+            )
+        if path == "mint":
+            return _response(
+                200,
+                {
+                    "signatures": [
+                        {
+                            "id": "kid",
+                            "amount": 1,
+                            "C_": PrivateKey().public_key.format().hex(),
+                        }
+                    ]
+                },
+            )
+        raise AssertionError(f"Unexpected path {path}")
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    promises = await api.mint(outputs=[output], quote="q", signature="sig")
+    assert len(promises) == 1
+
+    split_promises = await api.split([proof], [output])
+    assert len(split_promises) == 1
+
+    states = await api.check_proof_state([proof])
+    assert states.states[0].unspent
+
+    restored_outputs, restored_promises = await api.restore_promises([output])
+    assert restored_outputs[0].B_ == "ab"
+    assert len(restored_promises) == 1
+
+    blind_auth_promises = await api.blind_mint_blind_auth("clear", [output])
+    assert len(blind_auth_promises) == 1
+
+    mint_payload = [c for c in requests if c[1] == "mint/bolt11"][0][2]["json"]
+    assert set(mint_payload.keys()) == {"quote", "outputs", "signature"}
+    assert set(mint_payload["outputs"][0].keys()) == {"id", "amount", "B_"}
+
+
+@pytest.mark.asyncio
+async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
+    output = BlindedMessage(id="kid", amount=1, B_="ab")
+    proof = Proof(
+        id="kid", amount=1, C=PrivateKey().public_key.format().hex(), secret="s2"
+    )
+    cast(Any, api).keysets = {"kid": object()}
+
+    class DecodedInvoice:
+        amount_msat = 1000
+
+    requests = []
+
+    async def fake_request(self, method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        if path == "melt/quote/bolt11":
+            return _response(
+                200,
+                {
+                    "quote": "m-1",
+                    "amount": 1,
+                    "unit": "sat",
+                    "request": "lnbc1",
+                    "fee_reserve": 1,
+                    "state": "UNPAID",
+                    "expiry": 123,
+                },
+            )
+        if path == "melt/quote/bolt11/m-1":
+            return _response(
+                200,
+                {
+                    "quote": "m-1",
+                    "amount": 1,
+                    "unit": "sat",
+                    "request": "lnbc1",
+                    "fee_reserve": 1,
+                    "state": "UNPAID",
+                    "expiry": 123,
+                },
+            )
+        if path == "melt/bolt11":
+            return _response(
+                200,
+                {
+                    "quote": "m-1",
+                    "amount": 1,
+                    "unit": "sat",
+                    "request": "lnbc1",
+                    "fee_reserve": 1,
+                    "state": "PAID",
+                    "expiry": 123,
+                    "payment_preimage": "11" * 32,
+                },
+            )
+        raise AssertionError(f"Unexpected path {path}")
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.bolt11.decode", lambda request: DecodedInvoice()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    quote = await api.melt_quote("lnbc1", Unit.sat, amount_msat=500)
+    assert quote.quote == "m-1"
+
+    fetched_quote = await api.get_melt_quote("m-1")
+    assert fetched_quote.quote == "m-1"
+
+    melt_result = await api.melt("m-1", [proof], [output])
+    assert melt_result.state == MeltQuoteState.paid.value
+
+    melt_payload = [c for c in requests if c[1] == "melt/bolt11"][0][2]
+    assert melt_payload["timeout"] is None
+    assert set(melt_payload["json"]["inputs"][0].keys()) == {
+        "id",
+        "amount",
+        "secret",
+        "C",
+        "witness",
+    }
