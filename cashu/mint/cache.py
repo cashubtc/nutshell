@@ -51,7 +51,21 @@ class RedisCache:
                     logger.trace("Returning a cached response...")
                     resp = await self.redis.get(key)
                     if resp:
-                        return json.loads(resp)
+                        # SECURITY FIX: Validate data structure before deserialization
+                        # Prevents cache poisoning and potential RCE attacks
+                        try:
+                            data = json.loads(resp)
+                            # Validate that deserialized data is a dict (expected type)
+                            if not isinstance(data, dict):
+                                logger.warning(f"Invalid cache data type for key {key}: expected dict, got {type(data).__name__}")
+                                raise ValueError("Invalid cache data type")
+                            return data
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Invalid JSON in cache for key {key}: {e}")
+                            raise
+                        except ValueError as e:
+                            logger.error(f"Cache validation failed for key {key}: {e}")
+                            raise
                     else:
                         raise Exception(f"Found no cached response for key {key}")
                 result = await func(request, payload)
