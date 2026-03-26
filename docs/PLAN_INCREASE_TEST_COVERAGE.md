@@ -74,20 +74,20 @@ Increase meaningful coverage in critical, under-tested code paths without changi
 
 ### Target files
 
-- [ ] Add `tests/wallet/test_wallet_v1_api.py`
+- [x] Add `tests/wallet/test_wallet_v1_api.py`
 
 ### Cases to cover
 
-- [ ] `raise_on_error_request` for JSON and non-JSON responses.
-- [ ] `raise_on_unsupported_version` for 404 and non-404 cases.
-- [ ] `_request` blind-auth header injection and clear-auth header injection.
-- [ ] `_request` failures when auth DB/token/keyset is missing.
-- [ ] `_get_keys`, `_get_keyset`, `_get_keysets`, `_get_info` parsing and endpoint error behavior.
-- [ ] Ensure request prefixing behavior (`noprefix=False/True`) is preserved.
+- [x] `raise_on_error_request` for JSON and non-JSON responses.
+- [x] `raise_on_unsupported_version` for 404 and non-404 cases.
+- [x] `_request` blind-auth header injection and clear-auth header injection.
+- [x] `_request` failures when auth DB/token/keyset is missing.
+- [x] `_get_keys`, `_get_keyset`, `_get_keysets`, `_get_info` parsing and endpoint error behavior.
+- [x] Ensure request prefixing behavior (`noprefix=False/True`) is preserved.
 
 ### Validation
 
-- [ ] Run `poetry run pytest tests/wallet/test_wallet_v1_api.py`
+- [x] Run `poetry run pytest tests/wallet/test_wallet_v1_api.py`
 
 ## Phase 3 - Add focused unit tests for wallet CRUD primitives
 
