@@ -55,30 +55,41 @@ def test_get_info_serializes_mint_info():
 
 @pytest.mark.asyncio
 async def test_update_metadata_and_contacts(monkeypatch):
+    test_url = "https://rpc-test-url.example"
+    test_contact = ["rpc-test-contact", "hi@test"]
     original_urls = settings.mint_info_urls
     original_contact = settings.mint_info_contact.copy()
+    original_name = settings.mint_info_name
+    original_motd = settings.mint_info_motd
     rpc = _rpc_with_ledger()
     try:
+        filtered_urls = [u for u in (original_urls or []) if u != test_url]
+        settings.mint_info_urls = filtered_urls or None
+        settings.mint_info_contact = [
+            contact for contact in original_contact if contact != test_contact
+        ]
         await rpc.UpdateMotd(SimpleNamespace(motd="new motd"), None)
         await rpc.UpdateName(SimpleNamespace(name="New Name"), None)
-        await rpc.AddUrl(SimpleNamespace(url="https://new.test"), None)
+        await rpc.AddUrl(SimpleNamespace(url=test_url), None)
         await rpc.AddContact(
-            SimpleNamespace(method="test-contact", info="hi@test"), None
+            SimpleNamespace(method=test_contact[0], info=test_contact[1]), None
         )
 
         assert settings.mint_info_motd == "new motd"
         assert settings.mint_info_name == "New Name"
-        assert "https://new.test" in (settings.mint_info_urls or [])
-        assert ["test-contact", "hi@test"] in settings.mint_info_contact
+        assert test_url in (settings.mint_info_urls or [])
+        assert test_contact in settings.mint_info_contact
 
-        await rpc.RemoveUrl(SimpleNamespace(url="https://new.test"), None)
-        await rpc.RemoveContact(SimpleNamespace(method="test-contact"), None)
+        await rpc.RemoveUrl(SimpleNamespace(url=test_url), None)
+        await rpc.RemoveContact(SimpleNamespace(method=test_contact[0]), None)
 
-        assert "https://new.test" not in (settings.mint_info_urls or [])
-        assert ["test-contact", "hi@test"] not in settings.mint_info_contact
+        assert test_url not in (settings.mint_info_urls or [])
+        assert test_contact not in settings.mint_info_contact
     finally:
         settings.mint_info_urls = original_urls
         settings.mint_info_contact = original_contact
+        settings.mint_info_name = original_name
+        settings.mint_info_motd = original_motd
 
 
 @pytest.mark.asyncio
