@@ -226,7 +226,7 @@ async def test_mint_batch_failure_already_spent(ledger: Ledger):
 
 
 # ============================================================
-# Tests for MintInfo batch minting methods (NUT-333)
+# Tests for MintInfo batch minting methods (NUT-29)
 # ============================================================
 
 class TestMintInfoBatchSupport:
@@ -238,24 +238,24 @@ class TestMintInfoBatchSupport:
         assert mint_info.supports_batch_mint("bolt11") is False
 
     def test_supports_batch_mint_without_batch_nut(self):
-        """Test that supports_batch_mint returns False when NUT-333 not supported."""
+        """Test that supports_batch_mint returns False when NUT-29 not supported."""
         mint_info = MintInfo.model_construct(nuts={})
         assert mint_info.supports_batch_mint("bolt11") is False
 
     def test_supports_batch_mint_with_supported_method(self):
         """Test that supports_batch_mint returns True for supported method."""
-        mint_info = MintInfo.model_construct(nuts={333: {"methods": ["bolt11", "bolt12"]}})
+        mint_info = MintInfo.model_construct(nuts={29: {"methods": ["bolt11", "bolt12"]}})
         assert mint_info.supports_batch_mint("bolt11") is True
         assert mint_info.supports_batch_mint("bolt12") is True
 
     def test_supports_batch_mint_with_unsupported_method(self):
         """Test that supports_batch_mint returns False for unsupported method."""
-        mint_info = MintInfo.model_construct(nuts={333: {"methods": ["bolt11"]}})
+        mint_info = MintInfo.model_construct(nuts={29: {"methods": ["bolt11"]}})
         assert mint_info.supports_batch_mint("bolt12") is False
 
     def test_supports_batch_mint_with_empty_methods(self):
         """Test that supports_batch_mint returns False when methods list is empty."""
-        mint_info = MintInfo.model_construct(nuts={333: {"methods": []}})
+        mint_info = MintInfo.model_construct(nuts={29: {"methods": []}})
         assert mint_info.supports_batch_mint("bolt11") is False
 
     def test_get_max_batch_size_without_nuts(self):
@@ -264,18 +264,18 @@ class TestMintInfoBatchSupport:
         assert mint_info.get_max_batch_size() == 0
 
     def test_get_max_batch_size_without_batch_nut(self):
-        """Test that get_max_batch_size returns 0 when NUT-333 not supported."""
+        """Test that get_max_batch_size returns 0 when NUT-29 not supported."""
         mint_info = MintInfo.model_construct(nuts={})
         assert mint_info.get_max_batch_size() == 0
 
     def test_get_max_batch_size_with_value(self):
         """Test that get_max_batch_size returns the configured value."""
-        mint_info = MintInfo.model_construct(nuts={333: {"methods": ["bolt11"], "max_batch_size": 50}})
+        mint_info = MintInfo.model_construct(nuts={29: {"methods": ["bolt11"], "max_batch_size": 50}})
         assert mint_info.get_max_batch_size() == 50
 
     def test_get_max_batch_size_without_max(self):
         """Test that get_max_batch_size returns 0 when max_batch_size not set."""
-        mint_info = MintInfo.model_construct(nuts={333: {"methods": ["bolt11"]}})
+        mint_info = MintInfo.model_construct(nuts={29: {"methods": ["bolt11"]}})
         assert mint_info.get_max_batch_size() == 0
 
 
