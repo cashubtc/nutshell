@@ -190,8 +190,6 @@ class Ledger(
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
-        logger.debug("Disconnecting from database")
-        await self.db.engine.dispose()
         logger.debug("Shutting down invoice listeners")
         for task in self.invoice_listener_tasks:
             task.cancel()
@@ -200,6 +198,20 @@ class Ledger(
         logger.debug("Shutting down regular tasks")
         for task in self.regular_tasks:
             task.cancel()
+
+        # Wait for all background tasks to finish cancellation
+        tasks_to_wait = self.invoice_listener_tasks + self.watchdog_tasks + self.regular_tasks
+        if tasks_to_wait:
+            await asyncio.gather(*tasks_to_wait, return_exceptions=True)
+
+        logger.debug("Shutting down backends")
+        for method, unitbackends in self.backends.items():
+            for unit, backend in unitbackends.items():
+                if hasattr(backend, "cleanup"):
+                    await backend.cleanup()
+
+        logger.debug("Disconnecting from database")
+        await self.db.engine.dispose()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates

@@ -45,6 +45,12 @@ class LNbitsWallet(LightningBackend):
         self.ws_url = f"{self.endpoint.replace('http', 'ws', 1)}/api/v1/ws/{settings.mint_lnbits_key}"
         self.old_api = True
 
+    async def cleanup(self):
+        try:
+            await self.client.aclose()
+        except RuntimeError as e:
+            logger.warning(f"Error closing wallet connection: {e}")
+
     async def status(self) -> StatusResponse:
         try:
             r = await self.client.get(url=f"{self.endpoint}/api/v1/wallet", timeout=15)
