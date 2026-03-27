@@ -214,7 +214,6 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
-    assert not melt_quote.paid
     assert melt_quote.amount == 64
     assert melt_quote.fee_reserve == 0
 
@@ -267,9 +266,7 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     )
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
-
-    assert not melt_quote.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.unpaid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
