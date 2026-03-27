@@ -129,6 +129,7 @@ class Proof(BaseModel):
     C: str = ""  # signature on secret, unblinded by wallet
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
     witness: Union[None, str] = None  # witness for spending condition
+    p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
@@ -172,6 +173,9 @@ class Proof(BaseModel):
 
         if self.witness:
             return_dict["witness"] = self.witness
+
+        if self.p2pk_e:
+            return_dict["p2pk_e"] = self.p2pk_e
 
         return return_dict
 
@@ -1168,6 +1172,7 @@ class TokenV4Proof(BaseModel):
     c: bytes  # signature
     d: Optional[TokenV4DLEQ] = None  # DLEQ proof
     w: Optional[str] = None  # witness
+    pe: Optional[bytes] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1)
 
     @classmethod
     def from_proof(cls, proof: Proof, include_dleq=False):
@@ -1185,6 +1190,7 @@ class TokenV4Proof(BaseModel):
                 else None
             ),
             w=proof.witness,
+            pe=bytes.fromhex(proof.p2pk_e) if proof.p2pk_e else None,
         )
 
 
@@ -1255,6 +1261,7 @@ class TokenV4(Token):
                     else None
                 ),
                 witness=p.w,
+                p2pk_e=p.pe.hex() if p.pe else None,
             )
             for token in self.t
             for p in token.p
@@ -1294,6 +1301,7 @@ class TokenV4(Token):
                                 else None
                             ),
                             w=p.witness,
+                            pe=bytes.fromhex(p.p2pk_e) if p.p2pk_e else None,
                         )
                         for p in proofs
                     ],
@@ -1321,6 +1329,10 @@ class TokenV4(Token):
             for proof in token["p"]:
                 if not proof.get("w"):
                     del proof["w"]
+                # strip pe if not present
+                if not proof.get("pe"):
+                    if "pe" in proof:
+                        del proof["pe"]
         # optional memo
         if self.d:
             return_dict.update(dict(d=self.d))
@@ -1382,6 +1394,7 @@ class TokenV4(Token):
                                 else None
                             ),
                             witness=p.w,
+                            p2pk_e=p.pe.hex() if p.pe else None,
                         )
                         for p in token.p
                     ],
