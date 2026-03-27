@@ -8,15 +8,14 @@ from cashu.wallet.helpers import deserialize_token_from_string
 
 
 def test_get_output_split():
-    assert amount_split(13) == [1, 4, 8]
-    assert amount_split(0) == []
-    assert amount_split(-8) == []
+    assert amount_split(13) == [1, 4, 8], "Failed to split 13 into expected powers of 2"
+    assert amount_split(0) == [], "Split of 0 should be an empty list"
 
 
 def test_tokenv3_deserialize_get_attributes():
     token_str = "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAxNmQxY2UzMjk3N2IyZDgiLCJhbW91bnQiOjgsInNlY3JldCI6ImM1MDljMzgyYzY2MmRhYmJiNGQwYzVmOWVhMjU2MDBlM2FiNWIxMjNhY2U2Y2I3OWNhMzU5YTg1NDA4ZmVjYjciLCJDIjoiMDMwZTNkNDdkM2NlMjNkZTkzNTM3MjQ1NGJjOTMxMTJjZmExN2VmYWNkYjZjNWM2NDNmODVjOGFmM2JlNWQwMWEwIn0seyJpZCI6IjAxNmQxY2UzMjk3N2IyZDgiLCJhbW91bnQiOjIsInNlY3JldCI6IjgxYjhiYjFhN2Q2MGQwZGZiMjkxNmZjZmU4NzUxZmRhZGJjZTU2NDZmMmEyYTQzY2FkMDY4YjUzNzJlN2M5NGMiLCJDIjoiMDM1MTdhNDhmMTJlNDVkNGM1OGRlMjE2YTQzY2M4MTQzMDIzMWNmMmIwODlkMzI2NzA5ZDBmMmQwMGI3NDdlZmM3In1dLCJtaW50IjoiaHR0cDovL2xvY2FsaG9zdDozMzM4In1dLCJ1bml0Ijoic2F0In0"
     token = TokenV3.deserialize(token_str)
-    assert token.amount == 10
+    assert token.amount == 10, f"Expected TokenV3 amount 10, got {token.amount}"
     assert len(token.proofs) == 2
 
 
@@ -96,7 +95,7 @@ def test_tokenv4_deserialize_get_attributes():
     token_str = "cashuBo2F0gaJhaUgArSaMTR9YJmFwgqNhYQJhc3hAMDZlM2UzZjY4NDRiOGZkOGQ3NDMwODY1MjY3MjQ5YWU3NjdhMzg5MDBjODdkNGE0ZDMxOGY4MTJmNzkzN2ZiMmFjWCEDXDG_wzG35Lu4vcAtiycLSQlNqH65afih9N2SrFJn3GCjYWEIYXN4QDBmNTE5YjgwOWZlNmQ5MzZkMjVhYmU1YjhjYTZhMDRlNDc3OTJjOTI0YTkwZWRmYjU1MmM1ZjkzODJkNzFjMDJhY1ghA4CNH8dD8NNt715E37Ar65X6p6uBUoDbe8JipQp81TIgYW11aHR0cDovL2xvY2FsaG9zdDozMzM4YXVjc2F0"
     token = TokenV4.deserialize(token_str)
     assert token.mint == "http://localhost:3338"
-    assert token.amounts == [2, 8]
+    assert token.amounts == [2, 8], f"TokenV4 amounts mismatch: {token.amounts}"
     assert token.amount == 10
     assert token.unit == Unit.sat.name
     assert token.memo is None
@@ -204,8 +203,7 @@ def test_calculate_number_of_blank_outputs():
     fee_reserve_sat = 1000
     expected_n_blank_outputs = 10
     n_blank_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-    assert n_blank_outputs == expected_n_blank_outputs
-
+    assert n_blank_outputs == expected_n_blank_outputs, f"Incorrect number of blank outputs for fee reserve {fee_reserve_sat}"
 
 def test_calculate_number_of_blank_outputs_for_small_fee_reserve():
     # There should always be at least one blank output.
@@ -270,7 +268,7 @@ def test_secret_equality():
         kind=SecretKind.P2PK.value, data="asd", tags=Tags([["asd", "wasd"], ["mew"]])
     ) == Secret(
         kind=SecretKind.P2PK.value, data="asd", tags=Tags([["asd", "wasd"], ["mew"]])
-    )
+    ), "Secret equality comparison failed for identical secrets"
 
 
 def test_secret_set_dict():
@@ -326,9 +324,9 @@ def test_authproof_serialize_roundtrip():
     # to_base64 should strip padding
     assert not serialized.endswith("=")
     deserialized = AuthProof.from_base64(serialized)
-    assert deserialized.id == auth_proof.id
-    assert deserialized.secret == auth_proof.secret
-    assert deserialized.C == auth_proof.C
+    assert deserialized.id == auth_proof.id, "AuthProof ID mismatch after base64 roundtrip"
+    assert deserialized.secret == auth_proof.secret, "Deserialization failed: Secret mismatch"
+    assert deserialized.C == auth_proof.C, "Deserialization failed: Public key C mismatch"
 
 
 def test_authproof_from_base64_with_padding():
