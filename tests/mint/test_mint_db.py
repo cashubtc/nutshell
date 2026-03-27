@@ -522,7 +522,7 @@ async def test_get_mint_quotes(wallet: Wallet, ledger: Ledger):
     )
 
     assert len(fetched_quotes) == 3
-    # Verify order is preserved (per NUT-333 spec)
+    # Verify order is preserved (per NUT-29 spec)
     assert fetched_quotes[0].quote == quote3.quote
     assert fetched_quotes[1].quote == quote1.quote
     assert fetched_quotes[2].quote == quote2.quote

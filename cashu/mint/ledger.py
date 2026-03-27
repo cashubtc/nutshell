@@ -471,7 +471,7 @@ class Ledger(
     async def check_mint_quotes(self, quotes: List[str]) -> List[MintQuote]:
         """Checks multiple mint quotes and updates their status if paid.
 
-        Per NUT-333, this endpoint uses all-or-nothing error handling:
+        Per NUT-29, this endpoint uses all-or-nothing error handling:
         - If any quote_id is not known by the mint, the mint MUST reject the entire request
         - If any quote_id cannot be parsed (invalid format), the mint MUST reject the entire request
         """

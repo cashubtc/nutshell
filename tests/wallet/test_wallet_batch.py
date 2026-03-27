@@ -1,4 +1,4 @@
-"""Tests for wallet batch minting (NUT-333)."""
+"""Tests for wallet batch minting (NUT-29)."""
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

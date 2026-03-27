@@ -146,7 +146,7 @@ class NpubCash:
         Mints all paid quotes associated with the current wallet's mint.
         Returns a list of minted proofs.
         
-        Uses batch minting if the mint supports NUT-333.
+        Uses batch minting if the mint supports NUT-29.
         """
         if not self.wallet.url:
              raise ValueError("Wallet mint URL not set")
@@ -184,7 +184,7 @@ class NpubCash:
             return await self._mint_sequential(mint_quotes)
 
     async def _mint_batch(self, mint_quotes: List[tuple]) -> List[Any]:
-        """Mint quotes using batch endpoint (NUT-333)."""
+        """Mint quotes using batch endpoint (NUT-29)."""
         # Collect quote IDs that need minting
         quote_ids = []
         for quote_dict, quote_id, amount in mint_quotes:
