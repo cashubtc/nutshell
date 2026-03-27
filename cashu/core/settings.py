@@ -127,6 +127,13 @@ class MintLimits(MintSettings):
         description="Maximum length of REST API request arrays.",
     )
 
+    mint_max_batch_size: int = Field(
+        default=100,
+        gt=0,
+        title="Maximum batch size",
+        description="Maximum number of quotes allowed in a single batch mint request.",
+    )
+
     mint_peg_out_only: bool = Field(  # deprecated for mint_bolt11_disable_mint
         default=False,
         title="Disable minting tokens with bolt11",
