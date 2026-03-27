@@ -52,7 +52,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
-    assert melt_quote.state != MeltQuoteState.paid
+    assert melt_quote.state != MeltQuoteState.paid.value
     assert melt_quote.state == MeltQuoteState.unpaid.value
 
     assert melt_quote.amount == 64

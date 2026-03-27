@@ -398,7 +398,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "checking_id": quote.checking_id,
                 "unit": quote.unit,
                 "amount": quote.amount,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
@@ -468,7 +468,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time WHERE quote = :quote",
             {
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),

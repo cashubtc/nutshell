@@ -1188,34 +1188,36 @@ async def m032_remove_paid_and_issued_from_mint_quote(db: Database):
 
             # Recreate mint_quotes without 'paid' and 'issued'
             await conn.execute(
-                """
-                CREATE TABLE mint_quotes_new (
-                    quote TEXT PRIMARY KEY,
-                    method TEXT,
-                    request TEXT,
-                    checking_id TEXT,
-                    unit TEXT,
-                    amount INT,
-                    created_time NUM,
-                    paid_time NUM,
+                f"""
+                CREATE TABLE {db.table_with_schema('mint_quotes_new')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount {db.big_int} NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
                     state TEXT,
-                    pubkey TEXT
+                    pubkey TEXT,
+
+                    UNIQUE (quote)
                 );
             """
             )
 
             # Copy data (exclude 'paid' and 'issued')
             await conn.execute(
-                """
-                INSERT INTO mint_quotes_new (quote, method, request, checking_id, unit, amount, created_time, paid_time, state, pubkey)
+                f"""
+                INSERT INTO {db.table_with_schema('mint_quotes_new')} (quote, method, request, checking_id, unit, amount, created_time, paid_time, state, pubkey)
                 SELECT quote, method, request, checking_id, unit, amount, created_time, paid_time, state, pubkey
-                FROM mint_quotes;
+                FROM {db.table_with_schema('mint_quotes')};
             """
             )
 
             # Swap tables
-            await conn.execute("DROP TABLE mint_quotes;")
-            await conn.execute("ALTER TABLE mint_quotes_new RENAME TO mint_quotes;")
+            await conn.execute(f"DROP TABLE {db.table_with_schema('mint_quotes')};")
+            await conn.execute(f"ALTER TABLE {db.table_with_schema('mint_quotes_new')} RENAME TO {db.table_with_schema('mint_quotes')};")
 
             await conn.execute("PRAGMA foreign_keys=ON;")
 
