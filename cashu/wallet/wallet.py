@@ -366,14 +366,7 @@ class Wallet(
 
         await self.inactivate_base64_keysets(force_old_keysets)
 
-        # RE-FETCH after all DB updates using the centralized method
-        self.keysets = {}
         await self.load_keysets_from_db()
-
-        # for minting/swapping, only keep active keysets,
-        self.keysets = {
-            k_id: k for k_id, k in self.keysets.items() if k.active
-        }
 
     async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
         """Activates a keyset by setting self.keyset_id. Either activates a specific keyset
@@ -466,9 +459,7 @@ class Wallet(
         if url == "":
             url = self.url
         keysets = await get_keysets(mint_url=url, unit=unit, db=self.db)
-        for keyset in keysets:
-            if keyset.deleted_at is None:
-                self.keysets[keyset.id] = keyset
+        self.keysets = {k.id: k for k in keysets if k.deleted_at is None}
         logger.trace(
             f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
         )
