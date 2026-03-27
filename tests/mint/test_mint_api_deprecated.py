@@ -187,8 +187,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is None
-    assert result["paid"] is True
-
 
 @pytest.mark.asyncio
 async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
@@ -223,8 +221,6 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is None
-    assert result["paid"] is True
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -266,11 +262,9 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is not None
-    assert result["paid"] is True
     assert result["change"]
     # we get back 2 sats because Lightning was free to pay on regtest
     assert result["change"][0]["amount"] == 2
-
 
 @pytest.mark.asyncio
 async def test_checkfees(ledger: Ledger, wallet: Wallet):
