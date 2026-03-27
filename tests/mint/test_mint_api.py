@@ -219,10 +219,6 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
 
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is False
-    assert resp_quote.paid is False
-
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
 
@@ -250,9 +246,6 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
 
-    # check if DEPRECATED paid flag is also returned
-    assert result2["paid"] is True
-    assert resp_quote.paid is True
     assert resp_quote.pubkey == "02" + "00" * 32
 
 
@@ -361,10 +354,6 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.unit == "sat"
     assert resp_quote.request == request
 
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is False
-    assert resp_quote.paid is False
-
     invoice_obj = bolt11.decode(request)
 
     expiry = None
@@ -458,7 +447,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("payment_preimage") is None
-    assert result["paid"] is True
 
     # deserialize the response
     resp_quote = PostMeltQuoteResponse(**result)
@@ -471,11 +459,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.amount == 64
     assert resp_quote.unit == "sat"
     assert resp_quote.request == invoice_payment_request
-
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is True
-    assert resp_quote.paid is True
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -521,7 +504,6 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("payment_preimage") is not None
-    assert result["paid"] is True
     assert result["change"]
     # we get back 2 sats because Lightning was free to pay on regtest
     assert result["change"][0]["amount"] == 2
@@ -537,11 +519,6 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert resp_quote.change is not None
     assert resp_quote.change[0].amount == 2
     assert resp_quote.state == MeltQuoteState.paid.value
-
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is True
-    assert resp_quote.paid is True
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(

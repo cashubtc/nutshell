@@ -458,13 +458,6 @@ class MintQuote(LedgerEvent):
 
     @classmethod
     def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
-        # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
-        if mint_quote_resp.state is None:
-            if mint_quote_resp.paid is True:
-                mint_quote_resp.state = MintQuoteState.paid
-            elif mint_quote_resp.paid is False:
-                mint_quote_resp.state = MintQuoteState.unpaid
-        # END: BACKWARDS COMPATIBILITY < 0.16.0
         return cls(
             quote=mint_quote_resp.quote,
             method="bolt11",
@@ -1423,7 +1416,7 @@ class AuthProof(BaseModel):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
         return (
-            self.prefix + base64.b64encode(json.dumps(serialize_dict).encode()).decode()
+            self.prefix + base64.urlsafe_b64encode(json.dumps(serialize_dict).encode()).decode().rstrip("=")
         )
 
     @classmethod
@@ -1432,7 +1425,9 @@ class AuthProof(BaseModel):
             f"Token prefix not valid. Expected {cls.prefix}."
         )
         base64_str = base64_str[len(cls.prefix) :]
-        return cls.model_validate(json.loads(base64.b64decode(base64_str).decode()))
+        # Re-add padding if stripped, as urlsafe_b64decode requires it
+        padded = base64_str + "=" * (-len(base64_str) % 4)
+        return cls.model_validate(json.loads(base64.urlsafe_b64decode(padded).decode()))
 
     def to_proof(self):
         return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)

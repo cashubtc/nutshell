@@ -7,11 +7,8 @@ from cashu.core.models import (
     CheckSpendableRequest_deprecated,
     CheckSpendableResponse_deprecated,
     GetMintResponse_deprecated,
-    PostRestoreRequest,
-    PostRestoreResponse,
 )
 from cashu.mint.ledger import Ledger
-from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
@@ -190,8 +187,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is None
-    assert result["paid"] is True
-
 
 @pytest.mark.asyncio
 async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
@@ -226,8 +221,6 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is None
-    assert result["paid"] is True
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -269,11 +262,9 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is not None
-    assert result["paid"] is True
     assert result["change"]
     # we get back 2 sats because Lightning was free to pay on regtest
     assert result["change"][0]["amount"] == 2
-
 
 @pytest.mark.asyncio
 async def test_checkfees(ledger: Ledger, wallet: Wallet):
@@ -327,33 +318,3 @@ async def test_api_check_state(ledger: Ledger):
     assert states.pending
     assert len(states.pending) == 2
 
-
-@pytest.mark.asyncio
-async def test_api_restore(ledger: Ledger, wallet: Wallet):
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
-    secret_counter = await bump_secret_derivation(
-        db=wallet.db, keyset_id=wallet.keyset_id, by=0, skip=True
-    )
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(
-        secret_counter - 1, secret_counter - 1
-    )
-    outputs, rs = wallet._construct_outputs([64], secrets, rs)
-
-    payload = PostRestoreRequest(outputs=outputs)
-    response = httpx.post(
-        f"{BASE_URL}/restore",
-        json=payload.model_dump(),
-    )
-    data = response.json()
-    assert "promises" in data
-    assert "outputs" in data
-    assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostRestoreResponse.model_validate(response.json())
-    assert response
-    assert response.promises
-    assert len(response.promises) == 1
-    assert len(response.outputs) == 1
-    assert response.outputs == outputs
