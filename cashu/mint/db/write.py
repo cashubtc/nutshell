@@ -147,7 +147,9 @@ class DbWriteHelper:
         """
         quote: Union[MintQuote, None] = None
         async with self.db.get_connection(
-            lock_table="mint_quotes", lock_select_statement=f"quote='{quote_id}'"
+            lock_table="mint_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": quote_id},
         ) as conn:
             # get mint quote from db and check if it is already pending
             quote = await self.crud.get_mint_quote(
@@ -177,7 +179,11 @@ class DbWriteHelper:
             state (MintQuoteState): New state of the mint quote.
         """
         quote: Union[MintQuote, None] = None
-        async with self.db.get_connection(lock_table="mint_quotes") as conn:
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": quote_id},
+        ) as conn:
             # get mint quote from db and check if it is pending
             quote = await self.crud.get_mint_quote(
                 quote_id=quote_id, db=self.db, conn=conn
@@ -209,7 +215,8 @@ class DbWriteHelper:
             raise TransactionError("Melt quote doesn't have checking ID.")
         async with self.db.get_connection(
             lock_table="melt_quotes",
-            lock_select_statement=f"checking_id='{quote.checking_id}'",
+            lock_select_statement="checking_id = :checking_id",
+            lock_parameters={"checking_id": quote.checking_id},
         ) as conn:
             # get all melt quotes with same checking_id from db and check if there is one already pending or paid
             quotes_db = await self.crud.get_melt_quotes_by_checking_id(
@@ -243,7 +250,11 @@ class DbWriteHelper:
             TransactionError: If the melt quote is not found or not pending.
         """
         quote_copy = quote.model_copy()
-        async with self.db.get_connection(lock_table="melt_quotes") as conn:
+        async with self.db.get_connection(
+            lock_table="melt_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": quote.quote},
+        ) as conn:
             # get melt quote from db and check if it is pending
             quote_db = await self.crud.get_melt_quote(
                 quote_id=quote.quote, db=self.db, conn=conn
@@ -263,7 +274,11 @@ class DbWriteHelper:
         return quote_copy
 
     async def _update_mint_quote_state(self, quote_id: str, state: MintQuoteState):
-        async with self.db.get_connection(lock_table="mint_quotes") as conn:
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": quote_id},
+        ) as conn:
             mint_quote = await self.crud.get_mint_quote(
                 quote_id=quote_id, db=self.db, conn=conn
             )
@@ -286,7 +301,11 @@ class DbWriteHelper:
         Raises:
             TransactionError: If the melt quote is not found.
         """
-        async with self.db.get_connection(lock_table="melt_quotes") as conn:
+        async with self.db.get_connection(
+            lock_table="melt_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": quote_id},
+        ) as conn:
             melt_quote = await self.crud.get_melt_quote(
                 quote_id=quote_id, db=self.db, conn=conn
             )
@@ -306,7 +325,8 @@ class DbWriteHelper:
         """
         async with self.db.get_connection(
             lock_table="melt_quotes",
-            lock_select_statement=f"checking_id='{quote.checking_id}'",
+            lock_select_statement="checking_id = :checking_id",
+            lock_parameters={"checking_id": quote.checking_id},
         ) as conn:
             # get all melt quotes with same checking_id from db and check if there is one already pending or paid
             quotes_db = await self.crud.get_melt_quotes_by_checking_id(

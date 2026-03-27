@@ -44,7 +44,8 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
         async with self.db.get_connection(
             lock_table="mint_quotes",
-            lock_select_statement=f"checking_id='{checking_id}'",
+            lock_select_statement="checking_id = :checking_id",
+            lock_parameters={"checking_id": checking_id},
             lock_timeout=5,
         ) as conn:
             quote = await self.crud.get_mint_quote(

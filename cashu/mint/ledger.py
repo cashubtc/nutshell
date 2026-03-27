@@ -448,7 +448,8 @@ class Ledger(
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
                     lock_table="mint_quotes",
-                    lock_select_statement=f"quote='{quote_id}'",
+                    lock_select_statement="quote = :quote",
+                    lock_parameters={"quote": quote_id},
                 ) as conn:
                     quote = await self.crud.get_mint_quote(
                         quote_id=quote_id, db=self.db, conn=conn
@@ -1083,7 +1084,14 @@ class Ledger(
             proofs, keysets=self.keysets
         )
         try:
-            async with self.db.get_connection(lock_table="proofs_pending") as conn:
+            Ys = [p.Y for p in proofs]
+            lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
+            ys_list = ", ".join(f":y{i}" for i in range(len(Ys)))
+            async with self.db.get_connection(
+                lock_table="proofs_pending",
+                lock_select_statement=f"y IN ({ys_list})",
+                lock_parameters=lock_parameters,
+            ) as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._sign_blinded_messages(outputs, conn)
