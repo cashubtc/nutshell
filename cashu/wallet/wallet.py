@@ -291,14 +291,28 @@ class Wallet(
 
     async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.
-
         Then loads all keysets from the database for the active mint and active unit into self.keysets.
         """
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-        # load all keysets of thisd mint from the db
+
+        # load all keysets of this mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+
+        # mark keysets that disappeared from mint as deleted
+        active_ids = set(mint_keysets_dict.keys())
+        local_ids = {key.id for key in keysets_in_db}
+        keysets_in_db_dict = {k.id: k for k in keysets_in_db}
+
+        for key_id in (local_ids - active_ids):
+            ks = keysets_in_db_dict[key_id]
+            logger.debug(
+                f"Keyset {key_id} no longer reported by mint, marking as deleted"
+            )
+            if ks.deleted_at is None:
+                ks.deleted_at = int(time.time())
+            await update_keyset(keyset=ks, db=self.db)
 
         # db is empty, get all keys from the mint and store them
         if not keysets_in_db:
@@ -436,15 +450,16 @@ class Wallet(
     async def load_keysets_from_db(
         self, url: Union[str, None] = "", unit: Union[str, None] = ""
     ):
-        """Load all keysets of the selected mint and unit from the database into self.keysets."""
+        """Load all keysets of the selected mint and unit from the database into self.keysets.
+        Excludes keysets that have been marked as deleted (no longer reported by the mint).
+        """
         # so that the caller can set unit = None, otherwise use defaults
         if unit == "":
             unit = self.unit.name
         if url == "":
             url = self.url
         keysets = await get_keysets(mint_url=url, unit=unit, db=self.db)
-        for keyset in keysets:
-            self.keysets[keyset.id] = keyset
+        self.keysets = {k.id: k for k in keysets if k.deleted_at is None}
         logger.trace(
             f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
         )
