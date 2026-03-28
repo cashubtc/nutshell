@@ -56,9 +56,9 @@ def test_assert_limit_raises_when_rate_exceeded(monkeypatch):
 
 
 def test_get_ws_remote_address_defaults_to_localhost():
-    ws_without_client = SimpleNamespace(client=None)
-    ws_without_host = SimpleNamespace(client=SimpleNamespace(host=None))
-    ws_remote = SimpleNamespace(client=SimpleNamespace(host="198.51.100.5"))
+    ws_without_client = SimpleNamespace(client=None, headers={})
+    ws_without_host = SimpleNamespace(client=SimpleNamespace(host=None), headers={})
+    ws_remote = SimpleNamespace(client=SimpleNamespace(host="198.51.100.5"), headers={})
 
     assert limit.get_ws_remote_address(ws_without_client) == "127.0.0.1"
     assert limit.get_ws_remote_address(ws_without_host) == "127.0.0.1"
@@ -71,8 +71,8 @@ def test_limit_websocket_skips_localhost_and_limits_remote(monkeypatch):
         limit, "assert_limit", lambda identifier: called.append(identifier)
     )
 
-    local_ws = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
-    remote_ws = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"))
+    local_ws = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), headers={})
+    remote_ws = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
 
     limit.limit_websocket(local_ws)
     limit.limit_websocket(remote_ws)
