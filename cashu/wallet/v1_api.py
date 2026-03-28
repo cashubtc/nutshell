@@ -486,12 +486,13 @@ class LedgerAPI(SupportsAuth):
         quote: str,
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]],
+        prefer_async: bool = False,
     ) -> PostMeltQuoteResponse:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
-        payload = PostMeltRequest(quote=quote, inputs=proofs, outputs=outputs)
+        payload = PostMeltRequest(quote=quote, inputs=proofs, outputs=outputs, prefer_async=prefer_async)
 
         def _meltrequest_include_fields(
             proofs: List[Proof], outputs: List[BlindedMessage]
@@ -503,6 +504,7 @@ class LedgerAPI(SupportsAuth):
                 "quote": ...,
                 "inputs": {i: proofs_include for i in range(len(proofs))},
                 "outputs": {i: outputs_include for i in range(len(outputs))},
+                "prefer_async": ...,
             }
 
         resp = await self._request(
