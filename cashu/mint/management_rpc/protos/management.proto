@@ -36,6 +36,8 @@ service Mint {
     rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
     // UpdateQuoteTtl updates the Time-To-Live (TTL) for minting and melting quotes.
     rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    // GetQuoteTtl retrieves the current Time-To-Live (TTL) for minting and melting quotes.
+    rpc GetQuoteTtl(GetQuoteTtlRequest) returns (GetQuoteTtlResponse) {}
     // UpdateNut04Quote updates the state of a specific NUT-04 (minting) quote.
     rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     // UpdateNut05Quote updates the state of a specific NUT-05 (melting) quote.
@@ -182,6 +184,18 @@ message UpdateQuoteTtlRequest {
     optional uint64 melt_ttl = 2;
 }
 
+// GetQuoteTtlRequest is used to retrieve the expiry time of a specific quote.
+message GetQuoteTtlRequest {
+    // The ID of the quote to retrieve the expiry for.
+    string quote_id = 1;
+}
+
+// GetQuoteTtlResponse contains the expiry time for a specific quote.
+message GetQuoteTtlResponse {
+    // The Unix timestamp when the quote expires.
+    int64 expiry = 1;
+}
+
 // Nut04Quote represents a quote for minting (NUT-04).
 message Nut04Quote {
     // The unique identifier for the quote.
@@ -314,6 +328,8 @@ message RotateNextKeysetRequest {
     optional uint32 max_order = 2;
     // Optional: The input fee per kilobyte for the new keyset.
     optional uint64 input_fee_ppk = 3;
+    // Optional: The final expiry of the keyset, as a unix epoch in seconds
+    optional uint64 final_expiry = 4;
 }
 
 // RotateNextKeysetResponse contains information about the newly rotated keyset.
@@ -326,6 +342,8 @@ message RotateNextKeysetResponse {
     uint32 max_order = 3;
     // The input fee per kilobyte for the new keyset.
     uint64 input_fee_ppk = 4;
+    // Optional: The final expiry of the keyset, as a unix epoch in seconds
+    optional uint64 final_expiry = 5;
 }
 
 // UpdateLightningFeeRequest is used to update the lightning network fee configuration.

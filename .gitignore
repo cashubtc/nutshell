@@ -143,3 +143,5 @@ tor-data
 
 # PEM certs
 *.pem
+
+junit.xml

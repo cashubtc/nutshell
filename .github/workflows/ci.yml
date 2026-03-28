@@ -5,6 +5,9 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     uses: ./.github/workflows/checks.yml
@@ -15,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
+        poetry-version: ["2.3.2"]
         # Wallet v0 / deprecated mint API support was removed in https://github.com/cashubtc/nutshell/pull/814; deprecated-only CI runs are no longer valid.
         # mint-only-deprecated: ["false", "true"]
         mint-only-deprecated: ["false"]
@@ -35,7 +38,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
+        poetry-version: ["2.3.2"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_redis_cache.yml
     with:
@@ -50,7 +53,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
+        poetry-version: ["2.3.2"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_keycloak_auth.yml
     with:
@@ -65,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
+        poetry-version: ["2.3.2"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
@@ -81,7 +84,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
+        poetry-version: ["2.3.2"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]

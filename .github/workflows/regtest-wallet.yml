@@ -4,10 +4,10 @@ on:
   workflow_call:
     inputs:
       python-version:
-        default: "3.10.4"
+        default: "3.10"
         type: string
       poetry-version:
-        default: "1.5.1"
+        default: "2.3.2"
         type: string
       os-version:
         default: "ubuntu-latest"
@@ -18,6 +18,9 @@ on:
       backend-wallet-class:
         required: true
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   regtest-wallet:
@@ -30,7 +33,7 @@ jobs:
           docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
           until docker exec postgres pg_isready; do sleep 1; done
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/prepare
         with:
@@ -76,4 +79,9 @@ jobs:
           make test-wallet
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

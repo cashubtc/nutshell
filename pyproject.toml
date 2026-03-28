@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cashu"
-version = "0.19.2"
+version = "0.20.0"
 description = "Ecash wallet and mint"
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
@@ -8,6 +8,7 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.10"
 SQLAlchemy = {version = "^2.0.35", extras = ["asyncio"]}
+greenlet = ">=3.0.0"
 click = "^8.1.7"
 pydantic = "^2.5.3"
 pydantic-settings = "^2.1.0"
@@ -55,12 +56,14 @@ ruff = "^0.7.1"
 mypy = "^1.13.0"
 pre-commit = "^4.0.1"
 types-redis = "^4.6.0"
+hypothesis = "^6.150.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
+addopts = "--junitxml=junit.xml -o junit_family=legacy"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 

@@ -605,8 +605,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, paid, issued, state, created_time, paid_time, pubkey)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :paid, :issued, :state, :created_time, :paid_time, :pubkey)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, pubkey)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :pubkey)
             """,
             {
                 "quote": quote.quote,
@@ -615,8 +615,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 "checking_id": quote.checking_id,
                 "unit": quote.unit,
                 "amount": quote.amount,
-                "paid": quote.paid,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
-                "issued": quote.issued,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "state": quote.state.value,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
@@ -829,8 +827,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('keysets')}
-            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts, balance)
-            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts, :balance)
+            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts, balance, final_expiry)
+            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts, :balance, :final_expiry)
             """,
             {
                 "id": keyset.id,
@@ -851,6 +849,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "input_fee_ppk": keyset.input_fee_ppk,
                 "amounts": json.dumps(keyset.amounts),
                 "balance": keyset.balance,
+                "final_expiry": keyset.final_expiry,  # NEW: Store final expiry
             },
         )
 
@@ -963,7 +962,7 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             UPDATE {db.table_with_schema('keysets')}
-            SET seed = :seed, encrypted_seed = :encrypted_seed, seed_encryption_method = :seed_encryption_method, derivation_path = :derivation_path, valid_from = :valid_from, valid_to = :valid_to, first_seen = :first_seen, active = :active, version = :version, unit = :unit, input_fee_ppk = :input_fee_ppk
+            SET seed = :seed, encrypted_seed = :encrypted_seed, seed_encryption_method = :seed_encryption_method, derivation_path = :derivation_path, valid_from = :valid_from, valid_to = :valid_to, first_seen = :first_seen, active = :active, version = :version, unit = :unit, input_fee_ppk = :input_fee_ppk, final_expiry = :final_expiry
             WHERE id = :id
             """,
             {
@@ -984,6 +983,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
                 "balance": keyset.balance,
+                "final_expiry": keyset.final_expiry,  # NEW: Update final expiry
             },
         )
 

@@ -1140,7 +1140,6 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         # recreate the balance views
         await create_balance_views(db, conn)
 
-
 async def m029_remove_overlong_witness_values(db: Database):
     """
     Delete any witness values longer than 1024 characters in proofs tables.
@@ -1164,3 +1163,65 @@ async def m030_remove_overlong_witness_values(db: Database):
     Repeat m029 after limiting all new witness values to 1024 characters.
     """
     await m029_remove_overlong_witness_values(db)
+
+
+async def m031_add_final_expiry_to_keysets(db: Database):
+    """
+    Add final_expiry column to keysets table for keysets v2 support.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('keysets')}
+                ADD COLUMN final_expiry INTEGER NULL
+            """
+        )
+
+async def m032_remove_paid_and_issued_from_mint_quote(db: Database):
+    """
+    Remove the deprecated 'paid' and 'issued' fields from mint_quotes.
+    The 'state' column now fully represents payment status.
+    """
+    async with db.connect() as conn:
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+
+            # Recreate mint_quotes without 'paid' and 'issued'
+            await conn.execute(
+                f"""
+                CREATE TABLE {db.table_with_schema('mint_quotes_new')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount {db.big_int} NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
+                    state TEXT,
+                    pubkey TEXT,
+
+                    UNIQUE (quote)
+                );
+            """
+            )
+
+            # Copy data (exclude 'paid' and 'issued')
+            await conn.execute(
+                f"""
+                INSERT INTO {db.table_with_schema('mint_quotes_new')} (quote, method, request, checking_id, unit, amount, created_time, paid_time, state, pubkey)
+                SELECT quote, method, request, checking_id, unit, amount, created_time, paid_time, state, pubkey
+                FROM {db.table_with_schema('mint_quotes')};
+            """
+            )
+
+            # Swap tables
+            await conn.execute(f"DROP TABLE {db.table_with_schema('mint_quotes')};")
+            await conn.execute(f"ALTER TABLE {db.table_with_schema('mint_quotes_new')} RENAME TO {db.table_with_schema('mint_quotes')};")
+
+            await conn.execute("PRAGMA foreign_keys=ON;")
+
+        elif conn.type == "POSTGRES":
+            # Postgres supports dropping columns directly
+            await conn.execute("ALTER TABLE mint_quotes DROP COLUMN IF EXISTS paid;")
+            await conn.execute("ALTER TABLE mint_quotes DROP COLUMN IF EXISTS issued;")

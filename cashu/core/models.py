@@ -107,6 +107,7 @@ class KeysResponseKeyset(BaseModel):
     active: bool
     input_fee_ppk: Optional[int] = None
     keys: Dict[int, str]
+    final_expiry: Optional[int] = None 
 
 
 class KeysResponse(BaseModel):
@@ -118,6 +119,7 @@ class KeysetsResponseKeyset(BaseModel):
     unit: str
     active: bool
     input_fee_ppk: Optional[int] = None
+    final_expiry: Optional[int] = None
 
 
 class KeysetsResponse(BaseModel):
@@ -158,7 +160,6 @@ class PostMintQuoteResponse(BaseModel):
     state: Optional[str]  # state of the quote (optional for backwards compat)
     expiry: Optional[int]  # expiry of the quote
     pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
-    paid: Optional[bool] = None  # DEPRECATED as per NUT-04 PR #141
 
     @classmethod
     def from_mint_quote(cls, mint_quote: MintQuote) -> "PostMintQuoteResponse":
@@ -365,12 +366,6 @@ class PostRestoreRequest_Deprecated(BaseModel):
 class PostRestoreResponse(BaseModel):
     outputs: List[BlindedMessage] = []
     signatures: List[BlindedSignature] = []
-    promises: Optional[List[BlindedSignature]] = []  # deprecated since 0.15.1
-
-    # duplicate value of "signatures" for backwards compatibility with old clients < 0.15.1
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.promises = self.signatures
 
 
 # ------- API: BLIND AUTH -------

@@ -24,6 +24,7 @@ from .crypto.keys import (
     derive_keys_deprecated_pre_0_15,
     derive_keyset_id,
     derive_keyset_id_deprecated,
+    derive_keyset_id_v2,
     derive_pubkeys,
 )
 from .crypto.secp import PrivateKey, PublicKey
@@ -457,13 +458,6 @@ class MintQuote(LedgerEvent):
 
     @classmethod
     def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
-        # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
-        if mint_quote_resp.state is None:
-            if mint_quote_resp.paid is True:
-                mint_quote_resp.state = MintQuoteState.paid
-            elif mint_quote_resp.paid is False:
-                mint_quote_resp.state = MintQuoteState.unpaid
-        # END: BACKWARDS COMPATIBILITY < 0.16.0
         return cls(
             quote=mint_quote_resp.quote,
             method="bolt11",
@@ -804,6 +798,7 @@ class MintKeyset:
     version: Optional[str] = None
     amounts: List[int]
     balance: int
+    final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -825,6 +820,7 @@ class MintKeyset:
         id: str = "",
         balance: int = 0,
         fees_paid: int = 0,
+        final_expiry: Optional[int] = None,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -860,6 +856,7 @@ class MintKeyset:
         self.balance = balance
         self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
+        self.final_expiry = final_expiry
 
         if self.input_fee_ppk < 0:
             raise Exception("Input fee must be non-negative.")
@@ -914,6 +911,7 @@ class MintKeyset:
             amounts=json.loads(row["amounts"]),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
+            final_expiry=row["final_expiry"],
         )
 
     @property
@@ -957,12 +955,33 @@ class MintKeyset:
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+        elif self.version_tuple < (0, 20):
+            self.private_keys = derive_keys(
+                self.seed, self.derivation_path, self.amounts
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
+            
+            if id_in_db:
+                # If loading from DB, preserve existing ID
+                self.id = id_in_db
+            else:
+                assert self.public_keys is not None
+                self.id = derive_keyset_id(self.public_keys)
+                logger.info(f"Generated keyset v1 ID: {self.id}")
         else:
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
+            
+            # KEYSETS V2: Use new keyset ID derivation
+            if id_in_db:
+                # If loading from DB, preserve existing ID
+                self.id = id_in_db
+            else:
+                assert self.public_keys is not None
+                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
+                logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
 # ------- TOKEN -------
@@ -1393,7 +1412,7 @@ class AuthProof(BaseModel):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
         return (
-            self.prefix + base64.b64encode(json.dumps(serialize_dict).encode()).decode()
+            self.prefix + base64.urlsafe_b64encode(json.dumps(serialize_dict).encode()).decode().rstrip("=")
         )
 
     @classmethod
@@ -1402,7 +1421,9 @@ class AuthProof(BaseModel):
             f"Token prefix not valid. Expected {cls.prefix}."
         )
         base64_str = base64_str[len(cls.prefix) :]
-        return cls.model_validate(json.loads(base64.b64decode(base64_str).decode()))
+        # Re-add padding if stripped, as urlsafe_b64decode requires it
+        padded = base64_str + "=" * (-len(base64_str) % 4)
+        return cls.model_validate(json.loads(base64.urlsafe_b64decode(padded).decode()))
 
     def to_proof(self):
         return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)

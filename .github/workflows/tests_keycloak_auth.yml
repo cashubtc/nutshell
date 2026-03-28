@@ -4,10 +4,10 @@ on:
   workflow_call:
     inputs:
       python-version:
-        default: "3.10.4"
+        default: "3.10"
         type: string
       poetry-version:
-        default: "1.8.5"
+        default: "2.3.2"
         type: string
       mint-database:
         default: ""
@@ -16,13 +16,16 @@ on:
         default: "ubuntu-latest"
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   poetry:
     name: Auth tests with Keycloak (db ${{ inputs.mint-database }})
     runs-on: ${{ inputs.os }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Prepare environment
         uses: ./.github/actions/prepare
@@ -39,12 +42,6 @@ jobs:
             -e POSTGRES_DB=cashu \
             -p 5432:5432 postgres:16.4
           until docker exec postgres pg_isready; do sleep 1; done
-
-      - name: Prepare environment
-        uses: ./.github/actions/prepare
-        with:
-          python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
 
       - name: Start Keycloak with Backup
         run: |
@@ -74,4 +71,9 @@ jobs:
           docker compose -f tests/keycloak_data/docker-compose-restore.yml down
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

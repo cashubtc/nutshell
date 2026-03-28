@@ -4,10 +4,10 @@ on:
   workflow_call:
     inputs:
       python-version:
-        default: "3.10.4"
+        default: "3.10"
         type: string
       poetry-version:
-        default: "1.8.5"
+        default: "2.3.2"
         type: string
       mint-database:
         default: ""
@@ -18,6 +18,9 @@ on:
       mint-only-deprecated:
         default: "false"
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   poetry:
@@ -30,7 +33,7 @@ jobs:
           docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
           until docker exec postgres pg_isready; do sleep 1; done
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Prepare environment
         uses: ./.github/actions/prepare
@@ -60,4 +63,9 @@ jobs:
           docker compose -f docker/redis/docker-compose.yml down
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
