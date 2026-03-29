@@ -111,12 +111,26 @@ class LedgerVerification(
         # Verify SIG_ALL spending conditions
         self._verify_input_output_spending_conditions(proofs, outputs)
 
+    def _verify_proofs_unit(self, proofs: List[Proof], expected_unit: Unit) -> None:
+        """Verifies that all proofs have the expected unit and valid keysets."""
+        if not proofs:
+            raise TransactionError("no proofs provided.")
+        for p in proofs:
+            if p.id not in self.keysets:
+                raise TransactionError(f"keyset {p.id} unknown")
+            if self.keysets[p.id].unit != expected_unit:
+                raise TransactionError(
+                    f"proof unit {self.keysets[p.id].unit.name} does not match quote unit {expected_unit.name}"
+                )
+
     async def _verify_outputs(
         self,
         outputs: List[BlindedMessage],
         skip_amount_check=False,
+        expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
     ):
+
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         if not outputs:
@@ -129,6 +143,10 @@ class LedgerVerification(
             raise TransactionError("keyset id unknown.")
         if not self.keysets[outputs[0].id].active:
             raise TransactionError("keyset id inactive.")
+        if expected_unit and self.keysets[outputs[0].id].unit != expected_unit:
+            raise TransactionError(
+                f"output unit {self.keysets[outputs[0].id].unit.name} does not match quote unit {expected_unit.name}"
+            )
         # Verify amounts of outputs
         # we skip the amount check for NUT-8 change outputs (which can have amount 0)
         if not skip_amount_check:

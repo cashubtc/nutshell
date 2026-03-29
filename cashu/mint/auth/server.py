@@ -233,7 +233,8 @@ class AuthLedger(Ledger):
 
         try:
             yield
-            await self._invalidate_proofs(proofs=[proof])
+            # We do not calculate fees for auth keysets
+            await self.db_write.invalidate_proofs(proofs=[proof], keysets=self.keysets)
         except Exception as e:
             logger.error(f"Blind auth error: {e}")
             raise BlindAuthFailedError()
