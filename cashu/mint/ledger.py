@@ -476,6 +476,8 @@ class Ledger(
             raise TransactionError(
                 f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
             )
+        if quote_amounts and len(quote_amounts) != len(quotes):
+            raise TransactionError("quote_amounts length must match quotes length")
 
         await self._verify_outputs(outputs)
 
@@ -528,6 +530,12 @@ class Ledger(
             amount_to_mint = quote.amount
             if quote_amounts:
                 amount_to_mint = quote_amounts[i]
+                if amount_to_mint <= 0:
+                    raise TransactionError("quote amount must be positive")
+                if amount_to_mint > quote.amount:
+                    raise TransactionError(
+                        f"quote amount {amount_to_mint} exceeds available quote amount {quote.amount}"
+                    )
 
             total_quote_amount += amount_to_mint
 
@@ -578,6 +586,9 @@ class Ledger(
                 )
 
             except Exception as e:
+                await self.db_write._unset_mint_quotes_pending(
+                    quote_ids=quotes, state=MintQuoteState.paid, conn=conn
+                )
                 raise e
 
         return promises
