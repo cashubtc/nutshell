@@ -1,5 +1,4 @@
 import json
-import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -7,6 +6,25 @@ from pydantic import BaseModel
 from .base import Method, Unit
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
 from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+
+
+def _match_protected_endpoint(endpoint_path: str, request_path: str) -> bool:
+    """
+    Match a request path against a protected endpoint path using wildcard rules.
+
+    Rules (per NUT-21/NUT-22):
+    1. Exact match: no trailing '*' -> request path MUST equal endpoint_path
+    2. Prefix match: ends with '*' -> request path MUST start with the prefix ('*' removed)
+
+    The '*' wildcard, if present, MUST be the final character only.
+    """
+    if endpoint_path.endswith("*"):
+        # Prefix match: path must start with the prefix (excluding the trailing '*')
+        prefix = endpoint_path[:-1]  # Remove the trailing '*'
+        return request_path.startswith(prefix)
+    else:
+        # Exact match
+        return request_path == endpoint_path
 
 
 class MintInfo(BaseModel):
@@ -92,7 +110,9 @@ class MintInfo(BaseModel):
             return False
         path = "/" + path if not path.startswith("/") else path
         for endpoint in self.required_clear_auth_endpoints():
-            if method == endpoint.method and re.match(endpoint.path, path):
+            if method == endpoint.method and _match_protected_endpoint(
+                endpoint.path, path
+            ):
                 return True
         return False
 
@@ -122,6 +142,8 @@ class MintInfo(BaseModel):
             return False
         path = "/" + path if not path.startswith("/") else path
         for endpoint in self.required_blind_auth_paths():
-            if method == endpoint.method and re.match(endpoint.path, path):
+            if method == endpoint.method and _match_protected_endpoint(
+                endpoint.path, path
+            ):
                 return True
         return False
