@@ -4,7 +4,7 @@ import pytest
 from cashu.core.base import BlindedMessage, Method, Unit
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.mint_info import MintInfo
-from cashu.core.models import PostMintQuoteRequest
+from cashu.core.models import PostMintBatchItem, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import assert_err, is_fake, pay_if_regtest
@@ -44,14 +44,19 @@ async def test_mint_batch_success(ledger: Ledger):
         )
     ]
     
+
+    requests = [
+        PostMintBatchItem(quote=quote1.quote, outputs=[outputs[0]]),
+        PostMintBatchItem(quote=quote2.quote, outputs=[outputs[1]]),
+    ]
+    
     promises = await ledger.mint_batch(
-        outputs=outputs,
-        quotes=[quote1.quote, quote2.quote]
+        requests=requests
     )
     
     assert len(promises) == 2
-    assert promises[0].amount == 8
-    assert promises[1].amount == 4
+    assert promises[0].signatures[0].amount == 8
+    assert promises[1].signatures[0].amount == 4
     
     # Verify quotes are now ISSUED
     q1_db = await ledger.get_mint_quote(quote1.quote)
@@ -125,11 +130,16 @@ async def test_mint_batch_failure_unpaid(ledger: Ledger):
             )
         ]
         
+    
+        requests = [
+            PostMintBatchItem(quote=quote1.quote, outputs=[outputs[0]]),
+            PostMintBatchItem(quote=quote2.quote, outputs=[outputs[1]]),
+        ]
+
         # Should fail because quote2 is unpaid
         await assert_err(
             ledger.mint_batch(
-                outputs=outputs,
-                quotes=[quote1.quote, quote2.quote]
+                requests=requests
             ),
             "quote not paid"
         )
@@ -167,12 +177,17 @@ async def test_mint_batch_failure_amount_mismatch(ledger: Ledger):
         )
     ]
     
+
+    requests = [
+        PostMintBatchItem(quote=quote1.quote, outputs=[outputs[0]]),
+        PostMintBatchItem(quote=quote2.quote, outputs=[outputs[1]]),
+    ]
+    
     await assert_err(
         ledger.mint_batch(
-            outputs=outputs,
-            quotes=[quote1.quote, quote2.quote]
+            requests=requests
         ),
-        "output amount 16 exceeds quote amount 12"
+        "output amount 8 does not match quote amount 4"
     )
 
 @pytest.mark.skipif(not is_fake, reason="only for FakeWallet")
@@ -195,10 +210,14 @@ async def test_mint_batch_failure_already_spent(ledger: Ledger):
         )
     ]
     
+
+    requests1 = [
+        PostMintBatchItem(quote=quote1.quote, outputs=outputs1)
+    ]
+    
     # First mint succeeds
     await ledger.mint_batch(
-        outputs=outputs1,
-        quotes=[quote1.quote]
+        requests=requests1
     )
     
     # Verify state is ISSUED
@@ -215,11 +234,14 @@ async def test_mint_batch_failure_already_spent(ledger: Ledger):
         )
     ]
     
+    requests2 = [
+        PostMintBatchItem(quote=quote1.quote, outputs=outputs2)
+    ]
+    
     # Second mint fails
     await assert_err(
         ledger.mint_batch(
-            outputs=outputs2,
-            quotes=[quote1.quote]
+            requests=requests2
         ),
         "quote already issued"
     )

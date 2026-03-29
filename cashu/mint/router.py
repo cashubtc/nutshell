@@ -263,13 +263,10 @@ async def mint_batch(
     """
     logger.trace(f"> POST /v1/mint/{method}/batch: {payload}")
 
-    promises = await ledger.mint_batch(
-        outputs=payload.outputs,
-        quotes=payload.quotes,
-        quote_amounts=payload.quote_amounts,
-        signatures=payload.signatures,
+    responses = await ledger.mint_batch(
+        requests=payload.requests,
     )
-    blinded_signatures = PostMintBatchResponse(signatures=promises)
+    blinded_signatures = PostMintBatchResponse(responses=responses)
     logger.trace(f"< POST /v1/mint/{method}/batch: {blinded_signatures}")
     return blinded_signatures
 

@@ -43,6 +43,8 @@ from ..core.helpers import sum_proofs
 from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
+    PostMintBatchItem,
+    PostMintBatchResponseItem,
     PostMintQuoteRequest,
 )
 from ..core.nuts import nut20
@@ -463,23 +465,24 @@ class Ledger(
     async def mint_batch(
         self,
         *,
-        outputs: List[BlindedMessage],
-        quotes: List[str],
-        quote_amounts: Optional[List[int]] = None,
-        signatures: Optional[List[Optional[str]]] = None,
-    ) -> List[BlindedSignature]:
-        if not quotes:
-            raise TransactionError("no quotes provided")
+        requests: List[PostMintBatchItem],
+    ) -> List[PostMintBatchResponseItem]:
+        if not requests:
+            raise TransactionError("no requests provided")
+            
+        quotes = [r.quote for r in requests]
         if len(quotes) != len(set(quotes)):
             raise TransactionError("duplicate quotes")
         if len(quotes) > settings.mint_max_batch_size:
             raise TransactionError(
                 f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
             )
-        if quote_amounts and len(quote_amounts) != len(quotes):
-            raise TransactionError("quote_amounts length must match quotes length")
 
-        await self._verify_outputs(outputs)
+        # verify all outputs
+        all_outputs = []
+        for req in requests:
+            all_outputs.extend(req.outputs)
+        await self._verify_outputs(all_outputs)
 
         # Fetch all quotes
         mint_quotes = await self.crud.get_mint_quotes(quote_ids=quotes, db=self.db)
@@ -502,12 +505,10 @@ class Ledger(
 
         # Check consistency and state
         first_quote = mint_quotes[0]
-        output_unit = self.keysets[outputs[0].id].unit
+        output_unit = self.keysets[all_outputs[0].id].unit
 
-        total_quote_amount = 0
-
-        for i, quote_id in enumerate(quotes):
-            quote = quotes_map[quote_id]
+        for req in requests:
+            quote = quotes_map[req.quote]
 
             # Method/Unit check
             if quote.unit != first_quote.unit or quote.method != first_quote.method:
@@ -518,65 +519,52 @@ class Ledger(
 
             # State check
             if quote.pending:
-                raise TransactionError(f"quote {quote_id} pending")
+                raise TransactionError(f"quote {quote.quote} pending")
             if quote.issued:
                 raise QuoteAlreadyIssuedError()
             if not quote.paid:
                 raise QuoteNotPaidError()
             if quote.expiry and quote.expiry < int(time.time()):
-                raise TransactionError(f"quote {quote_id} expired")
+                raise TransactionError(f"quote {quote.quote} expired")
 
             # Amount check
-            amount_to_mint = quote.amount
-            if quote_amounts:
-                amount_to_mint = quote_amounts[i]
-                if amount_to_mint != quote.amount:
-                    raise TransactionError(
-                        f"quote amount {amount_to_mint} does not match available quote amount {quote.amount}"
-                    )
-
-            total_quote_amount += amount_to_mint
+            sum_outputs = sum([o.amount for o in req.outputs])
+            if sum_outputs != quote.amount:
+                raise TransactionError(
+                    f"output amount {sum_outputs} does not match quote amount {quote.amount} for quote {quote.quote}"
+                )
 
             # NUT-20 Signature check
-            if signatures and i < len(signatures) and signatures[i]:
-                signature = signatures[i]
-                assert signature is not None
+            if req.signature:
                 if not quote.pubkey:
                     raise TransactionError(
-                        f"signature provided for unlocked quote {quote_id}"
+                        f"signature provided for unlocked quote {quote.quote}"
                     )
 
                 # Verify signature
                 if not nut20.verify_mint_quote(
-                    quote.quote, outputs, quote.pubkey, signature
+                    quote.quote, req.outputs, quote.pubkey, req.signature
                 ):
                     raise QuoteSignatureInvalidError()
 
             elif quote.pubkey:
                 raise QuoteSignatureInvalidError()
 
-        sum_outputs = sum([o.amount for o in outputs])
-        
-        if sum_outputs > total_quote_amount:
-            raise TransactionError(
-                f"output amount {sum_outputs} exceeds quote amount {total_quote_amount}"
-            )
-        
-        if sum_outputs != total_quote_amount:
-            raise TransactionError(
-                f"output amount {sum_outputs} does not match quote amount {total_quote_amount}"
-            )
-
         # Atomic execution
+        responses = []
         async with self.db.get_connection() as conn:
             # set all pending
             await self.db_write._set_mint_quotes_pending(quote_ids=quotes, conn=conn)
 
             try:
-                await self._store_blinded_messages(
-                    outputs, mint_id=quotes[0], conn=conn
-                )
-                promises = await self._sign_blinded_messages(outputs, conn=conn)
+                for req in requests:
+                    await self._store_blinded_messages(
+                        req.outputs, mint_id=req.quote, conn=conn
+                    )
+                    promises = await self._sign_blinded_messages(req.outputs, conn=conn)
+                    responses.append(
+                        PostMintBatchResponseItem(quote=req.quote, signatures=promises)
+                    )
 
                 # Set all issued
                 await self.db_write._unset_mint_quotes_pending(
@@ -589,7 +577,8 @@ class Ledger(
                 )
                 raise e
 
-        return promises
+        return responses
+
 
     async def mint(
         self,
