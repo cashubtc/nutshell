@@ -854,15 +854,15 @@ class Ledger(
             melt_quote.unit, melt_quote.method
         )
 
+        # make sure that the proofs are in the same unit as the quote
+        self._verify_proofs_unit(proofs, expected_unit=unit)
+
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
             # _verify_outputs checks if all outputs have the same unit
-            await self._verify_outputs(outputs, skip_amount_check=True)
-            outputs_unit = self.keysets[outputs[0].id].unit
-            if not melt_quote.unit == outputs_unit.name:
-                raise TransactionError(
-                    f"output unit {outputs_unit.name} does not match quote unit {melt_quote.unit}"
-                )
+            await self._verify_outputs(
+                outputs, skip_amount_check=True, expected_unit=unit
+            )
 
         # verify SIG_ALL signatures
         message_to_sign = (
