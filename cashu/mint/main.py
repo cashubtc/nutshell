@@ -47,6 +47,8 @@ def main(
         host=host,
         ssl_keyfile=ssl_keyfile,
         ssl_certfile=ssl_certfile,
+        proxy_headers=settings.mint_rate_limit_proxy_trust,
+        forwarded_allow_ips=settings.mint_forwarded_allow_ips,
         **d,  # type: ignore
     )
 
