@@ -182,27 +182,21 @@ class PostMintRequest(BaseModel):
     )  # NUT-20 quote signature
 
 
-class PostMintBatchItem(BaseModel):
-    quote: str = Field(..., max_length=settings.mint_max_request_length)
+class PostMintBatchRequest(BaseModel):
+    quotes: List[str] = Field(..., max_length=settings.mint_max_request_length)
+    quote_amounts: Optional[List[int]] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )
     outputs: List[BlindedMessage] = Field(
         ..., max_length=settings.mint_max_request_length
     )
-    signature: Optional[str] = Field(
+    signatures: Optional[List[Optional[str]]] = Field(
         default=None, max_length=settings.mint_max_request_length
     )
 
 
-class PostMintBatchRequest(BaseModel):
-    requests: List[PostMintBatchItem]
-
-
-class PostMintBatchResponseItem(BaseModel):
-    quote: str
-    signatures: List[BlindedSignature]
-
-
 class PostMintBatchResponse(BaseModel):
-    responses: List[PostMintBatchResponseItem]
+    signatures: List[BlindedSignature] = []
 
 
 class PostMintQuoteCheckRequest(BaseModel):

@@ -17,6 +17,8 @@ from ..core.base import (
     MintQuote,
     MintQuoteState,
     Proof,
+    ProofSpentState,
+    ProofState,
     Unit,
 )
 from ..core.crypto import b_dhke
@@ -43,8 +45,6 @@ from ..core.helpers import sum_proofs
 from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
-    PostMintBatchItem,
-    PostMintBatchResponseItem,
     PostMintQuoteRequest,
 )
 from ..core.nuts import nut20
@@ -220,8 +220,53 @@ class Ledger(
 
     # ------- ECASH -------
 
-    async def _generate_change_promises(
+    async def _invalidate_proofs(
+        self,
+        *,
+        proofs: List[Proof],
+        quote_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        """Adds proofs to the set of spent proofs and stores them in the db.
 
+        Args:
+            proofs (List[Proof]): Proofs to add to known secret table.
+            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
+        """
+        # Group proofs by keyset_id to calculate fees per keyset
+        proofs_by_keyset: Dict[str, List[Proof]] = {}
+        for p in proofs:
+            proofs_by_keyset.setdefault(p.id, []).append(p)
+
+        async with self.db.get_connection(conn) as conn:
+            # store in db
+            for p in proofs:
+                logger.trace(f"Invalidating proof {p.Y}")
+                await self.crud.invalidate_proof(
+                    proof=p, db=self.db, quote_id=quote_id, conn=conn
+                )
+                await self.crud.bump_keyset_balance(
+                    keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
+                )
+                await self.events.submit(
+                    ProofState(
+                        Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
+                    )
+                )
+
+            # Calculate and increment fees for each keyset separately
+            for keyset_id, keyset_proofs in proofs_by_keyset.items():
+                keyset_fees = self.get_fees_for_proofs(keyset_proofs)
+                if keyset_fees > 0:
+                    logger.trace(f"Adding fees {keyset_fees} to keyset {keyset_id}")
+                    await self.crud.bump_keyset_fees_paid(
+                        keyset=self.keysets[keyset_id],
+                        amount=keyset_fees,
+                        db=self.db,
+                        conn=conn,
+                    )
+
+    async def _generate_change_promises(
         self,
         fee_provided: int,
         fee_paid: int,
@@ -405,8 +450,7 @@ class Ledger(
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
                     lock_table="mint_quotes",
-                    lock_select_statement="quote = :quote",
-                    lock_parameters={"quote": quote_id},
+                    lock_select_statement=f"quote='{quote_id}'",
                 ) as conn:
                     quote = await self.crud.get_mint_quote(
                         quote_id=quote_id, db=self.db, conn=conn
@@ -465,24 +509,23 @@ class Ledger(
     async def mint_batch(
         self,
         *,
-        requests: List[PostMintBatchItem],
-    ) -> List[PostMintBatchResponseItem]:
-        if not requests:
-            raise TransactionError("no requests provided")
-            
-        quotes = [r.quote for r in requests]
+        outputs: List[BlindedMessage],
+        quotes: List[str],
+        quote_amounts: Optional[List[int]] = None,
+        signatures: Optional[List[Optional[str]]] = None,
+    ) -> List[BlindedSignature]:
+        if not quotes:
+            raise TransactionError("no quotes provided")
         if len(quotes) != len(set(quotes)):
             raise TransactionError("duplicate quotes")
         if len(quotes) > settings.mint_max_batch_size:
             raise TransactionError(
                 f"batch size {len(quotes)} exceeds maximum allowed {settings.mint_max_batch_size}"
             )
+        if quote_amounts and len(quote_amounts) != len(quotes):
+            raise TransactionError("quote_amounts length must match quotes length")
 
-        # verify all outputs
-        all_outputs = []
-        for req in requests:
-            all_outputs.extend(req.outputs)
-        await self._verify_outputs(all_outputs)
+        await self._verify_outputs(outputs)
 
         # Fetch all quotes
         mint_quotes = await self.crud.get_mint_quotes(quote_ids=quotes, db=self.db)
@@ -505,10 +548,12 @@ class Ledger(
 
         # Check consistency and state
         first_quote = mint_quotes[0]
-        output_unit = self.keysets[all_outputs[0].id].unit
+        output_unit = self.keysets[outputs[0].id].unit
 
-        for req in requests:
-            quote = quotes_map[req.quote]
+        total_quote_amount = 0
+
+        for i, quote_id in enumerate(quotes):
+            quote = quotes_map[quote_id]
 
             # Method/Unit check
             if quote.unit != first_quote.unit or quote.method != first_quote.method:
@@ -519,52 +564,63 @@ class Ledger(
 
             # State check
             if quote.pending:
-                raise TransactionError(f"quote {quote.quote} pending")
+                raise TransactionError(f"quote {quote_id} pending")
             if quote.issued:
                 raise QuoteAlreadyIssuedError()
             if not quote.paid:
                 raise QuoteNotPaidError()
             if quote.expiry and quote.expiry < int(time.time()):
-                raise TransactionError(f"quote {quote.quote} expired")
+                raise TransactionError(f"quote {quote_id} expired")
 
             # Amount check
-            sum_outputs = sum([o.amount for o in req.outputs])
-            if sum_outputs != quote.amount:
-                raise TransactionError(
-                    f"output amount {sum_outputs} does not match quote amount {quote.amount} for quote {quote.quote}"
-                )
+            amount_to_mint = quote.amount
+            if quote_amounts:
+                amount_to_mint = quote_amounts[i]
+                if amount_to_mint != quote.amount:
+                    raise TransactionError(
+                        f"quote amount {amount_to_mint} does not match available quote amount {quote.amount}"
+                    )
+
+            total_quote_amount += amount_to_mint
 
             # NUT-20 Signature check
-            if req.signature:
+            if signatures and i < len(signatures) and signatures[i]:
                 if not quote.pubkey:
                     raise TransactionError(
-                        f"signature provided for unlocked quote {quote.quote}"
+                        f"signature provided for unlocked quote {quote_id}"
                     )
 
                 # Verify signature
                 if not nut20.verify_mint_quote(
-                    quote.quote, req.outputs, quote.pubkey, req.signature
+                    quote.quote, outputs, quote.pubkey, signatures[i] or ""
                 ):
                     raise QuoteSignatureInvalidError()
 
             elif quote.pubkey:
                 raise QuoteSignatureInvalidError()
 
+        sum_outputs = sum([o.amount for o in outputs])
+        
+        if sum_outputs > total_quote_amount:
+            raise TransactionError(
+                f"output amount {sum_outputs} exceeds quote amount {total_quote_amount}"
+            )
+        
+        if sum_outputs != total_quote_amount:
+            raise TransactionError(
+                f"output amount {sum_outputs} does not match quote amount {total_quote_amount}"
+            )
+
         # Atomic execution
-        responses = []
         async with self.db.get_connection() as conn:
             # set all pending
             await self.db_write._set_mint_quotes_pending(quote_ids=quotes, conn=conn)
 
             try:
-                for req in requests:
-                    await self._store_blinded_messages(
-                        req.outputs, mint_id=req.quote, conn=conn
-                    )
-                    promises = await self._sign_blinded_messages(req.outputs, conn=conn)
-                    responses.append(
-                        PostMintBatchResponseItem(quote=req.quote, signatures=promises)
-                    )
+                await self._store_blinded_messages(
+                    outputs, mint_id=quotes[0], conn=conn
+                )
+                promises = await self._sign_blinded_messages(outputs, conn=conn)
 
                 # Set all issued
                 await self.db_write._unset_mint_quotes_pending(
@@ -577,10 +633,11 @@ class Ledger(
                 )
                 raise e
 
-        return responses
+        return promises
 
 
     async def mint(
+
         self,
         *,
         outputs: List[BlindedMessage],
@@ -614,7 +671,7 @@ class Ledger(
             raise TransactionError("Mint quote already pending.")
         if quote.issued:
             raise QuoteAlreadyIssuedError()
-        if quote.state != MintQuoteState.paid:
+        if not quote.paid:
             raise QuoteNotPaidError()
 
         previous_state = quote.state
@@ -855,7 +912,13 @@ class Ledger(
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-
+                async with self.db.get_connection() as conn:
+                    await self._invalidate_proofs(
+                        proofs=pending_proofs, quote_id=quote_id, conn=conn
+                    )
+                    await self.db_write._unset_proofs_pending(
+                        pending_proofs, keysets=self.keysets, conn=conn
+                    )
                 # change to compensate wallet for overpaid fees
                 melt_outputs = await self.crud.get_blinded_messages_melt_id(
                     melt_id=quote_id, db=self.db
@@ -874,34 +937,22 @@ class Ledger(
                         keyset=self.keysets[melt_outputs[0].id],
                     )
                     melt_quote.change = return_promises
-
-                # Calculate fees
-                proofs_by_keyset: Dict[str, List[Proof]] = {}
-                for p in pending_proofs:
-                    proofs_by_keyset.setdefault(p.id, []).append(p)
-                keyset_fees = {}
-                for keyset_id, keyset_proofs in proofs_by_keyset.items():
-                    keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
-
-                melt_quote = await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
-                    quote=melt_quote,
-                    proofs=pending_proofs,
-                    keysets=self.keysets,
-                    keyset_fees=keyset_fees,
-                )
-
+                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.events.submit(melt_quote)
             if status.failed or (rollback_unknown and status.unknown):
                 logger.debug(f"Setting quote {quote_id} as unpaid")
+                melt_quote.state = MeltQuoteState.unpaid
+                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.events.submit(melt_quote)
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                melt_quote = await self.db_write.unset_melt_quote_pending_and_proofs(
-                    quote=melt_quote,
-                    proofs=pending_proofs,
-                    keysets=self.keysets,
-                    state=MeltQuoteState.unpaid,
+                await self.db_write._unset_proofs_pending(
+                    pending_proofs, keysets=self.keysets
                 )
-
+                await self.crud.delete_blinded_messages_melt_id(
+                    melt_id=quote_id, db=self.db
+                )
 
         return melt_quote
 
@@ -1014,15 +1065,15 @@ class Ledger(
             melt_quote.unit, melt_quote.method
         )
 
-        # make sure that the proofs are in the same unit as the quote
-        self._verify_proofs_unit(proofs, expected_unit=unit)
-
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
             # _verify_outputs checks if all outputs have the same unit
-            await self._verify_outputs(
-                outputs, skip_amount_check=True, expected_unit=unit
-            )
+            await self._verify_outputs(outputs, skip_amount_check=True)
+            outputs_unit = self.keysets[outputs[0].id].unit
+            if not melt_quote.unit == outputs_unit.name:
+                raise TransactionError(
+                    f"output unit {outputs_unit.name} does not match quote unit {melt_quote.unit}"
+                )
 
         # verify SIG_ALL signatures
         message_to_sign = (
@@ -1050,12 +1101,12 @@ class Ledger(
         # We must have called _verify_outputs here already! (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
-        # set quote and proofs to pending to avoid race conditions
-        melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
-            quote=melt_quote, proofs=proofs, keysets=self.keysets
+        # set proofs to pending to avoid race conditions
+        await self.db_write._verify_spent_proofs_and_set_pending(
+            proofs, keysets=self.keysets, quote_id=melt_quote.quote
         )
-
-        # store the change outputs
+        previous_state = melt_quote.state
+        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
         if outputs:
             await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
 
@@ -1110,11 +1161,14 @@ class Ledger(
                     match status.result:
                         case PaymentResult.FAILED | PaymentResult.UNKNOWN:
                             # Everything as expected. Payment AND a status check both agree on a failure. We roll back the transaction.
-                            await self.db_write.unset_melt_quote_pending_and_proofs(
-                                quote=melt_quote,
-                                proofs=proofs,
-                                keysets=self.keysets,
-                                state=MeltQuoteState.unpaid,
+                            await self.db_write._unset_proofs_pending(
+                                proofs, keysets=self.keysets
+                            )
+                            await self.db_write._unset_melt_quote_pending(
+                                quote=melt_quote, state=previous_state
+                            )
+                            await self.crud.delete_blinded_messages_melt_id(
+                                melt_id=melt_quote.quote, db=self.db
                             )
                             if status.error_message:
                                 logger.error(
@@ -1151,6 +1205,9 @@ class Ledger(
                     return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
         # melt was successful (either internal or via backend), invalidate proofs
+        await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
+        await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
+
         # prepare change to compensate wallet for overpaid fees
         return_promises: List[BlindedSignature] = []
         if outputs:
@@ -1164,23 +1221,10 @@ class Ledger(
 
         melt_quote.change = return_promises
 
-        # Calculate fees
-        proofs_by_keyset: Dict[str, List[Proof]] = {}
-        for p in proofs:
-            proofs_by_keyset.setdefault(p.id, []).append(p)
-        keyset_fees = {}
-        for keyset_id, keyset_proofs in proofs_by_keyset.items():
-            keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
-
-        melt_quote = await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
-            quote=melt_quote,
-            proofs=proofs,
-            keysets=self.keysets,
-            keyset_fees=keyset_fees,
-        )
+        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+        await self.events.submit(melt_quote)
 
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
-
 
     async def swap(
         self,
@@ -1210,30 +1254,9 @@ class Ledger(
             proofs, keysets=self.keysets
         )
         try:
-            Ys = [p.Y for p in proofs]
-            lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
-            ys_list = ", ".join(f":y{i}" for i in range(len(Ys)))
-            async with self.db.get_connection(
-                lock_table="proofs_pending",
-                lock_select_statement=f"y IN ({ys_list})",
-                lock_parameters=lock_parameters,
-            ) as conn:
+            async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
-
-                # Calculate fees
-                proofs_by_keyset: Dict[str, List[Proof]] = {}
-                for p in proofs:
-                    proofs_by_keyset.setdefault(p.id, []).append(p)
-                keyset_fees = {}
-                for keyset_id, keyset_proofs in proofs_by_keyset.items():
-                    keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
-
-                await self.db_write.invalidate_proofs(
-                    proofs=proofs,
-                    keysets=self.keysets,
-                    keyset_fees=keyset_fees,
-                    conn=conn,
-                )
+                await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._sign_blinded_messages(outputs, conn)
         except Exception as e:
             logger.trace(f"swap failed: {e}")

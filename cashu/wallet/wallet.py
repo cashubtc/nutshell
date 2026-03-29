@@ -706,17 +706,13 @@ class Wallet(
             return []
             
         # Call batch mint API
-        api_requests = [
-            {
-                "quote_id": q["quote_id"],
-                "outputs": q["outputs"],
-                "signature": q.get("signature"),
-            }
+        api_quotes = [
+            (q["quote_id"], q["outputs"]) 
             for q in quotes_with_outputs
         ]
         
         try:
-            result = await super().mint_batch(api_requests, method)
+            result = await super().mint_batch(api_quotes, method)
         except Exception as e:
             print(f"Batch mint failed: {e}. Falling back to sequential.")
             # Fall back to sequential
@@ -734,12 +730,10 @@ class Wallet(
         
         # Process results
         all_proofs = []
-        result_map = {r["quote"]: r.get("signatures", []) for r in result}
-        
         for q in quotes_with_outputs:
             quote_id = q["quote_id"]
             try:
-                signatures = result_map.get(quote_id, [])
+                signatures = result.get("quotes", {}).get(quote_id, {}).get("signatures", [])
                 if signatures:
                     promises = [self._signature_to_promise(s) for s in signatures]
                     proofs = await self._construct_proofs(
