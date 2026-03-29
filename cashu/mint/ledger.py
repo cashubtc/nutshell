@@ -530,11 +530,9 @@ class Ledger(
             amount_to_mint = quote.amount
             if quote_amounts:
                 amount_to_mint = quote_amounts[i]
-                if amount_to_mint <= 0:
-                    raise TransactionError("quote amount must be positive")
-                if amount_to_mint > quote.amount:
+                if amount_to_mint != quote.amount:
                     raise TransactionError(
-                        f"quote amount {amount_to_mint} exceeds available quote amount {quote.amount}"
+                        f"quote amount {amount_to_mint} does not match available quote amount {quote.amount}"
                     )
 
             total_quote_amount += amount_to_mint
