@@ -460,33 +460,34 @@ class LedgerAPI(SupportsAuth):
     @async_ensure_mint_loaded
     async def mint_batch(
         self,
-        quotes: List[tuple[str, List[BlindedMessage]]],
+        quotes: List[str],
+        outputs: List[BlindedMessage],
+        quote_amounts: Optional[List[int]] = None,
+        signatures: Optional[List[Optional[str]]] = None,
         method: str = "bolt11",
-        signature: Optional[str] = None,
-    ) -> Dict[str, List[BlindedSignature]]:
+    ) -> List[BlindedSignature]:
         """Mint tokens for multiple quotes at once.
         
         Args:
-            quotes: List of (quote_id, outputs) tuples
+            quotes: List of quote IDs
+            outputs: List of blinded messages
+            quote_amounts: Optional list of amounts to mint per quote
+            signatures: Optional list of NUT-20 signatures
             method: Payment method (default: bolt11)
-            signature: Optional NUT-19 signature
             
         Returns:
-            Dict mapping quote IDs to lists of blinded signatures
+            List of blinded signatures
         """
-        payload: Dict[str, Any] = {"method": method, "quotes": {}}
+        payload: Dict[str, Any] = {
+            "quotes": quotes,
+            "outputs": [o.model_dump(include={"id", "amount", "B_"}) for o in outputs]
+        }
         
-        for quote_id, outputs in quotes:
-            # Build outputs include fields
-            outputs_include = {"id", "amount", "B_"}
-            payload["quotes"][quote_id] = {
-                "outputs": {i: outputs_include for i in range(len(outputs))}
-            }
-            if signature:
-                payload["quotes"][quote_id]["signature"] = ...
-        
-        if signature:
-            payload["signature"] = signature
+        if quote_amounts is not None:
+            payload["quote_amounts"] = quote_amounts
+            
+        if signatures is not None:
+            payload["signatures"] = signatures
             
         resp = await self._request(
             POST,
@@ -494,7 +495,9 @@ class LedgerAPI(SupportsAuth):
             json=payload,
         )
         self.raise_on_unsupported_version(resp, f"POST /v1/mint/{method}/batch")
-        return resp.json()
+        
+        response_dict = resp.json()
+        return PostMintBatchResponse.model_validate(response_dict).signatures
 
     @async_set_httpx_client
     @async_ensure_mint_loaded

@@ -667,6 +667,8 @@ class Wallet(
             
         # Collect outputs for each quote
         quotes_with_outputs: List[Dict[str, Any]] = []
+        all_outputs: List[BlindedMessage] = []
+        
         for quote_id in quote_ids:
             # Get quote from DB to check amount
             quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
@@ -686,11 +688,7 @@ class Wallet(
             )
             await self._check_used_secrets(secrets)
             outputs, rs = self._construct_outputs(amounts, secrets, rs)
-            
-            # Check for NUT-20 signature
-            signature = None
-            if quote.privkey:
-                signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
+            all_outputs.extend(outputs)
             
             quotes_with_outputs.append({
                 "quote_id": quote_id,
@@ -699,43 +697,91 @@ class Wallet(
                 "rs": rs,
                 "derivation_paths": derivation_paths,
                 "amounts": amounts,
-                "signature": signature,
+                "privkey": quote.privkey,
+                "amount": amount,
             })
         
         if not quotes_with_outputs:
             return []
             
-        # Call batch mint API
-        api_quotes = [
-            (q["quote_id"], q["outputs"]) 
-            for q in quotes_with_outputs
-        ]
+        # Generate signatures over the full batch outputs
+        api_quotes = []
+        api_quote_amounts = []
+        api_signatures = []
         
+        has_any_signature = False
+        for q in quotes_with_outputs:
+            api_quotes.append(q["quote_id"])
+            api_quote_amounts.append(q["amount"])
+            
+            signature = None
+            if q["privkey"]:
+                signature = nut20.sign_mint_quote(q["quote_id"], all_outputs, q["privkey"])
+                has_any_signature = True
+            
+            api_signatures.append(signature)
+            q["signature"] = signature  # for fallback
+            
+        if not has_any_signature:
+            api_signatures = None
+            
+        # Call batch mint API
         try:
-            result = await super().mint_batch(api_quotes, method)
+            result_signatures = await super().mint_batch(
+                quotes=api_quotes,
+                outputs=all_outputs,
+                quote_amounts=api_quote_amounts,
+                signatures=api_signatures,
+                method=method
+            )
         except Exception as e:
             print(f"Batch mint failed: {e}. Falling back to sequential.")
             # Fall back to sequential
+            # For sequential fallback, the signature must only be over the specific quote's outputs!
             proofs = []
             for q in quotes_with_outputs:
                 try:
-                    promises = await super().mint(q["outputs"], q["quote_id"], q["signature"])
+                    # Re-sign for sequential using ONLY this quote's outputs
+                    seq_signature = None
+                    if q["privkey"]:
+                        seq_signature = nut20.sign_mint_quote(q["quote_id"], q["outputs"], q["privkey"])
+                        
+                    promises = await super().mint(q["outputs"], q["quote_id"], seq_signature)
                     proof = await self._construct_proofs(
                         promises, q["secrets"], q["rs"], q["derivation_paths"]
                     )
                     proofs.extend(proof)
+                    
+                    # Update DB
+                    await update_bolt11_mint_quote(
+                        db=self.db,
+                        quote=q["quote_id"],
+                        state=MintQuoteState.issued,
+                        paid_time=int(time.time()),
+                    )
+                    async with self.db.connect() as conn:
+                        for p in proof:
+                            p.mint_id = q["quote_id"]
+                            await update_proof(p, mint_id=q["quote_id"], conn=conn)
                 except Exception as eq:
                     print(f"Mint failed for quote {q['quote_id']}: {eq}")
             return proofs
         
         # Process results
         all_proofs = []
+        result_idx = 0
+        
         for q in quotes_with_outputs:
             quote_id = q["quote_id"]
+            num_outputs = len(q["outputs"])
+            
             try:
-                signatures = result.get("quotes", {}).get(quote_id, {}).get("signatures", [])
+                # Slice the flat array of signatures
+                signatures = result_signatures[result_idx:result_idx + num_outputs]
+                result_idx += num_outputs
+                
                 if signatures:
-                    promises = [self._signature_to_promise(s) for s in signatures]
+                    promises = signatures
                     proofs = await self._construct_proofs(
                         promises, q["secrets"], q["rs"], q["derivation_paths"]
                     )
