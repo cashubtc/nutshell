@@ -562,9 +562,22 @@ class Ledger(
                 raise QuoteNotPaidError()
 
         # Check amount balance
+        if payload.quote_amounts:
+            if len(payload.quote_amounts) != len(quotes):
+                raise TransactionError("quote_amounts length must match quotes length")
+            for i, quote in enumerate(quotes):
+                if quote.method == "bolt11" and payload.quote_amounts[i] != quote.amount:
+                    raise TransactionError(f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}")
+                if payload.quote_amounts[i] > quote.amount:
+                    raise TransactionError(f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}")
+
         quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
-        if sum(quote_amounts) != sum_amount_outputs:
-            raise TransactionError("amount to mint does not match quote amounts sum")
+        if "bolt11" in methods:
+            if sum(quote_amounts) != sum_amount_outputs:
+                raise TransactionError("amount to mint does not match quote amounts sum")
+        else:
+            if sum_amount_outputs > sum(quote_amounts):
+                raise TransactionError("amount to mint exceeds quote amounts sum")
 
         # Signature validation (NUT-20)
         for i, quote in enumerate(quotes):
