@@ -223,9 +223,16 @@ class DbWriteHelper:
         if not quote_ids:
             return []
 
-        # Lock the entire table for now as row-level locking with IN clauses requires db changes
+        # Use dynamically generated IN clause for row-level locking
+        placeholders = ", ".join([f":q_{i}" for i in range(len(quote_ids))])
+        lock_select_statement = f"quote IN ({placeholders})"
+        lock_parameters = {f"q_{i}": q for i, q in enumerate(quote_ids)}
+        
         async with self.db.get_connection(
-            conn=conn, lock_table="mint_quotes"
+            conn=conn,
+            lock_table="mint_quotes",
+            lock_select_statement=lock_select_statement,
+            lock_parameters=lock_parameters,
         ) as conn:
             quotes = await self.crud.get_mint_quotes(
                 quote_ids=quote_ids, db=self.db, conn=conn
@@ -268,9 +275,16 @@ class DbWriteHelper:
         if not quote_ids:
             return []
 
-        # Lock the entire table for now as row-level locking with IN clauses requires db changes
+        # Use dynamically generated IN clause for row-level locking
+        placeholders = ", ".join([f":q_{i}" for i in range(len(quote_ids))])
+        lock_select_statement = f"quote IN ({placeholders})"
+        lock_parameters = {f"q_{i}": q for i, q in enumerate(quote_ids)}
+        
         async with self.db.get_connection(
-            conn=conn, lock_table="mint_quotes"
+            conn=conn,
+            lock_table="mint_quotes",
+            lock_select_statement=lock_select_statement,
+            lock_parameters=lock_parameters,
         ) as conn:
             quotes = await self.crud.get_mint_quotes(
                 quote_ids=quote_ids, db=self.db, conn=conn
