@@ -10,10 +10,12 @@ from cashu.core.base import (
     Method,
     MintQuote,
     MintQuoteState,
+    P2PKWitness,
     Proof,
     Unit,
 )
 from cashu.core.crypto.b_dhke import step1_alice
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     InvalidProofsError,
     NoSecretInProofsError,
@@ -30,6 +32,8 @@ from cashu.core.errors import (
     WitnessTooLongError,
 )
 from cashu.core.nuts import nut20
+from cashu.core.p2pk import SigFlags, schnorr_sign
+from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import assert_err
@@ -416,7 +420,11 @@ def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
     p = Proof(id=kid, amount=8, secret="same", C="02" + "1c" * 32)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
-        patch.object(ledger.db_read, "_verify_proofs_spendable", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
         patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
     ):
         with pytest.raises(TransactionDuplicateInputsError):
@@ -426,7 +434,11 @@ def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
 def test_verify_inputs_rejects_invalid_bdhke(ledger: Ledger):
     kid = ledger.keyset.id
     p = Proof(id=kid, amount=8, secret="s", C="02" + "1d" * 32)
-    with patch.object(ledger.db_read, "_verify_proofs_spendable", return_value=True):
+    with patch.object(
+        ledger.db_read,
+        "_verify_proofs_spendable",
+        MagicMock(return_value=True),
+    ):
         with pytest.raises(InvalidProofsError):
             ledger._verify_inputs([p])
 
@@ -637,3 +649,485 @@ def test_witness_without_spending_condition(ledger: Ledger):
 
     with pytest.raises(TransactionError, match="witness data not allowed"):
         ledger._verify_input_spending_conditions(proof)
+
+
+# =============================================================================
+# Exhaustive paths: _verify_inputs, _verify_outputs, _verify_inputs_and_outputs_
+# together, verify_inputs_and_outputs
+# =============================================================================
+
+
+def _proof_plain(
+    ledger: Ledger, *, amount: int = 8, secret: str = "plain-secret-ok"
+) -> Proof:
+    return Proof(
+        id=ledger.keyset.id,
+        amount=amount,
+        secret=secret,
+        C="02" + secrets.token_hex(32),
+        witness=None,
+    )
+
+
+def _p2pk_sig_all_secret(pub_hex: str) -> str:
+    return Secret(
+        kind=SecretKind.P2PK.value,
+        data=pub_hex,
+        tags=Tags(tags=[["sigflag", SigFlags.SIG_ALL.value]]),
+        nonce="0" * 32,
+    ).serialize()
+
+
+def _keysets_by_unit(ledger: Ledger) -> tuple[str | None, str | None]:
+    """Return (sat_keyset_id, usd_keyset_id) if both exist."""
+    sat_id = next((k for k, ks in ledger.keysets.items() if ks.unit == Unit.sat), None)
+    usd_id = next((k for k, ks in ledger.keysets.items() if ks.unit == Unit.usd), None)
+    return sat_id, usd_id
+
+
+# --- _verify_inputs: every failure path (order matches verification.py) ---
+
+
+def test_verify_inputs_invalid_amount_raises_not_allowed_not_transaction_error(
+    ledger: Ledger,
+):
+    """`_verify_amount` raises before `all(...)` completes; 'invalid amount' TX is unreachable."""
+    p = _proof_plain(ledger, amount=0)
+    with pytest.raises(NotAllowedError, match="invalid amount"):
+        ledger._verify_inputs([p])
+
+
+def test_verify_inputs_empty_secret_raises_no_secret(ledger: Ledger):
+    p = _proof_plain(ledger, secret="")
+    with pytest.raises(NoSecretInProofsError):
+        ledger._verify_inputs([p])
+
+
+def test_verify_inputs_secret_too_long_raises(ledger: Ledger):
+    p = _proof_plain(ledger, secret="z" * (settings.mint_max_secret_length + 1))
+    with pytest.raises(SecretTooLongError):
+        ledger._verify_inputs([p])
+
+
+def test_verify_inputs_witness_too_long_raises(ledger: Ledger):
+    p = _proof_plain(ledger)
+    p.witness = "w" * (settings.mint_max_witness_length + 1)
+    with pytest.raises(WitnessTooLongError):
+        ledger._verify_inputs([p])
+
+
+def test_verify_inputs_witness_on_plain_secret_raises(ledger: Ledger):
+    p = _proof_plain(ledger, secret="not-a-cbor-secret")
+    p.witness = "{}"
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
+    ):
+        with pytest.raises(TransactionError, match="witness data not allowed"):
+            ledger._verify_inputs([p])
+
+
+def test_verify_inputs_spending_false_raises_validation_failed(ledger: Ledger):
+    p = _proof_plain(ledger)
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
+        patch.object(ledger, "_verify_input_spending_conditions", return_value=False),
+    ):
+        with pytest.raises(
+            TransactionError, match="validation of input spending conditions failed"
+        ):
+            ledger._verify_inputs([p])
+
+
+def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
+    p = _proof_plain(ledger)
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
+        patch.object(
+            ledger,
+            "_verify_input_spending_conditions",
+            side_effect=TransactionError("p2pk failed"),
+        ),
+    ):
+        with pytest.raises(TransactionError, match="p2pk failed"):
+            ledger._verify_inputs([p])
+
+
+def test_verify_inputs_not_spendable_raises_invalid_proofs(ledger: Ledger):
+    p = _proof_plain(ledger)
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=False),
+        ),
+    ):
+        with pytest.raises(InvalidProofsError):
+            ledger._verify_inputs([p])
+
+
+def test_verify_inputs_success_with_mocks(ledger: Ledger):
+    p = _proof_plain(ledger)
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
+    ):
+        ledger._verify_inputs([p])
+
+
+def test_verify_inputs_second_proof_fails_amount_stops_pipeline(ledger: Ledger):
+    ok = _proof_plain(ledger, secret="a")
+    bad = _proof_plain(ledger, amount=0, secret="b")
+    with pytest.raises(NotAllowedError):
+        ledger._verify_inputs([ok, bad])
+
+
+# --- _verify_outputs: remaining branches ---
+
+
+@pytest.mark.asyncio
+async def test_verify_outputs_invalid_amount_zero_without_skip(ledger: Ledger):
+    o = _blinded_output(ledger, amount=0, label="zero-amt")
+    with pytest.raises(NotAllowedError, match="invalid amount"):
+        await ledger._verify_outputs([o], skip_amount_check=False)
+
+
+@pytest.mark.asyncio
+async def test_verify_outputs_second_output_invalid_amount(ledger: Ledger):
+    o1 = _blinded_output(ledger, amount=8, label="ok1")
+    o2 = _blinded_output(ledger, amount=0, label="bad2")
+    with pytest.raises(NotAllowedError, match="invalid amount"):
+        await ledger._verify_outputs([o1, o2], skip_amount_check=False)
+
+
+@pytest.mark.asyncio
+async def test_verify_outputs_stored_before_signed_branch_any_c_(ledger: Ledger):
+    """`OutputsAlreadySignedError` when any returned row has truthy C_."""
+    o = _blinded_output(ledger, label="signed-branch")
+
+    async def fake_check(outputs, conn=None):
+        return [
+            o.model_copy(update={"C_": "03" + "cd" * 32}),
+            o.model_copy(update={"C_": None}),
+        ]
+
+    with patch.object(ledger, "_check_outputs_pending_or_issued_before", fake_check):
+        with pytest.raises(OutputsAlreadySignedError):
+            await ledger._verify_outputs([o])
+
+
+@pytest.mark.asyncio
+async def test_verify_outputs_stored_before_pending_when_no_signed_in_list(
+    ledger: Ledger,
+):
+    o = _blinded_output(ledger, label="pending-branch")
+
+    async def fake_check(outputs, conn=None):
+        return [
+            o.model_copy(update={"C_": None}),
+            o.model_copy(update={"C_": None}),
+        ]
+
+    with patch.object(ledger, "_check_outputs_pending_or_issued_before", fake_check):
+        with pytest.raises(OutputsArePendingError):
+            await ledger._verify_outputs([o])
+
+
+@pytest.mark.asyncio
+async def test_verify_outputs_multiple_fresh_outputs(ledger: Ledger):
+    await ledger._verify_outputs(
+        [
+            _blinded_output(ledger, label="m1"),
+            _blinded_output(ledger, label="m2"),
+        ]
+    )
+
+
+# --- _verify_inputs_and_outputs_together: all failure/success paths ---
+
+
+def test_together_input_amounts_equal_outputs_ok_until_equation(ledger: Ledger):
+    proofs = [_proof_plain(ledger, secret="a"), _proof_plain(ledger, secret="b")]
+    fee = ledger.get_fees_for_proofs(proofs)
+    outs = [
+        _blinded_output(ledger, amount=sum(p.amount for p in proofs) - fee, label="eq")
+    ]
+    with patch.object(
+        ledger, "_verify_input_output_spending_conditions", return_value=True
+    ):
+        ledger._verify_inputs_and_outputs_together(proofs, outs)
+
+
+def test_together_fails_input_output_amounts_before_equation(ledger: Ledger):
+    proofs = [_proof_plain(ledger, amount=4, secret="a")]
+    outs = [_blinded_output(ledger, amount=8, label="too-big")]
+    with pytest.raises(TransactionError, match="less than output amounts"):
+        ledger._verify_inputs_and_outputs_together(proofs, outs)
+
+
+def test_together_fails_equation_unbalanced(ledger: Ledger):
+    proofs = [_proof_plain(ledger, amount=8, secret="a")]
+    outs = [_blinded_output(ledger, amount=1, label="unbal")]
+    with patch.object(
+        ledger, "_verify_input_output_spending_conditions", return_value=True
+    ):
+        with pytest.raises(TransactionError, match="not balanced"):
+            ledger._verify_inputs_and_outputs_together(proofs, outs)
+
+
+def test_together_fails_mixed_input_units_in_equation(ledger: Ledger):
+    sat_id, usd_id = _keysets_by_unit(ledger)
+    if sat_id is None or usd_id is None:
+        pytest.skip("ledger needs both sat and usd keysets")
+    # pytest.skip is not NoReturn for mypy; narrow explicitly for Proof.id: str
+    assert sat_id is not None and usd_id is not None
+    p1 = _proof_plain(ledger, secret="a")
+    p1.id = sat_id
+    p2 = _proof_plain(ledger, secret="b")
+    p2.id = usd_id
+    outs = [_blinded_output(ledger, label="mix-u")]
+    with pytest.raises(
+        TransactionMultipleUnitsError, match="inputs have different units"
+    ):
+        ledger._verify_inputs_and_outputs_together([p1, p2], outs)
+
+
+def test_together_fails_unit_mismatch_sat_proof_usd_output(ledger: Ledger):
+    sat_id, usd_id = _keysets_by_unit(ledger)
+    if sat_id is None or usd_id is None:
+        pytest.skip("ledger needs both sat and usd keysets")
+    assert sat_id is not None and usd_id is not None
+
+    proofs = [_proof_plain(ledger, secret="a")]
+    proofs[0].id = sat_id
+    outs = [_blinded_output(ledger, label="usd-out")]
+    outs[0] = outs[0].model_copy(update={"id": usd_id})
+    fee = ledger.get_fees_for_proofs(proofs)
+    outs[0] = outs[0].model_copy(update={"amount": proofs[0].amount - fee})
+    with pytest.raises(TransactionUnitMismatchError):
+        ledger._verify_inputs_and_outputs_together(proofs, outs)
+
+
+def test_together_fails_sig_all_secrets_not_equal(ledger: Ledger):
+    kid = ledger.keyset.id
+    a = PrivateKey()
+    b = PrivateKey()
+    sa = _p2pk_sig_all_secret(a.public_key.format().hex())
+    sb = _p2pk_sig_all_secret(b.public_key.format().hex())
+    p1 = Proof(
+        id=kid,
+        amount=8,
+        secret=sa,
+        C="02" + secrets.token_hex(32),
+        witness=None,
+    )
+    p2 = Proof(
+        id=kid,
+        amount=8,
+        secret=sb,
+        C="02" + secrets.token_hex(32),
+        witness=None,
+    )
+    fee = ledger.get_fees_for_proofs([p1, p2])
+    outs = [
+        _blinded_output(ledger, amount=p1.amount + p2.amount - fee, label="sigall-bad")
+    ]
+    with pytest.raises(TransactionError, match="not all secrets are equal"):
+        ledger._verify_inputs_and_outputs_together([p1, p2], outs)
+
+
+def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
+    kid = ledger.keyset.id
+    signer = PrivateKey()
+    pub = signer.public_key.format().hex()
+    secret_str = _p2pk_sig_all_secret(pub)
+    p = Proof(
+        id=kid,
+        amount=16,
+        secret=secret_str,
+        C="02" + secrets.token_hex(32),
+        witness=None,
+    )
+    fee = ledger.get_fees_for_proofs([p])
+    outs = [_blinded_output(ledger, amount=p.amount - fee, label="sigall-bad-sig")]
+    p.witness = P2PKWitness(signatures=["00" * 64]).model_dump_json()
+    with pytest.raises(TransactionError, match="signature threshold not met"):
+        ledger._verify_inputs_and_outputs_together([p], outs)
+
+
+def test_together_sig_all_succeeds_when_signed(ledger: Ledger):
+    kid = ledger.keyset.id
+    signer = PrivateKey()
+    pub = signer.public_key.format().hex()
+    secret_str = _p2pk_sig_all_secret(pub)
+    p = Proof(
+        id=kid,
+        amount=16,
+        secret=secret_str,
+        C="02" + secrets.token_hex(32),
+        witness=None,
+    )
+    fee = ledger.get_fees_for_proofs([p])
+    outs = [_blinded_output(ledger, amount=p.amount - fee, label="sigall-ok")]
+    msg = "".join([p.secret] + [o.B_ for o in outs])
+    sig = schnorr_sign(msg.encode("utf-8"), signer).hex()
+    p.witness = P2PKWitness(signatures=[sig]).model_dump_json()
+    ledger._verify_inputs_and_outputs_together([p], outs)
+
+
+# --- verify_inputs_and_outputs: orchestration & error propagation ---
+
+
+@pytest.mark.asyncio
+async def test_vio_duplicate_inputs_raises(ledger: Ledger):
+    p = _proof_plain(ledger, secret="dup")
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
+        patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
+    ):
+        with pytest.raises(TransactionDuplicateInputsError):
+            await ledger.verify_inputs_and_outputs(
+                proofs=[p, p.model_copy()], outputs=None
+            )
+
+
+@pytest.mark.asyncio
+async def test_vio_empty_proofs_raises(ledger: Ledger):
+    await assert_err(
+        ledger.verify_inputs_and_outputs(proofs=[], outputs=None),
+        TransactionError(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_vio_propagates_not_allowed_from_inputs(ledger: Ledger):
+    p = _proof_plain(ledger, amount=-1)
+    with pytest.raises(NotAllowedError):
+        await ledger.verify_inputs_and_outputs(proofs=[p], outputs=None)
+
+
+@pytest.mark.asyncio
+async def test_vio_propagates_no_secret_from_inputs(ledger: Ledger):
+    p = _proof_plain(ledger, secret="")
+    with pytest.raises(NoSecretInProofsError):
+        await ledger.verify_inputs_and_outputs(proofs=[p], outputs=None)
+
+
+@pytest.mark.asyncio
+async def test_vio_propagates_invalid_proofs_from_inputs(ledger: Ledger):
+    p = _proof_plain(ledger)
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=False),
+        ),
+    ):
+        with pytest.raises(InvalidProofsError):
+            await ledger.verify_inputs_and_outputs(proofs=[p], outputs=None)
+
+
+@pytest.mark.asyncio
+async def test_vio_outputs_none_success_with_mocked_inputs(ledger: Ledger):
+    p = _proof_plain(ledger)
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
+        patch.object(
+            ledger.db_read,
+            "_verify_proofs_spendable",
+            MagicMock(return_value=True),
+        ),
+    ):
+        await ledger.verify_inputs_and_outputs(proofs=[p], outputs=None)
+
+
+@pytest.mark.asyncio
+async def test_vio_forwards_conn_to_verify_outputs(ledger: Ledger):
+    outs = [_blinded_output(ledger, label="conn-fwd")]
+    mock_conn = MagicMock()
+    captured: dict = {}
+
+    async def vo(outputs, skip_amount_check=False, conn=None):
+        captured["outputs"] = outputs
+        captured["skip"] = skip_amount_check
+        captured["conn"] = conn
+
+    with (
+        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs_and_outputs_together", return_value=None),
+        patch.object(ledger, "_verify_outputs", side_effect=vo),
+    ):
+        await ledger.verify_inputs_and_outputs(
+            proofs=[MagicMock(spec=Proof)], outputs=outs, conn=mock_conn
+        )
+    assert captured["conn"] is mock_conn
+    assert captured["outputs"] == outs
+    assert captured["skip"] is False
+
+
+@pytest.mark.asyncio
+async def test_vio_does_not_call_together_when_outputs_fail(ledger: Ledger):
+    with (
+        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
+    ):
+        await assert_err(
+            ledger.verify_inputs_and_outputs(
+                proofs=[MagicMock(spec=Proof)], outputs=[]
+            ),
+            TransactionError(),
+        )
+    together.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_vio_full_pipeline_order_outputs_then_together(ledger: Ledger):
+    outs = [_blinded_output(ledger, label="order")]
+    calls: list[str] = []
+
+    async def vo(*args, **kwargs):
+        calls.append("outputs")
+
+    def together(*args, **kwargs):
+        calls.append("together")
+
+    with (
+        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_outputs", side_effect=vo),
+        patch.object(
+            ledger, "_verify_inputs_and_outputs_together", side_effect=together
+        ),
+    ):
+        await ledger.verify_inputs_and_outputs(
+            proofs=[MagicMock(spec=Proof)], outputs=outs
+        )
+    assert calls == ["outputs", "together"]
