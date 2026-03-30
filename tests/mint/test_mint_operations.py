@@ -61,20 +61,24 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     if not settings.debug_mint_only_deprecated:
         melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
         assert melt_quote_response_pre_payment
-        assert (
-            not melt_quote_response_pre_payment.state == MeltQuoteState.paid
-        ), "melt quote should not be paid"
+        assert not melt_quote_response_pre_payment.state == MeltQuoteState.paid, (
+            "melt quote should not be paid"
+        )
         assert melt_quote_response_pre_payment.amount == 64
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
+        "melt quote should not be paid"
+    )
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
+        "melt quote should be paid"
+    )
     assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
@@ -103,20 +107,24 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     if not settings.debug_mint_only_deprecated:
         melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
         assert melt_quote_response_pre_payment
-        assert (
-            melt_quote_response_pre_payment.state == MeltQuoteState.unpaid
-        ), "melt quote should not be paid"
+        assert melt_quote_response_pre_payment.state == MeltQuoteState.unpaid, (
+            "melt quote should not be paid"
+        )
         assert melt_quote_response_pre_payment.amount == melt_quote.amount
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
+        "melt quote should not be paid"
+    )
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
+        "melt quote should be paid"
+    )
     assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
@@ -240,9 +248,11 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
         [p.amount for p in too_many_proofs], secrets, rs
     )
 
+    # Raw Σinputs < Σoutputs is rejected in _verify_input_output_amounts before the
+    # fee balance check (_verify_equation_balanced / "are not balanced").
     await assert_err(
         ledger.swap(proofs=send_proofs, outputs=outputs),
-        "are not balanced",
+        "less than output amounts",
     )
 
     # make sure we can still spend our tokens
