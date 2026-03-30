@@ -450,7 +450,8 @@ class Ledger(
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
                     lock_table="mint_quotes",
-                    lock_select_statement=f"quote='{quote_id}'",
+                    lock_select_statement="quote = :quote",
+                    lock_parameters={"quote": quote_id},
                 ) as conn:
                     quote = await self.crud.get_mint_quote(
                         quote_id=quote_id, db=self.db, conn=conn
