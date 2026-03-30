@@ -11,7 +11,6 @@ from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 from tests.helpers import (
     get_real_invoice,
-    is_deprecated_api_only,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -135,9 +134,6 @@ def test_pay_invoice_regtest(mint, cli_prefix):
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 def test_invoice(mint, cli_prefix):
-    if settings.debug_mint_only_deprecated:
-        pytest.skip("only works with v1 API")
-
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -151,9 +147,6 @@ def test_invoice(mint, cli_prefix):
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 def test_invoice_verbose(mint, cli_prefix):
-    if settings.debug_mint_only_deprecated:
-        pytest.skip("only works with v1 API")
-
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -189,7 +182,6 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.skipif(is_deprecated_api_only, reason="only works with v1 API")
 def test_invoice_with_memo(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(

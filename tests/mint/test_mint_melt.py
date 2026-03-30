@@ -17,7 +17,6 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
-    is_deprecated_api_only,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -92,8 +91,8 @@ async def create_pending_melts(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not is_fake or is_deprecated_api_only,
-    reason="only fakewallet and non-deprecated api",
+    not is_fake,
+    reason="only FakeWallet",
 )
 async def test_pending_melt_quote_outputs_registration_regression(
     wallet, ledger: Ledger
@@ -153,8 +152,8 @@ async def test_pending_melt_quote_outputs_registration_regression(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not is_fake or is_deprecated_api_only,
-    reason="only fakewallet and non-deprecated api",
+    not is_fake,
+    reason="only FakeWallet",
 )
 async def test_settled_melt_quote_outputs_registration_regression(
     wallet, ledger: Ledger
@@ -211,8 +210,8 @@ async def test_settled_melt_quote_outputs_registration_regression(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not is_fake or is_deprecated_api_only,
-    reason="only fakewallet and non-deprecated api",
+    not is_fake,
+    reason="only FakeWallet",
 )
 async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
     """Verify that if the same outputs are used in two melt requests,
