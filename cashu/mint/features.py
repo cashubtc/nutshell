@@ -10,6 +10,7 @@ from ..core.models import (
     MintMethodSetting,
 )
 from ..core.nuts.nuts import (
+    BATCH_MINT_NUT,
     BLIND_AUTH_NUT,
     CACHE_NUT,
     CLEAR_AUTH_NUT,
@@ -123,6 +124,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
+        mint_features[BATCH_MINT_NUT] = {
+            "max_batch_size": settings.mint_max_request_length,
+            "methods": list(set([m.name for m in self.backends.keys()])),
+        }
         return mint_features
 
     def add_mpp_features(
