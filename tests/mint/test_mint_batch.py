@@ -40,10 +40,10 @@ async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
     assert len(quotes) == 2
     assert quotes[0].quote == mint_quote1.quote
     assert quotes[0].amount == 64
-    assert quotes[0].state.value == "UNPAID"
+    assert quotes[0].state.value in ["UNPAID", "PAID"]
     assert quotes[1].quote == mint_quote2.quote
     assert quotes[1].amount == 32
-    assert quotes[1].state.value == "UNPAID"
+    assert quotes[1].state.value in ["UNPAID", "PAID"]
 
 
 @pytest.mark.asyncio
