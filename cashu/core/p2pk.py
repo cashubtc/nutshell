@@ -5,6 +5,7 @@ from typing import Union
 from coincurve import PublicKeyXOnly
 
 from .crypto.secp import PrivateKey, PublicKey
+from .errors import InvalidProofsError
 from .secret import Secret, SecretKind
 
 
@@ -18,7 +19,13 @@ class SigFlags(Enum):
 class P2PKSecret(Secret):
     @classmethod
     def from_secret(cls, secret: Secret):
-        assert SecretKind(secret.kind) == SecretKind.P2PK, "Secret is not a P2PK secret"
+        if SecretKind(secret.kind) != SecretKind.P2PK:
+            raise InvalidProofsError("Secret is not a P2PK secret")
+        if secret.tags.get_tag("sigflag") and secret.tags.get_tag("sigflag") not in [
+            SigFlags.SIG_INPUTS.value,
+            SigFlags.SIG_ALL.value,
+        ]:
+            raise InvalidProofsError("Secret does not have a valid sigflag tag")
         # NOTE: exclude tags in .dict() because it doesn't deserialize it properly
         # need to add it back in manually with tags=secret.tags
         return cls(**secret.model_dump(exclude={"tags"}), tags=secret.tags)
@@ -47,8 +54,8 @@ class P2PKSecret(Secret):
 def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
     signature = private_key.sign_schnorr(
         hashlib.sha256(message).digest(),
-        None,   # type: ignore
-    ) 
+        None,  # type: ignore
+    )
     return signature
 
 
