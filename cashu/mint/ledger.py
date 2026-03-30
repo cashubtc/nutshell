@@ -592,9 +592,7 @@ class Ledger(
                 raise QuoteSignatureInvalidError()
 
         # Set all quotes to pending
-        previous_states = {q.quote: q.state for q in quotes}
-        for quote_id in payload.quotes:
-            await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+        quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
             for quote in quotes:
@@ -606,17 +604,15 @@ class Ledger(
             promises = await self._sign_blinded_messages(payload.outputs)
 
             # Set all quotes to issued
-            for quote_id in payload.quotes:
-                await self.db_write._unset_mint_quote_pending(
-                    quote_id=quote_id, state=MintQuoteState.issued
-                )
+            await self.db_write._unset_mint_quotes_pending(
+                quote_ids=payload.quotes, state=MintQuoteState.issued
+            )
 
         except Exception as e:
             # Revert pending status
-            for quote_id in payload.quotes:
-                await self.db_write._unset_mint_quote_pending(
-                    quote_id=quote_id, state=previous_states[quote_id]
-                )
+            await self.db_write._unset_mint_quotes_pending(
+                quote_ids=payload.quotes, state=MintQuoteState.paid
+            )
             raise e
 
         return promises
