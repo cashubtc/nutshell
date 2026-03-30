@@ -173,6 +173,42 @@ class DbWriteHelper:
             raise TransactionError("Mint quote not found.")
         return quote
 
+    async def _set_mint_quotes_pending(self, quote_ids: List[str]) -> List[MintQuote]:
+        """Sets multiple mint quotes as pending.
+
+        Args:
+            quote_ids (List[str]): List of mint quote IDs to set as pending.
+        """
+        if not quote_ids:
+            return []
+
+        quotes: List[MintQuote] = []
+        lock_parameters = {f"quote_{i}": q for i, q in enumerate(quote_ids)}
+        lock_select_statement = "quote IN (" + ", ".join([f":quote_{i}" for i in range(len(quote_ids))]) + ")"
+
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement=lock_select_statement,
+            lock_parameters=lock_parameters,
+        ) as conn:
+            for quote_id in quote_ids:
+                quote = await self.crud.get_mint_quote(
+                    quote_id=quote_id, db=self.db, conn=conn
+                )
+                if not quote:
+                    raise TransactionError(f"Mint quote {quote_id} not found.")
+                if quote.pending:
+                    raise TransactionError(f"Mint quote {quote_id} already pending.")
+                if not quote.paid:
+                    raise TransactionError(f"Mint quote {quote_id} is not paid yet.")
+                
+                # set the quote as pending
+                quote.state = MintQuoteState.pending
+                logger.trace(f"crud: setting quote {quote_id} as PENDING")
+                await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+                quotes.append(quote)
+        return quotes
+
     async def _unset_mint_quote_pending(
         self, quote_id: str, state: MintQuoteState
     ) -> MintQuote:
@@ -207,6 +243,47 @@ class DbWriteHelper:
 
         await self.events.submit(quote)
         return quote
+
+    async def _unset_mint_quotes_pending(
+        self, quote_ids: List[str], state: MintQuoteState
+    ) -> List[MintQuote]:
+        """Unsets multiple mint quotes as pending.
+
+        Args:
+            quote_ids (List[str]): List of mint quote IDs to unset as pending.
+            state (MintQuoteState): New state of the mint quotes.
+        """
+        if not quote_ids:
+            return []
+
+        quotes: List[MintQuote] = []
+        lock_parameters = {f"quote_{i}": q for i, q in enumerate(quote_ids)}
+        lock_select_statement = "quote IN (" + ", ".join([f":quote_{i}" for i in range(len(quote_ids))]) + ")"
+
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement=lock_select_statement,
+            lock_parameters=lock_parameters,
+        ) as conn:
+            for quote_id in quote_ids:
+                quote = await self.crud.get_mint_quote(
+                    quote_id=quote_id, db=self.db, conn=conn
+                )
+                if not quote:
+                    raise TransactionError(f"Mint quote {quote_id} not found.")
+                if quote.state != MintQuoteState.pending:
+                    raise TransactionError(
+                        f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot set as {state.value}."
+                    )
+                # set the quote to previous state
+                quote.state = state
+                logger.trace(f"crud: setting quote {quote_id} as {state.value}")
+                await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+                quotes.append(quote)
+
+        for quote in quotes:
+            await self.events.submit(quote)
+        return quotes
 
     async def _set_melt_quote_pending(
         self, quote: MeltQuote, conn: Optional[Connection] = None
