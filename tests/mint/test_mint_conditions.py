@@ -1,6 +1,6 @@
 import time
 from hashlib import sha256
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -253,7 +253,9 @@ async def test_verify_inputs_and_outputs_p2pk_custom_sigflag_fails_without_outpu
 
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
-        patch.object(ledger.db_read, "_verify_proofs_spendable", return_value=True),
+        patch.object(
+            ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
+        ),
     ):
         await assert_err(
             ledger.verify_inputs_and_outputs(proofs=[proof], outputs=None),
@@ -277,7 +279,9 @@ async def test_verify_inputs_and_outputs_htlc_custom_sigflag_fails_without_outpu
 
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
-        patch.object(ledger.db_read, "_verify_proofs_spendable", return_value=True),
+        patch.object(
+            ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
+        ),
     ):
         await assert_err(
             ledger.verify_inputs_and_outputs(proofs=[proof], outputs=None),

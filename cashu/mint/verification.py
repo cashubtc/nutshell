@@ -63,7 +63,7 @@ class LedgerVerification(
             Exception: BDHKE verification failed.
         """
         # 1. Verify inputs
-        self._verify_inputs(proofs)
+        await self._verify_inputs(proofs)
 
         # If no outputs are provided, no further checks are needed
         if outputs is None:
@@ -75,7 +75,7 @@ class LedgerVerification(
         # 3. Verify inputs and outputs together
         self._verify_inputs_and_outputs_together(proofs, outputs)
 
-    def _verify_inputs(
+    async def _verify_inputs(
         self,
         proofs: List[Proof],
     ):
@@ -102,7 +102,7 @@ class LedgerVerification(
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
         # Verify if proofs are not already spent (this throws)
-        if not self.db_read._verify_proofs_spendable(proofs):
+        if not await self.db_read._verify_proofs_spendable(proofs):
             raise InvalidProofsError()
 
         logger.trace(f"Verified {len(proofs)} proofs.")

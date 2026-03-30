@@ -410,12 +410,14 @@ def test_verify_proof_bdhke_asserts_unknown_keyset(ledger: Ledger):
 # ---------------------------------------------------------------------------
 
 
-def test_verify_inputs_rejects_empty_list(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_rejects_empty_list(ledger: Ledger):
     with pytest.raises(TransactionError, match="no proofs provided"):
-        ledger._verify_inputs([])
+        await ledger._verify_inputs([])
 
 
-def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
     kid = ledger.keyset.id
     p = Proof(id=kid, amount=8, secret="same", C="02" + "1c" * 32)
     with (
@@ -423,24 +425,25 @@ def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
         patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
     ):
         with pytest.raises(TransactionDuplicateInputsError):
-            ledger._verify_inputs([p, p.model_copy()])
+            await ledger._verify_inputs([p, p.model_copy()])
 
 
-def test_verify_inputs_rejects_invalid_bdhke(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_rejects_invalid_bdhke(ledger: Ledger):
     kid = ledger.keyset.id
     p = Proof(id=kid, amount=8, secret="s", C="02" + "1d" * 32)
     with patch.object(
         ledger.db_read,
         "_verify_proofs_spendable",
-        MagicMock(return_value=True),
+        AsyncMock(return_value=True),
     ):
         with pytest.raises(InvalidProofsError):
-            ledger._verify_inputs([p])
+            await ledger._verify_inputs([p])
 
 
 # ---------------------------------------------------------------------------
@@ -581,7 +584,7 @@ async def test_verify_inputs_and_outputs_outputs_none_skips_output_pipeline(
     ledger: Ledger,
 ):
     with (
-        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)),
         patch.object(ledger, "_verify_outputs", new_callable=AsyncMock) as vo,
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
@@ -596,7 +599,7 @@ async def test_verify_inputs_and_outputs_outputs_none_skips_output_pipeline(
 async def test_verify_inputs_and_outputs_with_outputs_calls_together(ledger: Ledger):
     outs = [_blinded_output(ledger, label="pipe")]
     with (
-        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)),
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger.verify_inputs_and_outputs(
@@ -609,7 +612,7 @@ async def test_verify_inputs_and_outputs_with_outputs_calls_together(ledger: Led
 async def test_verify_inputs_and_outputs_empty_outputs_list_fails_after_inputs(
     ledger: Ledger,
 ):
-    with patch.object(ledger, "_verify_inputs", return_value=None):
+    with patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)):
         await assert_err(
             ledger.verify_inputs_and_outputs(
                 proofs=[MagicMock(spec=Proof)], outputs=[]
@@ -623,7 +626,7 @@ async def test_verify_inputs_and_outputs_happy_path_outputs_only_phase(ledger: L
     """Inputs mocked; real output verification for never-seen blinds."""
     outs = [_blinded_output(ledger, label="happy")]
     with (
-        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)),
         patch.object(ledger, "_verify_inputs_and_outputs_together", return_value=None),
     ):
         await ledger.verify_inputs_and_outputs(
@@ -688,35 +691,40 @@ def _keysets_by_unit(ledger: Ledger) -> tuple[str | None, str | None]:
 # --- _verify_inputs: every failure path (order matches verification.py) ---
 
 
-def test_verify_inputs_invalid_amount_raises_not_allowed_not_transaction_error(
+@pytest.mark.asyncio
+async def test_verify_inputs_invalid_amount_raises_not_allowed_not_transaction_error(
     ledger: Ledger,
 ):
     """`_verify_amount` raises before `all(...)` completes; 'invalid amount' TX is unreachable."""
     p = _proof_plain(ledger, amount=0)
     with pytest.raises(NotAllowedError, match="invalid amount"):
-        ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_empty_secret_raises_no_secret(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_empty_secret_raises_no_secret(ledger: Ledger):
     p = _proof_plain(ledger, secret="")
     with pytest.raises(NoSecretInProofsError):
-        ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_secret_too_long_raises(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_secret_too_long_raises(ledger: Ledger):
     p = _proof_plain(ledger, secret="z" * (settings.mint_max_secret_length + 1))
     with pytest.raises(SecretTooLongError):
-        ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_witness_too_long_raises(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_witness_too_long_raises(ledger: Ledger):
     p = _proof_plain(ledger)
     p.witness = "w" * (settings.mint_max_witness_length + 1)
     with pytest.raises(WitnessTooLongError):
-        ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_witness_on_plain_secret_raises(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_witness_on_plain_secret_raises(ledger: Ledger):
     p = _proof_plain(ledger, secret="not-a-cbor-secret")
     p.witness = "{}"
     with (
@@ -724,38 +732,40 @@ def test_verify_inputs_witness_on_plain_secret_raises(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
     ):
         with pytest.raises(TransactionError, match="witness data not allowed"):
-            ledger._verify_inputs([p])
+            await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_spending_false_raises_validation_failed(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_spending_false_raises_validation_failed(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
         patch.object(ledger, "_verify_input_spending_conditions", return_value=False),
     ):
         with pytest.raises(
             TransactionError, match="validation of input spending conditions failed"
         ):
-            ledger._verify_inputs([p])
+            await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
         patch.object(
             ledger,
@@ -764,10 +774,11 @@ def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
         ),
     ):
         with pytest.raises(TransactionError, match="p2pk failed"):
-            ledger._verify_inputs([p])
+            await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_not_spendable_raises_invalid_proofs(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_not_spendable_raises_invalid_proofs(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
@@ -775,14 +786,15 @@ def test_verify_inputs_not_spendable_raises_invalid_proofs(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=False),
+            AsyncMock(return_value=False),
         ),
     ):
         with pytest.raises(InvalidProofsError):
-            ledger._verify_inputs([p])
+            await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_success_with_mocks(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_success_with_mocks(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
@@ -790,17 +802,18 @@ def test_verify_inputs_success_with_mocks(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
     ):
-        ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
 
 
-def test_verify_inputs_second_proof_fails_amount_stops_pipeline(ledger: Ledger):
+@pytest.mark.asyncio
+async def test_verify_inputs_second_proof_fails_amount_stops_pipeline(ledger: Ledger):
     ok = _proof_plain(ledger, secret="a")
     bad = _proof_plain(ledger, amount=0, secret="b")
     with pytest.raises(NotAllowedError):
-        ledger._verify_inputs([ok, bad])
+        await ledger._verify_inputs([ok, bad])
 
 
 # --- _verify_outputs: remaining branches ---
@@ -1007,7 +1020,7 @@ async def test_vio_duplicate_inputs_raises(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
         patch.object(ledger, "_verify_input_spending_conditions", return_value=True),
     ):
@@ -1048,7 +1061,7 @@ async def test_vio_propagates_invalid_proofs_from_inputs(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=False),
+            AsyncMock(return_value=False),
         ),
     ):
         with pytest.raises(InvalidProofsError):
@@ -1064,7 +1077,7 @@ async def test_vio_outputs_none_success_with_mocked_inputs(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            MagicMock(return_value=True),
+            AsyncMock(return_value=True),
         ),
     ):
         await ledger.verify_inputs_and_outputs(proofs=[p], outputs=None)
@@ -1082,7 +1095,7 @@ async def test_vio_forwards_conn_to_verify_outputs(ledger: Ledger):
         captured["conn"] = conn
 
     with (
-        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)),
         patch.object(ledger, "_verify_inputs_and_outputs_together", return_value=None),
         patch.object(ledger, "_verify_outputs", side_effect=vo),
     ):
@@ -1097,7 +1110,7 @@ async def test_vio_forwards_conn_to_verify_outputs(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_vio_does_not_call_together_when_outputs_fail(ledger: Ledger):
     with (
-        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)),
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await assert_err(
@@ -1121,7 +1134,7 @@ async def test_vio_full_pipeline_order_outputs_then_together(ledger: Ledger):
         calls.append("together")
 
     with (
-        patch.object(ledger, "_verify_inputs", return_value=None),
+        patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)),
         patch.object(ledger, "_verify_outputs", side_effect=vo),
         patch.object(
             ledger, "_verify_inputs_and_outputs_together", side_effect=together
