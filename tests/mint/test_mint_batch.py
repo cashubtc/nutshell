@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 
 from cashu.core.models import PostMintBatchRequest, PostMintQuoteCheckRequest
 from cashu.core.nuts import nut20
@@ -6,6 +7,19 @@ from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.helpers import pay_if_regtest
+
+BASE_URL = "http://localhost:3337"
+
+
+@pytest_asyncio.fixture(scope="function")
+async def wallet(ledger: Ledger):
+    wallet1 = await Wallet.with_db(
+        url=BASE_URL,
+        db="test_data/wallet_mint_api_batch",
+        name="wallet_mint_api_batch",
+    )
+    await wallet1.load_mint()
+    yield wallet1
 
 
 @pytest.fixture(autouse=True)
