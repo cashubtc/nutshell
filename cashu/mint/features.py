@@ -76,6 +76,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features = self.add_mpp_features(mint_features)
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
+        mint_features = self.add_batch_features(mint_features)
 
         return mint_features
 
@@ -124,7 +125,13 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
+        return mint_features
+
+    def add_batch_features(
+        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+    ):
         mint_features[BATCH_MINT_NUT] = {
+            "supported": True,
             "max_batch_size": settings.mint_max_request_length,
             "methods": list(set([m.name for m in self.backends.keys()])),
         }
