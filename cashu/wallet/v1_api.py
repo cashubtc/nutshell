@@ -36,6 +36,7 @@ from ..core.models import (
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
     PostMeltResponse_deprecated,
+    PostMintBatchResponse,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,

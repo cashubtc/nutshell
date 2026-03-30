@@ -722,8 +722,7 @@ class Wallet(
             api_signatures.append(signature)
             q["signature"] = signature  # for fallback
             
-        if not has_any_signature:
-            api_signatures = None
+        signatures_to_send = api_signatures if has_any_signature else None
             
         # Call batch mint API
         try:
@@ -731,7 +730,7 @@ class Wallet(
                 quotes=api_quotes,
                 outputs=all_outputs,
                 quote_amounts=api_quote_amounts,
-                signatures=api_signatures,
+                signatures=signatures_to_send,
                 method=method
             )
         except Exception as e:
