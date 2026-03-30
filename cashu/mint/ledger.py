@@ -42,6 +42,8 @@ from ..core.helpers import sum_proofs
 from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
+    PostMintBatchRequest,
+    PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
 )
 from ..core.settings import settings
@@ -420,6 +422,25 @@ class Ledger(
 
         return quote
 
+    async def mint_quote_check(
+        self, payload: PostMintQuoteCheckRequest
+    ) -> List[MintQuote]:
+        """Batch check mint quotes.
+        
+        Args:
+            payload (PostMintQuoteCheckRequest): Request payload containing quote IDs.
+            
+        Returns:
+            List[MintQuote]: List of mint quotes matching the request.
+        """
+        quotes: List[MintQuote] = []
+        for quote_id in payload.quotes:
+            quote = await self.get_mint_quote(quote_id)
+            if not quote:
+                raise Exception(f"quote {quote_id} not found")
+            quotes.append(quote)
+        return quotes
+
     async def mint(
         self,
         *,
@@ -478,6 +499,112 @@ class Ledger(
         await self.db_write._unset_mint_quote_pending(
             quote_id=quote_id, state=MintQuoteState.issued
         )
+
+        return promises
+
+    async def mint_batch(
+        self,
+        payload: PostMintBatchRequest,
+    ) -> List[BlindedSignature]:
+        """Batch mint tokens.
+
+        Args:
+            payload (PostMintBatchRequest): Request payload containing quote IDs, outputs, and signatures.
+
+        Raises:
+            Exception: Validation of outputs failed.
+            Exception: Quote not paid.
+            Exception: Quote already issued.
+            Exception: Amount to mint does not match quote amount.
+
+        Returns:
+            List[BlindedSignature]: Signatures on the outputs.
+        """
+        if not payload.quotes:
+            raise TransactionError("batch must not be empty")
+
+        if len(set(payload.quotes)) != len(payload.quotes):
+            raise TransactionError("quotes must be unique")
+
+        if payload.signatures and len(payload.signatures) != len(payload.quotes):
+            raise TransactionError("signatures length must match quotes length")
+
+        await self._verify_outputs(payload.outputs)
+        # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
+        output_unit = self.keysets[payload.outputs[0].id].unit
+        sum_amount_outputs = sum([b.amount for b in payload.outputs])
+
+        quotes: List[MintQuote] = []
+        for quote_id in payload.quotes:
+            quote = await self.get_mint_quote(quote_id)
+            if not quote:
+                raise TransactionError(f"quote {quote_id} not found")
+            quotes.append(quote)
+
+        # Check payment method consistency
+        methods = set([q.method for q in quotes])
+        if len(methods) > 1:
+            raise TransactionError("all quotes must have the same method")
+
+        # Check currency unit consistency
+        units = set([q.unit for q in quotes])
+        if len(units) > 1:
+            raise TransactionError("all quotes must have the same unit")
+        if units.pop() != output_unit.name:
+            raise TransactionError("quote unit does not match output unit")
+
+        for quote in quotes:
+            if quote.pending:
+                raise TransactionError("mint quote already pending")
+            if quote.issued:
+                raise QuoteAlreadyIssuedError()
+            if quote.state != MintQuoteState.paid:
+                raise QuoteNotPaidError()
+
+        # Check amount balance
+        quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
+        if sum(quote_amounts) != sum_amount_outputs:
+            raise TransactionError("amount to mint does not match quote amounts sum")
+
+        # Signature validation (NUT-20)
+        for i, quote in enumerate(quotes):
+            sig = payload.signatures[i] if payload.signatures else None
+            
+            if not quote.pubkey and sig:
+                raise QuoteSignatureInvalidError()
+            
+            # The spec says msg_to_sign = quote_id[i] || B_0 || B_1 || ... || B_(n-1)
+            # This logic is inside self._verify_mint_quote_witness, let's reuse it.
+            if not self._verify_mint_quote_witness(quote, payload.outputs, sig):
+                raise QuoteSignatureInvalidError()
+
+        # Set all quotes to pending
+        previous_states = {q.quote: q.state for q in quotes}
+        for quote_id in payload.quotes:
+            await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+
+        try:
+            for quote in quotes:
+                if quote.expiry and quote.expiry < int(time.time()):
+                    raise TransactionError("quote expired")
+
+            # Store all blinded messages
+            await self._store_blinded_messages(payload.outputs, mint_id=payload.quotes[0])
+            promises = await self._sign_blinded_messages(payload.outputs)
+
+            # Set all quotes to issued
+            for quote_id in payload.quotes:
+                await self.db_write._unset_mint_quote_pending(
+                    quote_id=quote_id, state=MintQuoteState.issued
+                )
+
+        except Exception as e:
+            # Revert pending status
+            for quote_id in payload.quotes:
+                await self.db_write._unset_mint_quote_pending(
+                    quote_id=quote_id, state=previous_states[quote_id]
+                )
+            raise e
 
         return promises
 

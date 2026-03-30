@@ -169,7 +169,28 @@ class PostMintQuoteResponse(BaseModel):
         return cls.model_validate(to_dict)
 
 
+class PostMintQuoteCheckRequest(BaseModel):
+    quotes: List[str] = Field(..., max_length=settings.mint_max_request_length)
+
+
 # ------- API: MINT -------
+
+
+class PostMintBatchRequest(BaseModel):
+    quotes: List[str] = Field(..., max_length=settings.mint_max_request_length)
+    quote_amounts: Optional[List[int]] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )
+    outputs: List[BlindedMessage] = Field(
+        ..., max_length=settings.mint_max_request_length
+    )
+    signatures: Optional[List[Optional[str]]] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )
+
+
+class PostMintBatchResponse(BaseModel):
+    signatures: List[BlindedSignature] = []
 
 
 class PostMintRequest(BaseModel):
