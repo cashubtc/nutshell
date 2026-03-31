@@ -122,3 +122,83 @@ async def test_ledger_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet
         assert False, "Expected Exception"
     except Exception as e:
         assert "quotes must be unique" in str(e)
+
+import asyncio
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_race(ledger: Ledger, wallet: Wallet):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+
+    assert mint_quote1.privkey
+    assert mint_quote2.privkey
+
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+
+    req = PostMintBatchRequest(
+        quotes=[mint_quote1.quote, mint_quote2.quote],
+        quote_amounts=[64, 32],
+        outputs=outputs,
+        signatures=[sig1, sig2],
+    )
+
+    results = await asyncio.gather(
+        ledger.mint_batch(req),
+        ledger.mint_batch(req),
+        return_exceptions=True
+    )
+
+    successes = [r for r in results if not isinstance(r, Exception)]
+    exceptions = [r for r in results if isinstance(r, Exception)]
+
+    assert len(successes) == 1, f"Expected 1 success, got {len(successes)}"
+    assert len(exceptions) == 1, f"Expected 1 exception, got {len(exceptions)}"
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wallet):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs_gen, derivation_paths = await wallet.generate_secrets_from_to(10000, 10002)
+    outputs, _ = wallet._construct_outputs([64, 32], secrets[:2], rs_gen[:2])
+
+    assert mint_quote1.privkey
+    assert mint_quote2.privkey
+
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+
+    req_batch = PostMintBatchRequest(
+        quotes=[mint_quote1.quote, mint_quote2.quote],
+        quote_amounts=[64, 32],
+        outputs=outputs,
+        signatures=[sig1, sig2],
+    )
+
+    outputs_normal, _ = wallet._construct_outputs([64], [secrets[2]], [rs_gen[2]])
+    sig_normal = nut20.sign_mint_quote(mint_quote1.quote, outputs_normal, mint_quote1.privkey)
+
+    results = await asyncio.gather(
+        ledger.mint_batch(req_batch),
+        ledger.mint(outputs=outputs_normal, quote_id=mint_quote1.quote, signature=sig_normal),
+        return_exceptions=True
+    )
+
+    successes = [r for r in results if not isinstance(r, Exception)]
+    exceptions = [r for r in results if isinstance(r, Exception)]
+
+    assert len(successes) == 1, f"Expected 1 success, got {len(successes)}"
+    assert len(exceptions) == 1, f"Expected 1 exception, got {len(exceptions)}"
