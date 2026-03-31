@@ -64,10 +64,15 @@ class LedgerSpendingConditions:
         main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
         main_n_sigs = p2pk_secret.n_sigs or 1
 
-        exception_to_raise = None
+        exception_to_raise: Optional[Exception] = None
+
+        can_use_main_path = True
+        if SecretKind(secret.kind) == SecretKind.HTLC and not proof.htlcpreimage:
+            can_use_main_path = False
+            exception_to_raise = TransactionError("HTLC requires preimage for main path.")
 
         # Check if we can spend via the normal path (main pubkeys)
-        if main_pubkeys:
+        if main_pubkeys and can_use_main_path:
             try:
                 if self._verify_p2pk_signatures(
                     message_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
