@@ -48,8 +48,6 @@ class LedgerVerification(
     ):
         """Checks all proofs and outputs for validity.
 
-        Warning: Does NOT check if the proofs were already spent. Use `db_write._verify_proofs_spendable` for that.
-
         Args:
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
@@ -62,7 +60,25 @@ class LedgerVerification(
             Exception: Duplicate proofs provided.
             Exception: BDHKE verification failed.
         """
-        # Verify inputs
+        # 1. Verify inputs
+        await self._verify_inputs(proofs)
+
+        # If no outputs are provided, no further checks are needed
+        if outputs is None:
+            return
+
+        # 2. Verify outputs
+        await self._verify_outputs(outputs, conn=conn)
+
+        # 3. Verify inputs and outputs together
+        self._verify_inputs_and_outputs_together(proofs, outputs)
+
+    async def _verify_inputs(
+        self,
+        proofs: List[Proof],
+    ):
+        """Verify that the proofs are valid and can be spent."""
+        logger.trace(f"Verifying {len(proofs)} proofs.")
         if not proofs:
             raise TransactionError("no proofs provided.")
         # Verify amounts of inputs
@@ -83,33 +99,10 @@ class LedgerVerification(
         # Verify SIG_INPUTS spending conditions
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
+        # Verify proofs are not already spent (raises ProofsAlreadySpentError)
+        await self.db_read._verify_proofs_spendable(proofs)
 
-        if outputs is None:
-            # If no outputs are provided, we are melting
-            return
-
-        # Verify input and output amounts
-        self._verify_equation_balanced(proofs, outputs)
-
-        # Verify outputs
-        await self._verify_outputs(outputs, conn=conn)
-
-        # Verify inputs and outputs together
-        if not self._verify_input_output_amounts(proofs, outputs):
-            raise TransactionError("input amounts less than output.")
-        # Verify that input keyset units are the same as output keyset unit
-        # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
-        assert outputs[0].id, "output id not set"
-        if not all(
-            [
-                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-                for p in proofs
-            ]
-        ):
-            raise TransactionError("input and output keysets have different units.")
-
-        # Verify SIG_ALL spending conditions
-        self._verify_input_output_spending_conditions(proofs, outputs)
+        logger.trace(f"Verified {len(proofs)} proofs.")
 
     def _verify_proofs_unit(self, proofs: List[Proof], expected_unit: Unit) -> None:
         """Verifies that all proofs have the expected unit and valid keysets."""
@@ -168,6 +161,24 @@ class LedgerVerification(
 
         logger.trace(f"Verified {len(outputs)} outputs.")
 
+    def _verify_inputs_and_outputs_together(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+    ):
+        """Verify criteria that depend on both inputs and outputs."""
+        # Verify that inputs > outputs (excluding fees)
+        self._verify_input_output_amounts(proofs, outputs)
+
+        # Verify input and output amounts are balanced (inputs = outputs + fees)
+        self._verify_equation_balanced(proofs, outputs)
+
+        # Verify that input keyset units are the same as output keyset unit
+        self._verify_units_match(proofs, outputs)
+
+        # Verify SIG_ALL spending conditions
+        self._verify_input_output_spending_conditions(proofs, outputs)
+
     async def _check_outputs_pending_or_issued_before(
         self,
         outputs: List[BlindedMessage],
@@ -213,8 +224,7 @@ class LedgerVerification(
         """Verifies that the proof of promise was issued by this ledger."""
         assert proof.id in self.keysets, f"keyset {proof.id} unknown"
         logger.trace(
-            f"Validating proof {proof.secret} with keyset"
-            f" {self.keysets[proof.id].id}."
+            f"Validating proof {proof.secret} with keyset {self.keysets[proof.id].id}."
         )
         # use the appropriate active keyset for this proof.id
         private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
@@ -229,11 +239,14 @@ class LedgerVerification(
 
     def _verify_input_output_amounts(
         self, inputs: List[Proof], outputs: List[BlindedMessage]
-    ) -> bool:
+    ) -> None:
         """Verifies that inputs have at least the same amount as outputs"""
         input_amount = sum([p.amount for p in inputs])
         output_amount = sum([o.amount for o in outputs])
-        return input_amount >= output_amount
+        if not input_amount >= output_amount:
+            raise TransactionError(
+                f"input amounts ({input_amount}) less than output amounts ({output_amount})."
+            )
 
     def _verify_no_duplicate_proofs(self, proofs: List[Proof]) -> bool:
         secrets = [p.secret for p in proofs]
@@ -245,6 +258,20 @@ class LedgerVerification(
         B_s = [od.B_ for od in outputs]
         if len(B_s) != len(list(set(B_s))):
             return False
+        return True
+
+    def _verify_inputs_outputs_units_match(
+        self, proofs: List[Proof], outputs: List[BlindedMessage]
+    ) -> bool:
+        """Verifies that the units of the inputs and outputs match."""
+        units_proofs = [self.keysets[p.id].unit for p in proofs]
+        units_outputs = [self.keysets[o.id].unit for o in outputs]
+        if not len(set(units_proofs)) == 1:
+            raise TransactionMultipleUnitsError("inputs have different units.")
+        if not len(set(units_outputs)) == 1:
+            raise TransactionMultipleUnitsError("outputs have different units.")
+        if not units_proofs[0] == units_outputs[0]:
+            raise TransactionUnitMismatchError()
         return True
 
     def _verify_amount(self, amount: int) -> int:
