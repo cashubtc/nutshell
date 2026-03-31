@@ -12,7 +12,7 @@ from bech32 import (
     bech32_encode as _bech32_encode,
 )
 
-from .payment_request import NUT10Option, PaymentRequest, Transport
+from ..base import NUT10Option, PaymentRequest, Transport
 
 BECH32M_CONST = 0x2BC830A3
 HRP = "creqb"

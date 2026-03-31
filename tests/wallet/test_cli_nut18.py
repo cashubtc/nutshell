@@ -1,8 +1,8 @@
 import pytest
 from click.testing import CliRunner
 
+from cashu.core.base import NUT10Option, PaymentRequest
 from cashu.core.nuts.nut18 import serialize
-from cashu.core.nuts.payment_request import NUT10Option, PaymentRequest
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from tests.helpers import is_fake

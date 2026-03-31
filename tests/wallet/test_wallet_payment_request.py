@@ -1,9 +1,9 @@
 import pytest
 
+from cashu.core.base import NUT10Option, PaymentRequest, Transport
 from cashu.core.nuts.nut18 import deserialize, serialize
 from cashu.core.nuts.nut26 import bech32m_decode
 from cashu.core.nuts.nut26 import serialize as serialize_bech32m
-from cashu.core.nuts.payment_request import NUT10Option, PaymentRequest, Transport
 
 
 def test_nut18_serialization_example():

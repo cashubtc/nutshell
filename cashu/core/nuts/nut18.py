@@ -2,8 +2,8 @@ import base64
 
 import cbor2
 
+from ..base import PaymentRequest
 from .nut26 import deserialize as deserialize_bech32m
-from .payment_request import PaymentRequest
 
 
 def serialize(pr: PaymentRequest) -> str:
