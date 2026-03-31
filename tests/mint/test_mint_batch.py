@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 
@@ -123,7 +125,6 @@ async def test_ledger_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet
     except Exception as e:
         assert "quotes must be unique" in str(e)
 
-import asyncio
 
 @pytest.mark.asyncio
 async def test_ledger_mint_batch_race(ledger: Ledger, wallet: Wallet):
