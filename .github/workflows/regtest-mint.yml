@@ -25,7 +25,12 @@ permissions:
 jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
-    timeout-minutes: 10
+    # Was 10m; job was cancelled mid-suite (e.g. postgres + CoreLightningRestWallet) while tests still ran.
+    # PR discussion / follow-ups:
+    # - Is this ceiling OK, or should we tune (measure worst matrix cell)?
+    # - Cheaper isolation than DROP SCHEMA per test in tests/conftest.py `ledger`?
+    # - Lighter regtest matrix on PR vs full matrix on main or nightly?
+    timeout-minutes: 120
     steps:
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')
