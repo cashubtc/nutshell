@@ -22,6 +22,7 @@ from cashu.core.errors import (
     NotAllowedError,
     OutputsAlreadySignedError,
     OutputsArePendingError,
+    ProofsAlreadySpentError,
     SecretTooLongError,
     TransactionDuplicateInputsError,
     TransactionDuplicateOutputsError,
@@ -778,7 +779,7 @@ async def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_verify_inputs_not_spendable_raises_invalid_proofs(ledger: Ledger):
+async def test_verify_inputs_not_spendable_raises_proofs_already_spent(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
@@ -786,10 +787,10 @@ async def test_verify_inputs_not_spendable_raises_invalid_proofs(ledger: Ledger)
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            AsyncMock(return_value=False),
+            AsyncMock(side_effect=ProofsAlreadySpentError()),
         ),
     ):
-        with pytest.raises(InvalidProofsError):
+        with pytest.raises(ProofsAlreadySpentError):
             await ledger._verify_inputs([p])
 
 
@@ -1053,7 +1054,7 @@ async def test_vio_propagates_no_secret_from_inputs(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_vio_propagates_invalid_proofs_from_inputs(ledger: Ledger):
+async def test_vio_propagates_proofs_already_spent_from_inputs(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
@@ -1061,10 +1062,10 @@ async def test_vio_propagates_invalid_proofs_from_inputs(ledger: Ledger):
         patch.object(
             ledger.db_read,
             "_verify_proofs_spendable",
-            AsyncMock(return_value=False),
+            AsyncMock(side_effect=ProofsAlreadySpentError()),
         ),
     ):
-        with pytest.raises(InvalidProofsError):
+        with pytest.raises(ProofsAlreadySpentError):
             await ledger.verify_inputs_and_outputs(proofs=[p], outputs=None)
 
 

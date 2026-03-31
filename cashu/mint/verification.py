@@ -48,8 +48,6 @@ class LedgerVerification(
     ):
         """Checks all proofs and outputs for validity.
 
-        Warning: Does NOT check if the proofs were already spent. Use `db_write._verify_proofs_spendable` for that.
-
         Args:
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
@@ -101,9 +99,8 @@ class LedgerVerification(
         # Verify SIG_INPUTS spending conditions
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
-        # Verify if proofs are not already spent (this throws)
-        if not await self.db_read._verify_proofs_spendable(proofs):
-            raise InvalidProofsError()
+        # Verify proofs are not already spent (raises ProofsAlreadySpentError)
+        await self.db_read._verify_proofs_spendable(proofs)
 
         logger.trace(f"Verified {len(proofs)} proofs.")
 

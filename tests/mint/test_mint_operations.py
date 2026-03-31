@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
-from cashu.core.errors import OutputsAlreadySignedError
+from cashu.core.errors import OutputsAlreadySignedError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.nuts import nut20
@@ -214,6 +214,26 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
+
+
+@pytest.mark.asyncio
+async def test_verify_inputs_rejects_double_spent_proofs(
+    wallet1: Wallet, ledger: Ledger
+):
+    """After a swap, inputs are spent in the DB; _verify_inputs must reject re-use."""
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10, set_reserved=False)
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(len(send_proofs))
+    outputs, rs = wallet1._construct_outputs(
+        [p.amount for p in send_proofs], secrets, rs
+    )
+    await ledger.swap(proofs=send_proofs, outputs=outputs)
+
+    with pytest.raises(ProofsAlreadySpentError):
+        await ledger._verify_inputs(send_proofs)
 
 
 @pytest.mark.asyncio
