@@ -175,7 +175,7 @@ class PostMintQuoteResponse(BaseModel):
 class PostMintRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
     outputs: List[BlindedMessage] = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_outputs
     )
     signature: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
@@ -193,7 +193,7 @@ class GetMintResponse_deprecated(BaseModel):
 
 class PostMintRequest_deprecated(BaseModel):
     outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_outputs
     )
 
 
@@ -267,9 +267,9 @@ class PostMeltQuoteResponse(BaseModel):
 
 class PostMeltRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
-    inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    inputs: List[Proof] = Field(..., max_length=settings.mint_max_inputs)
     outputs: Union[List[BlindedMessage], None] = Field(
-        None, max_length=settings.mint_max_request_length
+        None, max_length=settings.mint_max_outputs
     )
 
 
@@ -280,10 +280,10 @@ class PostMeltResponse_deprecated(BaseModel):
 
 
 class PostMeltRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    proofs: List[Proof] = Field(..., max_length=settings.mint_max_inputs)
     pr: str = Field(..., max_length=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
-        None, max_length=settings.mint_max_request_length
+        None, max_length=settings.mint_max_outputs
     )
 
 
@@ -291,9 +291,9 @@ class PostMeltRequest_deprecated(BaseModel):
 
 
 class PostSwapRequest(BaseModel):
-    inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    inputs: List[Proof] = Field(..., max_length=settings.mint_max_inputs)
     outputs: List[BlindedMessage] = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_outputs
     )
 
 
@@ -303,10 +303,10 @@ class PostSwapResponse(BaseModel):
 
 # deprecated since 0.13.0
 class PostSwapRequest_Deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    proofs: List[Proof] = Field(..., max_length=settings.mint_max_inputs)
     amount: Optional[int] = None
     outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_outputs
     )
 
 
@@ -332,7 +332,7 @@ class PostCheckStateResponse(BaseModel):
 
 
 class CheckSpendableRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    proofs: List[Proof] = Field(..., max_length=settings.mint_max_inputs)
 
 
 class CheckSpendableResponse_deprecated(BaseModel):
@@ -353,13 +353,13 @@ class CheckFeesResponse_deprecated(BaseModel):
 
 class PostRestoreRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_outputs
     )
 
 
 class PostRestoreRequest_Deprecated(BaseModel):
     outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_outputs
     )
 
 
@@ -372,7 +372,7 @@ class PostRestoreResponse(BaseModel):
 class PostAuthBlindMintRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
         ...,
-        max_length=settings.mint_max_request_length,
+        max_length=settings.mint_max_outputs,
         description="Blinded messages for creating blind auth tokens.",
     )
 

@@ -23,6 +23,8 @@ from ..core.errors import (
     TransactionDuplicateInputsError,
     TransactionDuplicateOutputsError,
     TransactionError,
+    TransactionMaxInputsExceededError,
+    TransactionMaxOutputsExceededError,
     TransactionMultipleUnitsError,
     TransactionUnitError,
     TransactionUnitMismatchError,
@@ -65,6 +67,8 @@ class LedgerVerification(
         # Verify inputs
         if not proofs:
             raise TransactionError("no proofs provided.")
+        if len(proofs) > settings.mint_max_inputs:
+            raise TransactionMaxInputsExceededError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
             raise TransactionError("invalid amount.")
@@ -135,6 +139,8 @@ class LedgerVerification(
         logger.trace(f"Verifying {len(outputs)} outputs.")
         if not outputs:
             raise TransactionError("no outputs provided.")
+        if len(outputs) > settings.mint_max_outputs:
+            raise TransactionMaxOutputsExceededError()
         # Verify all outputs have the same keyset id
         if not all([o.id == outputs[0].id for o in outputs]):
             raise TransactionError("outputs have different keyset ids.")
