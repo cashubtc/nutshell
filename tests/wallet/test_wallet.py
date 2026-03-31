@@ -5,9 +5,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from mnemonic import Mnemonic
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintKeyset, MintQuoteState, Proof
+from cashu.core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintKeyset,
+    MintQuoteState,
+    Proof,
+    WalletKeyset,
+)
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -16,6 +22,7 @@ from cashu.wallet.crud import (
     get_bolt11_mint_quote,
     get_keysets,
     get_proofs,
+    store_keyset,
 )
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -608,24 +615,27 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     it gets removed from the wallet's keyset list and marked as deleted in the DB.
     """
 
-    # Manually seed the wallet (avoids 'seed not set')
-    mnemo = Mnemonic("english")
-    wallet1.mnemonic = mnemo.generate(strength=128)
+    # Save the real keyset ID that the wallet loaded from the mint
+    real_keyset_id = list(wallet1.keysets.keys())[0]
 
-    # create a dummy seed from mnemonic (bytes)
-    wallet1._seed = wallet1.mnemonic.encode("utf-8")
+    # Seed a second fake keyset in the DB so we have 2 keysets
+    fake_keyset = WalletKeyset(
+        id="fake_keyset_to_disappear",
+        unit=wallet1.unit.name,
+        mint_url=wallet1.url,
+        active=True,
+        public_keys=wallet1.keysets[real_keyset_id].public_keys,
+    )
+    await store_keyset(keyset=fake_keyset, db=wallet1.db)
+    await wallet1.load_keysets_from_db()
 
-    # Initialize private key using this dummy seed
-    await wallet1._init_private_key()
+    assert len(wallet1.keysets) == 2, "Expected 2 keysets before test"
 
-    # Save the old keyset ID for verification
-    old_keyset_id = list(wallet1.keysets.keys())[0]
-
-    # Mock backend response so only one keyset remains active on the mint
+    # Mock the mint API to only return the real keyset (fake one "disappeared")
     wallet1._get_keysets = AsyncMock(
         return_value=[
             MintKeyset(
-                id=old_keyset_id,
+                id=real_keyset_id,
                 unit="sat",
                 active=True,
                 derivation_path="m/0'/0'/0'",
@@ -634,17 +644,20 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
         ]
     )
 
-    before = len(wallet1.keysets)
-
     # Load keysets from mocked mint API
     await wallet1.load_mint_keysets()
 
-    after = len(wallet1.keysets)
+    # Assert only the real keyset remains in memory
+    assert len(wallet1.keysets) == 1
+    assert real_keyset_id in wallet1.keysets
 
-    # Assert keyset count remains consistent
-    assert after == 1
-    assert after <= before
+    # Assert the disappeared keyset is marked as deleted in the DB
+    disappeared_keysets_db = await get_keysets(
+        db=wallet1.db, id="fake_keyset_to_disappear", exclude_deleted=False
+    )
+    assert len(disappeared_keysets_db) == 1
+    assert disappeared_keysets_db[0].deleted_at is not None
 
-    # Assert that the retained keyset is not marked as deleted in DB
-    all_keysets_db = await get_keysets(db=wallet1.db, id=old_keyset_id)
-    assert all_keysets_db[0].deleted_at is None  # the one we kept is not deleted
+    # Assert the retained keyset is NOT marked as deleted
+    retained_keysets_db = await get_keysets(db=wallet1.db, id=real_keyset_id)
+    assert retained_keysets_db[0].deleted_at is None

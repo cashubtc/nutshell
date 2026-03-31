@@ -297,8 +297,8 @@ class Wallet(
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
 
-        # load all keysets of this mint from the db
-        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+        # load all keysets of this mint from the db (including deleted, for comparison)
+        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db, exclude_deleted=False)
 
         # mark keysets that disappeared from mint as deleted
         active_ids = set(mint_keysets_dict.keys())
@@ -322,7 +322,7 @@ class Wallet(
                 keyset.input_fee_ppk = mint_keysets_dict[keyset.id].input_fee_ppk or 0
                 await store_keyset(keyset=keyset, db=self.db)
 
-        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db, exclude_deleted=False)
         keysets_in_db_dict = {k.id: k for k in keysets_in_db}
 
         # get all new keysets that are not in memory yet and store them in the database
@@ -459,7 +459,7 @@ class Wallet(
         if url == "":
             url = self.url
         keysets = await get_keysets(mint_url=url, unit=unit, db=self.db)
-        self.keysets = {k.id: k for k in keysets if k.deleted_at is None}
+        self.keysets = {k.id: k for k in keysets}
         logger.trace(
             f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
         )

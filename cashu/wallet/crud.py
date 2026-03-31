@@ -210,6 +210,7 @@ async def get_keysets(
     unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
+    exclude_deleted: bool = True, #returns only live keysets by default, set to False to include deleted keysets as well
 ) -> List[WalletKeyset]:
     clauses = []
     values: Dict[str, Any] = {}
@@ -222,6 +223,8 @@ async def get_keysets(
     if unit:
         clauses.append("unit = :unit")
         values["unit"] = unit
+    if exclude_deleted:
+        clauses.append("deleted_at IS NULL")
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
