@@ -37,6 +37,7 @@ from ..core.errors import (
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
     TransactionError,
+    TransactionMaxOutputsExceededError,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
@@ -1088,6 +1089,8 @@ class Ledger(
     async def restore(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
+        if len(outputs) > settings.mint_max_outputs:
+            raise TransactionMaxOutputsExceededError()
         signatures: List[BlindedSignature] = []
         return_outputs: List[BlindedMessage] = []
         async with self.db.get_connection() as conn:

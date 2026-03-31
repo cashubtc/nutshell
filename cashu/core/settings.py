@@ -149,6 +149,18 @@ class MintLimits(MintSettings):
         title="Maximum request length",
         description="Maximum length of REST API request arrays.",
     )
+    mint_max_inputs: int = Field(
+        default=1000,
+        gt=0,
+        title="Maximum inputs per transaction",
+        description="Maximum number of proofs (inputs) per swap, melt, or check request.",
+    )
+    mint_max_outputs: int = Field(
+        default=1000,
+        gt=0,
+        title="Maximum outputs per transaction",
+        description="Maximum number of blinded outputs per mint, swap, melt change, or restore.",
+    )
 
     mint_peg_out_only: bool = Field(  # deprecated for mint_bolt11_disable_mint
         default=False,
