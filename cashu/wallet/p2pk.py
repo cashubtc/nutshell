@@ -214,37 +214,48 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # attach unlock signatures to proofs
         assert len(proofs) == len(signatures), "wrong number of signatures"
         for p, s in zip(proofs, signatures):
-            s_lower = s.lower()
+            # Normalize signature to lowercase for consistent storage and deduplication
+            s_normalized = s.lower()
+            
             if Secret.deserialize(p.secret).kind == SecretKind.P2PK.value:
                 # if there are already signatures, append
                 if p.witness and P2PKWitness.from_witness(p.witness).signatures:
                     proof_signatures = P2PKWitness.from_witness(p.witness).signatures
-                    proof_signatures_lower = [sig.lower() for sig in proof_signatures]
-                    if proof_signatures and s_lower not in proof_signatures_lower:
+                    # Normalize existing signatures for comparison
+                    proof_signatures_normalized = [sig.lower() for sig in proof_signatures]
+                    
+                    if proof_signatures and s_normalized not in proof_signatures_normalized:
+                        # Store normalized signature to prevent case-based duplicates
                         p.witness = P2PKWitness(
-                            signatures=proof_signatures + [s]
+                            signatures=proof_signatures + [s_normalized]
                         ).model_dump_json()
                 else:
-                    p.witness = P2PKWitness(signatures=[s]).model_dump_json()
+                    # Store normalized signature
+                    p.witness = P2PKWitness(signatures=[s_normalized]).model_dump_json()
             elif Secret.deserialize(p.secret).kind == SecretKind.HTLC.value:
                 # if there are already signatures, append
                 if p.witness and HTLCWitness.from_witness(p.witness).signatures:
                     witness = HTLCWitness.from_witness(p.witness)
                     proof_signatures = witness.signatures
                     if proof_signatures:
-                        proof_signatures_lower = [sig.lower() for sig in proof_signatures]
-                        if s_lower not in proof_signatures_lower:
+                        # Normalize existing signatures for comparison
+                        proof_signatures_normalized = [sig.lower() for sig in proof_signatures]
+                        if s_normalized not in proof_signatures_normalized:
+                            # Store normalized signature to prevent case-based duplicates
                             p.witness = HTLCWitness(
-                                preimage=witness.preimage, signatures=proof_signatures + [s]
+                                preimage=witness.preimage, 
+                                signatures=proof_signatures + [s_normalized]
                             ).model_dump_json()
                 else:
                     if p.witness:
                         witness = HTLCWitness.from_witness(p.witness)
+                        # Store normalized signature
                         p.witness = HTLCWitness(
-                            preimage=witness.preimage, signatures=[s]
+                            preimage=witness.preimage, signatures=[s_normalized]
                         ).model_dump_json()
                     else:
-                        p.witness = HTLCWitness(signatures=[s]).model_dump_json()
+                        # Store normalized signature
+                        p.witness = HTLCWitness(signatures=[s_normalized]).model_dump_json()
             else:
                 raise Exception("Secret kind not supported")
 
