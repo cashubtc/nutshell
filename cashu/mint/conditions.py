@@ -61,6 +61,7 @@ class LedgerSpendingConditions:
             main_pubkeys = [p2pk_secret.data]
         # get all additional pubkeys from tags for multisig
         main_pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
+        main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
         main_n_sigs = p2pk_secret.n_sigs or 1
 
         exception_to_raise = None
