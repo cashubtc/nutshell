@@ -123,6 +123,12 @@ class LedgerSpendingConditions:
 
         if len(set(pubkeys)) != len(pubkeys):
             raise TransactionError("pubkeys must be unique.")
+        
+        # enforce that x-coordinates are unique
+        x_only_pubkeys = [p[2:66] if len(p) in [66, 130] else p for p in pubkeys]
+        if len(set(x_only_pubkeys)) != len(x_only_pubkeys):
+            raise TransactionError("pubkeys must have unique x-coordinates.")
+
         logger.trace(f"pubkeys: {pubkeys}")
         unique_pubkeys = set(pubkeys)
 
@@ -339,6 +345,12 @@ class LedgerSpendingConditions:
         # validation
         if len(set(pubkeys)) != len(pubkeys):
             raise TransactionError("pubkeys must be unique.")
+            
+        # enforce that x-coordinates are unique
+        x_only_pubkeys = [p[2:66] if len(p) in [66, 130] else p for p in pubkeys]
+        if len(set(x_only_pubkeys)) != len(x_only_pubkeys):
+            raise TransactionError("pubkeys must have unique x-coordinates.")
+
         logger.trace(f"pubkeys: {pubkeys}")
         unique_pubkeys = set(pubkeys)
 
