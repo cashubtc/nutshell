@@ -104,21 +104,24 @@ def _parse_nostr_target(target_str: str) -> Tuple[bytes, List[str]]:
     hrp, data = bech32_decode(target_str)
     if hrp is None or data is None:
         raise ValueError(f"Invalid nostr target: {target_str}")
-    raw = bytes(convertbits(data, 5, 8, False) or [])
+    raw = convertbits(data, 5, 8, False)
+    if raw is None:
+        raise ValueError(f"Invalid nostr target: {target_str}")
+    raw_bytes = bytes(raw)
 
     if hrp == "npub":
-        return (raw, [])
+        return (raw_bytes, [])
 
     # nprofile: NIP-19 TLV (1-byte type, 1-byte length)
     pubkey = b""
     relays: List[str] = []
     pos = 0
-    while pos < len(raw):
-        t = raw[pos]
+    while pos < len(raw_bytes):
+        t = raw_bytes[pos]
         pos += 1
-        length = raw[pos]
+        length = raw_bytes[pos]
         pos += 1
-        v = raw[pos : pos + length]
+        v = raw_bytes[pos : pos + length]
         pos += length
         if t == 0:
             pubkey = v
@@ -130,7 +133,8 @@ def _encode_nostr_target(pubkey: bytes, relays: List[str]) -> str:
     """Encode 32-byte pubkey + relays -> npub or nprofile."""
     if not relays:
         five = convertbits(pubkey, 8, 5)
-        assert five is not None
+        if five is None:
+            raise ValueError("Failed to encode nostr pubkey")
         return _bech32_encode("npub", five)
 
     # NIP-19 TLV for nprofile
@@ -139,7 +143,8 @@ def _encode_nostr_target(pubkey: bytes, relays: List[str]) -> str:
         rb = r.encode()
         tlv += bytes([1, len(rb)]) + rb
     five = convertbits(tlv, 8, 5)
-    assert five is not None
+    if five is None:
+        raise ValueError("Failed to encode nostr profile")
     return _bech32_encode("nprofile", five)
 
 # ─── Transport encode/decode ────────────────────────────────────────
@@ -147,7 +152,11 @@ def _encode_nostr_target(pubkey: bytes, relays: List[str]) -> str:
 def _encode_transport(tr: Transport) -> bytes:
     kind = TRANSPORT_KINDS.get(tr.t)
     if kind is None:
-        raise ValueError(f"Unknown transport type: {tr.t}")
+        # preserve unknown kind values for re-encoding
+        try:
+            kind = int(tr.t)
+        except ValueError:
+            raise ValueError(f"Unknown transport type: {tr.t}")
 
     inner = _tlv_entry(0x01, bytes([kind]))
 
@@ -156,8 +165,10 @@ def _encode_transport(tr: Transport) -> bytes:
         inner += _tlv_entry(0x02, pubkey)
         for relay in relays:
             inner += _tlv_entry(0x03, _encode_tag_tuple(["r", relay]))
-    else:  # http_post
+    elif kind == 1:  # http_post
         inner += _tlv_entry(0x02, tr.a.encode())
+    else:  # unknown kind — target stored as hex, restore raw bytes
+        inner += _tlv_entry(0x02, bytes.fromhex(tr.a))
 
     if tr.g:
         for tag in tr.g:
@@ -179,14 +190,17 @@ def _decode_transport(data: bytes) -> Transport:
         elif tag == 0x03:
             tag_tuples.append(_decode_tag_tuple(val))
 
-    type_str = TRANSPORT_KINDS_REV.get(kind, "unknown")  # type: ignore
+    type_str = TRANSPORT_KINDS_REV.get(kind, str(kind))  # type: ignore
 
     if kind == 0:  # nostr
         relays = [t[1] for t in tag_tuples if t[0] == "r"]
         other_tags = [t for t in tag_tuples if t[0] != "r"]
         target = _encode_nostr_target(target_raw, relays)
-    else:
+    elif kind == 1:  # http_post
         target = target_raw.decode()
+        other_tags = tag_tuples
+    else:  # unknown kind — preserve target as hex
+        target = target_raw.hex()
         other_tags = tag_tuples
 
     return Transport(
@@ -225,8 +239,11 @@ def _decode_nut10(data: bytes) -> NUT10Option:
         elif tag == 0x03:
             tags.append(_decode_tag_tuple(val))
 
+    if kind is None:
+        raise ValueError("Missing kind in NUT-10 option")
+
     return NUT10Option(
-        k=NUT10_KINDS_REV.get(kind, str(kind)),  # type: ignore
+        k=NUT10_KINDS_REV.get(kind, str(kind)),
         d=d,
         t=tags if tags else None,
     )
@@ -298,7 +315,8 @@ def serialize(pr: PaymentRequest) -> str:
     """Serialize a PaymentRequest to NUT-26 Bech32m format (uppercase)."""
     raw = _pr_to_tlv(pr)
     five_bit = convertbits(raw, 8, 5)
-    assert five_bit is not None
+    if five_bit is None:
+        raise ValueError("Failed to encode payment request")
     return bech32m_encode(HRP, five_bit).upper()
 
 def deserialize(token: str) -> PaymentRequest:
