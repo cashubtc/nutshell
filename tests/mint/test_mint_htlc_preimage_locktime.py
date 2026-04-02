@@ -11,7 +11,7 @@ from cashu.mint.conditions import LedgerSpendingConditions
 from tests.mint.test_mint_conditions import _proof, _secret
 
 
-def test_htlc_preimage_bypass_after_locktime():
+def test_htlc_no_preimage_fails_after_locktime():
     cond = LedgerSpendingConditions()
     preimage = "11" * 32
     digest = sha256(bytes.fromhex(preimage)).hexdigest()

@@ -310,3 +310,18 @@ def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
     
     with pytest.raises(TransactionError, match="pubkeys must have unique x-coordinates"):
         cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
+
+
+def test_verify_p2pk_sig_inputs_handles_duplicate_pubkeys_gracefully():
+    cond = LedgerSpendingConditions()
+    
+    sk = PrivateKey()
+    pk = sk.public_key.format().hex()
+    
+    tags = [["pubkeys", pk], ["sigflag", "SIG_INPUTS"]]
+    secret_str = _secret(kind=SecretKind.P2PK, data=pk, extra_tags=tags)
+    
+    sig = schnorr_sign(secret_str.encode("utf-8"), sk).hex()
+    proof = _proof(secret_str, signatures=[sig])
+    
+    assert cond._verify_input_spending_conditions(proof)
