@@ -125,16 +125,13 @@ class LedgerSpendingConditions:
         n_sigs_required: int,
     ) -> bool:
         pubkeys = [p.lower() for p in pubkeys]
+        pubkeys = list(dict.fromkeys(pubkeys))
         signatures = [s.lower() for s in signatures]
 
-        if len(set(pubkeys)) != len(pubkeys):
-            raise TransactionError("pubkeys must be unique.")
-        
         # enforce that x-coordinates are unique
         x_only_pubkeys = [p[2:66] if len(p) in [66, 130] else p for p in pubkeys]
         if len(set(x_only_pubkeys)) != len(x_only_pubkeys):
             raise TransactionError("pubkeys must have unique x-coordinates.")
-
         logger.trace(f"pubkeys: {pubkeys}")
         unique_pubkeys = set(pubkeys)
 
@@ -320,88 +317,82 @@ class LedgerSpendingConditions:
 
         # now we can enforce that all inputs are SIG_ALL
         secret_lock: Union[P2PKSecret, HTLCSecret]
+        main_pubkeys: List[str] = []
         if SecretKind(secret.kind) == SecretKind.P2PK:
             secret_lock = P2PKSecret.from_secret(secret)
-            pubkeys = [secret_lock.data] + secret_lock.tags.get_tag_all("pubkeys")
-            n_sigs_required = secret_lock.n_sigs or 1
+            main_pubkeys = [secret_lock.data]
         elif SecretKind(secret.kind) == SecretKind.HTLC:
             secret_lock = HTLCSecret.from_secret(secret)
-            pubkeys = secret_lock.tags.get_tag_all("pubkeys")
-            n_sigs_required = secret_lock.n_sigs or 1
         else:
             # not a P2PK or HTLC secret
             return False
 
-        now = time.time()
-        if secret_lock.locktime and secret_lock.locktime < now:
-            # locktime has passed, we only require the refund pubkeys and n_sigs_refund
-            pubkeys = secret_lock.tags.get_tag_all("refund")
-            n_sigs_required = secret_lock.n_sigs_refund or 1
-
-        # if no pubkeys are present, anyone can spend
-        if not pubkeys:
-            return True
+        main_pubkeys += secret_lock.tags.get_tag_all("pubkeys")
+        main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
+        main_n_sigs = secret_lock.n_sigs or 1
 
         message_to_sign = message_to_sign or "".join(
             [p.secret for p in proofs] + [o.B_ for o in outputs]
         )
 
-        pubkeys = [p.lower() for p in pubkeys]
-
-        # validation
-        if len(set(pubkeys)) != len(pubkeys):
-            raise TransactionError("pubkeys must be unique.")
-            
-        # enforce that x-coordinates are unique
-        x_only_pubkeys = [p[2:66] if len(p) in [66, 130] else p for p in pubkeys]
-        if len(set(x_only_pubkeys)) != len(x_only_pubkeys):
-            raise TransactionError("pubkeys must have unique x-coordinates.")
-
-        logger.trace(f"pubkeys: {pubkeys}")
-        unique_pubkeys = set(pubkeys)
-
-        if not n_sigs_required > 0:
-            raise TransactionError("n_sigs must be positive.")
 
         first_proof = proofs[0]
         if not first_proof.witness:
             raise TransactionError("no witness in proof.")
         signatures = P2PKWitness.from_witness(first_proof.witness).signatures
-        signatures = [s.lower() for s in signatures]
 
-        # verify that signatures are present
-        if not signatures:
-            # no signature present although secret indicates one
-            raise TransactionError("no signatures in proof.")
+        exception_to_raise: Optional[Exception] = None
 
-        # we make sure that there are no duplicate signatures
-        if len(set(signatures)) != len(signatures):
-            raise TransactionError("signatures must be unique.")
+        can_use_main_path = True
+        if SecretKind(secret.kind) == SecretKind.HTLC and not all([p.htlcpreimage for p in proofs]):
+            can_use_main_path = False
+            exception_to_raise = TransactionError("HTLC requires preimage for main path.")
 
-        # check if enough pubkeys or signatures are present
-        if len(pubkeys) < n_sigs_required or len(signatures) < n_sigs_required:
-            raise TransactionError(
-                f"not enough pubkeys ({len(pubkeys)}) or signatures ({len(signatures)}) present for n_sigs ({n_sigs_required})."
-            )
-
-        logger.trace(f"pubkeys: {pubkeys}")
-
-        n_valid_sigs = 0
-        for p in unique_pubkeys:
-            for i, s in enumerate(signatures):
-                if verify_schnorr_signature(
-                    message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(p)),
-                    signature=bytes.fromhex(s),
+        # Check if we can spend via the normal path (main pubkeys)
+        if main_pubkeys and can_use_main_path:
+            try:
+                if self._verify_p2pk_signatures(
+                    message_to_sign, main_pubkeys, signatures.copy(), main_n_sigs
                 ):
-                    n_valid_sigs += 1
-                    signatures.pop(i)
-                    break
-        if n_valid_sigs < n_sigs_required:
-            raise TransactionError(
-                f"signature threshold not met. {n_valid_sigs} < {n_sigs_required}."
+                    logger.trace("Spending condition satisfied via main pubkeys.")
+                    return True
+            except Exception as e:
+                # Main path failed, continue to check refund path
+                exception_to_raise = e
+                pass
+
+        # Check if locktime has passed and refund path is available
+        now = time.time()
+        if secret_lock.locktime and secret_lock.locktime < now:
+            logger.trace(
+                f"p2pk locktime passed ({secret_lock.locktime}<{now}). Checking refund path."
             )
-        return True
+
+            refund_pubkeys = secret_lock.tags.get_tag_all("refund")
+            refund_n_sigs = secret_lock.n_sigs_refund or 1
+
+            if refund_pubkeys:
+                try:
+                    if self._verify_p2pk_signatures(
+                        message_to_sign,
+                        refund_pubkeys,
+                        signatures.copy(),
+                        refund_n_sigs,
+                    ):
+                        logger.trace("Spending condition satisfied via refund pubkeys.")
+                        return True
+                except Exception as e:
+                    # Refund path also failed
+                    exception_to_raise = e
+                    pass
+            else:
+                return True  # no refund pubkeys, anyone can spend
+
+        if exception_to_raise:
+            raise exception_to_raise
+        else:
+            # if no pubkeys are present, anyone can spend
+            return True
 
     def _verify_input_output_spending_conditions(
         self,

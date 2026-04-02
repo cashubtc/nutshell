@@ -57,12 +57,12 @@ def test_verify_p2pk_signatures_valid_threshold():
     assert cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
 
 
-def test_verify_p2pk_signatures_reject_duplicate_pubkeys():
+def test_verify_p2pk_signatures_accepts_duplicate_pubkeys():
     cond = LedgerSpendingConditions()
     message = "msg-dup-pubkeys"
     pub, sig = _pubkey_and_sig(message)
-    with pytest.raises(TransactionError, match="pubkeys must be unique"):
-        cond._verify_p2pk_signatures(message, [pub, pub], [sig], 1)
+    # Deduplication means 1 valid signature is sufficient even if pub is passed twice
+    assert cond._verify_p2pk_signatures(message, [pub, pub], [sig], 1)
 
 
 def test_verify_p2pk_signatures_reject_duplicate_signatures():
