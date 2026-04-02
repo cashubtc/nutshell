@@ -29,14 +29,20 @@ DECRYPTON_KEY = "testdecryptionkey"
 ENCRYPTED_SEED = "U2FsdGVkX1_7UU_-nVBMBWDy_9yDu4KeYb7MH8cJTYQGD4RWl82PALH8j-HKzTrI"
 
 
-async def assert_err(f, msg):
+async def assert_err(f, msg, contains: bool = False):
     """Compute f() and expect an error message 'msg'."""
     try:
         await f
     except Exception as exc:
-        assert exc.args[0] == msg, Exception(
-            f"Expected error: {msg}, got: {exc.args[0]}"
-        )
+        actual = str(exc.args[0]) if exc.args else str(exc)
+        if contains:
+            assert msg in actual, Exception(
+                f"Expected error containing {msg!r}, got: {actual!r}"
+            )
+        else:
+            assert actual == msg, Exception(
+                f"Expected error: {msg!r}, got: {actual!r}"
+            )
 
 
 def assert_amt(proofs: List[Proof], expected: int):
@@ -766,7 +772,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
     assert response1.state == "PAID"
 
-    assert_err(
+    await assert_err(
         wallet.melt(
             proofs=proofs2,
             invoice=invoice,
@@ -774,6 +780,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
             quote_id=melt_quote2.quote,
         ),
         "Melt quote already paid or pending.",
+        contains=True,
     )
 
 @pytest.mark.asyncio
@@ -832,28 +839,28 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
         unit="usd",
     )
     await wallet_usd.load_mint()
-    
+
     mint_quote_usd = await wallet_usd.request_mint(100)
     await pay_if_regtest(mint_quote_usd.request)
     usd_proofs = await wallet_usd.mint(100, quote_id=mint_quote_usd.quote)
     assert wallet_usd.unit.name == "usd"
-    
+
     sat_mint_quote = await ledger.mint_quote(
         quote_request=PostMintQuoteRequest(amount=100, unit="sat")
     )
     sat_invoice = sat_mint_quote.request
-    
+
     sat_melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="sat", request=sat_invoice)
     )
-    
+
     assert sat_melt_quote.amount == 100
     assert sat_melt_quote.unit == "sat"
-    
+
     await assert_err(
         ledger.melt(
-            proofs=usd_proofs, 
-            quote=sat_melt_quote.quote, 
+            proofs=usd_proofs,
+            quote=sat_melt_quote.quote,
             outputs=[]
         ),
         "proof unit usd does not match quote unit sat"
