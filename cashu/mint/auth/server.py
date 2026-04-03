@@ -5,7 +5,7 @@ import httpx
 import jwt
 from loguru import logger
 
-from ...core.base import AuthProof
+from ...core.base import AuthProof, BlindedMessage, BlindedSignature
 from ...core.db import Database
 from ...core.errors import (
     BlindAuthAmountExceededError,
@@ -13,7 +13,6 @@ from ...core.errors import (
     BlindAuthRateLimitExceededError,
     ClearAuthFailedError,
 )
-from ...core.models import BlindedMessage, BlindedSignature
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
