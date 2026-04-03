@@ -18,7 +18,7 @@ class WalletCompat(SupportsDb, SupportsMintURL):
     async def inactivate_base64_keysets(self, force_old_keysets: bool) -> None:
         # BEGIN backwards compatibility: phase out keysets with base64 ID by treating them as inactive
         if settings.wallet_inactivate_base64_keysets and not force_old_keysets:
-            keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+            keysets_in_db = await get_keysets(mint_url=self.url, db=self.db, exclude_deleted=False)
             for keyset in keysets_in_db:
                 if not keyset.active:
                     continue

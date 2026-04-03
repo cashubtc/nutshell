@@ -186,8 +186,8 @@ async def store_keyset(
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys, unit, input_fee_ppk)
-        VALUES (:id, :mint_url, :valid_from, :valid_to, :first_seen, :active, :public_keys, :unit, :input_fee_ppk)
+          (id, mint_url, valid_from, valid_to, first_seen, active, deleted_at, public_keys, unit, input_fee_ppk)
+        VALUES (:id, :mint_url, :valid_from, :valid_to, :first_seen, :active, :deleted_at, :public_keys, :unit, :input_fee_ppk)
         """,
         {
             "id": keyset.id,
@@ -196,6 +196,7 @@ async def store_keyset(
             "valid_to": keyset.valid_to or int(time.time()),
             "first_seen": keyset.first_seen or int(time.time()),
             "active": keyset.active,
+            "deleted_at": keyset.deleted_at,
             "public_keys": keyset.serialize(),
             "unit": keyset.unit.name,
             "input_fee_ppk": keyset.input_fee_ppk,
@@ -209,6 +210,7 @@ async def get_keysets(
     unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
+    exclude_deleted: bool = True, #returns only live keysets by default, set to False to include deleted keysets as well
 ) -> List[WalletKeyset]:
     clauses = []
     values: Dict[str, Any] = {}
@@ -221,6 +223,8 @@ async def get_keysets(
     if unit:
         clauses.append("unit = :unit")
         values["unit"] = unit
+    if exclude_deleted:
+        clauses.append("deleted_at IS NULL")
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
@@ -243,11 +247,12 @@ async def update_keyset(
     await (conn or db).execute(
         """
         UPDATE keysets
-        SET active = :active, input_fee_ppk = :input_fee_ppk
+        SET active = :active, deleted_at = :deleted_at, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
         """,
         {
             "active": keyset.active,
+            "deleted_at": keyset.deleted_at,
             "id": keyset.id,
             "input_fee_ppk": keyset.input_fee_ppk,
         },
