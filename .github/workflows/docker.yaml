@@ -3,6 +3,7 @@ name: Docker Build
 on:
   release:
     types: [released]
+  workflow_dispatch:
 
 permissions:
   contents: read
