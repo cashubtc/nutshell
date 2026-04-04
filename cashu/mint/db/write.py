@@ -266,7 +266,7 @@ class DbWriteHelper:
             lock_table="melt_quotes",
             lock_select_statement="quote = :quote",
             lock_parameters={"quote": quote.quote},
-            conn=conn
+            conn=conn,
         ) as conn:
             # get melt quote from db and check if it is pending
             quote_db = await self.crud.get_melt_quote(
@@ -503,4 +503,3 @@ class DbWriteHelper:
         await self.events.submit(quote_copy)
 
         return quote_copy
-

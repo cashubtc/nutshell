@@ -90,7 +90,7 @@ def step1_alice(
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
-    B_: PublicKey = Y + r.public_key # type: ignore
+    B_: PublicKey = Y + r.public_key  # type: ignore
     return B_, r
 
 

@@ -15,9 +15,17 @@ payment_request = (
     "3r52u0xmac6max8mdupghfzh84t4hfsvrfsqwnuszf"
 )
 
+
 @pytest.fixture(autouse=True)
 def cli_prefix():
-    yield ["--insecure", "--host", settings.mint_rpc_server_addr, "--port", settings.mint_rpc_server_port]
+    yield [
+        "--insecure",
+        "--host",
+        settings.mint_rpc_server_addr,
+        "--port",
+        settings.mint_rpc_server_port,
+    ]
+
 
 async def init_wallet():
     settings.debug = False
@@ -29,11 +37,13 @@ async def init_wallet():
     await wallet.load_proofs()
     return wallet
 
+
 def test_get_info(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "get-info"])
     assert result.exception is None
     assert "Mint Info:" in result.output
+
 
 def test_update_motd(cli_prefix):
     runner = CliRunner()
@@ -41,23 +51,33 @@ def test_update_motd(cli_prefix):
     assert result.exception is None
     assert "Motd successfully updated!" in result.output
 
+
 def test_update_short_description(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "description", "New short description"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "description", "New short description"]
+    )
     assert result.exception is None
     assert "Short description successfully updated!" in result.output
 
+
 def test_update_long_description(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "long-description", "New long description"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "long-description", "New long description"]
+    )
     assert result.exception is None
     assert "Long description successfully updated!" in result.output
 
+
 def test_update_icon_url(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "icon-url", "http://example.com/icon.png"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "icon-url", "http://example.com/icon.png"]
+    )
     assert result.exception is None
     assert "Icon url successfully updated!" in result.output
+
 
 def test_update_name(cli_prefix):
     runner = CliRunner()
@@ -65,20 +85,32 @@ def test_update_name(cli_prefix):
     assert result.exception is None
     assert "Name successfully updated!" in result.output
 
+
 def test_add_mint_url(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "url", "add", "http://example.com"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "url", "add", "http://example.com"]
+    )
     assert "Url successfully added!" in result.output
+
 
 def test_remove_mint_url(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "url", "remove", "http://example.com"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "url", "remove", "http://example.com"]
+    )
     assert result.exception is None
-    assert "Url successfully removed!" in result.output or "Contact method not found" in result.output
+    assert (
+        "Url successfully removed!" in result.output
+        or "Contact method not found" in result.output
+    )
+
 
 def test_add_remove_contact(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "contact", "add", "signal", "@example.420"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "contact", "add", "signal", "@example.420"]
+    )
     assert result.exception is None
     assert "Contact successfully added!" in result.output
 
@@ -86,11 +118,13 @@ def test_add_remove_contact(cli_prefix):
     assert result.exception is None
     assert "Contact successfully removed!" in result.output
 
+
 def test_update_lightning_fee(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "update", "lightning-fee", "2.5", "100"])
     assert result.exception is None
     assert "Lightning fee successfully updated!" in result.output
+
 
 def test_update_auth_limits(cli_prefix):
     runner = CliRunner()
@@ -98,11 +132,11 @@ def test_update_auth_limits(cli_prefix):
     assert result.exception is None
     assert "Rate limit per minute successfully updated!" in result.output
 
+
 @pytest.mark.asyncio
-@pytest.mark.skipif(not is_fake,
-    reason=(
-        "Only FakeWallet will mark the quote as paid"
-    ),
+@pytest.mark.skipif(
+    not is_fake,
+    reason=("Only FakeWallet will mark the quote as paid"),
 )
 async def test_update_mint_quote(cli_prefix):
     wallet = await init_wallet()
@@ -110,9 +144,12 @@ async def test_update_mint_quote(cli_prefix):
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
-    result = runner.invoke(cli, [*cli_prefix, "update", "mint-quote", "--", mint_quote.quote, "ISSUED"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "mint-quote", "--", mint_quote.quote, "ISSUED"]
+    )
     assert result.exception is None
     assert "Successfully updated!" in result.output
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -121,14 +158,19 @@ async def test_update_mint_quote(cli_prefix):
 )
 async def test_update_melt_quote(cli_prefix):
     wallet = await init_wallet()
-    melt_quote = await wallet.melt_quote("lnbc1u1p5qefdgsp5xj5cl559ks226f3vf3d7x2ev2qadplmkswp4649h755cfekdufsspp5sxenacdev78ssuwn5vehycs7ch2ds23hhzytut4ncm27gywtv6rqdqqcqpjrzjqdgp5ar48c8k4cns58jw9lamcdlh57trvrn9psgjrsvwz94j9tqsvrqsvcqqvqsqqqqqqqlgqqqzwyqq2q9qxpqysgqzg8e75zkcxazmd0wqmre6xgkumt7sl4ftsw0q4c6zvz8hn6zjxwz9fmdmwpupw7tw79f7gmukyeeh8vusvt03pgwfud9shj849rvrnqpgcpusw")
+    melt_quote = await wallet.melt_quote(
+        "lnbc1u1p5qefdgsp5xj5cl559ks226f3vf3d7x2ev2qadplmkswp4649h755cfekdufsspp5sxenacdev78ssuwn5vehycs7ch2ds23hhzytut4ncm27gywtv6rqdqqcqpjrzjqdgp5ar48c8k4cns58jw9lamcdlh57trvrn9psgjrsvwz94j9tqsvrqsvcqqvqsqqqqqqqlgqqqzwyqq2q9qxpqysgqzg8e75zkcxazmd0wqmre6xgkumt7sl4ftsw0q4c6zvz8hn6zjxwz9fmdmwpupw7tw79f7gmukyeeh8vusvt03pgwfud9shj849rvrnqpgcpusw"
+    )
     assert melt_quote.quote
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
-    result = runner.invoke(cli, [*cli_prefix, "update", "melt-quote", "--", melt_quote.quote, "PAID"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "update", "melt-quote", "--", melt_quote.quote, "PAID"]
+    )
     assert result.exception is None
     assert "Successfully updated!" in result.output
+
 
 @pytest.mark.asyncio
 async def test_get_mint_quote(cli_prefix):
@@ -137,9 +179,12 @@ async def test_get_mint_quote(cli_prefix):
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
-    result = runner.invoke(cli, [*cli_prefix, "get", "mint-quote", "--", mint_quote.quote])
+    result = runner.invoke(
+        cli, [*cli_prefix, "get", "mint-quote", "--", mint_quote.quote]
+    )
     assert result.exception is None
     assert "mint quote:" in result.output
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -148,13 +193,18 @@ async def test_get_mint_quote(cli_prefix):
 )
 async def test_get_melt_quote(cli_prefix):
     wallet = await init_wallet()
-    melt_quote = await wallet.melt_quote("lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj")
+    melt_quote = await wallet.melt_quote(
+        "lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj"
+    )
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
-    result = runner.invoke(cli, [*cli_prefix, "get", "melt-quote", "--", melt_quote.quote])
+    result = runner.invoke(
+        cli, [*cli_prefix, "get", "melt-quote", "--", melt_quote.quote]
+    )
     assert result.exception is None
     assert "melt quote:" in result.output
+
 
 @pytest.mark.asyncio
 async def test_get_quote_ttl_mint_quote(cli_prefix):
@@ -164,10 +214,13 @@ async def test_get_quote_ttl_mint_quote(cli_prefix):
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
-    result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "--", mint_quote.quote])
+    result = runner.invoke(
+        cli, [*cli_prefix, "get", "quote-ttl", "--", mint_quote.quote]
+    )
     assert result.exception is None
     # Mint quotes don't store expiry; the handler returns NOT_FOUND
     assert "Error:" in result.output
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -177,29 +230,35 @@ async def test_get_quote_ttl_mint_quote(cli_prefix):
 async def test_get_quote_ttl_melt_quote(cli_prefix):
     """Melt quotes persist expiry; GetQuoteTtl should return the expiry timestamp."""
     wallet = await init_wallet()
-    melt_quote = await wallet.melt_quote("lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj")
+    melt_quote = await wallet.melt_quote(
+        "lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj"
+    )
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
-    result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "--", melt_quote.quote])
+    result = runner.invoke(
+        cli, [*cli_prefix, "get", "quote-ttl", "--", melt_quote.quote]
+    )
     assert result.exception is None
     assert "Quote expiry:" in result.output
+
 
 def test_get_quote_ttl_invalid_id(cli_prefix):
     """A non-existent quote ID should result in a NOT_FOUND error from the handler."""
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "nonexistent-quote-id-00000"])
+    result = runner.invoke(
+        cli, [*cli_prefix, "get", "quote-ttl", "nonexistent-quote-id-00000"]
+    )
     assert result.exception is None
     assert "Error:" in result.output
 
-'''
-@pytest.mark.asyncio
-async def test_rotate_next_keyset(cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "next-keyset", "sat", "2"]) # Rotate keyset and add a 2 sat ppk fee
-    assert result.exception is None
-    print(result.output)
-    assert "New keyset successfully created:" in result.output
-    assert "keyset.unit = 'sat'" in result.output
-    assert "keyset.input_fee_ppk = 2" in result.output
-'''
+
+# @pytest.mark.asyncio
+# async def test_rotate_next_keyset(cli_prefix):
+#     runner = CliRunner()
+#     result = runner.invoke(cli, [*cli_prefix, "next-keyset", "sat", "2"]) # Rotate keyset and add a 2 sat ppk fee
+#     assert result.exception is None
+#     print(result.output)
+#     assert "New keyset successfully created:" in result.output
+#     assert "keyset.unit = 'sat'" in result.output
+#     assert "keyset.input_fee_ppk = 2" in result.output

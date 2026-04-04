@@ -273,7 +273,8 @@ class Database(Compat):
                 f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)} parameters: {lock_parameters}"
             )
             await wconn.execute(
-                self.lock_table(lock_table, lock_select_statement), lock_parameters or {}
+                self.lock_table(lock_table, lock_select_statement),
+                lock_parameters or {},
             )
             logger.trace(f"Success: Acquired lock on {lock_table}")
             return

@@ -197,7 +197,9 @@ async def test_htlc_redeem_with_2_of_1_signatures(wallet1: Wallet, wallet2: Wall
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2]
+        ).model_dump_json()
 
     await wallet2.redeem(send_proofs)
 
@@ -221,7 +223,9 @@ async def test_htlc_redeem_with_2_of_2_signatures(wallet1: Wallet, wallet2: Wall
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2]
+        ).model_dump_json()
 
     await wallet2.redeem(send_proofs)
 
@@ -247,7 +251,9 @@ async def test_htlc_redeem_with_2_of_2_signatures_with_duplicate_pubkeys(
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2]
+        ).model_dump_json()
 
     await assert_err(
         wallet2.redeem(send_proofs),
@@ -276,7 +282,9 @@ async def test_htlc_redeem_with_3_of_3_signatures_but_only_2_provided(
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2]
+        ).model_dump_json()
 
     await assert_err(
         wallet2.redeem(send_proofs),
@@ -310,7 +318,9 @@ async def test_htlc_redeem_with_2_of_3_signatures_with_2_valid_and_1_invalid_pro
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     signatures3 = [f"{s[:-5]}11111" for s in signatures1]  # wrong signature
     for p, s1, s2, s3 in zip(send_proofs, signatures1, signatures2, signatures3):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2, s3]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2, s3]
+        ).model_dump_json()
 
     await wallet2.redeem(send_proofs)
 
@@ -372,7 +382,9 @@ async def test_htlc_hashlock_path_valid_after_locktime(
 
     signatures = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for proof, signature in zip(send_proofs, signatures):
-        proof.witness = HTLCWitness(preimage=preimage, signatures=[signature]).model_dump_json()
+        proof.witness = HTLCWitness(
+            preimage=preimage, signatures=[signature]
+        ).model_dump_json()
 
     # Even though locktime expired, hashlock path should still be honored
     await wallet2.redeem(send_proofs)

@@ -24,7 +24,12 @@ class _OutputScriptType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _OutputScriptTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_OutputScriptType.ValueType], builtins.type):
+class _OutputScriptTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _OutputScriptType.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     SCRIPT_TYPE_PUBKEY_HASH: _OutputScriptType.ValueType  # 0
     SCRIPT_TYPE_SCRIPT_HASH: _OutputScriptType.ValueType  # 1
@@ -37,7 +42,9 @@ class _OutputScriptTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrappe
     SCRIPT_TYPE_WITNESS_UNKNOWN: _OutputScriptType.ValueType  # 8
     SCRIPT_TYPE_WITNESS_V1_TAPROOT: _OutputScriptType.ValueType  # 9
 
-class OutputScriptType(_OutputScriptType, metaclass=_OutputScriptTypeEnumTypeWrapper): ...
+class OutputScriptType(
+    _OutputScriptType, metaclass=_OutputScriptTypeEnumTypeWrapper
+): ...
 
 SCRIPT_TYPE_PUBKEY_HASH: OutputScriptType.ValueType  # 0
 SCRIPT_TYPE_SCRIPT_HASH: OutputScriptType.ValueType  # 1
@@ -55,7 +62,12 @@ class _CoinSelectionStrategy:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _CoinSelectionStrategyEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_CoinSelectionStrategy.ValueType], builtins.type):
+class _CoinSelectionStrategyEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _CoinSelectionStrategy.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     STRATEGY_USE_GLOBAL_CONFIG: _CoinSelectionStrategy.ValueType  # 0
     """Use the coin selection strategy defined in the global configuration
@@ -66,7 +78,9 @@ class _CoinSelectionStrategyEnumTypeWrapper(google.protobuf.internal.enum_type_w
     STRATEGY_RANDOM: _CoinSelectionStrategy.ValueType  # 2
     """Randomly select the available coins during coin selection."""
 
-class CoinSelectionStrategy(_CoinSelectionStrategy, metaclass=_CoinSelectionStrategyEnumTypeWrapper): ...
+class CoinSelectionStrategy(
+    _CoinSelectionStrategy, metaclass=_CoinSelectionStrategyEnumTypeWrapper
+): ...
 
 STRATEGY_USE_GLOBAL_CONFIG: CoinSelectionStrategy.ValueType  # 0
 """Use the coin selection strategy defined in the global configuration
@@ -82,7 +96,10 @@ class _AddressType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _AddressTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AddressType.ValueType], builtins.type):
+class _AddressTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_AddressType.ValueType],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     WITNESS_PUBKEY_HASH: _AddressType.ValueType  # 0
     NESTED_PUBKEY_HASH: _AddressType.ValueType  # 1
@@ -112,7 +129,12 @@ class _CommitmentType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _CommitmentTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_CommitmentType.ValueType], builtins.type):
+class _CommitmentTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _CommitmentType.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     UNKNOWN_COMMITMENT_TYPE: _CommitmentType.ValueType  # 0
     """
@@ -197,7 +219,10 @@ class _Initiator:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _InitiatorEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Initiator.ValueType], builtins.type):
+class _InitiatorEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Initiator.ValueType],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     INITIATOR_UNKNOWN: _Initiator.ValueType  # 0
     INITIATOR_LOCAL: _Initiator.ValueType  # 1
@@ -216,7 +241,12 @@ class _ResolutionType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _ResolutionTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ResolutionType.ValueType], builtins.type):
+class _ResolutionTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _ResolutionType.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     TYPE_UNKNOWN: _ResolutionType.ValueType  # 0
     ANCHOR: _ResolutionType.ValueType  # 1
@@ -261,7 +291,12 @@ class _ResolutionOutcome:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _ResolutionOutcomeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ResolutionOutcome.ValueType], builtins.type):
+class _ResolutionOutcomeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _ResolutionOutcome.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     OUTCOME_UNKNOWN: _ResolutionOutcome.ValueType  # 0
     """Outcome unknown."""
@@ -285,7 +320,9 @@ class _ResolutionOutcomeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapp
     TIMEOUT: _ResolutionOutcome.ValueType  # 5
     """A htlc was timed out on chain."""
 
-class ResolutionOutcome(_ResolutionOutcome, metaclass=_ResolutionOutcomeEnumTypeWrapper): ...
+class ResolutionOutcome(
+    _ResolutionOutcome, metaclass=_ResolutionOutcomeEnumTypeWrapper
+): ...
 
 OUTCOME_UNKNOWN: ResolutionOutcome.ValueType  # 0
 """Outcome unknown."""
@@ -314,7 +351,12 @@ class _NodeMetricType:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _NodeMetricTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_NodeMetricType.ValueType], builtins.type):
+class _NodeMetricTypeEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _NodeMetricType.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     UNKNOWN: _NodeMetricType.ValueType  # 0
     BETWEENNESS_CENTRALITY: _NodeMetricType.ValueType  # 1
@@ -329,13 +371,20 @@ class _InvoiceHTLCState:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _InvoiceHTLCStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_InvoiceHTLCState.ValueType], builtins.type):
+class _InvoiceHTLCStateEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _InvoiceHTLCState.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     ACCEPTED: _InvoiceHTLCState.ValueType  # 0
     SETTLED: _InvoiceHTLCState.ValueType  # 1
     CANCELED: _InvoiceHTLCState.ValueType  # 2
 
-class InvoiceHTLCState(_InvoiceHTLCState, metaclass=_InvoiceHTLCStateEnumTypeWrapper): ...
+class InvoiceHTLCState(
+    _InvoiceHTLCState, metaclass=_InvoiceHTLCStateEnumTypeWrapper
+): ...
 
 ACCEPTED: InvoiceHTLCState.ValueType  # 0
 SETTLED: InvoiceHTLCState.ValueType  # 1
@@ -346,7 +395,12 @@ class _PaymentFailureReason:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _PaymentFailureReasonEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_PaymentFailureReason.ValueType], builtins.type):
+class _PaymentFailureReasonEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _PaymentFailureReason.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     FAILURE_REASON_NONE: _PaymentFailureReason.ValueType  # 0
     """
@@ -375,7 +429,9 @@ class _PaymentFailureReasonEnumTypeWrapper(google.protobuf.internal.enum_type_wr
     Insufficient local balance.
     """
 
-class PaymentFailureReason(_PaymentFailureReason, metaclass=_PaymentFailureReasonEnumTypeWrapper): ...
+class PaymentFailureReason(
+    _PaymentFailureReason, metaclass=_PaymentFailureReasonEnumTypeWrapper
+): ...
 
 FAILURE_REASON_NONE: PaymentFailureReason.ValueType  # 0
 """
@@ -409,7 +465,10 @@ class _FeatureBit:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _FeatureBitEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_FeatureBit.ValueType], builtins.type):
+class _FeatureBitEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_FeatureBit.ValueType],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     DATALOSS_PROTECT_REQ: _FeatureBit.ValueType  # 0
     DATALOSS_PROTECT_OPT: _FeatureBit.ValueType  # 1
@@ -474,7 +533,12 @@ class _UpdateFailure:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _UpdateFailureEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_UpdateFailure.ValueType], builtins.type):
+class _UpdateFailureEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _UpdateFailure.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     UPDATE_FAILURE_UNKNOWN: _UpdateFailure.ValueType  # 0
     UPDATE_FAILURE_PENDING: _UpdateFailure.ValueType  # 1
@@ -505,7 +569,10 @@ class LookupHtlcResolutionRequest(google.protobuf.message.Message):
         chan_id: builtins.int = ...,
         htlc_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_id", b"chan_id", "htlc_index", b"htlc_index"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["chan_id", b"chan_id", "htlc_index", b"htlc_index"],
+    ) -> None: ...
 
 global___LookupHtlcResolutionRequest = LookupHtlcResolutionRequest
 
@@ -525,7 +592,9 @@ class LookupHtlcResolutionResponse(google.protobuf.message.Message):
         settled: builtins.bool = ...,
         offchain: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["offchain", b"offchain", "settled", b"settled"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["offchain", b"offchain", "settled", b"settled"]
+    ) -> None: ...
 
 global___LookupHtlcResolutionResponse = LookupHtlcResolutionResponse
 
@@ -559,7 +628,10 @@ class CustomMessage(google.protobuf.message.Message):
         type: builtins.int = ...,
         data: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["data", b"data", "peer", b"peer", "type", b"type"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["data", b"data", "peer", b"peer", "type", b"type"],
+    ) -> None: ...
 
 global___CustomMessage = CustomMessage
 
@@ -587,7 +659,10 @@ class SendCustomMessageRequest(google.protobuf.message.Message):
         type: builtins.int = ...,
         data: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["data", b"data", "peer", b"peer", "type", b"type"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["data", b"data", "peer", b"peer", "type", b"type"],
+    ) -> None: ...
 
 global___SendCustomMessageRequest = SendCustomMessageRequest
 
@@ -635,8 +710,26 @@ class Utxo(google.protobuf.message.Message):
         outpoint: global___OutPoint | None = ...,
         confirmations: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["outpoint", b"outpoint"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["address", b"address", "address_type", b"address_type", "amount_sat", b"amount_sat", "confirmations", b"confirmations", "outpoint", b"outpoint", "pk_script", b"pk_script"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["outpoint", b"outpoint"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "address",
+            b"address",
+            "address_type",
+            b"address_type",
+            "amount_sat",
+            b"amount_sat",
+            "confirmations",
+            b"confirmations",
+            "outpoint",
+            b"outpoint",
+            "pk_script",
+            b"pk_script",
+        ],
+    ) -> None: ...
 
 global___Utxo = Utxo
 
@@ -672,7 +765,23 @@ class OutputDetail(google.protobuf.message.Message):
         amount: builtins.int = ...,
         is_our_address: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["address", b"address", "amount", b"amount", "is_our_address", b"is_our_address", "output_index", b"output_index", "output_type", b"output_type", "pk_script", b"pk_script"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "address",
+            b"address",
+            "amount",
+            b"amount",
+            "is_our_address",
+            b"is_our_address",
+            "output_index",
+            b"output_index",
+            "output_type",
+            b"output_type",
+            "pk_script",
+            b"pk_script",
+        ],
+    ) -> None: ...
 
 global___OutputDetail = OutputDetail
 
@@ -711,17 +820,27 @@ class Transaction(google.protobuf.message.Message):
     label: builtins.str
     """A label that was optionally set on transaction broadcast."""
     @property
-    def dest_addresses(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def dest_addresses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """Addresses that received funds for this transaction. Deprecated as it is
         now incorporated in the output_details field.
         """
 
     @property
-    def output_details(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___OutputDetail]:
+    def output_details(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___OutputDetail
+    ]:
         """Outputs that received funds for this transaction"""
 
     @property
-    def previous_outpoints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PreviousOutPoint]:
+    def previous_outpoints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PreviousOutPoint
+    ]:
         """PreviousOutpoints/Inputs of this transaction."""
 
     def __init__(
@@ -738,9 +857,38 @@ class Transaction(google.protobuf.message.Message):
         output_details: collections.abc.Iterable[global___OutputDetail] | None = ...,
         raw_tx_hex: builtins.str = ...,
         label: builtins.str = ...,
-        previous_outpoints: collections.abc.Iterable[global___PreviousOutPoint] | None = ...,
+        previous_outpoints: collections.abc.Iterable[global___PreviousOutPoint]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amount", b"amount", "block_hash", b"block_hash", "block_height", b"block_height", "dest_addresses", b"dest_addresses", "label", b"label", "num_confirmations", b"num_confirmations", "output_details", b"output_details", "previous_outpoints", b"previous_outpoints", "raw_tx_hex", b"raw_tx_hex", "time_stamp", b"time_stamp", "total_fees", b"total_fees", "tx_hash", b"tx_hash"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amount",
+            b"amount",
+            "block_hash",
+            b"block_hash",
+            "block_height",
+            b"block_height",
+            "dest_addresses",
+            b"dest_addresses",
+            "label",
+            b"label",
+            "num_confirmations",
+            b"num_confirmations",
+            "output_details",
+            b"output_details",
+            "previous_outpoints",
+            b"previous_outpoints",
+            "raw_tx_hex",
+            b"raw_tx_hex",
+            "time_stamp",
+            b"time_stamp",
+            "total_fees",
+            b"total_fees",
+            "tx_hash",
+            b"tx_hash",
+        ],
+    ) -> None: ...
 
 global___Transaction = Transaction
 
@@ -773,7 +921,17 @@ class GetTransactionsRequest(google.protobuf.message.Message):
         end_height: builtins.int = ...,
         account: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["account", b"account", "end_height", b"end_height", "start_height", b"start_height"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "account",
+            b"account",
+            "end_height",
+            b"end_height",
+            "start_height",
+            b"start_height",
+        ],
+    ) -> None: ...
 
 global___GetTransactionsRequest = GetTransactionsRequest
 
@@ -783,7 +941,11 @@ class TransactionDetails(google.protobuf.message.Message):
 
     TRANSACTIONS_FIELD_NUMBER: builtins.int
     @property
-    def transactions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Transaction]:
+    def transactions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Transaction
+    ]:
         """The list of transactions relevant to the wallet."""
 
     def __init__(
@@ -791,7 +953,9 @@ class TransactionDetails(google.protobuf.message.Message):
         *,
         transactions: collections.abc.Iterable[global___Transaction] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["transactions", b"transactions"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["transactions", b"transactions"]
+    ) -> None: ...
 
 global___TransactionDetails = TransactionDetails
 
@@ -823,9 +987,35 @@ class FeeLimit(google.protobuf.message.Message):
         fixed_msat: builtins.int = ...,
         percent: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["fixed", b"fixed", "fixed_msat", b"fixed_msat", "limit", b"limit", "percent", b"percent"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["fixed", b"fixed", "fixed_msat", b"fixed_msat", "limit", b"limit", "percent", b"percent"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["limit", b"limit"]) -> typing.Literal["fixed", "fixed_msat", "percent"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "fixed",
+            b"fixed",
+            "fixed_msat",
+            b"fixed_msat",
+            "limit",
+            b"limit",
+            "percent",
+            b"percent",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "fixed",
+            b"fixed",
+            "fixed_msat",
+            b"fixed_msat",
+            "limit",
+            b"limit",
+            "percent",
+            b"percent",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["limit", b"limit"]
+    ) -> typing.Literal["fixed", "fixed_msat", "percent"] | None: ...
 
 global___FeeLimit = FeeLimit
 
@@ -847,7 +1037,9 @@ class SendRequest(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     DEST_FIELD_NUMBER: builtins.int
     DEST_STRING_FIELD_NUMBER: builtins.int
@@ -941,7 +1133,9 @@ class SendRequest(google.protobuf.message.Message):
         """
 
     @property
-    def dest_custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def dest_custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """
         An optional field that can be used to pass an arbitrary set of TLV records
         to a peer which understands the new records. This can be used to pass
@@ -951,7 +1145,11 @@ class SendRequest(google.protobuf.message.Message):
         """
 
     @property
-    def dest_features(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[global___FeatureBit.ValueType]:
+    def dest_features(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        global___FeatureBit.ValueType
+    ]:
         """
         Features assumed to be supported by the final node. All transitive feature
         dependencies must also be set properly. For a given feature bit pair, either
@@ -975,13 +1173,53 @@ class SendRequest(google.protobuf.message.Message):
         outgoing_chan_id: builtins.int = ...,
         last_hop_pubkey: builtins.bytes = ...,
         cltv_limit: builtins.int = ...,
-        dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         allow_self_payment: builtins.bool = ...,
-        dest_features: collections.abc.Iterable[global___FeatureBit.ValueType] | None = ...,
+        dest_features: collections.abc.Iterable[global___FeatureBit.ValueType]
+        | None = ...,
         payment_addr: builtins.bytes = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["fee_limit", b"fee_limit"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["allow_self_payment", b"allow_self_payment", "amt", b"amt", "amt_msat", b"amt_msat", "cltv_limit", b"cltv_limit", "dest", b"dest", "dest_custom_records", b"dest_custom_records", "dest_features", b"dest_features", "dest_string", b"dest_string", "fee_limit", b"fee_limit", "final_cltv_delta", b"final_cltv_delta", "last_hop_pubkey", b"last_hop_pubkey", "outgoing_chan_id", b"outgoing_chan_id", "payment_addr", b"payment_addr", "payment_hash", b"payment_hash", "payment_hash_string", b"payment_hash_string", "payment_request", b"payment_request"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["fee_limit", b"fee_limit"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "allow_self_payment",
+            b"allow_self_payment",
+            "amt",
+            b"amt",
+            "amt_msat",
+            b"amt_msat",
+            "cltv_limit",
+            b"cltv_limit",
+            "dest",
+            b"dest",
+            "dest_custom_records",
+            b"dest_custom_records",
+            "dest_features",
+            b"dest_features",
+            "dest_string",
+            b"dest_string",
+            "fee_limit",
+            b"fee_limit",
+            "final_cltv_delta",
+            b"final_cltv_delta",
+            "last_hop_pubkey",
+            b"last_hop_pubkey",
+            "outgoing_chan_id",
+            b"outgoing_chan_id",
+            "payment_addr",
+            b"payment_addr",
+            "payment_hash",
+            b"payment_hash",
+            "payment_hash_string",
+            b"payment_hash_string",
+            "payment_request",
+            b"payment_request",
+        ],
+    ) -> None: ...
 
 global___SendRequest = SendRequest
 
@@ -1006,8 +1244,22 @@ class SendResponse(google.protobuf.message.Message):
         payment_route: global___Route | None = ...,
         payment_hash: builtins.bytes = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["payment_route", b"payment_route"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["payment_error", b"payment_error", "payment_hash", b"payment_hash", "payment_preimage", b"payment_preimage", "payment_route", b"payment_route"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["payment_route", b"payment_route"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "payment_error",
+            b"payment_error",
+            "payment_hash",
+            b"payment_hash",
+            "payment_preimage",
+            b"payment_preimage",
+            "payment_route",
+            b"payment_route",
+        ],
+    ) -> None: ...
 
 global___SendResponse = SendResponse
 
@@ -1039,8 +1291,20 @@ class SendToRouteRequest(google.protobuf.message.Message):
         payment_hash_string: builtins.str = ...,
         route: global___Route | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["route", b"route"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["payment_hash", b"payment_hash", "payment_hash_string", b"payment_hash_string", "route", b"route"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["route", b"route"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "payment_hash",
+            b"payment_hash",
+            "payment_hash_string",
+            b"payment_hash_string",
+            "route",
+            b"route",
+        ],
+    ) -> None: ...
 
 global___SendToRouteRequest = SendToRouteRequest
 
@@ -1133,7 +1397,43 @@ class ChannelAcceptRequest(google.protobuf.message.Message):
         wants_zero_conf: builtins.bool = ...,
         wants_scid_alias: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chain_hash", b"chain_hash", "channel_flags", b"channel_flags", "channel_reserve", b"channel_reserve", "commitment_type", b"commitment_type", "csv_delay", b"csv_delay", "dust_limit", b"dust_limit", "fee_per_kw", b"fee_per_kw", "funding_amt", b"funding_amt", "max_accepted_htlcs", b"max_accepted_htlcs", "max_value_in_flight", b"max_value_in_flight", "min_htlc", b"min_htlc", "node_pubkey", b"node_pubkey", "pending_chan_id", b"pending_chan_id", "push_amt", b"push_amt", "wants_scid_alias", b"wants_scid_alias", "wants_zero_conf", b"wants_zero_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chain_hash",
+            b"chain_hash",
+            "channel_flags",
+            b"channel_flags",
+            "channel_reserve",
+            b"channel_reserve",
+            "commitment_type",
+            b"commitment_type",
+            "csv_delay",
+            b"csv_delay",
+            "dust_limit",
+            b"dust_limit",
+            "fee_per_kw",
+            b"fee_per_kw",
+            "funding_amt",
+            b"funding_amt",
+            "max_accepted_htlcs",
+            b"max_accepted_htlcs",
+            "max_value_in_flight",
+            b"max_value_in_flight",
+            "min_htlc",
+            b"min_htlc",
+            "node_pubkey",
+            b"node_pubkey",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "push_amt",
+            b"push_amt",
+            "wants_scid_alias",
+            b"wants_scid_alias",
+            "wants_zero_conf",
+            b"wants_zero_conf",
+        ],
+    ) -> None: ...
 
 global___ChannelAcceptRequest = ChannelAcceptRequest
 
@@ -1221,7 +1521,33 @@ class ChannelAcceptResponse(google.protobuf.message.Message):
         min_accept_depth: builtins.int = ...,
         zero_conf: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["accept", b"accept", "csv_delay", b"csv_delay", "error", b"error", "in_flight_max_msat", b"in_flight_max_msat", "max_htlc_count", b"max_htlc_count", "min_accept_depth", b"min_accept_depth", "min_htlc_in", b"min_htlc_in", "pending_chan_id", b"pending_chan_id", "reserve_sat", b"reserve_sat", "upfront_shutdown", b"upfront_shutdown", "zero_conf", b"zero_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "accept",
+            b"accept",
+            "csv_delay",
+            b"csv_delay",
+            "error",
+            b"error",
+            "in_flight_max_msat",
+            b"in_flight_max_msat",
+            "max_htlc_count",
+            b"max_htlc_count",
+            "min_accept_depth",
+            b"min_accept_depth",
+            "min_htlc_in",
+            b"min_htlc_in",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "reserve_sat",
+            b"reserve_sat",
+            "upfront_shutdown",
+            b"upfront_shutdown",
+            "zero_conf",
+            b"zero_conf",
+        ],
+    ) -> None: ...
 
 global___ChannelAcceptResponse = ChannelAcceptResponse
 
@@ -1251,9 +1577,33 @@ class ChannelPoint(google.protobuf.message.Message):
         funding_txid_str: builtins.str = ...,
         output_index: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["funding_txid", b"funding_txid", "funding_txid_bytes", b"funding_txid_bytes", "funding_txid_str", b"funding_txid_str"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["funding_txid", b"funding_txid", "funding_txid_bytes", b"funding_txid_bytes", "funding_txid_str", b"funding_txid_str", "output_index", b"output_index"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["funding_txid", b"funding_txid"]) -> typing.Literal["funding_txid_bytes", "funding_txid_str"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "funding_txid",
+            b"funding_txid",
+            "funding_txid_bytes",
+            b"funding_txid_bytes",
+            "funding_txid_str",
+            b"funding_txid_str",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "funding_txid",
+            b"funding_txid",
+            "funding_txid_bytes",
+            b"funding_txid_bytes",
+            "funding_txid_str",
+            b"funding_txid_str",
+            "output_index",
+            b"output_index",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["funding_txid", b"funding_txid"]
+    ) -> typing.Literal["funding_txid_bytes", "funding_txid_str"] | None: ...
 
 global___ChannelPoint = ChannelPoint
 
@@ -1277,7 +1627,17 @@ class OutPoint(google.protobuf.message.Message):
         txid_str: builtins.str = ...,
         output_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["output_index", b"output_index", "txid_bytes", b"txid_bytes", "txid_str", b"txid_str"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "output_index",
+            b"output_index",
+            "txid_bytes",
+            b"txid_bytes",
+            "txid_str",
+            b"txid_str",
+        ],
+    ) -> None: ...
 
 global___OutPoint = OutPoint
 
@@ -1299,7 +1659,12 @@ class PreviousOutPoint(google.protobuf.message.Message):
         outpoint: builtins.str = ...,
         is_our_output: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["is_our_output", b"is_our_output", "outpoint", b"outpoint"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "is_our_output", b"is_our_output", "outpoint", b"outpoint"
+        ],
+    ) -> None: ...
 
 global___PreviousOutPoint = PreviousOutPoint
 
@@ -1321,7 +1686,9 @@ class LightningAddress(google.protobuf.message.Message):
         pubkey: builtins.str = ...,
         host: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["host", b"host", "pubkey", b"pubkey"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["host", b"host", "pubkey", b"pubkey"]
+    ) -> None: ...
 
 global___LightningAddress = LightningAddress
 
@@ -1343,7 +1710,9 @@ class EstimateFeeRequest(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.int = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     ADDRTOAMOUNT_FIELD_NUMBER: builtins.int
     TARGET_CONF_FIELD_NUMBER: builtins.int
@@ -1363,7 +1732,9 @@ class EstimateFeeRequest(google.protobuf.message.Message):
     coin_selection_strategy: global___CoinSelectionStrategy.ValueType
     """The strategy to use for selecting coins during fees estimation."""
     @property
-    def AddrToAmount(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.int]:
+    def AddrToAmount(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.int]:
         """The map from addresses to amounts for the transaction."""
 
     def __init__(
@@ -1375,7 +1746,21 @@ class EstimateFeeRequest(google.protobuf.message.Message):
         spend_unconfirmed: builtins.bool = ...,
         coin_selection_strategy: global___CoinSelectionStrategy.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["AddrToAmount", b"AddrToAmount", "coin_selection_strategy", b"coin_selection_strategy", "min_confs", b"min_confs", "spend_unconfirmed", b"spend_unconfirmed", "target_conf", b"target_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "AddrToAmount",
+            b"AddrToAmount",
+            "coin_selection_strategy",
+            b"coin_selection_strategy",
+            "min_confs",
+            b"min_confs",
+            "spend_unconfirmed",
+            b"spend_unconfirmed",
+            "target_conf",
+            b"target_conf",
+        ],
+    ) -> None: ...
 
 global___EstimateFeeRequest = EstimateFeeRequest
 
@@ -1401,7 +1786,17 @@ class EstimateFeeResponse(google.protobuf.message.Message):
         feerate_sat_per_byte: builtins.int = ...,
         sat_per_vbyte: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["fee_sat", b"fee_sat", "feerate_sat_per_byte", b"feerate_sat_per_byte", "sat_per_vbyte", b"sat_per_vbyte"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "fee_sat",
+            b"fee_sat",
+            "feerate_sat_per_byte",
+            b"feerate_sat_per_byte",
+            "sat_per_vbyte",
+            b"sat_per_vbyte",
+        ],
+    ) -> None: ...
 
 global___EstimateFeeResponse = EstimateFeeResponse
 
@@ -1423,7 +1818,9 @@ class SendManyRequest(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.int = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     ADDRTOAMOUNT_FIELD_NUMBER: builtins.int
     TARGET_CONF_FIELD_NUMBER: builtins.int
@@ -1457,7 +1854,9 @@ class SendManyRequest(google.protobuf.message.Message):
     coin_selection_strategy: global___CoinSelectionStrategy.ValueType
     """The strategy to use for selecting coins during sending many requests."""
     @property
-    def AddrToAmount(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.int]:
+    def AddrToAmount(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.int]:
         """The map from addresses to amounts"""
 
     def __init__(
@@ -1472,7 +1871,27 @@ class SendManyRequest(google.protobuf.message.Message):
         spend_unconfirmed: builtins.bool = ...,
         coin_selection_strategy: global___CoinSelectionStrategy.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["AddrToAmount", b"AddrToAmount", "coin_selection_strategy", b"coin_selection_strategy", "label", b"label", "min_confs", b"min_confs", "sat_per_byte", b"sat_per_byte", "sat_per_vbyte", b"sat_per_vbyte", "spend_unconfirmed", b"spend_unconfirmed", "target_conf", b"target_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "AddrToAmount",
+            b"AddrToAmount",
+            "coin_selection_strategy",
+            b"coin_selection_strategy",
+            "label",
+            b"label",
+            "min_confs",
+            b"min_confs",
+            "sat_per_byte",
+            b"sat_per_byte",
+            "sat_per_vbyte",
+            b"sat_per_vbyte",
+            "spend_unconfirmed",
+            b"spend_unconfirmed",
+            "target_conf",
+            b"target_conf",
+        ],
+    ) -> None: ...
 
 global___SendManyRequest = SendManyRequest
 
@@ -1553,7 +1972,31 @@ class SendCoinsRequest(google.protobuf.message.Message):
         spend_unconfirmed: builtins.bool = ...,
         coin_selection_strategy: global___CoinSelectionStrategy.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["addr", b"addr", "amount", b"amount", "coin_selection_strategy", b"coin_selection_strategy", "label", b"label", "min_confs", b"min_confs", "sat_per_byte", b"sat_per_byte", "sat_per_vbyte", b"sat_per_vbyte", "send_all", b"send_all", "spend_unconfirmed", b"spend_unconfirmed", "target_conf", b"target_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "addr",
+            b"addr",
+            "amount",
+            b"amount",
+            "coin_selection_strategy",
+            b"coin_selection_strategy",
+            "label",
+            b"label",
+            "min_confs",
+            b"min_confs",
+            "sat_per_byte",
+            b"sat_per_byte",
+            "sat_per_vbyte",
+            b"sat_per_vbyte",
+            "send_all",
+            b"send_all",
+            "spend_unconfirmed",
+            b"spend_unconfirmed",
+            "target_conf",
+            b"target_conf",
+        ],
+    ) -> None: ...
 
 global___SendCoinsRequest = SendCoinsRequest
 
@@ -1593,7 +2036,12 @@ class ListUnspentRequest(google.protobuf.message.Message):
         max_confs: builtins.int = ...,
         account: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["account", b"account", "max_confs", b"max_confs", "min_confs", b"min_confs"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "account", b"account", "max_confs", b"max_confs", "min_confs", b"min_confs"
+        ],
+    ) -> None: ...
 
 global___ListUnspentRequest = ListUnspentRequest
 
@@ -1603,7 +2051,11 @@ class ListUnspentResponse(google.protobuf.message.Message):
 
     UTXOS_FIELD_NUMBER: builtins.int
     @property
-    def utxos(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Utxo]:
+    def utxos(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Utxo
+    ]:
         """A list of utxos"""
 
     def __init__(
@@ -1634,7 +2086,9 @@ class NewAddressRequest(google.protobuf.message.Message):
         type: global___AddressType.ValueType = ...,
         account: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["account", b"account", "type", b"type"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["account", b"account", "type", b"type"]
+    ) -> None: ...
 
 global___NewAddressRequest = NewAddressRequest
 
@@ -1676,7 +2130,9 @@ class SignMessageRequest(google.protobuf.message.Message):
         msg: builtins.bytes = ...,
         single_hash: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["msg", b"msg", "single_hash", b"single_hash"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["msg", b"msg", "single_hash", b"single_hash"]
+    ) -> None: ...
 
 global___SignMessageRequest = SignMessageRequest
 
@@ -1692,7 +2148,9 @@ class SignMessageResponse(google.protobuf.message.Message):
         *,
         signature: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["signature", b"signature"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["signature", b"signature"]
+    ) -> None: ...
 
 global___SignMessageResponse = SignMessageResponse
 
@@ -1715,7 +2173,9 @@ class VerifyMessageRequest(google.protobuf.message.Message):
         msg: builtins.bytes = ...,
         signature: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["msg", b"msg", "signature", b"signature"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["msg", b"msg", "signature", b"signature"]
+    ) -> None: ...
 
 global___VerifyMessageRequest = VerifyMessageRequest
 
@@ -1735,7 +2195,9 @@ class VerifyMessageResponse(google.protobuf.message.Message):
         valid: builtins.bool = ...,
         pubkey: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["pubkey", b"pubkey", "valid", b"valid"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["pubkey", b"pubkey", "valid", b"valid"]
+    ) -> None: ...
 
 global___VerifyMessageResponse = VerifyMessageResponse
 
@@ -1769,8 +2231,15 @@ class ConnectPeerRequest(google.protobuf.message.Message):
         perm: builtins.bool = ...,
         timeout: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["addr", b"addr"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["addr", b"addr", "perm", b"perm", "timeout", b"timeout"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["addr", b"addr"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "addr", b"addr", "perm", b"perm", "timeout", b"timeout"
+        ],
+    ) -> None: ...
 
 global___ConnectPeerRequest = ConnectPeerRequest
 
@@ -1849,7 +2318,25 @@ class HTLC(google.protobuf.message.Message):
         forwarding_channel: builtins.int = ...,
         forwarding_htlc_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amount", b"amount", "expiration_height", b"expiration_height", "forwarding_channel", b"forwarding_channel", "forwarding_htlc_index", b"forwarding_htlc_index", "hash_lock", b"hash_lock", "htlc_index", b"htlc_index", "incoming", b"incoming"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amount",
+            b"amount",
+            "expiration_height",
+            b"expiration_height",
+            "forwarding_channel",
+            b"forwarding_channel",
+            "forwarding_htlc_index",
+            b"forwarding_htlc_index",
+            "hash_lock",
+            b"hash_lock",
+            "htlc_index",
+            b"htlc_index",
+            "incoming",
+            b"incoming",
+        ],
+    ) -> None: ...
 
 global___HTLC = HTLC
 
@@ -1890,7 +2377,23 @@ class ChannelConstraints(google.protobuf.message.Message):
         min_htlc_msat: builtins.int = ...,
         max_accepted_htlcs: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_reserve_sat", b"chan_reserve_sat", "csv_delay", b"csv_delay", "dust_limit_sat", b"dust_limit_sat", "max_accepted_htlcs", b"max_accepted_htlcs", "max_pending_amt_msat", b"max_pending_amt_msat", "min_htlc_msat", b"min_htlc_msat"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_reserve_sat",
+            b"chan_reserve_sat",
+            "csv_delay",
+            b"csv_delay",
+            "dust_limit_sat",
+            b"dust_limit_sat",
+            "max_accepted_htlcs",
+            b"max_accepted_htlcs",
+            "max_pending_amt_msat",
+            b"max_pending_amt_msat",
+            "min_htlc_msat",
+            b"min_htlc_msat",
+        ],
+    ) -> None: ...
 
 global___ChannelConstraints = ChannelConstraints
 
@@ -2063,7 +2566,11 @@ class Channel(google.protobuf.message.Message):
     the channel's operation.
     """
     @property
-    def pending_htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___HTLC]:
+    def pending_htlcs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___HTLC
+    ]:
         """
         The list of active, uncleared HTLCs currently pending within the channel.
         """
@@ -2077,7 +2584,9 @@ class Channel(google.protobuf.message.Message):
         """List constraints for the remote node."""
 
     @property
-    def alias_scids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+    def alias_scids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
         """
         This lists out the set of alias short channel ids that exist for a channel.
         This may be empty.
@@ -2123,8 +2632,92 @@ class Channel(google.protobuf.message.Message):
         peer_scid_alias: builtins.int = ...,
         memo: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["local_constraints", b"local_constraints", "remote_constraints", b"remote_constraints"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["active", b"active", "alias_scids", b"alias_scids", "capacity", b"capacity", "chan_id", b"chan_id", "chan_status_flags", b"chan_status_flags", "channel_point", b"channel_point", "close_address", b"close_address", "commit_fee", b"commit_fee", "commit_weight", b"commit_weight", "commitment_type", b"commitment_type", "csv_delay", b"csv_delay", "fee_per_kw", b"fee_per_kw", "initiator", b"initiator", "lifetime", b"lifetime", "local_balance", b"local_balance", "local_chan_reserve_sat", b"local_chan_reserve_sat", "local_constraints", b"local_constraints", "memo", b"memo", "num_updates", b"num_updates", "peer_alias", b"peer_alias", "peer_scid_alias", b"peer_scid_alias", "pending_htlcs", b"pending_htlcs", "private", b"private", "push_amount_sat", b"push_amount_sat", "remote_balance", b"remote_balance", "remote_chan_reserve_sat", b"remote_chan_reserve_sat", "remote_constraints", b"remote_constraints", "remote_pubkey", b"remote_pubkey", "static_remote_key", b"static_remote_key", "thaw_height", b"thaw_height", "total_satoshis_received", b"total_satoshis_received", "total_satoshis_sent", b"total_satoshis_sent", "unsettled_balance", b"unsettled_balance", "uptime", b"uptime", "zero_conf", b"zero_conf", "zero_conf_confirmed_scid", b"zero_conf_confirmed_scid"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "local_constraints",
+            b"local_constraints",
+            "remote_constraints",
+            b"remote_constraints",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "active",
+            b"active",
+            "alias_scids",
+            b"alias_scids",
+            "capacity",
+            b"capacity",
+            "chan_id",
+            b"chan_id",
+            "chan_status_flags",
+            b"chan_status_flags",
+            "channel_point",
+            b"channel_point",
+            "close_address",
+            b"close_address",
+            "commit_fee",
+            b"commit_fee",
+            "commit_weight",
+            b"commit_weight",
+            "commitment_type",
+            b"commitment_type",
+            "csv_delay",
+            b"csv_delay",
+            "fee_per_kw",
+            b"fee_per_kw",
+            "initiator",
+            b"initiator",
+            "lifetime",
+            b"lifetime",
+            "local_balance",
+            b"local_balance",
+            "local_chan_reserve_sat",
+            b"local_chan_reserve_sat",
+            "local_constraints",
+            b"local_constraints",
+            "memo",
+            b"memo",
+            "num_updates",
+            b"num_updates",
+            "peer_alias",
+            b"peer_alias",
+            "peer_scid_alias",
+            b"peer_scid_alias",
+            "pending_htlcs",
+            b"pending_htlcs",
+            "private",
+            b"private",
+            "push_amount_sat",
+            b"push_amount_sat",
+            "remote_balance",
+            b"remote_balance",
+            "remote_chan_reserve_sat",
+            b"remote_chan_reserve_sat",
+            "remote_constraints",
+            b"remote_constraints",
+            "remote_pubkey",
+            b"remote_pubkey",
+            "static_remote_key",
+            b"static_remote_key",
+            "thaw_height",
+            b"thaw_height",
+            "total_satoshis_received",
+            b"total_satoshis_received",
+            "total_satoshis_sent",
+            b"total_satoshis_sent",
+            "unsettled_balance",
+            b"unsettled_balance",
+            "uptime",
+            b"uptime",
+            "zero_conf",
+            b"zero_conf",
+            "zero_conf_confirmed_scid",
+            b"zero_conf_confirmed_scid",
+        ],
+    ) -> None: ...
 
 global___Channel = Channel
 
@@ -2162,7 +2755,23 @@ class ListChannelsRequest(google.protobuf.message.Message):
         peer: builtins.bytes = ...,
         peer_alias_lookup: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["active_only", b"active_only", "inactive_only", b"inactive_only", "peer", b"peer", "peer_alias_lookup", b"peer_alias_lookup", "private_only", b"private_only", "public_only", b"public_only"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "active_only",
+            b"active_only",
+            "inactive_only",
+            b"inactive_only",
+            "peer",
+            b"peer",
+            "peer_alias_lookup",
+            b"peer_alias_lookup",
+            "private_only",
+            b"private_only",
+            "public_only",
+            b"public_only",
+        ],
+    ) -> None: ...
 
 global___ListChannelsRequest = ListChannelsRequest
 
@@ -2172,7 +2781,11 @@ class ListChannelsResponse(google.protobuf.message.Message):
 
     CHANNELS_FIELD_NUMBER: builtins.int
     @property
-    def channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Channel]:
+    def channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Channel
+    ]:
         """The list of active channels"""
 
     def __init__(
@@ -2180,7 +2793,9 @@ class ListChannelsResponse(google.protobuf.message.Message):
         *,
         channels: collections.abc.Iterable[global___Channel] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["channels", b"channels"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["channels", b"channels"]
+    ) -> None: ...
 
 global___ListChannelsResponse = ListChannelsResponse
 
@@ -2196,7 +2811,9 @@ class AliasMap(google.protobuf.message.Message):
     the first assigned "base" alias.
     """
     @property
-    def aliases(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+    def aliases(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
         """The set of all aliases stored for the base SCID."""
 
     def __init__(
@@ -2205,7 +2822,10 @@ class AliasMap(google.protobuf.message.Message):
         base_scid: builtins.int = ...,
         aliases: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["aliases", b"aliases", "base_scid", b"base_scid"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["aliases", b"aliases", "base_scid", b"base_scid"],
+    ) -> None: ...
 
 global___AliasMap = AliasMap
 
@@ -2225,13 +2845,19 @@ class ListAliasesResponse(google.protobuf.message.Message):
 
     ALIAS_MAPS_FIELD_NUMBER: builtins.int
     @property
-    def alias_maps(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___AliasMap]: ...
+    def alias_maps(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___AliasMap
+    ]: ...
     def __init__(
         self,
         *,
         alias_maps: collections.abc.Iterable[global___AliasMap] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["alias_maps", b"alias_maps"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["alias_maps", b"alias_maps"]
+    ) -> None: ...
 
 global___ListAliasesResponse = ListAliasesResponse
 
@@ -2243,7 +2869,12 @@ class ChannelCloseSummary(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _ClosureTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[ChannelCloseSummary._ClosureType.ValueType], builtins.type):  # noqa: F821
+    class _ClosureTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            ChannelCloseSummary._ClosureType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         COOPERATIVE_CLOSE: ChannelCloseSummary._ClosureType.ValueType  # 0
         LOCAL_FORCE_CLOSE: ChannelCloseSummary._ClosureType.ValueType  # 1
@@ -2312,9 +2943,15 @@ class ChannelCloseSummary(google.protobuf.message.Message):
     zero_conf_confirmed_scid: builtins.int
     """ The confirmed SCID for a zero-conf channel."""
     @property
-    def resolutions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Resolution]: ...
+    def resolutions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Resolution
+    ]: ...
     @property
-    def alias_scids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+    def alias_scids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
         """
         This lists out the set of alias short channel ids that existed for the
         closed channel. This may be empty.
@@ -2339,7 +2976,41 @@ class ChannelCloseSummary(google.protobuf.message.Message):
         alias_scids: collections.abc.Iterable[builtins.int] | None = ...,
         zero_conf_confirmed_scid: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["alias_scids", b"alias_scids", "capacity", b"capacity", "chain_hash", b"chain_hash", "chan_id", b"chan_id", "channel_point", b"channel_point", "close_height", b"close_height", "close_initiator", b"close_initiator", "close_type", b"close_type", "closing_tx_hash", b"closing_tx_hash", "open_initiator", b"open_initiator", "remote_pubkey", b"remote_pubkey", "resolutions", b"resolutions", "settled_balance", b"settled_balance", "time_locked_balance", b"time_locked_balance", "zero_conf_confirmed_scid", b"zero_conf_confirmed_scid"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "alias_scids",
+            b"alias_scids",
+            "capacity",
+            b"capacity",
+            "chain_hash",
+            b"chain_hash",
+            "chan_id",
+            b"chan_id",
+            "channel_point",
+            b"channel_point",
+            "close_height",
+            b"close_height",
+            "close_initiator",
+            b"close_initiator",
+            "close_type",
+            b"close_type",
+            "closing_tx_hash",
+            b"closing_tx_hash",
+            "open_initiator",
+            b"open_initiator",
+            "remote_pubkey",
+            b"remote_pubkey",
+            "resolutions",
+            b"resolutions",
+            "settled_balance",
+            b"settled_balance",
+            "time_locked_balance",
+            b"time_locked_balance",
+            "zero_conf_confirmed_scid",
+            b"zero_conf_confirmed_scid",
+        ],
+    ) -> None: ...
 
 global___ChannelCloseSummary = ChannelCloseSummary
 
@@ -2375,8 +3046,24 @@ class Resolution(google.protobuf.message.Message):
         amount_sat: builtins.int = ...,
         sweep_txid: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["outpoint", b"outpoint"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["amount_sat", b"amount_sat", "outcome", b"outcome", "outpoint", b"outpoint", "resolution_type", b"resolution_type", "sweep_txid", b"sweep_txid"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["outpoint", b"outpoint"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amount_sat",
+            b"amount_sat",
+            "outcome",
+            b"outcome",
+            "outpoint",
+            b"outpoint",
+            "resolution_type",
+            b"resolution_type",
+            "sweep_txid",
+            b"sweep_txid",
+        ],
+    ) -> None: ...
 
 global___Resolution = Resolution
 
@@ -2406,7 +3093,23 @@ class ClosedChannelsRequest(google.protobuf.message.Message):
         funding_canceled: builtins.bool = ...,
         abandoned: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["abandoned", b"abandoned", "breach", b"breach", "cooperative", b"cooperative", "funding_canceled", b"funding_canceled", "local_force", b"local_force", "remote_force", b"remote_force"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "abandoned",
+            b"abandoned",
+            "breach",
+            b"breach",
+            "cooperative",
+            b"cooperative",
+            "funding_canceled",
+            b"funding_canceled",
+            "local_force",
+            b"local_force",
+            "remote_force",
+            b"remote_force",
+        ],
+    ) -> None: ...
 
 global___ClosedChannelsRequest = ClosedChannelsRequest
 
@@ -2416,13 +3119,19 @@ class ClosedChannelsResponse(google.protobuf.message.Message):
 
     CHANNELS_FIELD_NUMBER: builtins.int
     @property
-    def channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelCloseSummary]: ...
+    def channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelCloseSummary
+    ]: ...
     def __init__(
         self,
         *,
         channels: collections.abc.Iterable[global___ChannelCloseSummary] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["channels", b"channels"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["channels", b"channels"]
+    ) -> None: ...
 
 global___ClosedChannelsResponse = ClosedChannelsResponse
 
@@ -2434,7 +3143,12 @@ class Peer(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _SyncTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Peer._SyncType.ValueType], builtins.type):   # noqa: F821
+    class _SyncTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            Peer._SyncType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         UNKNOWN_SYNC: Peer._SyncType.ValueType  # 0
         """
@@ -2486,8 +3200,12 @@ class Peer(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: global___Feature | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     PUB_KEY_FIELD_NUMBER: builtins.int
     ADDRESS_FIELD_NUMBER: builtins.int
@@ -2538,11 +3256,17 @@ class Peer(google.protobuf.message.Message):
     The last ping payload the peer has sent to us.
     """
     @property
-    def features(self) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
         """Features advertised by the remote peer in their init message."""
 
     @property
-    def errors(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___TimestampedError]:
+    def errors(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___TimestampedError
+    ]:
         """
         The latest errors received from our peer with timestamps, limited to the 10
         most recent errors. These errors are tracked across peer connections, but
@@ -2569,7 +3293,39 @@ class Peer(google.protobuf.message.Message):
         last_flap_ns: builtins.int = ...,
         last_ping_payload: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["address", b"address", "bytes_recv", b"bytes_recv", "bytes_sent", b"bytes_sent", "errors", b"errors", "features", b"features", "flap_count", b"flap_count", "inbound", b"inbound", "last_flap_ns", b"last_flap_ns", "last_ping_payload", b"last_ping_payload", "ping_time", b"ping_time", "pub_key", b"pub_key", "sat_recv", b"sat_recv", "sat_sent", b"sat_sent", "sync_type", b"sync_type"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "address",
+            b"address",
+            "bytes_recv",
+            b"bytes_recv",
+            "bytes_sent",
+            b"bytes_sent",
+            "errors",
+            b"errors",
+            "features",
+            b"features",
+            "flap_count",
+            b"flap_count",
+            "inbound",
+            b"inbound",
+            "last_flap_ns",
+            b"last_flap_ns",
+            "last_ping_payload",
+            b"last_ping_payload",
+            "ping_time",
+            b"ping_time",
+            "pub_key",
+            b"pub_key",
+            "sat_recv",
+            b"sat_recv",
+            "sat_sent",
+            b"sat_sent",
+            "sync_type",
+            b"sync_type",
+        ],
+    ) -> None: ...
 
 global___Peer = Peer
 
@@ -2589,7 +3345,9 @@ class TimestampedError(google.protobuf.message.Message):
         timestamp: builtins.int = ...,
         error: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["error", b"error", "timestamp", b"timestamp"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["error", b"error", "timestamp", b"timestamp"]
+    ) -> None: ...
 
 global___TimestampedError = TimestampedError
 
@@ -2609,7 +3367,9 @@ class ListPeersRequest(google.protobuf.message.Message):
         *,
         latest_error: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["latest_error", b"latest_error"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["latest_error", b"latest_error"]
+    ) -> None: ...
 
 global___ListPeersRequest = ListPeersRequest
 
@@ -2619,7 +3379,11 @@ class ListPeersResponse(google.protobuf.message.Message):
 
     PEERS_FIELD_NUMBER: builtins.int
     @property
-    def peers(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Peer]:
+    def peers(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Peer
+    ]:
         """The list of currently connected peers"""
 
     def __init__(
@@ -2649,7 +3413,12 @@ class PeerEvent(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _EventTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[PeerEvent._EventType.ValueType], builtins.type):    # noqa: F821
+    class _EventTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            PeerEvent._EventType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         PEER_ONLINE: PeerEvent._EventType.ValueType  # 0
         PEER_OFFLINE: PeerEvent._EventType.ValueType  # 1
@@ -2669,7 +3438,9 @@ class PeerEvent(google.protobuf.message.Message):
         pub_key: builtins.str = ...,
         type: global___PeerEvent.EventType.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["pub_key", b"pub_key", "type", b"type"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["pub_key", b"pub_key", "type", b"type"]
+    ) -> None: ...
 
 global___PeerEvent = PeerEvent
 
@@ -2702,8 +3473,12 @@ class GetInfoResponse(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: global___Feature | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     VERSION_FIELD_NUMBER: builtins.int
     COMMIT_HASH_FIELD_NUMBER: builtins.int
@@ -2765,7 +3540,11 @@ class GetInfoResponse(google.protobuf.message.Message):
     store_final_htlc_resolutions: builtins.bool
     """Indicates whether final htlc resolutions are stored on disk."""
     @property
-    def chains(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Chain]:
+    def chains(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Chain
+    ]:
         """
         A list of active chains the node is connected to. This will only
         ever contain a single entry since LND will only ever have a single
@@ -2773,11 +3552,15 @@ class GetInfoResponse(google.protobuf.message.Message):
         """
 
     @property
-    def uris(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def uris(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """The URIs of the current node."""
 
     @property
-    def features(self) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
         """
         Features that our node has advertised in our init message, node
         announcements and invoices.
@@ -2807,7 +3590,51 @@ class GetInfoResponse(google.protobuf.message.Message):
         require_htlc_interceptor: builtins.bool = ...,
         store_final_htlc_resolutions: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["alias", b"alias", "best_header_timestamp", b"best_header_timestamp", "block_hash", b"block_hash", "block_height", b"block_height", "chains", b"chains", "color", b"color", "commit_hash", b"commit_hash", "features", b"features", "identity_pubkey", b"identity_pubkey", "num_active_channels", b"num_active_channels", "num_inactive_channels", b"num_inactive_channels", "num_peers", b"num_peers", "num_pending_channels", b"num_pending_channels", "require_htlc_interceptor", b"require_htlc_interceptor", "store_final_htlc_resolutions", b"store_final_htlc_resolutions", "synced_to_chain", b"synced_to_chain", "synced_to_graph", b"synced_to_graph", "testnet", b"testnet", "uris", b"uris", "version", b"version"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "alias",
+            b"alias",
+            "best_header_timestamp",
+            b"best_header_timestamp",
+            "block_hash",
+            b"block_hash",
+            "block_height",
+            b"block_height",
+            "chains",
+            b"chains",
+            "color",
+            b"color",
+            "commit_hash",
+            b"commit_hash",
+            "features",
+            b"features",
+            "identity_pubkey",
+            b"identity_pubkey",
+            "num_active_channels",
+            b"num_active_channels",
+            "num_inactive_channels",
+            b"num_inactive_channels",
+            "num_peers",
+            b"num_peers",
+            "num_pending_channels",
+            b"num_pending_channels",
+            "require_htlc_interceptor",
+            b"require_htlc_interceptor",
+            "store_final_htlc_resolutions",
+            b"store_final_htlc_resolutions",
+            "synced_to_chain",
+            b"synced_to_chain",
+            "synced_to_graph",
+            b"synced_to_graph",
+            "testnet",
+            b"testnet",
+            "uris",
+            b"uris",
+            "version",
+            b"version",
+        ],
+    ) -> None: ...
 
 global___GetInfoResponse = GetInfoResponse
 
@@ -2839,21 +3666,31 @@ class GetDebugInfoResponse(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: builtins.str = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     CONFIG_FIELD_NUMBER: builtins.int
     LOG_FIELD_NUMBER: builtins.int
     @property
-    def config(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
+    def config(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
     @property
-    def log(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def log(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        builtins.str
+    ]: ...
     def __init__(
         self,
         *,
         config: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         log: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["config", b"config", "log", b"log"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["config", b"config", "log", b"log"]
+    ) -> None: ...
 
 global___GetDebugInfoResponse = GetDebugInfoResponse
 
@@ -2887,7 +3724,17 @@ class GetRecoveryInfoResponse(google.protobuf.message.Message):
         recovery_finished: builtins.bool = ...,
         progress: builtins.float = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["progress", b"progress", "recovery_finished", b"recovery_finished", "recovery_mode", b"recovery_mode"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "progress",
+            b"progress",
+            "recovery_finished",
+            b"recovery_finished",
+            "recovery_mode",
+            b"recovery_mode",
+        ],
+    ) -> None: ...
 
 global___GetRecoveryInfoResponse = GetRecoveryInfoResponse
 
@@ -2909,7 +3756,9 @@ class Chain(google.protobuf.message.Message):
         chain: builtins.str = ...,
         network: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chain", b"chain", "network", b"network"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["chain", b"chain", "network", b"network"]
+    ) -> None: ...
 
 global___Chain = Chain
 
@@ -2930,7 +3779,17 @@ class ConfirmationUpdate(google.protobuf.message.Message):
         block_height: builtins.int = ...,
         num_confs_left: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["block_height", b"block_height", "block_sha", b"block_sha", "num_confs_left", b"num_confs_left"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "block_height",
+            b"block_height",
+            "block_sha",
+            b"block_sha",
+            "num_confs_left",
+            b"num_confs_left",
+        ],
+    ) -> None: ...
 
 global___ConfirmationUpdate = ConfirmationUpdate
 
@@ -2946,8 +3805,12 @@ class ChannelOpenUpdate(google.protobuf.message.Message):
         *,
         channel_point: global___ChannelPoint | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["channel_point", b"channel_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["channel_point", b"channel_point"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["channel_point", b"channel_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing.Literal["channel_point", b"channel_point"]
+    ) -> None: ...
 
 global___ChannelOpenUpdate = ChannelOpenUpdate
 
@@ -2965,7 +3828,12 @@ class ChannelCloseUpdate(google.protobuf.message.Message):
         closing_txid: builtins.bytes = ...,
         success: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["closing_txid", b"closing_txid", "success", b"success"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "closing_txid", b"closing_txid", "success", b"success"
+        ],
+    ) -> None: ...
 
 global___ChannelCloseUpdate = ChannelCloseUpdate
 
@@ -3035,8 +3903,30 @@ class CloseChannelRequest(google.protobuf.message.Message):
         max_fee_per_vbyte: builtins.int = ...,
         no_wait: builtins.bool = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["channel_point", b"channel_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["channel_point", b"channel_point", "delivery_address", b"delivery_address", "force", b"force", "max_fee_per_vbyte", b"max_fee_per_vbyte", "no_wait", b"no_wait", "sat_per_byte", b"sat_per_byte", "sat_per_vbyte", b"sat_per_vbyte", "target_conf", b"target_conf"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["channel_point", b"channel_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channel_point",
+            b"channel_point",
+            "delivery_address",
+            b"delivery_address",
+            "force",
+            b"force",
+            "max_fee_per_vbyte",
+            b"max_fee_per_vbyte",
+            "no_wait",
+            b"no_wait",
+            "sat_per_byte",
+            b"sat_per_byte",
+            "sat_per_vbyte",
+            b"sat_per_vbyte",
+            "target_conf",
+            b"target_conf",
+        ],
+    ) -> None: ...
 
 global___CloseChannelRequest = CloseChannelRequest
 
@@ -3060,9 +3950,35 @@ class CloseStatusUpdate(google.protobuf.message.Message):
         chan_close: global___ChannelCloseUpdate | None = ...,
         close_instant: global___InstantUpdate | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_close", b"chan_close", "close_instant", b"close_instant", "close_pending", b"close_pending", "update", b"update"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["chan_close", b"chan_close", "close_instant", b"close_instant", "close_pending", b"close_pending", "update", b"update"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["update", b"update"]) -> typing.Literal["close_pending", "chan_close", "close_instant"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "chan_close",
+            b"chan_close",
+            "close_instant",
+            b"close_instant",
+            "close_pending",
+            b"close_pending",
+            "update",
+            b"update",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_close",
+            b"chan_close",
+            "close_instant",
+            b"close_instant",
+            "close_pending",
+            b"close_pending",
+            "update",
+            b"update",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["update", b"update"]
+    ) -> typing.Literal["close_pending", "chan_close", "close_instant"] | None: ...
 
 global___CloseStatusUpdate = CloseStatusUpdate
 
@@ -3080,7 +3996,10 @@ class PendingUpdate(google.protobuf.message.Message):
         txid: builtins.bytes = ...,
         output_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["output_index", b"output_index", "txid", b"txid"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["output_index", b"output_index", "txid", b"txid"],
+    ) -> None: ...
 
 global___PendingUpdate = PendingUpdate
 
@@ -3125,7 +4044,17 @@ class ReadyForPsbtFunding(google.protobuf.message.Message):
         funding_amount: builtins.int = ...,
         psbt: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["funding_address", b"funding_address", "funding_amount", b"funding_amount", "psbt", b"psbt"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "funding_address",
+            b"funding_address",
+            "funding_amount",
+            b"funding_amount",
+            "psbt",
+            b"psbt",
+        ],
+    ) -> None: ...
 
 global___ReadyForPsbtFunding = ReadyForPsbtFunding
 
@@ -3161,7 +4090,11 @@ class BatchOpenChannelRequest(google.protobuf.message.Message):
     coin_selection_strategy: global___CoinSelectionStrategy.ValueType
     """The strategy to use for selecting coins during batch opening channels."""
     @property
-    def channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BatchOpenChannel]:
+    def channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BatchOpenChannel
+    ]:
         """The list of channels to open."""
 
     def __init__(
@@ -3175,7 +4108,25 @@ class BatchOpenChannelRequest(google.protobuf.message.Message):
         label: builtins.str = ...,
         coin_selection_strategy: global___CoinSelectionStrategy.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["channels", b"channels", "coin_selection_strategy", b"coin_selection_strategy", "label", b"label", "min_confs", b"min_confs", "sat_per_vbyte", b"sat_per_vbyte", "spend_unconfirmed", b"spend_unconfirmed", "target_conf", b"target_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channels",
+            b"channels",
+            "coin_selection_strategy",
+            b"coin_selection_strategy",
+            "label",
+            b"label",
+            "min_confs",
+            b"min_confs",
+            "sat_per_vbyte",
+            b"sat_per_vbyte",
+            "spend_unconfirmed",
+            b"spend_unconfirmed",
+            "target_conf",
+            b"target_conf",
+        ],
+    ) -> None: ...
 
 global___BatchOpenChannelRequest = BatchOpenChannelRequest
 
@@ -3330,7 +4281,51 @@ class BatchOpenChannel(google.protobuf.message.Message):
         remote_chan_reserve_sat: builtins.int = ...,
         memo: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["base_fee", b"base_fee", "close_address", b"close_address", "commitment_type", b"commitment_type", "fee_rate", b"fee_rate", "local_funding_amount", b"local_funding_amount", "max_local_csv", b"max_local_csv", "memo", b"memo", "min_htlc_msat", b"min_htlc_msat", "node_pubkey", b"node_pubkey", "pending_chan_id", b"pending_chan_id", "private", b"private", "push_sat", b"push_sat", "remote_chan_reserve_sat", b"remote_chan_reserve_sat", "remote_csv_delay", b"remote_csv_delay", "remote_max_htlcs", b"remote_max_htlcs", "remote_max_value_in_flight_msat", b"remote_max_value_in_flight_msat", "scid_alias", b"scid_alias", "use_base_fee", b"use_base_fee", "use_fee_rate", b"use_fee_rate", "zero_conf", b"zero_conf"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee",
+            b"base_fee",
+            "close_address",
+            b"close_address",
+            "commitment_type",
+            b"commitment_type",
+            "fee_rate",
+            b"fee_rate",
+            "local_funding_amount",
+            b"local_funding_amount",
+            "max_local_csv",
+            b"max_local_csv",
+            "memo",
+            b"memo",
+            "min_htlc_msat",
+            b"min_htlc_msat",
+            "node_pubkey",
+            b"node_pubkey",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "private",
+            b"private",
+            "push_sat",
+            b"push_sat",
+            "remote_chan_reserve_sat",
+            b"remote_chan_reserve_sat",
+            "remote_csv_delay",
+            b"remote_csv_delay",
+            "remote_max_htlcs",
+            b"remote_max_htlcs",
+            "remote_max_value_in_flight_msat",
+            b"remote_max_value_in_flight_msat",
+            "scid_alias",
+            b"scid_alias",
+            "use_base_fee",
+            b"use_base_fee",
+            "use_fee_rate",
+            b"use_fee_rate",
+            "zero_conf",
+            b"zero_conf",
+        ],
+    ) -> None: ...
 
 global___BatchOpenChannel = BatchOpenChannel
 
@@ -3340,13 +4335,19 @@ class BatchOpenChannelResponse(google.protobuf.message.Message):
 
     PENDING_CHANNELS_FIELD_NUMBER: builtins.int
     @property
-    def pending_channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PendingUpdate]: ...
+    def pending_channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PendingUpdate
+    ]: ...
     def __init__(
         self,
         *,
         pending_channels: collections.abc.Iterable[global___PendingUpdate] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["pending_channels", b"pending_channels"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["pending_channels", b"pending_channels"]
+    ) -> None: ...
 
 global___BatchOpenChannelResponse = BatchOpenChannelResponse
 
@@ -3523,7 +4524,11 @@ class OpenChannelRequest(google.protobuf.message.Message):
         """
 
     @property
-    def outpoints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___OutPoint]:
+    def outpoints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___OutPoint
+    ]:
         """
         A list of selected outpoints that are allocated for channel funding.
         """
@@ -3560,8 +4565,70 @@ class OpenChannelRequest(google.protobuf.message.Message):
         memo: builtins.str = ...,
         outpoints: collections.abc.Iterable[global___OutPoint] | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["funding_shim", b"funding_shim"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["base_fee", b"base_fee", "close_address", b"close_address", "commitment_type", b"commitment_type", "fee_rate", b"fee_rate", "fund_max", b"fund_max", "funding_shim", b"funding_shim", "local_funding_amount", b"local_funding_amount", "max_local_csv", b"max_local_csv", "memo", b"memo", "min_confs", b"min_confs", "min_htlc_msat", b"min_htlc_msat", "node_pubkey", b"node_pubkey", "node_pubkey_string", b"node_pubkey_string", "outpoints", b"outpoints", "private", b"private", "push_sat", b"push_sat", "remote_chan_reserve_sat", b"remote_chan_reserve_sat", "remote_csv_delay", b"remote_csv_delay", "remote_max_htlcs", b"remote_max_htlcs", "remote_max_value_in_flight_msat", b"remote_max_value_in_flight_msat", "sat_per_byte", b"sat_per_byte", "sat_per_vbyte", b"sat_per_vbyte", "scid_alias", b"scid_alias", "spend_unconfirmed", b"spend_unconfirmed", "target_conf", b"target_conf", "use_base_fee", b"use_base_fee", "use_fee_rate", b"use_fee_rate", "zero_conf", b"zero_conf"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["funding_shim", b"funding_shim"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee",
+            b"base_fee",
+            "close_address",
+            b"close_address",
+            "commitment_type",
+            b"commitment_type",
+            "fee_rate",
+            b"fee_rate",
+            "fund_max",
+            b"fund_max",
+            "funding_shim",
+            b"funding_shim",
+            "local_funding_amount",
+            b"local_funding_amount",
+            "max_local_csv",
+            b"max_local_csv",
+            "memo",
+            b"memo",
+            "min_confs",
+            b"min_confs",
+            "min_htlc_msat",
+            b"min_htlc_msat",
+            "node_pubkey",
+            b"node_pubkey",
+            "node_pubkey_string",
+            b"node_pubkey_string",
+            "outpoints",
+            b"outpoints",
+            "private",
+            b"private",
+            "push_sat",
+            b"push_sat",
+            "remote_chan_reserve_sat",
+            b"remote_chan_reserve_sat",
+            "remote_csv_delay",
+            b"remote_csv_delay",
+            "remote_max_htlcs",
+            b"remote_max_htlcs",
+            "remote_max_value_in_flight_msat",
+            b"remote_max_value_in_flight_msat",
+            "sat_per_byte",
+            b"sat_per_byte",
+            "sat_per_vbyte",
+            b"sat_per_vbyte",
+            "scid_alias",
+            b"scid_alias",
+            "spend_unconfirmed",
+            b"spend_unconfirmed",
+            "target_conf",
+            b"target_conf",
+            "use_base_fee",
+            b"use_base_fee",
+            "use_fee_rate",
+            b"use_fee_rate",
+            "zero_conf",
+            b"zero_conf",
+        ],
+    ) -> None: ...
 
 global___OpenChannelRequest = OpenChannelRequest
 
@@ -3607,9 +4674,37 @@ class OpenStatusUpdate(google.protobuf.message.Message):
         psbt_fund: global___ReadyForPsbtFunding | None = ...,
         pending_chan_id: builtins.bytes = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_open", b"chan_open", "chan_pending", b"chan_pending", "psbt_fund", b"psbt_fund", "update", b"update"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["chan_open", b"chan_open", "chan_pending", b"chan_pending", "pending_chan_id", b"pending_chan_id", "psbt_fund", b"psbt_fund", "update", b"update"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["update", b"update"]) -> typing.Literal["chan_pending", "chan_open", "psbt_fund"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "chan_open",
+            b"chan_open",
+            "chan_pending",
+            b"chan_pending",
+            "psbt_fund",
+            b"psbt_fund",
+            "update",
+            b"update",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_open",
+            b"chan_open",
+            "chan_pending",
+            b"chan_pending",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "psbt_fund",
+            b"psbt_fund",
+            "update",
+            b"update",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["update", b"update"]
+    ) -> typing.Literal["chan_pending", "chan_open", "psbt_fund"] | None: ...
 
 global___OpenStatusUpdate = OpenStatusUpdate
 
@@ -3629,7 +4724,12 @@ class KeyLocator(google.protobuf.message.Message):
         key_family: builtins.int = ...,
         key_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["key_family", b"key_family", "key_index", b"key_index"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "key_family", b"key_family", "key_index", b"key_index"
+        ],
+    ) -> None: ...
 
 global___KeyLocator = KeyLocator
 
@@ -3655,8 +4755,15 @@ class KeyDescriptor(google.protobuf.message.Message):
         raw_key_bytes: builtins.bytes = ...,
         key_loc: global___KeyLocator | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["key_loc", b"key_loc"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["key_loc", b"key_loc", "raw_key_bytes", b"raw_key_bytes"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["key_loc", b"key_loc"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "key_loc", b"key_loc", "raw_key_bytes", b"raw_key_bytes"
+        ],
+    ) -> None: ...
 
 global___KeyDescriptor = KeyDescriptor
 
@@ -3716,8 +4823,31 @@ class ChanPointShim(google.protobuf.message.Message):
         thaw_height: builtins.int = ...,
         musig2: builtins.bool = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point", "local_key", b"local_key"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["amt", b"amt", "chan_point", b"chan_point", "local_key", b"local_key", "musig2", b"musig2", "pending_chan_id", b"pending_chan_id", "remote_key", b"remote_key", "thaw_height", b"thaw_height"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "chan_point", b"chan_point", "local_key", b"local_key"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt",
+            b"amt",
+            "chan_point",
+            b"chan_point",
+            "local_key",
+            b"local_key",
+            "musig2",
+            b"musig2",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "remote_key",
+            b"remote_key",
+            "thaw_height",
+            b"thaw_height",
+        ],
+    ) -> None: ...
 
 global___ChanPointShim = ChanPointShim
 
@@ -3755,7 +4885,17 @@ class PsbtShim(google.protobuf.message.Message):
         base_psbt: builtins.bytes = ...,
         no_publish: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["base_psbt", b"base_psbt", "no_publish", b"no_publish", "pending_chan_id", b"pending_chan_id"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_psbt",
+            b"base_psbt",
+            "no_publish",
+            b"no_publish",
+            "pending_chan_id",
+            b"pending_chan_id",
+        ],
+    ) -> None: ...
 
 global___PsbtShim = PsbtShim
 
@@ -3785,9 +4925,31 @@ class FundingShim(google.protobuf.message.Message):
         chan_point_shim: global___ChanPointShim | None = ...,
         psbt_shim: global___PsbtShim | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point_shim", b"chan_point_shim", "psbt_shim", b"psbt_shim", "shim", b"shim"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["chan_point_shim", b"chan_point_shim", "psbt_shim", b"psbt_shim", "shim", b"shim"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["shim", b"shim"]) -> typing.Literal["chan_point_shim", "psbt_shim"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "chan_point_shim",
+            b"chan_point_shim",
+            "psbt_shim",
+            b"psbt_shim",
+            "shim",
+            b"shim",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_point_shim",
+            b"chan_point_shim",
+            "psbt_shim",
+            b"psbt_shim",
+            "shim",
+            b"shim",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["shim", b"shim"]
+    ) -> typing.Literal["chan_point_shim", "psbt_shim"] | None: ...
 
 global___FundingShim = FundingShim
 
@@ -3803,7 +4965,9 @@ class FundingShimCancel(google.protobuf.message.Message):
         *,
         pending_chan_id: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["pending_chan_id", b"pending_chan_id"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["pending_chan_id", b"pending_chan_id"]
+    ) -> None: ...
 
 global___FundingShimCancel = FundingShimCancel
 
@@ -3842,7 +5006,17 @@ class FundingPsbtVerify(google.protobuf.message.Message):
         pending_chan_id: builtins.bytes = ...,
         skip_finalize: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["funded_psbt", b"funded_psbt", "pending_chan_id", b"pending_chan_id", "skip_finalize", b"skip_finalize"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "funded_psbt",
+            b"funded_psbt",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "skip_finalize",
+            b"skip_finalize",
+        ],
+    ) -> None: ...
 
 global___FundingPsbtVerify = FundingPsbtVerify
 
@@ -3874,7 +5048,17 @@ class FundingPsbtFinalize(google.protobuf.message.Message):
         pending_chan_id: builtins.bytes = ...,
         final_raw_tx: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["final_raw_tx", b"final_raw_tx", "pending_chan_id", b"pending_chan_id", "signed_psbt", b"signed_psbt"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "final_raw_tx",
+            b"final_raw_tx",
+            "pending_chan_id",
+            b"pending_chan_id",
+            "signed_psbt",
+            b"signed_psbt",
+        ],
+    ) -> None: ...
 
 global___FundingPsbtFinalize = FundingPsbtFinalize
 
@@ -3923,9 +5107,42 @@ class FundingTransitionMsg(google.protobuf.message.Message):
         psbt_verify: global___FundingPsbtVerify | None = ...,
         psbt_finalize: global___FundingPsbtFinalize | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["psbt_finalize", b"psbt_finalize", "psbt_verify", b"psbt_verify", "shim_cancel", b"shim_cancel", "shim_register", b"shim_register", "trigger", b"trigger"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["psbt_finalize", b"psbt_finalize", "psbt_verify", b"psbt_verify", "shim_cancel", b"shim_cancel", "shim_register", b"shim_register", "trigger", b"trigger"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["trigger", b"trigger"]) -> typing.Literal["shim_register", "shim_cancel", "psbt_verify", "psbt_finalize"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "psbt_finalize",
+            b"psbt_finalize",
+            "psbt_verify",
+            b"psbt_verify",
+            "shim_cancel",
+            b"shim_cancel",
+            "shim_register",
+            b"shim_register",
+            "trigger",
+            b"trigger",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "psbt_finalize",
+            b"psbt_finalize",
+            "psbt_verify",
+            b"psbt_verify",
+            "shim_cancel",
+            b"shim_cancel",
+            "shim_register",
+            b"shim_register",
+            "trigger",
+            b"trigger",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["trigger", b"trigger"]
+    ) -> (
+        typing.Literal["shim_register", "shim_cancel", "psbt_verify", "psbt_finalize"]
+        | None
+    ): ...
 
 global___FundingTransitionMsg = FundingTransitionMsg
 
@@ -3975,7 +5192,23 @@ class PendingHTLC(google.protobuf.message.Message):
         blocks_til_maturity: builtins.int = ...,
         stage: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amount", b"amount", "blocks_til_maturity", b"blocks_til_maturity", "incoming", b"incoming", "maturity_height", b"maturity_height", "outpoint", b"outpoint", "stage", b"stage"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amount",
+            b"amount",
+            "blocks_til_maturity",
+            b"blocks_til_maturity",
+            "incoming",
+            b"incoming",
+            "maturity_height",
+            b"maturity_height",
+            "outpoint",
+            b"outpoint",
+            "stage",
+            b"stage",
+        ],
+    ) -> None: ...
 
 global___PendingHTLC = PendingHTLC
 
@@ -3993,7 +5226,9 @@ class PendingChannelsRequest(google.protobuf.message.Message):
         *,
         include_raw_tx: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["include_raw_tx", b"include_raw_tx"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["include_raw_tx", b"include_raw_tx"]
+    ) -> None: ...
 
 global___PendingChannelsRequest = PendingChannelsRequest
 
@@ -4065,7 +5300,37 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             private: builtins.bool = ...,
             memo: builtins.str = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["capacity", b"capacity", "chan_status_flags", b"chan_status_flags", "channel_point", b"channel_point", "commitment_type", b"commitment_type", "initiator", b"initiator", "local_balance", b"local_balance", "local_chan_reserve_sat", b"local_chan_reserve_sat", "memo", b"memo", "num_forwarding_packages", b"num_forwarding_packages", "private", b"private", "remote_balance", b"remote_balance", "remote_chan_reserve_sat", b"remote_chan_reserve_sat", "remote_node_pub", b"remote_node_pub"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing.Literal[
+                "capacity",
+                b"capacity",
+                "chan_status_flags",
+                b"chan_status_flags",
+                "channel_point",
+                b"channel_point",
+                "commitment_type",
+                b"commitment_type",
+                "initiator",
+                b"initiator",
+                "local_balance",
+                b"local_balance",
+                "local_chan_reserve_sat",
+                b"local_chan_reserve_sat",
+                "memo",
+                b"memo",
+                "num_forwarding_packages",
+                b"num_forwarding_packages",
+                "private",
+                b"private",
+                "remote_balance",
+                b"remote_balance",
+                "remote_chan_reserve_sat",
+                b"remote_chan_reserve_sat",
+                "remote_node_pub",
+                b"remote_node_pub",
+            ],
+        ) -> None: ...
 
     @typing.final
     class PendingOpenChannel(google.protobuf.message.Message):
@@ -4116,8 +5381,24 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             fee_per_kw: builtins.int = ...,
             funding_expiry_blocks: builtins.int = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["channel", b"channel"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["channel", b"channel", "commit_fee", b"commit_fee", "commit_weight", b"commit_weight", "fee_per_kw", b"fee_per_kw", "funding_expiry_blocks", b"funding_expiry_blocks"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["channel", b"channel"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing.Literal[
+                "channel",
+                b"channel",
+                "commit_fee",
+                b"commit_fee",
+                "commit_weight",
+                b"commit_weight",
+                "fee_per_kw",
+                b"fee_per_kw",
+                "funding_expiry_blocks",
+                b"funding_expiry_blocks",
+            ],
+        ) -> None: ...
 
     @typing.final
     class WaitingCloseChannel(google.protobuf.message.Message):
@@ -4156,8 +5437,27 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             closing_txid: builtins.str = ...,
             closing_tx_hex: builtins.str = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["channel", b"channel", "commitments", b"commitments"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["channel", b"channel", "closing_tx_hex", b"closing_tx_hex", "closing_txid", b"closing_txid", "commitments", b"commitments", "limbo_balance", b"limbo_balance"]) -> None: ...
+        def HasField(
+            self,
+            field_name: typing.Literal[
+                "channel", b"channel", "commitments", b"commitments"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing.Literal[
+                "channel",
+                b"channel",
+                "closing_tx_hex",
+                b"closing_tx_hex",
+                "closing_txid",
+                b"closing_txid",
+                "commitments",
+                b"commitments",
+                "limbo_balance",
+                b"limbo_balance",
+            ],
+        ) -> None: ...
 
     @typing.final
     class Commitments(google.protobuf.message.Message):
@@ -4200,7 +5500,23 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             remote_commit_fee_sat: builtins.int = ...,
             remote_pending_commit_fee_sat: builtins.int = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["local_commit_fee_sat", b"local_commit_fee_sat", "local_txid", b"local_txid", "remote_commit_fee_sat", b"remote_commit_fee_sat", "remote_pending_commit_fee_sat", b"remote_pending_commit_fee_sat", "remote_pending_txid", b"remote_pending_txid", "remote_txid", b"remote_txid"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing.Literal[
+                "local_commit_fee_sat",
+                b"local_commit_fee_sat",
+                "local_txid",
+                b"local_txid",
+                "remote_commit_fee_sat",
+                b"remote_commit_fee_sat",
+                "remote_pending_commit_fee_sat",
+                b"remote_pending_commit_fee_sat",
+                "remote_pending_txid",
+                b"remote_pending_txid",
+                "remote_txid",
+                b"remote_txid",
+            ],
+        ) -> None: ...
 
     @typing.final
     class ClosedChannel(google.protobuf.message.Message):
@@ -4220,8 +5536,15 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             channel: global___PendingChannelsResponse.PendingChannel | None = ...,
             closing_txid: builtins.str = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["channel", b"channel"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["channel", b"channel", "closing_txid", b"closing_txid"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["channel", b"channel"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing.Literal[
+                "channel", b"channel", "closing_txid", b"closing_txid"
+            ],
+        ) -> None: ...
 
     @typing.final
     class ForceClosedChannel(google.protobuf.message.Message):
@@ -4231,11 +5554,20 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             ValueType = typing.NewType("ValueType", builtins.int)
             V: typing_extensions.TypeAlias = ValueType
 
-        class _AnchorStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType], builtins.type):   # noqa: F821
+        class _AnchorStateEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-            LIMBO: PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType  # 0
+            LIMBO: (
+                PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType
+            )  # 0
             """The recovered_balance is zero and limbo_balance is non-zero."""
-            RECOVERED: PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType  # 1
+            RECOVERED: (
+                PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType
+            )  # 1
             """The recovered_balance is non-zero."""
             LOST: PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType  # 2
             """A state that is neither LIMBO nor RECOVERED."""
@@ -4276,13 +5608,19 @@ class PendingChannelsResponse(google.protobuf.message.Message):
         """
         recovered_balance: builtins.int
         """The total value of funds successfully recovered from this channel"""
-        anchor: global___PendingChannelsResponse.ForceClosedChannel.AnchorState.ValueType
+        anchor: (
+            global___PendingChannelsResponse.ForceClosedChannel.AnchorState.ValueType
+        )
         @property
         def channel(self) -> global___PendingChannelsResponse.PendingChannel:
             """The pending channel to be force closed"""
 
         @property
-        def pending_htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PendingHTLC]: ...
+        def pending_htlcs(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___PendingHTLC
+        ]: ...
         def __init__(
             self,
             *,
@@ -4295,8 +5633,30 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             pending_htlcs: collections.abc.Iterable[global___PendingHTLC] | None = ...,
             anchor: global___PendingChannelsResponse.ForceClosedChannel.AnchorState.ValueType = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["channel", b"channel"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["anchor", b"anchor", "blocks_til_maturity", b"blocks_til_maturity", "channel", b"channel", "closing_txid", b"closing_txid", "limbo_balance", b"limbo_balance", "maturity_height", b"maturity_height", "pending_htlcs", b"pending_htlcs", "recovered_balance", b"recovered_balance"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["channel", b"channel"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing.Literal[
+                "anchor",
+                b"anchor",
+                "blocks_til_maturity",
+                b"blocks_til_maturity",
+                "channel",
+                b"channel",
+                "closing_txid",
+                b"closing_txid",
+                "limbo_balance",
+                b"limbo_balance",
+                "maturity_height",
+                b"maturity_height",
+                "pending_htlcs",
+                b"pending_htlcs",
+                "recovered_balance",
+                b"recovered_balance",
+            ],
+        ) -> None: ...
 
     TOTAL_LIMBO_BALANCE_FIELD_NUMBER: builtins.int
     PENDING_OPEN_CHANNELS_FIELD_NUMBER: builtins.int
@@ -4306,11 +5666,19 @@ class PendingChannelsResponse(google.protobuf.message.Message):
     total_limbo_balance: builtins.int
     """The balance in satoshis encumbered in pending channels"""
     @property
-    def pending_open_channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PendingChannelsResponse.PendingOpenChannel]:
+    def pending_open_channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PendingChannelsResponse.PendingOpenChannel
+    ]:
         """Channels pending opening"""
 
     @property
-    def pending_closing_channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PendingChannelsResponse.ClosedChannel]:
+    def pending_closing_channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PendingChannelsResponse.ClosedChannel
+    ]:
         """
         Deprecated: Channels pending closing previously contained cooperatively
         closed channels with a single confirmation. These channels are now
@@ -4318,23 +5686,57 @@ class PendingChannelsResponse(google.protobuf.message.Message):
         """
 
     @property
-    def pending_force_closing_channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PendingChannelsResponse.ForceClosedChannel]:
+    def pending_force_closing_channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PendingChannelsResponse.ForceClosedChannel
+    ]:
         """Channels pending force closing"""
 
     @property
-    def waiting_close_channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PendingChannelsResponse.WaitingCloseChannel]:
+    def waiting_close_channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PendingChannelsResponse.WaitingCloseChannel
+    ]:
         """Channels waiting for closing tx to confirm"""
 
     def __init__(
         self,
         *,
         total_limbo_balance: builtins.int = ...,
-        pending_open_channels: collections.abc.Iterable[global___PendingChannelsResponse.PendingOpenChannel] | None = ...,
-        pending_closing_channels: collections.abc.Iterable[global___PendingChannelsResponse.ClosedChannel] | None = ...,
-        pending_force_closing_channels: collections.abc.Iterable[global___PendingChannelsResponse.ForceClosedChannel] | None = ...,
-        waiting_close_channels: collections.abc.Iterable[global___PendingChannelsResponse.WaitingCloseChannel] | None = ...,
+        pending_open_channels: collections.abc.Iterable[
+            global___PendingChannelsResponse.PendingOpenChannel
+        ]
+        | None = ...,
+        pending_closing_channels: collections.abc.Iterable[
+            global___PendingChannelsResponse.ClosedChannel
+        ]
+        | None = ...,
+        pending_force_closing_channels: collections.abc.Iterable[
+            global___PendingChannelsResponse.ForceClosedChannel
+        ]
+        | None = ...,
+        waiting_close_channels: collections.abc.Iterable[
+            global___PendingChannelsResponse.WaitingCloseChannel
+        ]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["pending_closing_channels", b"pending_closing_channels", "pending_force_closing_channels", b"pending_force_closing_channels", "pending_open_channels", b"pending_open_channels", "total_limbo_balance", b"total_limbo_balance", "waiting_close_channels", b"waiting_close_channels"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "pending_closing_channels",
+            b"pending_closing_channels",
+            "pending_force_closing_channels",
+            b"pending_force_closing_channels",
+            "pending_open_channels",
+            b"pending_open_channels",
+            "total_limbo_balance",
+            b"total_limbo_balance",
+            "waiting_close_channels",
+            b"waiting_close_channels",
+        ],
+    ) -> None: ...
 
 global___PendingChannelsResponse = PendingChannelsResponse
 
@@ -4356,7 +5758,12 @@ class ChannelEventUpdate(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _UpdateTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[ChannelEventUpdate._UpdateType.ValueType], builtins.type): # noqa: F821
+    class _UpdateTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            ChannelEventUpdate._UpdateType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         OPEN_CHANNEL: ChannelEventUpdate._UpdateType.ValueType  # 0
         CLOSED_CHANNEL: ChannelEventUpdate._UpdateType.ValueType  # 1
@@ -4404,9 +5811,59 @@ class ChannelEventUpdate(google.protobuf.message.Message):
         fully_resolved_channel: global___ChannelPoint | None = ...,
         type: global___ChannelEventUpdate.UpdateType.ValueType = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["active_channel", b"active_channel", "channel", b"channel", "closed_channel", b"closed_channel", "fully_resolved_channel", b"fully_resolved_channel", "inactive_channel", b"inactive_channel", "open_channel", b"open_channel", "pending_open_channel", b"pending_open_channel"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["active_channel", b"active_channel", "channel", b"channel", "closed_channel", b"closed_channel", "fully_resolved_channel", b"fully_resolved_channel", "inactive_channel", b"inactive_channel", "open_channel", b"open_channel", "pending_open_channel", b"pending_open_channel", "type", b"type"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["channel", b"channel"]) -> typing.Literal["open_channel", "closed_channel", "active_channel", "inactive_channel", "pending_open_channel", "fully_resolved_channel"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "active_channel",
+            b"active_channel",
+            "channel",
+            b"channel",
+            "closed_channel",
+            b"closed_channel",
+            "fully_resolved_channel",
+            b"fully_resolved_channel",
+            "inactive_channel",
+            b"inactive_channel",
+            "open_channel",
+            b"open_channel",
+            "pending_open_channel",
+            b"pending_open_channel",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "active_channel",
+            b"active_channel",
+            "channel",
+            b"channel",
+            "closed_channel",
+            b"closed_channel",
+            "fully_resolved_channel",
+            b"fully_resolved_channel",
+            "inactive_channel",
+            b"inactive_channel",
+            "open_channel",
+            b"open_channel",
+            "pending_open_channel",
+            b"pending_open_channel",
+            "type",
+            b"type",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["channel", b"channel"]
+    ) -> (
+        typing.Literal[
+            "open_channel",
+            "closed_channel",
+            "active_channel",
+            "inactive_channel",
+            "pending_open_channel",
+            "fully_resolved_channel",
+        ]
+        | None
+    ): ...
 
 global___ChannelEventUpdate = ChannelEventUpdate
 
@@ -4426,7 +5883,15 @@ class WalletAccountBalance(google.protobuf.message.Message):
         confirmed_balance: builtins.int = ...,
         unconfirmed_balance: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["confirmed_balance", b"confirmed_balance", "unconfirmed_balance", b"unconfirmed_balance"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "confirmed_balance",
+            b"confirmed_balance",
+            "unconfirmed_balance",
+            b"unconfirmed_balance",
+        ],
+    ) -> None: ...
 
 global___WalletAccountBalance = WalletAccountBalance
 
@@ -4451,7 +5916,10 @@ class WalletBalanceRequest(google.protobuf.message.Message):
         account: builtins.str = ...,
         min_confs: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["account", b"account", "min_confs", b"min_confs"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["account", b"account", "min_confs", b"min_confs"],
+    ) -> None: ...
 
 global___WalletBalanceRequest = WalletBalanceRequest
 
@@ -4474,8 +5942,12 @@ class WalletBalanceResponse(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: global___WalletAccountBalance | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     TOTAL_BALANCE_FIELD_NUMBER: builtins.int
     CONFIRMED_BALANCE_FIELD_NUMBER: builtins.int
@@ -4496,7 +5968,11 @@ class WalletBalanceResponse(google.protobuf.message.Message):
     reserved_balance_anchor_chan: builtins.int
     """The amount of reserve required."""
     @property
-    def account_balance(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___WalletAccountBalance]:
+    def account_balance(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, global___WalletAccountBalance
+    ]:
         """A mapping of each wallet account's name to its balance."""
 
     def __init__(
@@ -4507,9 +5983,28 @@ class WalletBalanceResponse(google.protobuf.message.Message):
         unconfirmed_balance: builtins.int = ...,
         locked_balance: builtins.int = ...,
         reserved_balance_anchor_chan: builtins.int = ...,
-        account_balance: collections.abc.Mapping[builtins.str, global___WalletAccountBalance] | None = ...,
+        account_balance: collections.abc.Mapping[
+            builtins.str, global___WalletAccountBalance
+        ]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["account_balance", b"account_balance", "confirmed_balance", b"confirmed_balance", "locked_balance", b"locked_balance", "reserved_balance_anchor_chan", b"reserved_balance_anchor_chan", "total_balance", b"total_balance", "unconfirmed_balance", b"unconfirmed_balance"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "account_balance",
+            b"account_balance",
+            "confirmed_balance",
+            b"confirmed_balance",
+            "locked_balance",
+            b"locked_balance",
+            "reserved_balance_anchor_chan",
+            b"reserved_balance_anchor_chan",
+            "total_balance",
+            b"total_balance",
+            "unconfirmed_balance",
+            b"unconfirmed_balance",
+        ],
+    ) -> None: ...
 
 global___WalletBalanceResponse = WalletBalanceResponse
 
@@ -4529,7 +6024,9 @@ class Amount(google.protobuf.message.Message):
         sat: builtins.int = ...,
         msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["msat", b"msat", "sat", b"sat"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["msat", b"msat", "sat", b"sat"]
+    ) -> None: ...
 
 global___Amount = Amount
 
@@ -4595,8 +6092,44 @@ class ChannelBalanceResponse(google.protobuf.message.Message):
         pending_open_local_balance: global___Amount | None = ...,
         pending_open_remote_balance: global___Amount | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["local_balance", b"local_balance", "pending_open_local_balance", b"pending_open_local_balance", "pending_open_remote_balance", b"pending_open_remote_balance", "remote_balance", b"remote_balance", "unsettled_local_balance", b"unsettled_local_balance", "unsettled_remote_balance", b"unsettled_remote_balance"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["balance", b"balance", "local_balance", b"local_balance", "pending_open_balance", b"pending_open_balance", "pending_open_local_balance", b"pending_open_local_balance", "pending_open_remote_balance", b"pending_open_remote_balance", "remote_balance", b"remote_balance", "unsettled_local_balance", b"unsettled_local_balance", "unsettled_remote_balance", b"unsettled_remote_balance"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "local_balance",
+            b"local_balance",
+            "pending_open_local_balance",
+            b"pending_open_local_balance",
+            "pending_open_remote_balance",
+            b"pending_open_remote_balance",
+            "remote_balance",
+            b"remote_balance",
+            "unsettled_local_balance",
+            b"unsettled_local_balance",
+            "unsettled_remote_balance",
+            b"unsettled_remote_balance",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "balance",
+            b"balance",
+            "local_balance",
+            b"local_balance",
+            "pending_open_balance",
+            b"pending_open_balance",
+            "pending_open_local_balance",
+            b"pending_open_local_balance",
+            "pending_open_remote_balance",
+            b"pending_open_remote_balance",
+            "remote_balance",
+            b"remote_balance",
+            "unsettled_local_balance",
+            b"unsettled_local_balance",
+            "unsettled_remote_balance",
+            b"unsettled_remote_balance",
+        ],
+    ) -> None: ...
 
 global___ChannelBalanceResponse = ChannelBalanceResponse
 
@@ -4618,7 +6151,9 @@ class QueryRoutesRequest(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     PUB_KEY_FIELD_NUMBER: builtins.int
     AMT_FIELD_NUMBER: builtins.int
@@ -4704,26 +6239,40 @@ class QueryRoutesRequest(google.protobuf.message.Message):
         """
 
     @property
-    def ignored_nodes(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+    def ignored_nodes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        builtins.bytes
+    ]:
         """
         A list of nodes to ignore during path finding. When using REST, these fields
         must be encoded as base64.
         """
 
     @property
-    def ignored_edges(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___EdgeLocator]:
+    def ignored_edges(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___EdgeLocator
+    ]:
         """
         Deprecated. A list of edges to ignore during path finding.
         """
 
     @property
-    def ignored_pairs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NodePair]:
+    def ignored_pairs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___NodePair
+    ]:
         """
         A list of directed node pairs that will be ignored during path finding.
         """
 
     @property
-    def dest_custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def dest_custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """
         An optional field that can be used to pass an arbitrary set of TLV records
         to a peer which understands the new records. This can be used to pass
@@ -4734,20 +6283,32 @@ class QueryRoutesRequest(google.protobuf.message.Message):
         """
 
     @property
-    def route_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RouteHint]:
+    def route_hints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___RouteHint
+    ]:
         """
         Optional route hints to reach the destination through private channels.
         """
 
     @property
-    def blinded_payment_paths(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedPaymentPath]:
+    def blinded_payment_paths(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BlindedPaymentPath
+    ]:
         """
         An optional blinded path(s) to reach the destination. Note that the
         introduction node must be provided as the first hop in the route.
         """
 
     @property
-    def dest_features(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[global___FeatureBit.ValueType]:
+    def dest_features(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        global___FeatureBit.ValueType
+    ]:
         """
         Features assumed to be supported by the final node. All transitive feature
         dependencies must also be set properly. For a given feature bit pair, either
@@ -4773,16 +6334,61 @@ class QueryRoutesRequest(google.protobuf.message.Message):
         use_mission_control: builtins.bool = ...,
         ignored_pairs: collections.abc.Iterable[global___NodePair] | None = ...,
         cltv_limit: builtins.int = ...,
-        dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         outgoing_chan_id: builtins.int = ...,
         last_hop_pubkey: builtins.bytes = ...,
         route_hints: collections.abc.Iterable[global___RouteHint] | None = ...,
-        blinded_payment_paths: collections.abc.Iterable[global___BlindedPaymentPath] | None = ...,
-        dest_features: collections.abc.Iterable[global___FeatureBit.ValueType] | None = ...,
+        blinded_payment_paths: collections.abc.Iterable[global___BlindedPaymentPath]
+        | None = ...,
+        dest_features: collections.abc.Iterable[global___FeatureBit.ValueType]
+        | None = ...,
         time_pref: builtins.float = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["fee_limit", b"fee_limit"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["amt", b"amt", "amt_msat", b"amt_msat", "blinded_payment_paths", b"blinded_payment_paths", "cltv_limit", b"cltv_limit", "dest_custom_records", b"dest_custom_records", "dest_features", b"dest_features", "fee_limit", b"fee_limit", "final_cltv_delta", b"final_cltv_delta", "ignored_edges", b"ignored_edges", "ignored_nodes", b"ignored_nodes", "ignored_pairs", b"ignored_pairs", "last_hop_pubkey", b"last_hop_pubkey", "outgoing_chan_id", b"outgoing_chan_id", "pub_key", b"pub_key", "route_hints", b"route_hints", "source_pub_key", b"source_pub_key", "time_pref", b"time_pref", "use_mission_control", b"use_mission_control"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["fee_limit", b"fee_limit"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt",
+            b"amt",
+            "amt_msat",
+            b"amt_msat",
+            "blinded_payment_paths",
+            b"blinded_payment_paths",
+            "cltv_limit",
+            b"cltv_limit",
+            "dest_custom_records",
+            b"dest_custom_records",
+            "dest_features",
+            b"dest_features",
+            "fee_limit",
+            b"fee_limit",
+            "final_cltv_delta",
+            b"final_cltv_delta",
+            "ignored_edges",
+            b"ignored_edges",
+            "ignored_nodes",
+            b"ignored_nodes",
+            "ignored_pairs",
+            b"ignored_pairs",
+            "last_hop_pubkey",
+            b"last_hop_pubkey",
+            "outgoing_chan_id",
+            b"outgoing_chan_id",
+            "pub_key",
+            b"pub_key",
+            "route_hints",
+            b"route_hints",
+            "source_pub_key",
+            b"source_pub_key",
+            "time_pref",
+            b"time_pref",
+            "use_mission_control",
+            b"use_mission_control",
+        ],
+    ) -> None: ...
 
 global___QueryRoutesRequest = QueryRoutesRequest
 
@@ -4802,7 +6408,9 @@ class NodePair(google.protobuf.message.Message):
         *,
         to: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["from", b"from", "to", b"to"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["from", b"from", "to", b"to"]
+    ) -> None: ...
 
 global___NodePair = NodePair
 
@@ -4827,7 +6435,12 @@ class EdgeLocator(google.protobuf.message.Message):
         channel_id: builtins.int = ...,
         direction_reverse: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["channel_id", b"channel_id", "direction_reverse", b"direction_reverse"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channel_id", b"channel_id", "direction_reverse", b"direction_reverse"
+        ],
+    ) -> None: ...
 
 global___EdgeLocator = EdgeLocator
 
@@ -4843,7 +6456,11 @@ class QueryRoutesResponse(google.protobuf.message.Message):
     control state. [EXPERIMENTAL]
     """
     @property
-    def routes(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Route]:
+    def routes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Route
+    ]:
         """
         The route that results from the path finding operation. This is still a
         repeated field to retain backwards compatibility.
@@ -4855,7 +6472,12 @@ class QueryRoutesResponse(google.protobuf.message.Message):
         routes: collections.abc.Iterable[global___Route] | None = ...,
         success_prob: builtins.float = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["routes", b"routes", "success_prob", b"success_prob"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "routes", b"routes", "success_prob", b"success_prob"
+        ],
+    ) -> None: ...
 
 global___QueryRoutesResponse = QueryRoutesResponse
 
@@ -4877,7 +6499,9 @@ class Hop(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     CHAN_ID_FIELD_NUMBER: builtins.int
     CHAN_CAPACITY_FIELD_NUMBER: builtins.int
@@ -4964,7 +6588,9 @@ class Hop(google.protobuf.message.Message):
         """
 
     @property
-    def custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """
         An optional set of key-value TLV records. This is useful within the context
         of the SendToRoute call as it allows callers to specify arbitrary K-V pairs
@@ -4985,14 +6611,56 @@ class Hop(google.protobuf.message.Message):
         tlv_payload: builtins.bool = ...,
         mpp_record: global___MPPRecord | None = ...,
         amp_record: global___AMPRecord | None = ...,
-        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         metadata: builtins.bytes = ...,
         blinding_point: builtins.bytes = ...,
         encrypted_data: builtins.bytes = ...,
         total_amt_msat: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["amp_record", b"amp_record", "mpp_record", b"mpp_record"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["amp_record", b"amp_record", "amt_to_forward", b"amt_to_forward", "amt_to_forward_msat", b"amt_to_forward_msat", "blinding_point", b"blinding_point", "chan_capacity", b"chan_capacity", "chan_id", b"chan_id", "custom_records", b"custom_records", "encrypted_data", b"encrypted_data", "expiry", b"expiry", "fee", b"fee", "fee_msat", b"fee_msat", "metadata", b"metadata", "mpp_record", b"mpp_record", "pub_key", b"pub_key", "tlv_payload", b"tlv_payload", "total_amt_msat", b"total_amt_msat"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "amp_record", b"amp_record", "mpp_record", b"mpp_record"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amp_record",
+            b"amp_record",
+            "amt_to_forward",
+            b"amt_to_forward",
+            "amt_to_forward_msat",
+            b"amt_to_forward_msat",
+            "blinding_point",
+            b"blinding_point",
+            "chan_capacity",
+            b"chan_capacity",
+            "chan_id",
+            b"chan_id",
+            "custom_records",
+            b"custom_records",
+            "encrypted_data",
+            b"encrypted_data",
+            "expiry",
+            b"expiry",
+            "fee",
+            b"fee",
+            "fee_msat",
+            b"fee_msat",
+            "metadata",
+            b"metadata",
+            "mpp_record",
+            b"mpp_record",
+            "pub_key",
+            b"pub_key",
+            "tlv_payload",
+            b"tlv_payload",
+            "total_amt_msat",
+            b"total_amt_msat",
+        ],
+    ) -> None: ...
 
 global___Hop = Hop
 
@@ -5023,7 +6691,12 @@ class MPPRecord(google.protobuf.message.Message):
         payment_addr: builtins.bytes = ...,
         total_amt_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["payment_addr", b"payment_addr", "total_amt_msat", b"total_amt_msat"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "payment_addr", b"payment_addr", "total_amt_msat", b"total_amt_msat"
+        ],
+    ) -> None: ...
 
 global___MPPRecord = MPPRecord
 
@@ -5044,7 +6717,17 @@ class AMPRecord(google.protobuf.message.Message):
         set_id: builtins.bytes = ...,
         child_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["child_index", b"child_index", "root_share", b"root_share", "set_id", b"set_id"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "child_index",
+            b"child_index",
+            "root_share",
+            b"root_share",
+            "set_id",
+            b"set_id",
+        ],
+    ) -> None: ...
 
 global___AMPRecord = AMPRecord
 
@@ -5096,7 +6779,11 @@ class Route(google.protobuf.message.Message):
     The total amount in millisatoshis.
     """
     @property
-    def hops(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Hop]:
+    def hops(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Hop
+    ]:
         """
         Contains details concerning the specific forwarding details at each hop.
         """
@@ -5111,7 +6798,23 @@ class Route(google.protobuf.message.Message):
         total_fees_msat: builtins.int = ...,
         total_amt_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["hops", b"hops", "total_amt", b"total_amt", "total_amt_msat", b"total_amt_msat", "total_fees", b"total_fees", "total_fees_msat", b"total_fees_msat", "total_time_lock", b"total_time_lock"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "hops",
+            b"hops",
+            "total_amt",
+            b"total_amt",
+            "total_amt_msat",
+            b"total_amt_msat",
+            "total_fees",
+            b"total_fees",
+            "total_fees_msat",
+            b"total_fees_msat",
+            "total_time_lock",
+            b"total_time_lock",
+        ],
+    ) -> None: ...
 
 global___Route = Route
 
@@ -5131,7 +6834,12 @@ class NodeInfoRequest(google.protobuf.message.Message):
         pub_key: builtins.str = ...,
         include_channels: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["include_channels", b"include_channels", "pub_key", b"pub_key"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "include_channels", b"include_channels", "pub_key", b"pub_key"
+        ],
+    ) -> None: ...
 
 global___NodeInfoRequest = NodeInfoRequest
 
@@ -5157,7 +6865,11 @@ class NodeInfo(google.protobuf.message.Message):
         """
 
     @property
-    def channels(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelEdge]:
+    def channels(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelEdge
+    ]:
         """A list of all public channels for the node."""
 
     def __init__(
@@ -5168,8 +6880,22 @@ class NodeInfo(google.protobuf.message.Message):
         total_capacity: builtins.int = ...,
         channels: collections.abc.Iterable[global___ChannelEdge] | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["node", b"node"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["channels", b"channels", "node", b"node", "num_channels", b"num_channels", "total_capacity", b"total_capacity"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["node", b"node"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channels",
+            b"channels",
+            "node",
+            b"node",
+            "num_channels",
+            b"num_channels",
+            "total_capacity",
+            b"total_capacity",
+        ],
+    ) -> None: ...
 
 global___NodeInfo = NodeInfo
 
@@ -5199,8 +6925,12 @@ class LightningNode(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: global___Feature | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     @typing.final
     class CustomRecordsEntry(google.protobuf.message.Message):
@@ -5216,7 +6946,9 @@ class LightningNode(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     LAST_UPDATE_FIELD_NUMBER: builtins.int
     PUB_KEY_FIELD_NUMBER: builtins.int
@@ -5230,11 +6962,21 @@ class LightningNode(google.protobuf.message.Message):
     alias: builtins.str
     color: builtins.str
     @property
-    def addresses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NodeAddress]: ...
+    def addresses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___NodeAddress
+    ]: ...
     @property
-    def features(self) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]: ...
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.int, global___Feature
+    ]: ...
     @property
-    def custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """Custom node announcement tlv records."""
 
     def __init__(
@@ -5246,9 +6988,28 @@ class LightningNode(google.protobuf.message.Message):
         addresses: collections.abc.Iterable[global___NodeAddress] | None = ...,
         color: builtins.str = ...,
         features: collections.abc.Mapping[builtins.int, global___Feature] | None = ...,
-        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["addresses", b"addresses", "alias", b"alias", "color", b"color", "custom_records", b"custom_records", "features", b"features", "last_update", b"last_update", "pub_key", b"pub_key"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "addresses",
+            b"addresses",
+            "alias",
+            b"alias",
+            "color",
+            b"color",
+            "custom_records",
+            b"custom_records",
+            "features",
+            b"features",
+            "last_update",
+            b"last_update",
+            "pub_key",
+            b"pub_key",
+        ],
+    ) -> None: ...
 
 global___LightningNode = LightningNode
 
@@ -5266,7 +7027,9 @@ class NodeAddress(google.protobuf.message.Message):
         network: builtins.str = ...,
         addr: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["addr", b"addr", "network", b"network"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["addr", b"addr", "network", b"network"]
+    ) -> None: ...
 
 global___NodeAddress = NodeAddress
 
@@ -5288,7 +7051,9 @@ class RoutingPolicy(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     TIME_LOCK_DELTA_FIELD_NUMBER: builtins.int
     MIN_HTLC_FIELD_NUMBER: builtins.int
@@ -5310,7 +7075,9 @@ class RoutingPolicy(google.protobuf.message.Message):
     inbound_fee_base_msat: builtins.int
     inbound_fee_rate_milli_msat: builtins.int
     @property
-    def custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """Custom channel update tlv records."""
 
     def __init__(
@@ -5323,11 +7090,36 @@ class RoutingPolicy(google.protobuf.message.Message):
         disabled: builtins.bool = ...,
         max_htlc_msat: builtins.int = ...,
         last_update: builtins.int = ...,
-        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         inbound_fee_base_msat: builtins.int = ...,
         inbound_fee_rate_milli_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["custom_records", b"custom_records", "disabled", b"disabled", "fee_base_msat", b"fee_base_msat", "fee_rate_milli_msat", b"fee_rate_milli_msat", "inbound_fee_base_msat", b"inbound_fee_base_msat", "inbound_fee_rate_milli_msat", b"inbound_fee_rate_milli_msat", "last_update", b"last_update", "max_htlc_msat", b"max_htlc_msat", "min_htlc", b"min_htlc", "time_lock_delta", b"time_lock_delta"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "custom_records",
+            b"custom_records",
+            "disabled",
+            b"disabled",
+            "fee_base_msat",
+            b"fee_base_msat",
+            "fee_rate_milli_msat",
+            b"fee_rate_milli_msat",
+            "inbound_fee_base_msat",
+            b"inbound_fee_base_msat",
+            "inbound_fee_rate_milli_msat",
+            b"inbound_fee_rate_milli_msat",
+            "last_update",
+            b"last_update",
+            "max_htlc_msat",
+            b"max_htlc_msat",
+            "min_htlc",
+            b"min_htlc",
+            "time_lock_delta",
+            b"time_lock_delta",
+        ],
+    ) -> None: ...
 
 global___RoutingPolicy = RoutingPolicy
 
@@ -5357,7 +7149,9 @@ class ChannelEdge(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     CHANNEL_ID_FIELD_NUMBER: builtins.int
     CHAN_POINT_FIELD_NUMBER: builtins.int
@@ -5384,7 +7178,9 @@ class ChannelEdge(google.protobuf.message.Message):
     @property
     def node2_policy(self) -> global___RoutingPolicy: ...
     @property
-    def custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """Custom channel announcement tlv records."""
 
     def __init__(
@@ -5398,10 +7194,38 @@ class ChannelEdge(google.protobuf.message.Message):
         capacity: builtins.int = ...,
         node1_policy: global___RoutingPolicy | None = ...,
         node2_policy: global___RoutingPolicy | None = ...,
-        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["node1_policy", b"node1_policy", "node2_policy", b"node2_policy"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["capacity", b"capacity", "chan_point", b"chan_point", "channel_id", b"channel_id", "custom_records", b"custom_records", "last_update", b"last_update", "node1_policy", b"node1_policy", "node1_pub", b"node1_pub", "node2_policy", b"node2_policy", "node2_pub", b"node2_pub"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "node1_policy", b"node1_policy", "node2_policy", b"node2_policy"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "capacity",
+            b"capacity",
+            "chan_point",
+            b"chan_point",
+            "channel_id",
+            b"channel_id",
+            "custom_records",
+            b"custom_records",
+            "last_update",
+            b"last_update",
+            "node1_policy",
+            b"node1_policy",
+            "node1_pub",
+            b"node1_pub",
+            "node2_policy",
+            b"node2_policy",
+            "node2_pub",
+            b"node2_pub",
+        ],
+    ) -> None: ...
 
 global___ChannelEdge = ChannelEdge
 
@@ -5421,7 +7245,9 @@ class ChannelGraphRequest(google.protobuf.message.Message):
         *,
         include_unannounced: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["include_unannounced", b"include_unannounced"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["include_unannounced", b"include_unannounced"]
+    ) -> None: ...
 
 global___ChannelGraphRequest = ChannelGraphRequest
 
@@ -5434,11 +7260,19 @@ class ChannelGraph(google.protobuf.message.Message):
     NODES_FIELD_NUMBER: builtins.int
     EDGES_FIELD_NUMBER: builtins.int
     @property
-    def nodes(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___LightningNode]:
+    def nodes(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___LightningNode
+    ]:
         """The list of `LightningNode`s in this channel graph"""
 
     @property
-    def edges(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelEdge]:
+    def edges(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelEdge
+    ]:
         """The list of `ChannelEdge`s in this channel graph"""
 
     def __init__(
@@ -5447,7 +7281,9 @@ class ChannelGraph(google.protobuf.message.Message):
         nodes: collections.abc.Iterable[global___LightningNode] | None = ...,
         edges: collections.abc.Iterable[global___ChannelEdge] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["edges", b"edges", "nodes", b"nodes"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["edges", b"edges", "nodes", b"nodes"]
+    ) -> None: ...
 
 global___ChannelGraph = ChannelGraph
 
@@ -5457,7 +7293,11 @@ class NodeMetricsRequest(google.protobuf.message.Message):
 
     TYPES_FIELD_NUMBER: builtins.int
     @property
-    def types(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[global___NodeMetricType.ValueType]:
+    def types(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        global___NodeMetricType.ValueType
+    ]:
         """The requested node metrics."""
 
     def __init__(
@@ -5488,12 +7328,20 @@ class NodeMetricsResponse(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: global___FloatMetric | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     BETWEENNESS_CENTRALITY_FIELD_NUMBER: builtins.int
     @property
-    def betweenness_centrality(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___FloatMetric]:
+    def betweenness_centrality(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, global___FloatMetric
+    ]:
         """
         Betweenness centrality is the sum of the ratio of shortest paths that pass
         through the node for each pair of nodes in the graph (not counting paths
@@ -5505,9 +7353,15 @@ class NodeMetricsResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        betweenness_centrality: collections.abc.Mapping[builtins.str, global___FloatMetric] | None = ...,
+        betweenness_centrality: collections.abc.Mapping[
+            builtins.str, global___FloatMetric
+        ]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["betweenness_centrality", b"betweenness_centrality"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["betweenness_centrality", b"betweenness_centrality"],
+    ) -> None: ...
 
 global___NodeMetricsResponse = NodeMetricsResponse
 
@@ -5527,7 +7381,12 @@ class FloatMetric(google.protobuf.message.Message):
         value: builtins.float = ...,
         normalized_value: builtins.float = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["normalized_value", b"normalized_value", "value", b"value"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "normalized_value", b"normalized_value", "value", b"value"
+        ],
+    ) -> None: ...
 
 global___FloatMetric = FloatMetric
 
@@ -5553,7 +7412,10 @@ class ChanInfoRequest(google.protobuf.message.Message):
         chan_id: builtins.int = ...,
         chan_point: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_id", b"chan_id", "chan_point", b"chan_point"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["chan_id", b"chan_id", "chan_point", b"chan_point"],
+    ) -> None: ...
 
 global___ChanInfoRequest = ChanInfoRequest
 
@@ -5609,7 +7471,33 @@ class NetworkInfo(google.protobuf.message.Message):
         median_channel_size_sat: builtins.int = ...,
         num_zombie_chans: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["avg_channel_size", b"avg_channel_size", "avg_out_degree", b"avg_out_degree", "graph_diameter", b"graph_diameter", "max_channel_size", b"max_channel_size", "max_out_degree", b"max_out_degree", "median_channel_size_sat", b"median_channel_size_sat", "min_channel_size", b"min_channel_size", "num_channels", b"num_channels", "num_nodes", b"num_nodes", "num_zombie_chans", b"num_zombie_chans", "total_network_capacity", b"total_network_capacity"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "avg_channel_size",
+            b"avg_channel_size",
+            "avg_out_degree",
+            b"avg_out_degree",
+            "graph_diameter",
+            b"graph_diameter",
+            "max_channel_size",
+            b"max_channel_size",
+            "max_out_degree",
+            b"max_out_degree",
+            "median_channel_size_sat",
+            b"median_channel_size_sat",
+            "min_channel_size",
+            b"min_channel_size",
+            "num_channels",
+            b"num_channels",
+            "num_nodes",
+            b"num_nodes",
+            "num_zombie_chans",
+            b"num_zombie_chans",
+            "total_network_capacity",
+            b"total_network_capacity",
+        ],
+    ) -> None: ...
 
 global___NetworkInfo = NetworkInfo
 
@@ -5651,19 +7539,43 @@ class GraphTopologyUpdate(google.protobuf.message.Message):
     CHANNEL_UPDATES_FIELD_NUMBER: builtins.int
     CLOSED_CHANS_FIELD_NUMBER: builtins.int
     @property
-    def node_updates(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NodeUpdate]: ...
+    def node_updates(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___NodeUpdate
+    ]: ...
     @property
-    def channel_updates(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelEdgeUpdate]: ...
+    def channel_updates(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelEdgeUpdate
+    ]: ...
     @property
-    def closed_chans(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ClosedChannelUpdate]: ...
+    def closed_chans(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ClosedChannelUpdate
+    ]: ...
     def __init__(
         self,
         *,
         node_updates: collections.abc.Iterable[global___NodeUpdate] | None = ...,
-        channel_updates: collections.abc.Iterable[global___ChannelEdgeUpdate] | None = ...,
-        closed_chans: collections.abc.Iterable[global___ClosedChannelUpdate] | None = ...,
+        channel_updates: collections.abc.Iterable[global___ChannelEdgeUpdate]
+        | None = ...,
+        closed_chans: collections.abc.Iterable[global___ClosedChannelUpdate]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["channel_updates", b"channel_updates", "closed_chans", b"closed_chans", "node_updates", b"node_updates"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channel_updates",
+            b"channel_updates",
+            "closed_chans",
+            b"closed_chans",
+            "node_updates",
+            b"node_updates",
+        ],
+    ) -> None: ...
 
 global___GraphTopologyUpdate = GraphTopologyUpdate
 
@@ -5686,8 +7598,12 @@ class NodeUpdate(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: global___Feature | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     ADDRESSES_FIELD_NUMBER: builtins.int
     IDENTITY_KEY_FIELD_NUMBER: builtins.int
@@ -5704,15 +7620,23 @@ class NodeUpdate(google.protobuf.message.Message):
     alias: builtins.str
     color: builtins.str
     @property
-    def addresses(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def addresses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """
         Deprecated, use node_addresses.
         """
 
     @property
-    def node_addresses(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___NodeAddress]: ...
+    def node_addresses(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___NodeAddress
+    ]: ...
     @property
-    def features(self) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
         """
         Features that the node has advertised in the init message, node
         announcements and invoices.
@@ -5729,7 +7653,25 @@ class NodeUpdate(google.protobuf.message.Message):
         node_addresses: collections.abc.Iterable[global___NodeAddress] | None = ...,
         features: collections.abc.Mapping[builtins.int, global___Feature] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["addresses", b"addresses", "alias", b"alias", "color", b"color", "features", b"features", "global_features", b"global_features", "identity_key", b"identity_key", "node_addresses", b"node_addresses"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "addresses",
+            b"addresses",
+            "alias",
+            b"alias",
+            "color",
+            b"color",
+            "features",
+            b"features",
+            "global_features",
+            b"global_features",
+            "identity_key",
+            b"identity_key",
+            "node_addresses",
+            b"node_addresses",
+        ],
+    ) -> None: ...
 
 global___NodeUpdate = NodeUpdate
 
@@ -5766,8 +7708,29 @@ class ChannelEdgeUpdate(google.protobuf.message.Message):
         advertising_node: builtins.str = ...,
         connecting_node: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point", "routing_policy", b"routing_policy"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["advertising_node", b"advertising_node", "capacity", b"capacity", "chan_id", b"chan_id", "chan_point", b"chan_point", "connecting_node", b"connecting_node", "routing_policy", b"routing_policy"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "chan_point", b"chan_point", "routing_policy", b"routing_policy"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "advertising_node",
+            b"advertising_node",
+            "capacity",
+            b"capacity",
+            "chan_id",
+            b"chan_id",
+            "chan_point",
+            b"chan_point",
+            "connecting_node",
+            b"connecting_node",
+            "routing_policy",
+            b"routing_policy",
+        ],
+    ) -> None: ...
 
 global___ChannelEdgeUpdate = ChannelEdgeUpdate
 
@@ -5797,8 +7760,22 @@ class ClosedChannelUpdate(google.protobuf.message.Message):
         closed_height: builtins.int = ...,
         chan_point: global___ChannelPoint | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["capacity", b"capacity", "chan_id", b"chan_id", "chan_point", b"chan_point", "closed_height", b"closed_height"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["chan_point", b"chan_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "capacity",
+            b"capacity",
+            "chan_id",
+            b"chan_id",
+            "chan_point",
+            b"chan_point",
+            "closed_height",
+            b"closed_height",
+        ],
+    ) -> None: ...
 
 global___ClosedChannelUpdate = ClosedChannelUpdate
 
@@ -5833,7 +7810,21 @@ class HopHint(google.protobuf.message.Message):
         fee_proportional_millionths: builtins.int = ...,
         cltv_expiry_delta: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_id", b"chan_id", "cltv_expiry_delta", b"cltv_expiry_delta", "fee_base_msat", b"fee_base_msat", "fee_proportional_millionths", b"fee_proportional_millionths", "node_id", b"node_id"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_id",
+            b"chan_id",
+            "cltv_expiry_delta",
+            b"cltv_expiry_delta",
+            "fee_base_msat",
+            b"fee_base_msat",
+            "fee_proportional_millionths",
+            b"fee_proportional_millionths",
+            "node_id",
+            b"node_id",
+        ],
+    ) -> None: ...
 
 global___HopHint = HopHint
 
@@ -5858,7 +7849,11 @@ class RouteHint(google.protobuf.message.Message):
 
     HOP_HINTS_FIELD_NUMBER: builtins.int
     @property
-    def hop_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___HopHint]:
+    def hop_hints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___HopHint
+    ]:
         """
         A list of hop hints that when chained together can assist in reaching a
         specific destination.
@@ -5869,7 +7864,9 @@ class RouteHint(google.protobuf.message.Message):
         *,
         hop_hints: collections.abc.Iterable[global___HopHint] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["hop_hints", b"hop_hints"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["hop_hints", b"hop_hints"]
+    ) -> None: ...
 
 global___RouteHint = RouteHint
 
@@ -5911,7 +7908,11 @@ class BlindedPaymentPath(google.protobuf.message.Message):
         """The blinded path to send the payment to."""
 
     @property
-    def features(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[global___FeatureBit.ValueType]:
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        global___FeatureBit.ValueType
+    ]:
         """The feature bits for the route."""
 
     def __init__(
@@ -5925,8 +7926,28 @@ class BlindedPaymentPath(google.protobuf.message.Message):
         htlc_max_msat: builtins.int = ...,
         features: collections.abc.Iterable[global___FeatureBit.ValueType] | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["blinded_path", b"blinded_path"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["base_fee_msat", b"base_fee_msat", "blinded_path", b"blinded_path", "features", b"features", "htlc_max_msat", b"htlc_max_msat", "htlc_min_msat", b"htlc_min_msat", "proportional_fee_rate", b"proportional_fee_rate", "total_cltv_delta", b"total_cltv_delta"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["blinded_path", b"blinded_path"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee_msat",
+            b"base_fee_msat",
+            "blinded_path",
+            b"blinded_path",
+            "features",
+            b"features",
+            "htlc_max_msat",
+            b"htlc_max_msat",
+            "htlc_min_msat",
+            b"htlc_min_msat",
+            "proportional_fee_rate",
+            b"proportional_fee_rate",
+            "total_cltv_delta",
+            b"total_cltv_delta",
+        ],
+    ) -> None: ...
 
 global___BlindedPaymentPath = BlindedPaymentPath
 
@@ -5942,7 +7963,11 @@ class BlindedPath(google.protobuf.message.Message):
     blinding_point: builtins.bytes
     """The ephemeral pubkey used by nodes in the blinded route."""
     @property
-    def blinded_hops(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedHop]:
+    def blinded_hops(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BlindedHop
+    ]:
         """
         A set of blinded node keys and data blobs for the blinded portion of the
         route. Note that the first hop is expected to be the introduction node,
@@ -5956,7 +7981,17 @@ class BlindedPath(google.protobuf.message.Message):
         blinding_point: builtins.bytes = ...,
         blinded_hops: collections.abc.Iterable[global___BlindedHop] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["blinded_hops", b"blinded_hops", "blinding_point", b"blinding_point", "introduction_node", b"introduction_node"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "blinded_hops",
+            b"blinded_hops",
+            "blinding_point",
+            b"blinding_point",
+            "introduction_node",
+            b"introduction_node",
+        ],
+    ) -> None: ...
 
 global___BlindedPath = BlindedPath
 
@@ -5976,7 +8011,12 @@ class BlindedHop(google.protobuf.message.Message):
         blinded_node: builtins.bytes = ...,
         encrypted_data: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["blinded_node", b"blinded_node", "encrypted_data", b"encrypted_data"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "blinded_node", b"blinded_node", "encrypted_data", b"encrypted_data"
+        ],
+    ) -> None: ...
 
 global___BlindedHop = BlindedHop
 
@@ -6004,7 +8044,19 @@ class AMPInvoiceState(google.protobuf.message.Message):
         settle_time: builtins.int = ...,
         amt_paid_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amt_paid_msat", b"amt_paid_msat", "settle_index", b"settle_index", "settle_time", b"settle_time", "state", b"state"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt_paid_msat",
+            b"amt_paid_msat",
+            "settle_index",
+            b"settle_index",
+            "settle_time",
+            b"settle_time",
+            "state",
+            b"state",
+        ],
+    ) -> None: ...
 
 global___AMPInvoiceState = AMPInvoiceState
 
@@ -6016,7 +8068,12 @@ class Invoice(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _InvoiceStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Invoice._InvoiceState.ValueType], builtins.type):    # noqa: F821
+    class _InvoiceStateEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            Invoice._InvoiceState.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         OPEN: Invoice._InvoiceState.ValueType  # 0
         SETTLED: Invoice._InvoiceState.ValueType  # 1
@@ -6044,8 +8101,12 @@ class Invoice(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: global___Feature | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     @typing.final
     class AmpInvoiceStateEntry(google.protobuf.message.Message):
@@ -6062,8 +8123,12 @@ class Invoice(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: global___AMPInvoiceState | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     MEMO_FIELD_NUMBER: builtins.int
     R_PREIMAGE_FIELD_NUMBER: builtins.int
@@ -6228,28 +8293,42 @@ class Invoice(google.protobuf.message.Message):
     Signals whether or not this is an AMP invoice.
     """
     @property
-    def route_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RouteHint]:
+    def route_hints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___RouteHint
+    ]:
         """
         Route hints that can each be individually used to assist in reaching the
         invoice's destination.
         """
 
     @property
-    def htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___InvoiceHTLC]:
+    def htlcs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___InvoiceHTLC
+    ]:
         """
         List of HTLCs paying to this invoice [EXPERIMENTAL].
         Note: Output only, don't specify for creating an invoice.
         """
 
     @property
-    def features(self) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]:
         """
         List of features advertised on the invoice.
         Note: Output only, don't specify for creating an invoice.
         """
 
     @property
-    def amp_invoice_state(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___AMPInvoiceState]:
+    def amp_invoice_state(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, global___AMPInvoiceState
+    ]:
         """
         [EXPERIMENTAL]:
 
@@ -6289,9 +8368,70 @@ class Invoice(google.protobuf.message.Message):
         is_keysend: builtins.bool = ...,
         payment_addr: builtins.bytes = ...,
         is_amp: builtins.bool = ...,
-        amp_invoice_state: collections.abc.Mapping[builtins.str, global___AMPInvoiceState] | None = ...,
+        amp_invoice_state: collections.abc.Mapping[
+            builtins.str, global___AMPInvoiceState
+        ]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["add_index", b"add_index", "amp_invoice_state", b"amp_invoice_state", "amt_paid", b"amt_paid", "amt_paid_msat", b"amt_paid_msat", "amt_paid_sat", b"amt_paid_sat", "cltv_expiry", b"cltv_expiry", "creation_date", b"creation_date", "description_hash", b"description_hash", "expiry", b"expiry", "fallback_addr", b"fallback_addr", "features", b"features", "htlcs", b"htlcs", "is_amp", b"is_amp", "is_keysend", b"is_keysend", "memo", b"memo", "payment_addr", b"payment_addr", "payment_request", b"payment_request", "private", b"private", "r_hash", b"r_hash", "r_preimage", b"r_preimage", "route_hints", b"route_hints", "settle_date", b"settle_date", "settle_index", b"settle_index", "settled", b"settled", "state", b"state", "value", b"value", "value_msat", b"value_msat"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "add_index",
+            b"add_index",
+            "amp_invoice_state",
+            b"amp_invoice_state",
+            "amt_paid",
+            b"amt_paid",
+            "amt_paid_msat",
+            b"amt_paid_msat",
+            "amt_paid_sat",
+            b"amt_paid_sat",
+            "cltv_expiry",
+            b"cltv_expiry",
+            "creation_date",
+            b"creation_date",
+            "description_hash",
+            b"description_hash",
+            "expiry",
+            b"expiry",
+            "fallback_addr",
+            b"fallback_addr",
+            "features",
+            b"features",
+            "htlcs",
+            b"htlcs",
+            "is_amp",
+            b"is_amp",
+            "is_keysend",
+            b"is_keysend",
+            "memo",
+            b"memo",
+            "payment_addr",
+            b"payment_addr",
+            "payment_request",
+            b"payment_request",
+            "private",
+            b"private",
+            "r_hash",
+            b"r_hash",
+            "r_preimage",
+            b"r_preimage",
+            "route_hints",
+            b"route_hints",
+            "settle_date",
+            b"settle_date",
+            "settle_index",
+            b"settle_index",
+            "settled",
+            b"settled",
+            "state",
+            b"state",
+            "value",
+            b"value",
+            "value_msat",
+            b"value_msat",
+        ],
+    ) -> None: ...
 
 global___Invoice = Invoice
 
@@ -6315,7 +8455,9 @@ class InvoiceHTLC(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     CHAN_ID_FIELD_NUMBER: builtins.int
     HTLC_INDEX_FIELD_NUMBER: builtins.int
@@ -6347,7 +8489,9 @@ class InvoiceHTLC(google.protobuf.message.Message):
     mpp_total_amt_msat: builtins.int
     """The total amount of the mpp payment in msat."""
     @property
-    def custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """Custom tlv records."""
 
     @property
@@ -6365,12 +8509,39 @@ class InvoiceHTLC(google.protobuf.message.Message):
         resolve_time: builtins.int = ...,
         expiry_height: builtins.int = ...,
         state: global___InvoiceHTLCState.ValueType = ...,
-        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         mpp_total_amt_msat: builtins.int = ...,
         amp: global___AMP | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["amp", b"amp"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["accept_height", b"accept_height", "accept_time", b"accept_time", "amp", b"amp", "amt_msat", b"amt_msat", "chan_id", b"chan_id", "custom_records", b"custom_records", "expiry_height", b"expiry_height", "htlc_index", b"htlc_index", "mpp_total_amt_msat", b"mpp_total_amt_msat", "resolve_time", b"resolve_time", "state", b"state"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "accept_height",
+            b"accept_height",
+            "accept_time",
+            b"accept_time",
+            "amp",
+            b"amp",
+            "amt_msat",
+            b"amt_msat",
+            "chan_id",
+            b"chan_id",
+            "custom_records",
+            b"custom_records",
+            "expiry_height",
+            b"expiry_height",
+            "htlc_index",
+            b"htlc_index",
+            "mpp_total_amt_msat",
+            b"mpp_total_amt_msat",
+            "resolve_time",
+            b"resolve_time",
+            "state",
+            b"state",
+        ],
+    ) -> None: ...
 
 global___InvoiceHTLC = InvoiceHTLC
 
@@ -6411,7 +8582,21 @@ class AMP(google.protobuf.message.Message):
         hash: builtins.bytes = ...,
         preimage: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["child_index", b"child_index", "hash", b"hash", "preimage", b"preimage", "root_share", b"root_share", "set_id", b"set_id"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "child_index",
+            b"child_index",
+            "hash",
+            b"hash",
+            "preimage",
+            b"preimage",
+            "root_share",
+            b"root_share",
+            "set_id",
+            b"set_id",
+        ],
+    ) -> None: ...
 
 global___AMP = AMP
 
@@ -6451,7 +8636,19 @@ class AddInvoiceResponse(google.protobuf.message.Message):
         add_index: builtins.int = ...,
         payment_addr: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["add_index", b"add_index", "payment_addr", b"payment_addr", "payment_request", b"payment_request", "r_hash", b"r_hash"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "add_index",
+            b"add_index",
+            "payment_addr",
+            b"payment_addr",
+            "payment_request",
+            b"payment_request",
+            "r_hash",
+            b"r_hash",
+        ],
+    ) -> None: ...
 
 global___AddInvoiceResponse = AddInvoiceResponse
 
@@ -6479,7 +8676,10 @@ class PaymentHash(google.protobuf.message.Message):
         r_hash_str: builtins.str = ...,
         r_hash: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["r_hash", b"r_hash", "r_hash_str", b"r_hash_str"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["r_hash", b"r_hash", "r_hash_str", b"r_hash_str"],
+    ) -> None: ...
 
 global___PaymentHash = PaymentHash
 
@@ -6528,7 +8728,23 @@ class ListInvoiceRequest(google.protobuf.message.Message):
         creation_date_start: builtins.int = ...,
         creation_date_end: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["creation_date_end", b"creation_date_end", "creation_date_start", b"creation_date_start", "index_offset", b"index_offset", "num_max_invoices", b"num_max_invoices", "pending_only", b"pending_only", "reversed", b"reversed"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "creation_date_end",
+            b"creation_date_end",
+            "creation_date_start",
+            b"creation_date_start",
+            "index_offset",
+            b"index_offset",
+            "num_max_invoices",
+            b"num_max_invoices",
+            "pending_only",
+            b"pending_only",
+            "reversed",
+            b"reversed",
+        ],
+    ) -> None: ...
 
 global___ListInvoiceRequest = ListInvoiceRequest
 
@@ -6550,7 +8766,11 @@ class ListInvoiceResponse(google.protobuf.message.Message):
     to seek backwards, pagination style.
     """
     @property
-    def invoices(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Invoice]:
+    def invoices(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Invoice
+    ]:
         """
         A list of invoices from the time slice of the time series specified in the
         request.
@@ -6563,7 +8783,17 @@ class ListInvoiceResponse(google.protobuf.message.Message):
         last_index_offset: builtins.int = ...,
         first_index_offset: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["first_index_offset", b"first_index_offset", "invoices", b"invoices", "last_index_offset", b"last_index_offset"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "first_index_offset",
+            b"first_index_offset",
+            "invoices",
+            b"invoices",
+            "last_index_offset",
+            b"last_index_offset",
+        ],
+    ) -> None: ...
 
 global___ListInvoiceResponse = ListInvoiceResponse
 
@@ -6593,7 +8823,12 @@ class InvoiceSubscription(google.protobuf.message.Message):
         add_index: builtins.int = ...,
         settle_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["add_index", b"add_index", "settle_index", b"settle_index"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "add_index", b"add_index", "settle_index", b"settle_index"
+        ],
+    ) -> None: ...
 
 global___InvoiceSubscription = InvoiceSubscription
 
@@ -6605,7 +8840,12 @@ class Payment(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _PaymentStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Payment._PaymentStatus.ValueType], builtins.type): # noqa: F821
+    class _PaymentStatusEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            Payment._PaymentStatus.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         UNKNOWN: Payment._PaymentStatus.ValueType  # 0
         """Deprecated. This status will never be returned."""
@@ -6677,7 +8917,11 @@ class Payment(google.protobuf.message.Message):
     """
     failure_reason: global___PaymentFailureReason.ValueType
     @property
-    def htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___HTLCAttempt]:
+    def htlcs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___HTLCAttempt
+    ]:
         """The HTLCs made in attempt to settle the payment."""
 
     def __init__(
@@ -6699,7 +8943,41 @@ class Payment(google.protobuf.message.Message):
         payment_index: builtins.int = ...,
         failure_reason: global___PaymentFailureReason.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["creation_date", b"creation_date", "creation_time_ns", b"creation_time_ns", "failure_reason", b"failure_reason", "fee", b"fee", "fee_msat", b"fee_msat", "fee_sat", b"fee_sat", "htlcs", b"htlcs", "payment_hash", b"payment_hash", "payment_index", b"payment_index", "payment_preimage", b"payment_preimage", "payment_request", b"payment_request", "status", b"status", "value", b"value", "value_msat", b"value_msat", "value_sat", b"value_sat"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "creation_date",
+            b"creation_date",
+            "creation_time_ns",
+            b"creation_time_ns",
+            "failure_reason",
+            b"failure_reason",
+            "fee",
+            b"fee",
+            "fee_msat",
+            b"fee_msat",
+            "fee_sat",
+            b"fee_sat",
+            "htlcs",
+            b"htlcs",
+            "payment_hash",
+            b"payment_hash",
+            "payment_index",
+            b"payment_index",
+            "payment_preimage",
+            b"payment_preimage",
+            "payment_request",
+            b"payment_request",
+            "status",
+            b"status",
+            "value",
+            b"value",
+            "value_msat",
+            b"value_msat",
+            "value_sat",
+            b"value_sat",
+        ],
+    ) -> None: ...
 
 global___Payment = Payment
 
@@ -6711,7 +8989,12 @@ class HTLCAttempt(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _HTLCStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[HTLCAttempt._HTLCStatus.ValueType], builtins.type):    # noqa: F821
+    class _HTLCStatusEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            HTLCAttempt._HTLCStatus.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         IN_FLIGHT: HTLCAttempt._HTLCStatus.ValueType  # 0
         SUCCEEDED: HTLCAttempt._HTLCStatus.ValueType  # 1
@@ -6761,8 +9044,28 @@ class HTLCAttempt(google.protobuf.message.Message):
         failure: global___Failure | None = ...,
         preimage: builtins.bytes = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["failure", b"failure", "route", b"route"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["attempt_id", b"attempt_id", "attempt_time_ns", b"attempt_time_ns", "failure", b"failure", "preimage", b"preimage", "resolve_time_ns", b"resolve_time_ns", "route", b"route", "status", b"status"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["failure", b"failure", "route", b"route"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "attempt_id",
+            b"attempt_id",
+            "attempt_time_ns",
+            b"attempt_time_ns",
+            "failure",
+            b"failure",
+            "preimage",
+            b"preimage",
+            "resolve_time_ns",
+            b"resolve_time_ns",
+            "route",
+            b"route",
+            "status",
+            b"status",
+        ],
+    ) -> None: ...
 
 global___HTLCAttempt = HTLCAttempt
 
@@ -6826,7 +9129,25 @@ class ListPaymentsRequest(google.protobuf.message.Message):
         creation_date_start: builtins.int = ...,
         creation_date_end: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["count_total_payments", b"count_total_payments", "creation_date_end", b"creation_date_end", "creation_date_start", b"creation_date_start", "include_incomplete", b"include_incomplete", "index_offset", b"index_offset", "max_payments", b"max_payments", "reversed", b"reversed"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "count_total_payments",
+            b"count_total_payments",
+            "creation_date_end",
+            b"creation_date_end",
+            "creation_date_start",
+            b"creation_date_start",
+            "include_incomplete",
+            b"include_incomplete",
+            "index_offset",
+            b"index_offset",
+            "max_payments",
+            b"max_payments",
+            "reversed",
+            b"reversed",
+        ],
+    ) -> None: ...
 
 global___ListPaymentsRequest = ListPaymentsRequest
 
@@ -6856,7 +9177,11 @@ class ListPaymentsResponse(google.protobuf.message.Message):
     database.
     """
     @property
-    def payments(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Payment]:
+    def payments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Payment
+    ]:
         """The list of payments"""
 
     def __init__(
@@ -6867,7 +9192,19 @@ class ListPaymentsResponse(google.protobuf.message.Message):
         last_index_offset: builtins.int = ...,
         total_num_payments: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["first_index_offset", b"first_index_offset", "last_index_offset", b"last_index_offset", "payments", b"payments", "total_num_payments", b"total_num_payments"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "first_index_offset",
+            b"first_index_offset",
+            "last_index_offset",
+            b"last_index_offset",
+            "payments",
+            b"payments",
+            "total_num_payments",
+            b"total_num_payments",
+        ],
+    ) -> None: ...
 
 global___ListPaymentsResponse = ListPaymentsResponse
 
@@ -6889,7 +9226,12 @@ class DeletePaymentRequest(google.protobuf.message.Message):
         payment_hash: builtins.bytes = ...,
         failed_htlcs_only: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["failed_htlcs_only", b"failed_htlcs_only", "payment_hash", b"payment_hash"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "failed_htlcs_only", b"failed_htlcs_only", "payment_hash", b"payment_hash"
+        ],
+    ) -> None: ...
 
 global___DeletePaymentRequest = DeletePaymentRequest
 
@@ -6917,7 +9259,17 @@ class DeleteAllPaymentsRequest(google.protobuf.message.Message):
         failed_htlcs_only: builtins.bool = ...,
         all_payments: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["all_payments", b"all_payments", "failed_htlcs_only", b"failed_htlcs_only", "failed_payments_only", b"failed_payments_only"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "all_payments",
+            b"all_payments",
+            "failed_htlcs_only",
+            b"failed_htlcs_only",
+            "failed_payments_only",
+            b"failed_payments_only",
+        ],
+    ) -> None: ...
 
 global___DeleteAllPaymentsRequest = DeleteAllPaymentsRequest
 
@@ -6964,8 +9316,20 @@ class AbandonChannelRequest(google.protobuf.message.Message):
         pending_funding_shim_only: builtins.bool = ...,
         i_know_what_i_am_doing: builtins.bool = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["channel_point", b"channel_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["channel_point", b"channel_point", "i_know_what_i_am_doing", b"i_know_what_i_am_doing", "pending_funding_shim_only", b"pending_funding_shim_only"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["channel_point", b"channel_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channel_point",
+            b"channel_point",
+            "i_know_what_i_am_doing",
+            b"i_know_what_i_am_doing",
+            "pending_funding_shim_only",
+            b"pending_funding_shim_only",
+        ],
+    ) -> None: ...
 
 global___AbandonChannelRequest = AbandonChannelRequest
 
@@ -6993,7 +9357,9 @@ class DebugLevelRequest(google.protobuf.message.Message):
         show: builtins.bool = ...,
         level_spec: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["level_spec", b"level_spec", "show", b"show"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["level_spec", b"level_spec", "show", b"show"]
+    ) -> None: ...
 
 global___DebugLevelRequest = DebugLevelRequest
 
@@ -7008,7 +9374,9 @@ class DebugLevelResponse(google.protobuf.message.Message):
         *,
         sub_systems: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["sub_systems", b"sub_systems"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["sub_systems", b"sub_systems"]
+    ) -> None: ...
 
 global___DebugLevelResponse = DebugLevelResponse
 
@@ -7047,8 +9415,12 @@ class PayReq(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: global___Feature | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     DESTINATION_FIELD_NUMBER: builtins.int
     PAYMENT_HASH_FIELD_NUMBER: builtins.int
@@ -7076,11 +9448,23 @@ class PayReq(google.protobuf.message.Message):
     payment_addr: builtins.bytes
     num_msat: builtins.int
     @property
-    def route_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RouteHint]: ...
+    def route_hints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___RouteHint
+    ]: ...
     @property
-    def features(self) -> google.protobuf.internal.containers.MessageMap[builtins.int, global___Feature]: ...
+    def features(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.int, global___Feature
+    ]: ...
     @property
-    def blinded_paths(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedPaymentPath]: ...
+    def blinded_paths(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BlindedPaymentPath
+    ]: ...
     def __init__(
         self,
         *,
@@ -7097,9 +9481,42 @@ class PayReq(google.protobuf.message.Message):
         payment_addr: builtins.bytes = ...,
         num_msat: builtins.int = ...,
         features: collections.abc.Mapping[builtins.int, global___Feature] | None = ...,
-        blinded_paths: collections.abc.Iterable[global___BlindedPaymentPath] | None = ...,
+        blinded_paths: collections.abc.Iterable[global___BlindedPaymentPath]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["blinded_paths", b"blinded_paths", "cltv_expiry", b"cltv_expiry", "description", b"description", "description_hash", b"description_hash", "destination", b"destination", "expiry", b"expiry", "fallback_addr", b"fallback_addr", "features", b"features", "num_msat", b"num_msat", "num_satoshis", b"num_satoshis", "payment_addr", b"payment_addr", "payment_hash", b"payment_hash", "route_hints", b"route_hints", "timestamp", b"timestamp"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "blinded_paths",
+            b"blinded_paths",
+            "cltv_expiry",
+            b"cltv_expiry",
+            "description",
+            b"description",
+            "description_hash",
+            b"description_hash",
+            "destination",
+            b"destination",
+            "expiry",
+            b"expiry",
+            "fallback_addr",
+            b"fallback_addr",
+            "features",
+            b"features",
+            "num_msat",
+            b"num_msat",
+            "num_satoshis",
+            b"num_satoshis",
+            "payment_addr",
+            b"payment_addr",
+            "payment_hash",
+            b"payment_hash",
+            "route_hints",
+            b"route_hints",
+            "timestamp",
+            b"timestamp",
+        ],
+    ) -> None: ...
 
 global___PayReq = PayReq
 
@@ -7120,7 +9537,12 @@ class Feature(google.protobuf.message.Message):
         is_required: builtins.bool = ...,
         is_known: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["is_known", b"is_known", "is_required", b"is_required", "name", b"name"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "is_known", b"is_known", "is_required", b"is_required", "name", b"name"
+        ],
+    ) -> None: ...
 
 global___Feature = Feature
 
@@ -7176,7 +9598,25 @@ class ChannelFeeReport(google.protobuf.message.Message):
         inbound_base_fee_msat: builtins.int = ...,
         inbound_fee_per_mil: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["base_fee_msat", b"base_fee_msat", "chan_id", b"chan_id", "channel_point", b"channel_point", "fee_per_mil", b"fee_per_mil", "fee_rate", b"fee_rate", "inbound_base_fee_msat", b"inbound_base_fee_msat", "inbound_fee_per_mil", b"inbound_fee_per_mil"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee_msat",
+            b"base_fee_msat",
+            "chan_id",
+            b"chan_id",
+            "channel_point",
+            b"channel_point",
+            "fee_per_mil",
+            b"fee_per_mil",
+            "fee_rate",
+            b"fee_rate",
+            "inbound_base_fee_msat",
+            b"inbound_base_fee_msat",
+            "inbound_fee_per_mil",
+            b"inbound_fee_per_mil",
+        ],
+    ) -> None: ...
 
 global___ChannelFeeReport = ChannelFeeReport
 
@@ -7201,7 +9641,11 @@ class FeeReportResponse(google.protobuf.message.Message):
     over the past 1 month.
     """
     @property
-    def channel_fees(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelFeeReport]:
+    def channel_fees(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelFeeReport
+    ]:
         """An array of channel fee reports which describes the current fee schedule
         for each channel.
         """
@@ -7214,7 +9658,19 @@ class FeeReportResponse(google.protobuf.message.Message):
         week_fee_sum: builtins.int = ...,
         month_fee_sum: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["channel_fees", b"channel_fees", "day_fee_sum", b"day_fee_sum", "month_fee_sum", b"month_fee_sum", "week_fee_sum", b"week_fee_sum"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channel_fees",
+            b"channel_fees",
+            "day_fee_sum",
+            b"day_fee_sum",
+            "month_fee_sum",
+            b"month_fee_sum",
+            "week_fee_sum",
+            b"week_fee_sum",
+        ],
+    ) -> None: ...
 
 global___FeeReportResponse = FeeReportResponse
 
@@ -7238,7 +9694,12 @@ class InboundFee(google.protobuf.message.Message):
         base_fee_msat: builtins.int = ...,
         fee_rate_ppm: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["base_fee_msat", b"base_fee_msat", "fee_rate_ppm", b"fee_rate_ppm"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee_msat", b"base_fee_msat", "fee_rate_ppm", b"fee_rate_ppm"
+        ],
+    ) -> None: ...
 
 global___InboundFee = InboundFee
 
@@ -7299,9 +9760,49 @@ class PolicyUpdateRequest(google.protobuf.message.Message):
         min_htlc_msat_specified: builtins.bool = ...,
         inbound_fee: global___InboundFee | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point", "global", b"global", "inbound_fee", b"inbound_fee", "scope", b"scope"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["base_fee_msat", b"base_fee_msat", "chan_point", b"chan_point", "fee_rate", b"fee_rate", "fee_rate_ppm", b"fee_rate_ppm", "global", b"global", "inbound_fee", b"inbound_fee", "max_htlc_msat", b"max_htlc_msat", "min_htlc_msat", b"min_htlc_msat", "min_htlc_msat_specified", b"min_htlc_msat_specified", "scope", b"scope", "time_lock_delta", b"time_lock_delta"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["scope", b"scope"]) -> typing.Literal["global", "chan_point"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "chan_point",
+            b"chan_point",
+            "global",
+            b"global",
+            "inbound_fee",
+            b"inbound_fee",
+            "scope",
+            b"scope",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee_msat",
+            b"base_fee_msat",
+            "chan_point",
+            b"chan_point",
+            "fee_rate",
+            b"fee_rate",
+            "fee_rate_ppm",
+            b"fee_rate_ppm",
+            "global",
+            b"global",
+            "inbound_fee",
+            b"inbound_fee",
+            "max_htlc_msat",
+            b"max_htlc_msat",
+            "min_htlc_msat",
+            b"min_htlc_msat",
+            "min_htlc_msat_specified",
+            b"min_htlc_msat_specified",
+            "scope",
+            b"scope",
+            "time_lock_delta",
+            b"time_lock_delta",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["scope", b"scope"]
+    ) -> typing.Literal["global", "chan_point"] | None: ...
 
 global___PolicyUpdateRequest = PolicyUpdateRequest
 
@@ -7327,8 +9828,20 @@ class FailedUpdate(google.protobuf.message.Message):
         reason: global___UpdateFailure.ValueType = ...,
         update_error: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["outpoint", b"outpoint"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["outpoint", b"outpoint", "reason", b"reason", "update_error", b"update_error"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["outpoint", b"outpoint"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "outpoint",
+            b"outpoint",
+            "reason",
+            b"reason",
+            "update_error",
+            b"update_error",
+        ],
+    ) -> None: ...
 
 global___FailedUpdate = FailedUpdate
 
@@ -7338,7 +9851,11 @@ class PolicyUpdateResponse(google.protobuf.message.Message):
 
     FAILED_UPDATES_FIELD_NUMBER: builtins.int
     @property
-    def failed_updates(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___FailedUpdate]:
+    def failed_updates(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___FailedUpdate
+    ]:
         """List of failed policy updates."""
 
     def __init__(
@@ -7346,7 +9863,9 @@ class PolicyUpdateResponse(google.protobuf.message.Message):
         *,
         failed_updates: collections.abc.Iterable[global___FailedUpdate] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["failed_updates", b"failed_updates"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["failed_updates", b"failed_updates"]
+    ) -> None: ...
 
 global___PolicyUpdateResponse = PolicyUpdateResponse
 
@@ -7389,7 +9908,21 @@ class ForwardingHistoryRequest(google.protobuf.message.Message):
         num_max_events: builtins.int = ...,
         peer_alias_lookup: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["end_time", b"end_time", "index_offset", b"index_offset", "num_max_events", b"num_max_events", "peer_alias_lookup", b"peer_alias_lookup", "start_time", b"start_time"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "end_time",
+            b"end_time",
+            "index_offset",
+            b"index_offset",
+            "num_max_events",
+            b"num_max_events",
+            "peer_alias_lookup",
+            b"peer_alias_lookup",
+            "start_time",
+            b"start_time",
+        ],
+    ) -> None: ...
 
 global___ForwardingHistoryRequest = ForwardingHistoryRequest
 
@@ -7463,7 +9996,35 @@ class ForwardingEvent(google.protobuf.message.Message):
         peer_alias_in: builtins.str = ...,
         peer_alias_out: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amt_in", b"amt_in", "amt_in_msat", b"amt_in_msat", "amt_out", b"amt_out", "amt_out_msat", b"amt_out_msat", "chan_id_in", b"chan_id_in", "chan_id_out", b"chan_id_out", "fee", b"fee", "fee_msat", b"fee_msat", "peer_alias_in", b"peer_alias_in", "peer_alias_out", b"peer_alias_out", "timestamp", b"timestamp", "timestamp_ns", b"timestamp_ns"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt_in",
+            b"amt_in",
+            "amt_in_msat",
+            b"amt_in_msat",
+            "amt_out",
+            b"amt_out",
+            "amt_out_msat",
+            b"amt_out_msat",
+            "chan_id_in",
+            b"chan_id_in",
+            "chan_id_out",
+            b"chan_id_out",
+            "fee",
+            b"fee",
+            "fee_msat",
+            b"fee_msat",
+            "peer_alias_in",
+            b"peer_alias_in",
+            "peer_alias_out",
+            b"peer_alias_out",
+            "timestamp",
+            b"timestamp",
+            "timestamp_ns",
+            b"timestamp_ns",
+        ],
+    ) -> None: ...
 
 global___ForwardingEvent = ForwardingEvent
 
@@ -7478,7 +10039,11 @@ class ForwardingHistoryResponse(google.protobuf.message.Message):
     be used to seek further, pagination style.
     """
     @property
-    def forwarding_events(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ForwardingEvent]:
+    def forwarding_events(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ForwardingEvent
+    ]:
         """A list of forwarding events from the time slice of the time series
         specified in the request.
         """
@@ -7486,10 +10051,19 @@ class ForwardingHistoryResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        forwarding_events: collections.abc.Iterable[global___ForwardingEvent] | None = ...,
+        forwarding_events: collections.abc.Iterable[global___ForwardingEvent]
+        | None = ...,
         last_offset_index: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["forwarding_events", b"forwarding_events", "last_offset_index", b"last_offset_index"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "forwarding_events",
+            b"forwarding_events",
+            "last_offset_index",
+            b"last_offset_index",
+        ],
+    ) -> None: ...
 
 global___ForwardingHistoryResponse = ForwardingHistoryResponse
 
@@ -7507,8 +10081,12 @@ class ExportChannelBackupRequest(google.protobuf.message.Message):
         *,
         chan_point: global___ChannelPoint | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["chan_point", b"chan_point"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["chan_point", b"chan_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing.Literal["chan_point", b"chan_point"]
+    ) -> None: ...
 
 global___ExportChannelBackupRequest = ExportChannelBackupRequest
 
@@ -7537,8 +10115,15 @@ class ChannelBackup(google.protobuf.message.Message):
         chan_point: global___ChannelPoint | None = ...,
         chan_backup: builtins.bytes = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["chan_backup", b"chan_backup", "chan_point", b"chan_point"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["chan_point", b"chan_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_backup", b"chan_backup", "chan_point", b"chan_point"
+        ],
+    ) -> None: ...
 
 global___ChannelBackup = ChannelBackup
 
@@ -7556,7 +10141,11 @@ class MultiChanBackup(google.protobuf.message.Message):
     field must be encoded as base64.
     """
     @property
-    def chan_points(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelPoint]:
+    def chan_points(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelPoint
+    ]:
         """
         Is the set of all channels that are included in this multi-channel backup.
         """
@@ -7567,7 +10156,12 @@ class MultiChanBackup(google.protobuf.message.Message):
         chan_points: collections.abc.Iterable[global___ChannelPoint] | None = ...,
         multi_chan_backup: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_points", b"chan_points", "multi_chan_backup", b"multi_chan_backup"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "chan_points", b"chan_points", "multi_chan_backup", b"multi_chan_backup"
+        ],
+    ) -> None: ...
 
 global___MultiChanBackup = MultiChanBackup
 
@@ -7607,8 +10201,24 @@ class ChanBackupSnapshot(google.protobuf.message.Message):
         single_chan_backups: global___ChannelBackups | None = ...,
         multi_chan_backup: global___MultiChanBackup | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["multi_chan_backup", b"multi_chan_backup", "single_chan_backups", b"single_chan_backups"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["multi_chan_backup", b"multi_chan_backup", "single_chan_backups", b"single_chan_backups"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "multi_chan_backup",
+            b"multi_chan_backup",
+            "single_chan_backups",
+            b"single_chan_backups",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "multi_chan_backup",
+            b"multi_chan_backup",
+            "single_chan_backups",
+            b"single_chan_backups",
+        ],
+    ) -> None: ...
 
 global___ChanBackupSnapshot = ChanBackupSnapshot
 
@@ -7618,7 +10228,11 @@ class ChannelBackups(google.protobuf.message.Message):
 
     CHAN_BACKUPS_FIELD_NUMBER: builtins.int
     @property
-    def chan_backups(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ChannelBackup]:
+    def chan_backups(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ChannelBackup
+    ]:
         """
         A set of single-chan static channel backups.
         """
@@ -7628,7 +10242,9 @@ class ChannelBackups(google.protobuf.message.Message):
         *,
         chan_backups: collections.abc.Iterable[global___ChannelBackup] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_backups", b"chan_backups"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["chan_backups", b"chan_backups"]
+    ) -> None: ...
 
 global___ChannelBackups = ChannelBackups
 
@@ -7655,9 +10271,31 @@ class RestoreChanBackupRequest(google.protobuf.message.Message):
         chan_backups: global___ChannelBackups | None = ...,
         multi_chan_backup: builtins.bytes = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["backup", b"backup", "chan_backups", b"chan_backups", "multi_chan_backup", b"multi_chan_backup"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["backup", b"backup", "chan_backups", b"chan_backups", "multi_chan_backup", b"multi_chan_backup"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["backup", b"backup"]) -> typing.Literal["chan_backups", "multi_chan_backup"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "backup",
+            b"backup",
+            "chan_backups",
+            b"chan_backups",
+            "multi_chan_backup",
+            b"multi_chan_backup",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "backup",
+            b"backup",
+            "chan_backups",
+            b"chan_backups",
+            "multi_chan_backup",
+            b"multi_chan_backup",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["backup", b"backup"]
+    ) -> typing.Literal["chan_backups", "multi_chan_backup"] | None: ...
 
 global___RestoreChanBackupRequest = RestoreChanBackupRequest
 
@@ -7707,7 +10345,9 @@ class MacaroonPermission(google.protobuf.message.Message):
         entity: builtins.str = ...,
         action: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["action", b"action", "entity", b"entity"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["action", b"action", "entity", b"entity"]
+    ) -> None: ...
 
 global___MacaroonPermission = MacaroonPermission
 
@@ -7726,7 +10366,11 @@ class BakeMacaroonRequest(google.protobuf.message.Message):
     aware of.
     """
     @property
-    def permissions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MacaroonPermission]:
+    def permissions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___MacaroonPermission
+    ]:
         """The list of permissions the new macaroon should grant."""
 
     def __init__(
@@ -7736,7 +10380,17 @@ class BakeMacaroonRequest(google.protobuf.message.Message):
         root_key_id: builtins.int = ...,
         allow_external_permissions: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["allow_external_permissions", b"allow_external_permissions", "permissions", b"permissions", "root_key_id", b"root_key_id"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "allow_external_permissions",
+            b"allow_external_permissions",
+            "permissions",
+            b"permissions",
+            "root_key_id",
+            b"root_key_id",
+        ],
+    ) -> None: ...
 
 global___BakeMacaroonRequest = BakeMacaroonRequest
 
@@ -7752,7 +10406,9 @@ class BakeMacaroonResponse(google.protobuf.message.Message):
         *,
         macaroon: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["macaroon", b"macaroon"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["macaroon", b"macaroon"]
+    ) -> None: ...
 
 global___BakeMacaroonResponse = BakeMacaroonResponse
 
@@ -7772,7 +10428,9 @@ class ListMacaroonIDsResponse(google.protobuf.message.Message):
 
     ROOT_KEY_IDS_FIELD_NUMBER: builtins.int
     @property
-    def root_key_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+    def root_key_ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
         """The list of root key IDs that are in use."""
 
     def __init__(
@@ -7780,7 +10438,9 @@ class ListMacaroonIDsResponse(google.protobuf.message.Message):
         *,
         root_key_ids: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["root_key_ids", b"root_key_ids"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["root_key_ids", b"root_key_ids"]
+    ) -> None: ...
 
 global___ListMacaroonIDsResponse = ListMacaroonIDsResponse
 
@@ -7796,7 +10456,9 @@ class DeleteMacaroonIDRequest(google.protobuf.message.Message):
         *,
         root_key_id: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["root_key_id", b"root_key_id"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["root_key_id", b"root_key_id"]
+    ) -> None: ...
 
 global___DeleteMacaroonIDRequest = DeleteMacaroonIDRequest
 
@@ -7822,7 +10484,11 @@ class MacaroonPermissionList(google.protobuf.message.Message):
 
     PERMISSIONS_FIELD_NUMBER: builtins.int
     @property
-    def permissions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MacaroonPermission]:
+    def permissions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___MacaroonPermission
+    ]:
         """A list of macaroon permissions."""
 
     def __init__(
@@ -7830,7 +10496,9 @@ class MacaroonPermissionList(google.protobuf.message.Message):
         *,
         permissions: collections.abc.Iterable[global___MacaroonPermission] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["permissions", b"permissions"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["permissions", b"permissions"]
+    ) -> None: ...
 
 global___MacaroonPermissionList = MacaroonPermissionList
 
@@ -7863,12 +10531,20 @@ class ListPermissionsResponse(google.protobuf.message.Message):
             key: builtins.str = ...,
             value: global___MacaroonPermissionList | None = ...,
         ) -> None: ...
-        def HasField(self, field_name: typing.Literal["value", b"value"]) -> builtins.bool: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def HasField(
+            self, field_name: typing.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     METHOD_PERMISSIONS_FIELD_NUMBER: builtins.int
     @property
-    def method_permissions(self) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___MacaroonPermissionList]:
+    def method_permissions(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, global___MacaroonPermissionList
+    ]:
         """
         A map between all RPC method URIs and their required macaroon permissions to
         access them.
@@ -7877,9 +10553,14 @@ class ListPermissionsResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        method_permissions: collections.abc.Mapping[builtins.str, global___MacaroonPermissionList] | None = ...,
+        method_permissions: collections.abc.Mapping[
+            builtins.str, global___MacaroonPermissionList
+        ]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["method_permissions", b"method_permissions"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["method_permissions", b"method_permissions"]
+    ) -> None: ...
 
 global___ListPermissionsResponse = ListPermissionsResponse
 
@@ -7891,7 +10572,12 @@ class Failure(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _FailureCodeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Failure._FailureCode.ValueType], builtins.type):  # noqa: F821
+    class _FailureCodeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            Failure._FailureCode.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         RESERVED: Failure._FailureCode.ValueType  # 0
         """
@@ -8025,8 +10711,30 @@ class Failure(google.protobuf.message.Message):
         failure_source_index: builtins.int = ...,
         height: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["channel_update", b"channel_update"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["channel_update", b"channel_update", "cltv_expiry", b"cltv_expiry", "code", b"code", "failure_source_index", b"failure_source_index", "flags", b"flags", "height", b"height", "htlc_msat", b"htlc_msat", "onion_sha_256", b"onion_sha_256"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["channel_update", b"channel_update"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "channel_update",
+            b"channel_update",
+            "cltv_expiry",
+            b"cltv_expiry",
+            "code",
+            b"code",
+            "failure_source_index",
+            b"failure_source_index",
+            "flags",
+            b"flags",
+            "height",
+            b"height",
+            "htlc_msat",
+            b"htlc_msat",
+            "onion_sha_256",
+            b"onion_sha_256",
+        ],
+    ) -> None: ...
 
 global___Failure = Failure
 
@@ -8131,7 +10839,35 @@ class ChannelUpdate(google.protobuf.message.Message):
         htlc_maximum_msat: builtins.int = ...,
         extra_opaque_data: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["base_fee", b"base_fee", "chain_hash", b"chain_hash", "chan_id", b"chan_id", "channel_flags", b"channel_flags", "extra_opaque_data", b"extra_opaque_data", "fee_rate", b"fee_rate", "htlc_maximum_msat", b"htlc_maximum_msat", "htlc_minimum_msat", b"htlc_minimum_msat", "message_flags", b"message_flags", "signature", b"signature", "time_lock_delta", b"time_lock_delta", "timestamp", b"timestamp"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "base_fee",
+            b"base_fee",
+            "chain_hash",
+            b"chain_hash",
+            "chan_id",
+            b"chan_id",
+            "channel_flags",
+            b"channel_flags",
+            "extra_opaque_data",
+            b"extra_opaque_data",
+            "fee_rate",
+            b"fee_rate",
+            "htlc_maximum_msat",
+            b"htlc_maximum_msat",
+            "htlc_minimum_msat",
+            b"htlc_minimum_msat",
+            "message_flags",
+            b"message_flags",
+            "signature",
+            b"signature",
+            "time_lock_delta",
+            b"time_lock_delta",
+            "timestamp",
+            b"timestamp",
+        ],
+    ) -> None: ...
 
 global___ChannelUpdate = ChannelUpdate
 
@@ -8145,7 +10881,11 @@ class MacaroonId(google.protobuf.message.Message):
     nonce: builtins.bytes
     storageId: builtins.bytes
     @property
-    def ops(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Op]: ...
+    def ops(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___Op
+    ]: ...
     def __init__(
         self,
         *,
@@ -8153,7 +10893,12 @@ class MacaroonId(google.protobuf.message.Message):
         storageId: builtins.bytes = ...,
         ops: collections.abc.Iterable[global___Op] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["nonce", b"nonce", "ops", b"ops", "storageId", b"storageId"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "nonce", b"nonce", "ops", b"ops", "storageId", b"storageId"
+        ],
+    ) -> None: ...
 
 global___MacaroonId = MacaroonId
 
@@ -8165,14 +10910,20 @@ class Op(google.protobuf.message.Message):
     ACTIONS_FIELD_NUMBER: builtins.int
     entity: builtins.str
     @property
-    def actions(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def actions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        builtins.str
+    ]: ...
     def __init__(
         self,
         *,
         entity: builtins.str = ...,
         actions: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["actions", b"actions", "entity", b"entity"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["actions", b"actions", "entity", b"entity"]
+    ) -> None: ...
 
 global___Op = Op
 
@@ -8186,7 +10937,11 @@ class CheckMacPermRequest(google.protobuf.message.Message):
     macaroon: builtins.bytes
     fullMethod: builtins.str
     @property
-    def permissions(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MacaroonPermission]: ...
+    def permissions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___MacaroonPermission
+    ]: ...
     def __init__(
         self,
         *,
@@ -8194,7 +10949,17 @@ class CheckMacPermRequest(google.protobuf.message.Message):
         permissions: collections.abc.Iterable[global___MacaroonPermission] | None = ...,
         fullMethod: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["fullMethod", b"fullMethod", "macaroon", b"macaroon", "permissions", b"permissions"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "fullMethod",
+            b"fullMethod",
+            "macaroon",
+            b"macaroon",
+            "permissions",
+            b"permissions",
+        ],
+    ) -> None: ...
 
 global___CheckMacPermRequest = CheckMacPermRequest
 
@@ -8304,9 +11069,49 @@ class RPCMiddlewareRequest(google.protobuf.message.Message):
         reg_complete: builtins.bool = ...,
         msg_id: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["intercept_type", b"intercept_type", "reg_complete", b"reg_complete", "request", b"request", "response", b"response", "stream_auth", b"stream_auth"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["custom_caveat_condition", b"custom_caveat_condition", "intercept_type", b"intercept_type", "msg_id", b"msg_id", "raw_macaroon", b"raw_macaroon", "reg_complete", b"reg_complete", "request", b"request", "request_id", b"request_id", "response", b"response", "stream_auth", b"stream_auth"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["intercept_type", b"intercept_type"]) -> typing.Literal["stream_auth", "request", "response", "reg_complete"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "intercept_type",
+            b"intercept_type",
+            "reg_complete",
+            b"reg_complete",
+            "request",
+            b"request",
+            "response",
+            b"response",
+            "stream_auth",
+            b"stream_auth",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "custom_caveat_condition",
+            b"custom_caveat_condition",
+            "intercept_type",
+            b"intercept_type",
+            "msg_id",
+            b"msg_id",
+            "raw_macaroon",
+            b"raw_macaroon",
+            "reg_complete",
+            b"reg_complete",
+            "request",
+            b"request",
+            "request_id",
+            b"request_id",
+            "response",
+            b"response",
+            "stream_auth",
+            b"stream_auth",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["intercept_type", b"intercept_type"]
+    ) -> (
+        typing.Literal["stream_auth", "request", "response", "reg_complete"] | None
+    ): ...
 
 global___RPCMiddlewareRequest = RPCMiddlewareRequest
 
@@ -8326,7 +11131,9 @@ class StreamAuth(google.protobuf.message.Message):
         *,
         method_full_uri: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["method_full_uri", b"method_full_uri"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["method_full_uri", b"method_full_uri"]
+    ) -> None: ...
 
 global___StreamAuth = StreamAuth
 
@@ -8375,7 +11182,21 @@ class RPCMessage(google.protobuf.message.Message):
         serialized: builtins.bytes = ...,
         is_error: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["is_error", b"is_error", "method_full_uri", b"method_full_uri", "serialized", b"serialized", "stream_rpc", b"stream_rpc", "type_name", b"type_name"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "is_error",
+            b"is_error",
+            "method_full_uri",
+            b"method_full_uri",
+            "serialized",
+            b"serialized",
+            "stream_rpc",
+            b"stream_rpc",
+            "type_name",
+            b"type_name",
+        ],
+    ) -> None: ...
 
 global___RPCMessage = RPCMessage
 
@@ -8420,9 +11241,33 @@ class RPCMiddlewareResponse(google.protobuf.message.Message):
         register: global___MiddlewareRegistration | None = ...,
         feedback: global___InterceptFeedback | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["feedback", b"feedback", "middleware_message", b"middleware_message", "register", b"register"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["feedback", b"feedback", "middleware_message", b"middleware_message", "ref_msg_id", b"ref_msg_id", "register", b"register"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["middleware_message", b"middleware_message"]) -> typing.Literal["register", "feedback"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "feedback",
+            b"feedback",
+            "middleware_message",
+            b"middleware_message",
+            "register",
+            b"register",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "feedback",
+            b"feedback",
+            "middleware_message",
+            b"middleware_message",
+            "ref_msg_id",
+            b"ref_msg_id",
+            "register",
+            b"register",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["middleware_message", b"middleware_message"]
+    ) -> typing.Literal["register", "feedback"] | None: ...
 
 global___RPCMiddlewareResponse = RPCMiddlewareResponse
 
@@ -8464,7 +11309,17 @@ class MiddlewareRegistration(google.protobuf.message.Message):
         custom_macaroon_caveat_name: builtins.str = ...,
         read_only_mode: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["custom_macaroon_caveat_name", b"custom_macaroon_caveat_name", "middleware_name", b"middleware_name", "read_only_mode", b"read_only_mode"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "custom_macaroon_caveat_name",
+            b"custom_macaroon_caveat_name",
+            "middleware_name",
+            b"middleware_name",
+            "read_only_mode",
+            b"read_only_mode",
+        ],
+    ) -> None: ...
 
 global___MiddlewareRegistration = MiddlewareRegistration
 
@@ -8501,6 +11356,16 @@ class InterceptFeedback(google.protobuf.message.Message):
         replace_response: builtins.bool = ...,
         replacement_serialized: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["error", b"error", "replace_response", b"replace_response", "replacement_serialized", b"replacement_serialized"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "error",
+            b"error",
+            "replace_response",
+            b"replace_response",
+            "replacement_serialized",
+            b"replacement_serialized",
+        ],
+    ) -> None: ...
 
 global___InterceptFeedback = InterceptFeedback

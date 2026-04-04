@@ -33,4 +33,3 @@ for file in $BASE_DIR/*.{py,pyi}; do
 done
 
 echo "Done!"
-

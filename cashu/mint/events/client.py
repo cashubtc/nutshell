@@ -219,13 +219,19 @@ class LedgerEventClientManager:
                 quote_id=filter, db=self.db_read.db
             )
             if mint_quote:
-                await self._send_obj(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump(), subId)
+                await self._send_obj(
+                    PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump(),
+                    subId,
+                )
         elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
             melt_quote = await self.db_read.crud.get_melt_quote(
                 quote_id=filter, db=self.db_read.db
             )
             if melt_quote:
-                await self._send_obj(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump(), subId)
+                await self._send_obj(
+                    PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump(),
+                    subId,
+                )
         elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
             proofs = await self.db_read.get_proofs_states(Ys=[filter])
             if len(proofs):

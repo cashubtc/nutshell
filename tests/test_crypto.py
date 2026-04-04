@@ -59,7 +59,10 @@ def test_step1():
         B_.format().hex()
         == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
     )
-    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001"
+    assert (
+        blinding_factor.to_hex()
+        == "0000000000000000000000000000000000000000000000000000000000000001"
+    )
 
 
 def test_step2():
@@ -69,14 +72,12 @@ def test_step2():
             bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000001"
             ),
-
         ),
     )
     a = PrivateKey(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
         ),
-
     )
     C_, e, s = step2_bob(B_, a)
     assert (
@@ -104,7 +105,6 @@ def test_step3():
         + bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001",
         ),
-
     )
     C = step3_alice(C_, r, A)
 
@@ -149,26 +149,22 @@ def test_dleq_step2_bob_dleq():
             bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000001"
             ),
-
         ),
     )
     a = PrivateKey(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
         ),
-
     )
     p_bytes = bytes.fromhex(
         "0000000000000000000000000000000000000000000000000000000000000001"
     )  # 32 bytes
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert (
-        e.to_hex()
-        == "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe1"
+        e.to_hex() == "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe1"
     )
     assert (
-        s.to_hex()
-        == "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe2"
+        s.to_hex() == "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe2"
     )  # differs from e only in least significant byte because `a = 0x1`
 
     # change `a`
@@ -176,16 +172,13 @@ def test_dleq_step2_bob_dleq():
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000001111"
         ),
-
     )
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert (
-        e.to_hex()
-        == "076cbdda4f368053c33056c438df014d1875eb3c8b28120bece74b6d0e6381bb"
+        e.to_hex() == "076cbdda4f368053c33056c438df014d1875eb3c8b28120bece74b6d0e6381bb"
     )
     assert (
-        s.to_hex()
-        == "b6d41ac1e12415862bf8cace95e5355e9262eab8a11d201dadd3b6e41584ea6e"
+        s.to_hex() == "b6d41ac1e12415862bf8cace95e5355e9262eab8a11d201dadd3b6e41584ea6e"
     )
 
 
@@ -255,7 +248,6 @@ def test_dleq_alice_direct_verify_dleq():
             bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000001"
             ),
-
         ),
     )
     C_, e, s = step2_bob(B_, a)
@@ -267,7 +259,6 @@ def test_dleq_carol_verify_from_bob():
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
         ),
-
     )
     A = a.public_key
     assert A
@@ -373,7 +364,10 @@ def test_step1_deprecated():
         B_.format().hex()
         == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
     )
-    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001"
+    assert (
+        blinding_factor.to_hex()
+        == "0000000000000000000000000000000000000000000000000000000000000001"
+    )
 
 
 def test_step2_deprecated():
@@ -383,14 +377,12 @@ def test_step2_deprecated():
             bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000001"
             ),
-
         ),
     )
     a = PrivateKey(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
         ),
-
     )
     C_, e, s = step2_bob(B_, a)
     assert (
@@ -418,7 +410,6 @@ def test_step3_deprecated():
         + bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001",
         ),
-
     )
     C = step3_alice(C_, r, A)
 
@@ -435,26 +426,22 @@ def test_dleq_step2_bob_dleq_deprecated():
             bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000001"
             ),
-
         ),
     )
     a = PrivateKey(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
         ),
-
     )
     p_bytes = bytes.fromhex(
         "0000000000000000000000000000000000000000000000000000000000000001"
     )  # 32 bytes
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert (
-        e.to_hex()
-        == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
+        e.to_hex() == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
     )
     assert (
-        s.to_hex()
-        == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
+        s.to_hex() == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
     )  # differs from e only in least significant byte because `a = 0x1`
 
     # change `a`
@@ -462,14 +449,11 @@ def test_dleq_step2_bob_dleq_deprecated():
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000001111"
         ),
-
     )
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert (
-        e.to_hex()
-        == "df1984d5c22f7e17afe33b8669f02f530f286ae3b00a1978edaf900f4721f65e"
+        e.to_hex() == "df1984d5c22f7e17afe33b8669f02f530f286ae3b00a1978edaf900f4721f65e"
     )
     assert (
-        s.to_hex()
-        == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
+        s.to_hex() == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
     )

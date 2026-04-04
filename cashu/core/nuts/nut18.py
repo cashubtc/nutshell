@@ -10,10 +10,12 @@ class Transport(BaseModel):
     a: str  # target
     g: Optional[List[List[str]]] = None  # tags
 
+
 class NUT10Option(BaseModel):
     k: str  # kind
     d: str  # data
     t: Optional[List[List[str]]] = None  # tags
+
 
 class PaymentRequest(BaseModel):
     i: Optional[str] = None  # payment id

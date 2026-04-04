@@ -55,7 +55,11 @@ class RedisCache:
                     else:
                         raise Exception(f"Found no cached response for key {key}")
                 result = await func(request, payload)
-                await self.redis.set(name=key, value=result.model_dump_json(), ex=settings.mint_redis_cache_ttl)
+                await self.redis.set(
+                    name=key,
+                    value=result.model_dump_json(),
+                    ex=settings.mint_redis_cache_ttl,
+                )
                 return result
 
             return wrapper

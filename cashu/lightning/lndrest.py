@@ -100,7 +100,10 @@ class LndRestWallet(LightningBackend):
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
-            base_url=self.endpoint, headers=self.auth, verify=self.cert, timeout=None,
+            base_url=self.endpoint,
+            headers=self.auth,
+            verify=self.cert,
+            timeout=None,
         )
         if self.supports_mpp:
             logger.info("LNDRestWallet enabling MPP feature")
@@ -307,7 +310,7 @@ class LndRestWallet(LightningBackend):
                         "pub_key"
                     ]
                     logger.debug(
-                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
+                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index - 1} of the route"
                     )
                     continue
             break
@@ -417,7 +420,7 @@ class LndRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 url = "/v1/invoices/subscribe"
@@ -440,9 +443,12 @@ class LndRestWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff with jitter
-                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
+                retry_delay = max(
+                    settings.mint_retry_exponential_backoff_base_delay,
+                    min(retry_delay * 2, max_retry_delay),
+                )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

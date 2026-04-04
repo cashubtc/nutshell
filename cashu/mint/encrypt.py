@@ -70,19 +70,19 @@ async def migrate(no_dry_run):
     """Migrate the database to encrypted seeds."""
     click.echo(f"Database: directory: {settings.mint_database}")
     assert settings.mint_seed_decryption_key, "MINT_SEED_DECRYPTION_KEY not set."
-    assert (
-        len(settings.mint_seed_decryption_key) > 12
-    ), "MINT_SEED_DECRYPTION_KEY is too short, must be at least 12 characters."
-    click.echo(
-        "Decryption key:"
-        f" {settings.mint_seed_decryption_key[0]}{'*'*10}{settings.mint_seed_decryption_key[-1]}"
+    assert len(settings.mint_seed_decryption_key) > 12, (
+        "MINT_SEED_DECRYPTION_KEY is too short, must be at least 12 characters."
     )
     click.echo(
-        f"Seed: {settings.mint_private_key[0]}{'*'*10}{settings.mint_private_key[-1]}" # type: ignore
+        "Decryption key:"
+        f" {settings.mint_seed_decryption_key[0]}{'*' * 10}{settings.mint_seed_decryption_key[-1]}"
+    )
+    click.echo(
+        f"Seed: {settings.mint_private_key[0]}{'*' * 10}{settings.mint_private_key[-1]}"  # type: ignore
     )
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
-        seed=settings.mint_private_key, # type: ignore
+        seed=settings.mint_private_key,  # type: ignore
         derivation_path=settings.mint_derivation_path,
         backends={},
         crud=LedgerCrudSqlite(),
@@ -148,7 +148,7 @@ async def migrate(no_dry_run):
                 )
 
         click.echo("Initializing mint with encrypted seeds.")
-        encrypted_mint_private_key = aes.encrypt(settings.mint_private_key.encode()) # type: ignore
+        encrypted_mint_private_key = aes.encrypt(settings.mint_private_key.encode())  # type: ignore
         ledger = Ledger(
             db=Database("mint", settings.mint_database),
             seed=encrypted_mint_private_key,

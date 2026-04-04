@@ -164,7 +164,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('users')}
+            INSERT INTO {db.table_with_schema("users")}
             (id)
             VALUES (:id)
             """,
@@ -180,7 +180,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> Optional[User]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('users')}
+            SELECT * from {db.table_with_schema("users")}
             WHERE id = :user_id
             """,
             {"user_id": user_id},
@@ -196,7 +196,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('users')}
+            UPDATE {db.table_with_schema("users")}
             SET last_access = :last_access
             WHERE id = :user_id
             """,
@@ -220,7 +220,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')}
+            INSERT INTO {db.table_with_schema("promises")}
             (amount, b_, c_, dleq_e, dleq_s, id, created)
             VALUES (:amount, :b_, :c_, :dleq_e, :dleq_s, :id, :created)
             """,
@@ -244,7 +244,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> Optional[BlindedSignature]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('promises')}
+            SELECT * from {db.table_with_schema("promises")}
             WHERE b_ = :b_
             """,
             {"b_": str(b_)},
@@ -260,8 +260,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([':b_' + str(i) for i in range(len(b_s))])})
+            SELECT * from {db.table_with_schema("promises")}
+            WHERE b_ IN ({",".join([":b_" + str(i) for i in range(len(b_s))])})
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
@@ -277,7 +277,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_used')}
+            INSERT INTO {db.table_with_schema("proofs_used")}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
             """,
@@ -301,7 +301,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> List[MeltQuote]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema('proofs_pending')})
+            SELECT * from {db.table_with_schema("melt_quotes")} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema("proofs_pending")})
             """
         )
         return [MeltQuote.from_row(r) for r in rows] if rows else []  # type: ignore
@@ -315,7 +315,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> List[Proof]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('proofs_pending')}
+            SELECT * from {db.table_with_schema("proofs_pending")}
             WHERE melt_quote = :quote_id
             """,
             {"quote_id": quote_id},
@@ -330,8 +330,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
         query = f"""
-        SELECT * from {db.table_with_schema('proofs_pending')}
-        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        SELECT * from {db.table_with_schema("proofs_pending")}
+        WHERE y IN ({",".join([":y_" + str(i) for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
@@ -347,7 +347,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_pending')}
+            INSERT INTO {db.table_with_schema("proofs_pending")}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
             """,
@@ -372,7 +372,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            DELETE FROM {db.table_with_schema('proofs_pending')}
+            DELETE FROM {db.table_with_schema("proofs_pending")}
             WHERE secret = :secret
             """,
             {"secret": proof.secret},
@@ -387,7 +387,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('mint_quotes')}
+            INSERT INTO {db.table_with_schema("mint_quotes")}
             (quote, method, request, checking_id, unit, amount, state, created_time, paid_time)
             VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time)
             """,
@@ -433,7 +433,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('mint_quotes')}
+            SELECT * from {db.table_with_schema("mint_quotes")}
             {where}
             """,
             values,
@@ -451,7 +451,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> Optional[MintQuote]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('mint_quotes')}
+            SELECT * from {db.table_with_schema("mint_quotes")}
             WHERE request = :request
             """,
             {"request": request},
@@ -485,7 +485,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('melt_quotes')}
+            INSERT INTO {db.table_with_schema("melt_quotes")}
             (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof, change, expiry)
             VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :paid, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
             """,
@@ -539,7 +539,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('melt_quotes')}
+            SELECT * from {db.table_with_schema("melt_quotes")}
             {where}
             """,
             values,
@@ -557,7 +557,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET paid = :paid, state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
+            UPDATE {db.table_with_schema("melt_quotes")} SET paid = :paid, state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
             """,
             {
                 "paid": quote.paid,
@@ -585,7 +585,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('keysets')}
+            INSERT INTO {db.table_with_schema("keysets")}
             (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk)
             VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk)
             """,
@@ -643,7 +643,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
 
         rows = await (conn or db).fetchall(  # type: ignore
             f"""
-            SELECT * from {db.table_with_schema('keysets')}
+            SELECT * from {db.table_with_schema("keysets")}
             {where}
             """,
             values,
@@ -658,8 +658,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
         query = f"""
-        SELECT * from {db.table_with_schema('proofs_used')}
-        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        SELECT * from {db.table_with_schema("proofs_used")}
+        WHERE y IN ({",".join([":y_" + str(i) for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)

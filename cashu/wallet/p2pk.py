@@ -232,10 +232,13 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                     witness = HTLCWitness.from_witness(p.witness)
                     proof_signatures = witness.signatures
                     if proof_signatures:
-                        proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                        proof_signatures_lower = [
+                            sig.lower() for sig in proof_signatures
+                        ]
                         if s_lower not in proof_signatures_lower:
                             p.witness = HTLCWitness(
-                                preimage=witness.preimage, signatures=proof_signatures + [s]
+                                preimage=witness.preimage,
+                                signatures=proof_signatures + [s],
                             ).model_dump_json()
                 else:
                     if p.witness:

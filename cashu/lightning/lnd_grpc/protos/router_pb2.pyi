@@ -26,7 +26,12 @@ class _FailureDetail:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _FailureDetailEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_FailureDetail.ValueType], builtins.type):
+class _FailureDetailEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _FailureDetail.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     UNKNOWN: _FailureDetail.ValueType  # 0
     NO_DETAIL: _FailureDetail.ValueType  # 1
@@ -83,7 +88,12 @@ class _PaymentState:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _PaymentStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_PaymentState.ValueType], builtins.type):
+class _PaymentStateEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _PaymentState.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     IN_FLIGHT: _PaymentState.ValueType  # 0
     """
@@ -154,13 +164,20 @@ class _ResolveHoldForwardAction:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _ResolveHoldForwardActionEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ResolveHoldForwardAction.ValueType], builtins.type):
+class _ResolveHoldForwardActionEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _ResolveHoldForwardAction.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     SETTLE: _ResolveHoldForwardAction.ValueType  # 0
     FAIL: _ResolveHoldForwardAction.ValueType  # 1
     RESUME: _ResolveHoldForwardAction.ValueType  # 2
 
-class ResolveHoldForwardAction(_ResolveHoldForwardAction, metaclass=_ResolveHoldForwardActionEnumTypeWrapper): ...
+class ResolveHoldForwardAction(
+    _ResolveHoldForwardAction, metaclass=_ResolveHoldForwardActionEnumTypeWrapper
+): ...
 
 SETTLE: ResolveHoldForwardAction.ValueType  # 0
 FAIL: ResolveHoldForwardAction.ValueType  # 1
@@ -171,13 +188,20 @@ class _ChanStatusAction:
     ValueType = typing.NewType("ValueType", builtins.int)
     V: typing_extensions.TypeAlias = ValueType
 
-class _ChanStatusActionEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ChanStatusAction.ValueType], builtins.type):
+class _ChanStatusActionEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _ChanStatusAction.ValueType
+    ],
+    builtins.type,
+):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     ENABLE: _ChanStatusAction.ValueType  # 0
     DISABLE: _ChanStatusAction.ValueType  # 1
     AUTO: _ChanStatusAction.ValueType  # 2
 
-class ChanStatusAction(_ChanStatusAction, metaclass=_ChanStatusActionEnumTypeWrapper): ...
+class ChanStatusAction(
+    _ChanStatusAction, metaclass=_ChanStatusActionEnumTypeWrapper
+): ...
 
 ENABLE: ChanStatusAction.ValueType  # 0
 DISABLE: ChanStatusAction.ValueType  # 1
@@ -202,7 +226,9 @@ class SendPaymentRequest(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     DEST_FIELD_NUMBER: builtins.int
     AMT_FIELD_NUMBER: builtins.int
@@ -341,13 +367,19 @@ class SendPaymentRequest(google.protobuf.message.Message):
     being sent.
     """
     @property
-    def route_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[cashu.lightning.lnd_grpc.protos.lightning_pb2.RouteHint]:
+    def route_hints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.RouteHint
+    ]:
         """
         Optional route hints to reach the destination through private channels.
         """
 
     @property
-    def dest_custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def dest_custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """
         An optional field that can be used to pass an arbitrary set of TLV records
         to a peer which understands the new records. This can be used to pass
@@ -357,7 +389,11 @@ class SendPaymentRequest(google.protobuf.message.Message):
         """
 
     @property
-    def dest_features(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[cashu.lightning.lnd_grpc.protos.lightning_pb2.FeatureBit.ValueType]:
+    def dest_features(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.FeatureBit.ValueType
+    ]:
         """
         Features assumed to be supported by the final node. All transitive feature
         dependencies must also be set properly. For a given feature bit pair, either
@@ -367,7 +403,9 @@ class SendPaymentRequest(google.protobuf.message.Message):
         """
 
     @property
-    def outgoing_chan_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+    def outgoing_chan_ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
         """
         The channel ids of the channels are allowed for the first hop. If empty,
         any channel may be used.
@@ -385,13 +423,20 @@ class SendPaymentRequest(google.protobuf.message.Message):
         fee_limit_sat: builtins.int = ...,
         outgoing_chan_id: builtins.int = ...,
         cltv_limit: builtins.int = ...,
-        route_hints: collections.abc.Iterable[cashu.lightning.lnd_grpc.protos.lightning_pb2.RouteHint] | None = ...,
-        dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        route_hints: collections.abc.Iterable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.RouteHint
+        ]
+        | None = ...,
+        dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         amt_msat: builtins.int = ...,
         fee_limit_msat: builtins.int = ...,
         last_hop_pubkey: builtins.bytes = ...,
         allow_self_payment: builtins.bool = ...,
-        dest_features: collections.abc.Iterable[cashu.lightning.lnd_grpc.protos.lightning_pb2.FeatureBit.ValueType] | None = ...,
+        dest_features: collections.abc.Iterable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.FeatureBit.ValueType
+        ]
+        | None = ...,
         max_parts: builtins.int = ...,
         no_inflight_updates: builtins.bool = ...,
         outgoing_chan_ids: collections.abc.Iterable[builtins.int] | None = ...,
@@ -401,7 +446,59 @@ class SendPaymentRequest(google.protobuf.message.Message):
         time_pref: builtins.float = ...,
         cancelable: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["allow_self_payment", b"allow_self_payment", "amp", b"amp", "amt", b"amt", "amt_msat", b"amt_msat", "cancelable", b"cancelable", "cltv_limit", b"cltv_limit", "dest", b"dest", "dest_custom_records", b"dest_custom_records", "dest_features", b"dest_features", "fee_limit_msat", b"fee_limit_msat", "fee_limit_sat", b"fee_limit_sat", "final_cltv_delta", b"final_cltv_delta", "last_hop_pubkey", b"last_hop_pubkey", "max_parts", b"max_parts", "max_shard_size_msat", b"max_shard_size_msat", "no_inflight_updates", b"no_inflight_updates", "outgoing_chan_id", b"outgoing_chan_id", "outgoing_chan_ids", b"outgoing_chan_ids", "payment_addr", b"payment_addr", "payment_hash", b"payment_hash", "payment_request", b"payment_request", "route_hints", b"route_hints", "time_pref", b"time_pref", "timeout_seconds", b"timeout_seconds"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "allow_self_payment",
+            b"allow_self_payment",
+            "amp",
+            b"amp",
+            "amt",
+            b"amt",
+            "amt_msat",
+            b"amt_msat",
+            "cancelable",
+            b"cancelable",
+            "cltv_limit",
+            b"cltv_limit",
+            "dest",
+            b"dest",
+            "dest_custom_records",
+            b"dest_custom_records",
+            "dest_features",
+            b"dest_features",
+            "fee_limit_msat",
+            b"fee_limit_msat",
+            "fee_limit_sat",
+            b"fee_limit_sat",
+            "final_cltv_delta",
+            b"final_cltv_delta",
+            "last_hop_pubkey",
+            b"last_hop_pubkey",
+            "max_parts",
+            b"max_parts",
+            "max_shard_size_msat",
+            b"max_shard_size_msat",
+            "no_inflight_updates",
+            b"no_inflight_updates",
+            "outgoing_chan_id",
+            b"outgoing_chan_id",
+            "outgoing_chan_ids",
+            b"outgoing_chan_ids",
+            "payment_addr",
+            b"payment_addr",
+            "payment_hash",
+            b"payment_hash",
+            "payment_request",
+            b"payment_request",
+            "route_hints",
+            b"route_hints",
+            "time_pref",
+            b"time_pref",
+            "timeout_seconds",
+            b"timeout_seconds",
+        ],
+    ) -> None: ...
 
 global___SendPaymentRequest = SendPaymentRequest
 
@@ -424,7 +521,15 @@ class TrackPaymentRequest(google.protobuf.message.Message):
         payment_hash: builtins.bytes = ...,
         no_inflight_updates: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["no_inflight_updates", b"no_inflight_updates", "payment_hash", b"payment_hash"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "no_inflight_updates",
+            b"no_inflight_updates",
+            "payment_hash",
+            b"payment_hash",
+        ],
+    ) -> None: ...
 
 global___TrackPaymentRequest = TrackPaymentRequest
 
@@ -443,7 +548,9 @@ class TrackPaymentsRequest(google.protobuf.message.Message):
         *,
         no_inflight_updates: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["no_inflight_updates", b"no_inflight_updates"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["no_inflight_updates", b"no_inflight_updates"]
+    ) -> None: ...
 
 global___TrackPaymentsRequest = TrackPaymentsRequest
 
@@ -494,7 +601,19 @@ class RouteFeeRequest(google.protobuf.message.Message):
         payment_request: builtins.str = ...,
         timeout: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amt_sat", b"amt_sat", "dest", b"dest", "payment_request", b"payment_request", "timeout", b"timeout"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt_sat",
+            b"amt_sat",
+            "dest",
+            b"dest",
+            "payment_request",
+            b"payment_request",
+            "timeout",
+            b"timeout",
+        ],
+    ) -> None: ...
 
 global___RouteFeeRequest = RouteFeeRequest
 
@@ -516,7 +635,9 @@ class RouteFeeResponse(google.protobuf.message.Message):
     will still need to factor in the final CLTV delta of the last hop into this
     value.
     """
-    failure_reason: cashu.lightning.lnd_grpc.protos.lightning_pb2.PaymentFailureReason.ValueType
+    failure_reason: (
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.PaymentFailureReason.ValueType
+    )
     """
     An indication whether a probing payment succeeded or whether and why it
     failed. FAILURE_REASON_NONE indicates success.
@@ -528,7 +649,17 @@ class RouteFeeResponse(google.protobuf.message.Message):
         time_lock_delay: builtins.int = ...,
         failure_reason: cashu.lightning.lnd_grpc.protos.lightning_pb2.PaymentFailureReason.ValueType = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["failure_reason", b"failure_reason", "routing_fee_msat", b"routing_fee_msat", "time_lock_delay", b"time_lock_delay"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "failure_reason",
+            b"failure_reason",
+            "routing_fee_msat",
+            b"routing_fee_msat",
+            "time_lock_delay",
+            b"time_lock_delay",
+        ],
+    ) -> None: ...
 
 global___RouteFeeResponse = RouteFeeResponse
 
@@ -559,8 +690,20 @@ class SendToRouteRequest(google.protobuf.message.Message):
         route: cashu.lightning.lnd_grpc.protos.lightning_pb2.Route | None = ...,
         skip_temp_err: builtins.bool = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["route", b"route"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["payment_hash", b"payment_hash", "route", b"route", "skip_temp_err", b"skip_temp_err"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["route", b"route"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "payment_hash",
+            b"payment_hash",
+            "route",
+            b"route",
+            "skip_temp_err",
+            b"skip_temp_err",
+        ],
+    ) -> None: ...
 
 global___SendToRouteRequest = SendToRouteRequest
 
@@ -582,8 +725,12 @@ class SendToRouteResponse(google.protobuf.message.Message):
         preimage: builtins.bytes = ...,
         failure: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["failure", b"failure"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["failure", b"failure", "preimage", b"preimage"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["failure", b"failure"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing.Literal["failure", b"failure", "preimage", b"preimage"]
+    ) -> None: ...
 
 global___SendToRouteResponse = SendToRouteResponse
 
@@ -625,7 +772,11 @@ class QueryMissionControlResponse(google.protobuf.message.Message):
 
     PAIRS_FIELD_NUMBER: builtins.int
     @property
-    def pairs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PairHistory]:
+    def pairs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PairHistory
+    ]:
         """Node pair-level mission control state."""
 
     def __init__(
@@ -649,7 +800,11 @@ class XImportMissionControlRequest(google.protobuf.message.Message):
     still clamp existing failure/success amounts.
     """
     @property
-    def pairs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___PairHistory]:
+    def pairs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___PairHistory
+    ]:
         """Node pair-level mission control state to be imported."""
 
     def __init__(
@@ -658,7 +813,9 @@ class XImportMissionControlRequest(google.protobuf.message.Message):
         pairs: collections.abc.Iterable[global___PairHistory] | None = ...,
         force: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["force", b"force", "pairs", b"pairs"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["force", b"force", "pairs", b"pairs"]
+    ) -> None: ...
 
 global___XImportMissionControlRequest = XImportMissionControlRequest
 
@@ -694,8 +851,15 @@ class PairHistory(google.protobuf.message.Message):
         node_to: builtins.bytes = ...,
         history: global___PairData | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["history", b"history"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["history", b"history", "node_from", b"node_from", "node_to", b"node_to"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["history", b"history"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "history", b"history", "node_from", b"node_from", "node_to", b"node_to"
+        ],
+    ) -> None: ...
 
 global___PairHistory = PairHistory
 
@@ -737,7 +901,23 @@ class PairData(google.protobuf.message.Message):
         success_amt_sat: builtins.int = ...,
         success_amt_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["fail_amt_msat", b"fail_amt_msat", "fail_amt_sat", b"fail_amt_sat", "fail_time", b"fail_time", "success_amt_msat", b"success_amt_msat", "success_amt_sat", b"success_amt_sat", "success_time", b"success_time"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "fail_amt_msat",
+            b"fail_amt_msat",
+            "fail_amt_sat",
+            b"fail_amt_sat",
+            "fail_time",
+            b"fail_time",
+            "success_amt_msat",
+            b"success_amt_msat",
+            "success_amt_sat",
+            b"success_amt_sat",
+            "success_time",
+            b"success_time",
+        ],
+    ) -> None: ...
 
 global___PairData = PairData
 
@@ -767,7 +947,9 @@ class GetMissionControlConfigResponse(google.protobuf.message.Message):
         *,
         config: global___MissionControlConfig | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["config", b"config"]) -> builtins.bool: ...
+    def HasField(
+        self, field_name: typing.Literal["config", b"config"]
+    ) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["config", b"config"]) -> None: ...
 
 global___GetMissionControlConfigResponse = GetMissionControlConfigResponse
@@ -789,7 +971,9 @@ class SetMissionControlConfigRequest(google.protobuf.message.Message):
         *,
         config: global___MissionControlConfig | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["config", b"config"]) -> builtins.bool: ...
+    def HasField(
+        self, field_name: typing.Literal["config", b"config"]
+    ) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["config", b"config"]) -> None: ...
 
 global___SetMissionControlConfigRequest = SetMissionControlConfigRequest
@@ -812,12 +996,19 @@ class MissionControlConfig(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _ProbabilityModelEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[MissionControlConfig._ProbabilityModel.ValueType], builtins.type):   # noqa: F821
+    class _ProbabilityModelEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            MissionControlConfig._ProbabilityModel.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         APRIORI: MissionControlConfig._ProbabilityModel.ValueType  # 0
         BIMODAL: MissionControlConfig._ProbabilityModel.ValueType  # 1
 
-    class ProbabilityModel(_ProbabilityModel, metaclass=_ProbabilityModelEnumTypeWrapper): ...
+    class ProbabilityModel(
+        _ProbabilityModel, metaclass=_ProbabilityModelEnumTypeWrapper
+    ): ...
     APRIORI: MissionControlConfig.ProbabilityModel.ValueType  # 0
     BIMODAL: MissionControlConfig.ProbabilityModel.ValueType  # 1
 
@@ -884,9 +1075,43 @@ class MissionControlConfig(google.protobuf.message.Message):
         apriori: global___AprioriParameters | None = ...,
         bimodal: global___BimodalParameters | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["EstimatorConfig", b"EstimatorConfig", "apriori", b"apriori", "bimodal", b"bimodal"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["EstimatorConfig", b"EstimatorConfig", "apriori", b"apriori", "bimodal", b"bimodal", "half_life_seconds", b"half_life_seconds", "hop_probability", b"hop_probability", "maximum_payment_results", b"maximum_payment_results", "minimum_failure_relax_interval", b"minimum_failure_relax_interval", "model", b"model", "weight", b"weight"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["EstimatorConfig", b"EstimatorConfig"]) -> typing.Literal["apriori", "bimodal"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "EstimatorConfig",
+            b"EstimatorConfig",
+            "apriori",
+            b"apriori",
+            "bimodal",
+            b"bimodal",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "EstimatorConfig",
+            b"EstimatorConfig",
+            "apriori",
+            b"apriori",
+            "bimodal",
+            b"bimodal",
+            "half_life_seconds",
+            b"half_life_seconds",
+            "hop_probability",
+            b"hop_probability",
+            "maximum_payment_results",
+            b"maximum_payment_results",
+            "minimum_failure_relax_interval",
+            b"minimum_failure_relax_interval",
+            "model",
+            b"model",
+            "weight",
+            b"weight",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["EstimatorConfig", b"EstimatorConfig"]
+    ) -> typing.Literal["apriori", "bimodal"] | None: ...
 
 global___MissionControlConfig = MissionControlConfig
 
@@ -926,7 +1151,17 @@ class BimodalParameters(google.protobuf.message.Message):
         scale_msat: builtins.int = ...,
         decay_time: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["decay_time", b"decay_time", "node_weight", b"node_weight", "scale_msat", b"scale_msat"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "decay_time",
+            b"decay_time",
+            "node_weight",
+            b"node_weight",
+            "scale_msat",
+            b"scale_msat",
+        ],
+    ) -> None: ...
 
 global___BimodalParameters = BimodalParameters
 
@@ -977,7 +1212,19 @@ class AprioriParameters(google.protobuf.message.Message):
         weight: builtins.float = ...,
         capacity_fraction: builtins.float = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["capacity_fraction", b"capacity_fraction", "half_life_seconds", b"half_life_seconds", "hop_probability", b"hop_probability", "weight", b"weight"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "capacity_fraction",
+            b"capacity_fraction",
+            "half_life_seconds",
+            b"half_life_seconds",
+            "hop_probability",
+            b"hop_probability",
+            "weight",
+            b"weight",
+        ],
+    ) -> None: ...
 
 global___AprioriParameters = AprioriParameters
 
@@ -1001,7 +1248,12 @@ class QueryProbabilityRequest(google.protobuf.message.Message):
         to_node: builtins.bytes = ...,
         amt_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amt_msat", b"amt_msat", "from_node", b"from_node", "to_node", b"to_node"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt_msat", b"amt_msat", "from_node", b"from_node", "to_node", b"to_node"
+        ],
+    ) -> None: ...
 
 global___QueryProbabilityRequest = QueryProbabilityRequest
 
@@ -1023,8 +1275,15 @@ class QueryProbabilityResponse(google.protobuf.message.Message):
         probability: builtins.float = ...,
         history: global___PairData | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["history", b"history"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["history", b"history", "probability", b"probability"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["history", b"history"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "history", b"history", "probability", b"probability"
+        ],
+    ) -> None: ...
 
 global___QueryProbabilityResponse = QueryProbabilityResponse
 
@@ -1058,7 +1317,11 @@ class BuildRouteRequest(google.protobuf.message.Message):
     This is also called payment secret in specifications (e.g. BOLT 11).
     """
     @property
-    def hop_pubkeys(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.bytes]:
+    def hop_pubkeys(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        builtins.bytes
+    ]:
         """
         A list of hops that defines the route. This does not include the source hop
         pubkey.
@@ -1073,7 +1336,21 @@ class BuildRouteRequest(google.protobuf.message.Message):
         hop_pubkeys: collections.abc.Iterable[builtins.bytes] | None = ...,
         payment_addr: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amt_msat", b"amt_msat", "final_cltv_delta", b"final_cltv_delta", "hop_pubkeys", b"hop_pubkeys", "outgoing_chan_id", b"outgoing_chan_id", "payment_addr", b"payment_addr"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "amt_msat",
+            b"amt_msat",
+            "final_cltv_delta",
+            b"final_cltv_delta",
+            "hop_pubkeys",
+            b"hop_pubkeys",
+            "outgoing_chan_id",
+            b"outgoing_chan_id",
+            "payment_addr",
+            b"payment_addr",
+        ],
+    ) -> None: ...
 
 global___BuildRouteRequest = BuildRouteRequest
 
@@ -1093,7 +1370,9 @@ class BuildRouteResponse(google.protobuf.message.Message):
         *,
         route: cashu.lightning.lnd_grpc.protos.lightning_pb2.Route | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["route", b"route"]) -> builtins.bool: ...
+    def HasField(
+        self, field_name: typing.Literal["route", b"route"]
+    ) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["route", b"route"]) -> None: ...
 
 global___BuildRouteResponse = BuildRouteResponse
@@ -1125,7 +1404,12 @@ class HtlcEvent(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _EventTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[HtlcEvent._EventType.ValueType], builtins.type):    # noqa: F821
+    class _EventTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            HtlcEvent._EventType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         UNKNOWN: HtlcEvent._EventType.ValueType  # 0
         SEND: HtlcEvent._EventType.ValueType  # 1
@@ -1207,9 +1491,69 @@ class HtlcEvent(google.protobuf.message.Message):
         subscribed_event: global___SubscribedEvent | None = ...,
         final_htlc_event: global___FinalHtlcEvent | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["event", b"event", "final_htlc_event", b"final_htlc_event", "forward_event", b"forward_event", "forward_fail_event", b"forward_fail_event", "link_fail_event", b"link_fail_event", "settle_event", b"settle_event", "subscribed_event", b"subscribed_event"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["event", b"event", "event_type", b"event_type", "final_htlc_event", b"final_htlc_event", "forward_event", b"forward_event", "forward_fail_event", b"forward_fail_event", "incoming_channel_id", b"incoming_channel_id", "incoming_htlc_id", b"incoming_htlc_id", "link_fail_event", b"link_fail_event", "outgoing_channel_id", b"outgoing_channel_id", "outgoing_htlc_id", b"outgoing_htlc_id", "settle_event", b"settle_event", "subscribed_event", b"subscribed_event", "timestamp_ns", b"timestamp_ns"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["event", b"event"]) -> typing.Literal["forward_event", "forward_fail_event", "settle_event", "link_fail_event", "subscribed_event", "final_htlc_event"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "event",
+            b"event",
+            "final_htlc_event",
+            b"final_htlc_event",
+            "forward_event",
+            b"forward_event",
+            "forward_fail_event",
+            b"forward_fail_event",
+            "link_fail_event",
+            b"link_fail_event",
+            "settle_event",
+            b"settle_event",
+            "subscribed_event",
+            b"subscribed_event",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "event",
+            b"event",
+            "event_type",
+            b"event_type",
+            "final_htlc_event",
+            b"final_htlc_event",
+            "forward_event",
+            b"forward_event",
+            "forward_fail_event",
+            b"forward_fail_event",
+            "incoming_channel_id",
+            b"incoming_channel_id",
+            "incoming_htlc_id",
+            b"incoming_htlc_id",
+            "link_fail_event",
+            b"link_fail_event",
+            "outgoing_channel_id",
+            b"outgoing_channel_id",
+            "outgoing_htlc_id",
+            b"outgoing_htlc_id",
+            "settle_event",
+            b"settle_event",
+            "subscribed_event",
+            b"subscribed_event",
+            "timestamp_ns",
+            b"timestamp_ns",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["event", b"event"]
+    ) -> (
+        typing.Literal[
+            "forward_event",
+            "forward_fail_event",
+            "settle_event",
+            "link_fail_event",
+            "subscribed_event",
+            "final_htlc_event",
+        ]
+        | None
+    ): ...
 
 global___HtlcEvent = HtlcEvent
 
@@ -1237,7 +1581,19 @@ class HtlcInfo(google.protobuf.message.Message):
         incoming_amt_msat: builtins.int = ...,
         outgoing_amt_msat: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["incoming_amt_msat", b"incoming_amt_msat", "incoming_timelock", b"incoming_timelock", "outgoing_amt_msat", b"outgoing_amt_msat", "outgoing_timelock", b"outgoing_timelock"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "incoming_amt_msat",
+            b"incoming_amt_msat",
+            "incoming_timelock",
+            b"incoming_timelock",
+            "outgoing_amt_msat",
+            b"outgoing_amt_msat",
+            "outgoing_timelock",
+            b"outgoing_timelock",
+        ],
+    ) -> None: ...
 
 global___HtlcInfo = HtlcInfo
 
@@ -1255,7 +1611,9 @@ class ForwardEvent(google.protobuf.message.Message):
         *,
         info: global___HtlcInfo | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["info", b"info"]) -> builtins.bool: ...
+    def HasField(
+        self, field_name: typing.Literal["info", b"info"]
+    ) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["info", b"info"]) -> None: ...
 
 global___ForwardEvent = ForwardEvent
@@ -1282,7 +1640,9 @@ class SettleEvent(google.protobuf.message.Message):
         *,
         preimage: builtins.bytes = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["preimage", b"preimage"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["preimage", b"preimage"]
+    ) -> None: ...
 
 global___SettleEvent = SettleEvent
 
@@ -1300,7 +1660,9 @@ class FinalHtlcEvent(google.protobuf.message.Message):
         settled: builtins.bool = ...,
         offchain: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["offchain", b"offchain", "settled", b"settled"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["offchain", b"offchain", "settled", b"settled"]
+    ) -> None: ...
 
 global___FinalHtlcEvent = FinalHtlcEvent
 
@@ -1322,7 +1684,9 @@ class LinkFailEvent(google.protobuf.message.Message):
     WIRE_FAILURE_FIELD_NUMBER: builtins.int
     FAILURE_DETAIL_FIELD_NUMBER: builtins.int
     FAILURE_STRING_FIELD_NUMBER: builtins.int
-    wire_failure: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType
+    wire_failure: (
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType
+    )
     """FailureCode is the BOLT error code for the failure."""
     failure_detail: global___FailureDetail.ValueType
     """
@@ -1344,8 +1708,22 @@ class LinkFailEvent(google.protobuf.message.Message):
         failure_detail: global___FailureDetail.ValueType = ...,
         failure_string: builtins.str = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["info", b"info"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["failure_detail", b"failure_detail", "failure_string", b"failure_string", "info", b"info", "wire_failure", b"wire_failure"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["info", b"info"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "failure_detail",
+            b"failure_detail",
+            "failure_string",
+            b"failure_string",
+            "info",
+            b"info",
+            "wire_failure",
+            b"wire_failure",
+        ],
+    ) -> None: ...
 
 global___LinkFailEvent = LinkFailEvent
 
@@ -1363,7 +1741,11 @@ class PaymentStatus(google.protobuf.message.Message):
     The pre-image of the payment when state is SUCCEEDED.
     """
     @property
-    def htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt]:
+    def htlcs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt
+    ]:
         """
         The HTLCs made in attempt to settle the payment [EXPERIMENTAL].
         """
@@ -1373,9 +1755,17 @@ class PaymentStatus(google.protobuf.message.Message):
         *,
         state: global___PaymentState.ValueType = ...,
         preimage: builtins.bytes = ...,
-        htlcs: collections.abc.Iterable[cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt] | None = ...,
+        htlcs: collections.abc.Iterable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt
+        ]
+        | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["htlcs", b"htlcs", "preimage", b"preimage", "state", b"state"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "htlcs", b"htlcs", "preimage", b"preimage", "state", b"state"
+        ],
+    ) -> None: ...
 
 global___PaymentStatus = PaymentStatus
 
@@ -1395,7 +1785,9 @@ class CircuitKey(google.protobuf.message.Message):
         chan_id: builtins.int = ...,
         htlc_id: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["chan_id", b"chan_id", "htlc_id", b"htlc_id"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["chan_id", b"chan_id", "htlc_id", b"htlc_id"]
+    ) -> None: ...
 
 global___CircuitKey = CircuitKey
 
@@ -1417,7 +1809,9 @@ class ForwardHtlcInterceptRequest(google.protobuf.message.Message):
             key: builtins.int = ...,
             value: builtins.bytes = ...,
         ) -> None: ...
-        def ClearField(self, field_name: typing.Literal["key", b"key", "value", b"value"]) -> None: ...
+        def ClearField(
+            self, field_name: typing.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
 
     INCOMING_CIRCUIT_KEY_FIELD_NUMBER: builtins.int
     INCOMING_AMOUNT_MSAT_FIELD_NUMBER: builtins.int
@@ -1462,7 +1856,9 @@ class ForwardHtlcInterceptRequest(google.protobuf.message.Message):
         """
 
     @property
-    def custom_records(self) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
+    def custom_records(
+        self,
+    ) -> google.protobuf.internal.containers.ScalarMap[builtins.int, builtins.bytes]:
         """Any custom records that were present in the payload."""
 
     def __init__(
@@ -1475,12 +1871,40 @@ class ForwardHtlcInterceptRequest(google.protobuf.message.Message):
         outgoing_requested_chan_id: builtins.int = ...,
         outgoing_amount_msat: builtins.int = ...,
         outgoing_expiry: builtins.int = ...,
-        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
+        custom_records: collections.abc.Mapping[builtins.int, builtins.bytes]
+        | None = ...,
         onion_blob: builtins.bytes = ...,
         auto_fail_height: builtins.int = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["incoming_circuit_key", b"incoming_circuit_key"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["auto_fail_height", b"auto_fail_height", "custom_records", b"custom_records", "incoming_amount_msat", b"incoming_amount_msat", "incoming_circuit_key", b"incoming_circuit_key", "incoming_expiry", b"incoming_expiry", "onion_blob", b"onion_blob", "outgoing_amount_msat", b"outgoing_amount_msat", "outgoing_expiry", b"outgoing_expiry", "outgoing_requested_chan_id", b"outgoing_requested_chan_id", "payment_hash", b"payment_hash"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal["incoming_circuit_key", b"incoming_circuit_key"],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "auto_fail_height",
+            b"auto_fail_height",
+            "custom_records",
+            b"custom_records",
+            "incoming_amount_msat",
+            b"incoming_amount_msat",
+            "incoming_circuit_key",
+            b"incoming_circuit_key",
+            "incoming_expiry",
+            b"incoming_expiry",
+            "onion_blob",
+            b"onion_blob",
+            "outgoing_amount_msat",
+            b"outgoing_amount_msat",
+            "outgoing_expiry",
+            b"outgoing_expiry",
+            "outgoing_requested_chan_id",
+            b"outgoing_requested_chan_id",
+            "payment_hash",
+            b"payment_hash",
+        ],
+    ) -> None: ...
 
 global___ForwardHtlcInterceptRequest = ForwardHtlcInterceptRequest
 
@@ -1511,7 +1935,9 @@ class ForwardHtlcInterceptResponse(google.protobuf.message.Message):
     If failure_message is specified, the failure_code field must be set
     to zero.
     """
-    failure_code: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType
+    failure_code: (
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType
+    )
     """Return the specified failure code in case the resolve action is Fail. The
     message data fields are populated automatically.
 
@@ -1536,8 +1962,25 @@ class ForwardHtlcInterceptResponse(google.protobuf.message.Message):
         failure_message: builtins.bytes = ...,
         failure_code: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["incoming_circuit_key", b"incoming_circuit_key"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["action", b"action", "failure_code", b"failure_code", "failure_message", b"failure_message", "incoming_circuit_key", b"incoming_circuit_key", "preimage", b"preimage"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal["incoming_circuit_key", b"incoming_circuit_key"],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "action",
+            b"action",
+            "failure_code",
+            b"failure_code",
+            "failure_message",
+            b"failure_message",
+            "incoming_circuit_key",
+            b"incoming_circuit_key",
+            "preimage",
+            b"preimage",
+        ],
+    ) -> None: ...
 
 global___ForwardHtlcInterceptResponse = ForwardHtlcInterceptResponse
 
@@ -1549,15 +1992,23 @@ class UpdateChanStatusRequest(google.protobuf.message.Message):
     ACTION_FIELD_NUMBER: builtins.int
     action: global___ChanStatusAction.ValueType
     @property
-    def chan_point(self) -> cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint: ...
+    def chan_point(
+        self,
+    ) -> cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint: ...
     def __init__(
         self,
         *,
-        chan_point: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint | None = ...,
+        chan_point: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint
+        | None = ...,
         action: global___ChanStatusAction.ValueType = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["chan_point", b"chan_point"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["action", b"action", "chan_point", b"chan_point"]) -> None: ...
+    def HasField(
+        self, field_name: typing.Literal["chan_point", b"chan_point"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["action", b"action", "chan_point", b"chan_point"],
+    ) -> None: ...
 
 global___UpdateChanStatusRequest = UpdateChanStatusRequest
 

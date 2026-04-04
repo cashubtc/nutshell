@@ -220,7 +220,9 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert melt_quote.fee_reserve == 0
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
+        "melt quote should not be paid"
+    )
 
     # let's first try to melt without enough funds
     send_proofs, fees = await wallet1.select_to_send(wallet1.proofs, 64)
@@ -240,7 +242,9 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
+        "melt quote should be paid"
+    )
 
 
 @pytest.mark.asyncio
@@ -268,10 +272,14 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     )
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
+        "melt quote should not be paid"
+    )
 
     assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
+        "melt quote should be paid"
+    )

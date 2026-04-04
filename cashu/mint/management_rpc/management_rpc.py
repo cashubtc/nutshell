@@ -1,4 +1,3 @@
-
 import os
 
 import grpc
@@ -17,7 +16,6 @@ from ..ledger import Ledger
 
 
 class MintManagementRPC(management_pb2_grpc.MintServicer):
-
     def __init__(self, ledger: Ledger):
         self.ledger = ledger
         super().__init__()
@@ -30,7 +28,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         del mint_info_dict["description_long"]
         response = management_pb2.GetInfoResponse(**mint_info_dict)
         return response
-    
+
     async def UpdateMotd(self, request, _):
         logger.debug("gRPC UpdateMotd has been called")
         settings.mint_info_motd = request.motd
@@ -93,14 +91,14 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def UpdateNut04(self, request, context):
         """Cannot implement this yet"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
     async def UpdateNut05(self, request, context):
         """Cannot implement this yet"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
 
     async def UpdateQuoteTtl(self, request, context):
         logger.debug("gRPC UpdateQuoteTtl has been called")
@@ -111,7 +109,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No quote ttl was specified")
         return management_pb2.UpdateResponse()
-    
+
     async def GetQuoteTtl(self, request, context):
         logger.debug(
             f"gRPC GetQuoteTtl has been called for quote_id: {request.quote_id}"
@@ -136,14 +134,13 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         )
         raise Exception("Quote not found or has no expiry")
 
-
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
         mint_quote_dict = mint_quote.dict()
-        mint_quote_dict['state'] = str(mint_quote_dict['state'])
-        del mint_quote_dict['mint'] # unused
-        del mint_quote_dict['privkey'] # unused
+        mint_quote_dict["state"] = str(mint_quote_dict["state"])
+        del mint_quote_dict["mint"]  # unused
+        del mint_quote_dict["privkey"]  # unused
         return management_pb2.GetNut04QuoteResponse(
             quote=management_pb2.Nut04Quote(**mint_quote_dict)
         )
@@ -158,8 +155,8 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
         melt_quote_dict = melt_quote.dict()
-        melt_quote_dict['state'] = str(melt_quote_dict['state'])
-        del melt_quote_dict['mint']
+        melt_quote_dict["state"] = str(melt_quote_dict["state"])
+        del melt_quote_dict["mint"]
         return management_pb2.GetNut05QuoteResponse(
             quote=management_pb2.Nut05Quote(**melt_quote_dict)
         )
@@ -176,17 +173,21 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         # it influences the keyset ID and -in turn- the Mint behaviour when activating keysets
         # upon a restar (it will activate a new keyset with the standard max order)
         if request.max_order:
-            logger.warning(f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted.")
+            logger.warning(
+                f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted."
+            )
         logger.debug(f"{request.final_expiry = }")
         new_keyset = await self.ledger.rotate_next_keyset(
             Unit[request.unit],
             input_fee_ppk=request.input_fee_ppk,
-            final_expiry=request.final_expiry
+            final_expiry=request.final_expiry,
         )
         return management_pb2.RotateNextKeysetResponse(
             id=new_keyset.id,
             unit=str(new_keyset.unit),
-            max_order=new_keyset.amounts[-1].bit_length(), # Neat trick to get log_2(last_amount) + 1
+            max_order=new_keyset.amounts[
+                -1
+            ].bit_length(),  # Neat trick to get log_2(last_amount) + 1
             input_fee_ppk=new_keyset.input_fee_ppk,
             final_expiry=new_keyset.final_expiry,
         )
@@ -200,22 +201,27 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No fee specified")
         return management_pb2.UpdateResponse()
-    
+
     async def UpdateAuthLimits(self, request, _):
         logger.debug("gRPC UpdateAuthLimits has been called")
         if request.auth_rate_limit_per_minute:
-            settings.mint_auth_rate_limit_per_minute = request.auth_rate_limit_per_minute
+            settings.mint_auth_rate_limit_per_minute = (
+                request.auth_rate_limit_per_minute
+            )
         elif request.auth_max_blind_tokens:
             settings.mint_auth_max_blind_tokens = request.auth_max_blind_tokens
         else:
             raise Exception("No auth limit was specified")
         return management_pb2.UpdateResponse()
 
+
 async def serve(ledger: Ledger):
     host = settings.mint_rpc_server_addr
     port = settings.mint_rpc_server_port
     server = grpc.aio.server()
-    management_pb2_grpc.add_MintServicer_to_server(MintManagementRPC(ledger=ledger), server)
+    management_pb2_grpc.add_MintServicer_to_server(
+        MintManagementRPC(ledger=ledger), server
+    )
 
     if settings.mint_rpc_server_mutual_tls:
         # Verify the existence of the required paths
@@ -223,7 +229,10 @@ async def serve(ledger: Ledger):
         mint_rpc_ca_path = settings.mint_rpc_server_ca
         mint_rpc_cert_path = settings.mint_rpc_server_cert
 
-        if not all(os.path.exists(path) if path else False for path in [mint_rpc_key_path, mint_rpc_ca_path, mint_rpc_cert_path]):
+        if not all(
+            os.path.exists(path) if path else False
+            for path in [mint_rpc_key_path, mint_rpc_ca_path, mint_rpc_cert_path]
+        ):
             logger.error("One or more required files for mTLS are missing:")
             if not mint_rpc_key_path or not os.path.exists(mint_rpc_key_path):
                 logger.error(f"Missing key file: {mint_rpc_key_path}")
@@ -231,22 +240,34 @@ async def serve(ledger: Ledger):
                 logger.error(f"Missing CA file: {mint_rpc_ca_path}")
             if not mint_rpc_cert_path or not os.path.exists(mint_rpc_cert_path):
                 logger.error(f"Missing cert file: {mint_rpc_cert_path}")
-            raise FileNotFoundError("Required mTLS files are missing. Please check the paths.")
+            raise FileNotFoundError(
+                "Required mTLS files are missing. Please check the paths."
+            )
+
+        assert mint_rpc_key_path is not None
+        assert mint_rpc_ca_path is not None
+        assert mint_rpc_cert_path is not None
 
         logger.info(f"Starting mTLS Management RPC service on {host}:{port}")
         # Load server credentials
         server_credentials = grpc.ssl_server_credentials(
-            ((open(mint_rpc_key_path, 'rb').read(), open(mint_rpc_cert_path, 'rb').read()),), # type: ignore
-            root_certificates=open(mint_rpc_ca_path, 'rb').read(), # type: ignore
+            (
+                (
+                    open(mint_rpc_key_path, "rb").read(),
+                    open(mint_rpc_cert_path, "rb").read(),
+                ),
+            ),  # type: ignore
+            root_certificates=open(mint_rpc_ca_path, "rb").read(),  # type: ignore
             require_client_auth=True,
         )
         server.add_secure_port(f"{host}:{port}", server_credentials)
     else:
         logger.info(f"Starting INSECURE Management RPC service on {host}:{port}")
         server.add_insecure_port(f"{host}:{port}")
-    
+
     await server.start()
     return server
+
 
 async def shutdown(server: grpc.aio.Server):
     logger.info("Shutting down management RPC gracefully...")

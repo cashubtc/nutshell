@@ -112,18 +112,18 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         """
         Determinstically generates two secrets (one as the secret message,
         one as the blinding factor) using versioned derivation.
-        
+
         NUT-13: Uses keyset version to determine derivation method:
         - Version "base64" (ancient, pre-0.15.0): BIP32 derivation
-        - Version "00" (legacy): BIP32 derivation 
+        - Version "00" (legacy): BIP32 derivation
         - Version "01" (v2): HMAC-SHA256 derivation
         """
         keyset_id = keyset_id or self.keyset_id
-        
+
         # Get keyset version to determine derivation method
         version = get_keyset_id_version(keyset_id)
         logger.trace(f"Keyset {keyset_id} version: {version}")
-        
+
         if version == "base64" or version == "00":
             # BIP32 derivation for base64 (ancient) and version 00 keysets
             return await self._derive_secret_bip32(counter, keyset_id)
@@ -141,7 +141,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         Used for keyset version "00".
         """
         assert self.bip32, "BIP32 not initialized yet."
-        
+
         # integer keyset id modulo max number of bip32 child keys
         try:
             keyest_id_int = int.from_bytes(bytes.fromhex(keyset_id), "big") % (
@@ -222,9 +222,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             # secrets are supplied as str
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
-            rs = [
-                PrivateKey(s[1]) for s in secrets_rs_derivationpaths
-            ]
+            rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
 
@@ -246,9 +244,9 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         Raises:
             ValueError: If `from_counter` is larger than `to_counter`
         """
-        assert (
-            from_counter <= to_counter
-        ), "from_counter must be smaller than to_counter"
+        assert from_counter <= to_counter, (
+            "from_counter must be smaller than to_counter"
+        )
         secret_counters = [c for c in range(from_counter, to_counter + 1)]
         secrets_rs_derivationpaths = [
             await self.generate_determinstic_secret(s, keyset_id)

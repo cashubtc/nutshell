@@ -14,12 +14,14 @@ def test_decode_lnurl():
     # Test invalid LNURL
     assert decode_lnurl("invalid") is None
 
+
 def test_resolve_lightning_address():
     address = "user@domain.com"
     url = resolve_lightning_address(address)
     assert url == "https://domain.com/.well-known/lnurlp/user"
 
     assert resolve_lightning_address("invalid") is None
+
 
 @pytest.mark.asyncio
 async def test_handle_lnurl_success_with_amount():
@@ -29,7 +31,7 @@ async def test_handle_lnurl_success_with_amount():
 
     with patch("cashu.wallet.lnurl.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         # Mock initial LNURL request
         mock_response_1 = MagicMock()
         mock_response_1.json.return_value = {
@@ -37,22 +39,20 @@ async def test_handle_lnurl_success_with_amount():
             "callback": callback_url,
             "minSendable": 1000,
             "maxSendable": 10000000,
-            "metadata": "[[\"text/plain\", \"Description\"]]"
+            "metadata": '[["text/plain", "Description"]]',
         }
         mock_response_1.status_code = 200
 
         # Mock callback request
         mock_response_2 = MagicMock()
-        mock_response_2.json.return_value = {
-            "pr": "lnbc1...",
-            "status": "OK"
-        }
+        mock_response_2.json.return_value = {"pr": "lnbc1...", "status": "OK"}
         mock_response_2.status_code = 200
 
         mock_instance.get.side_effect = [mock_response_1, mock_response_2]
 
         invoice = await handle_lnurl(lnurl, amount)
         assert invoice == "lnbc1..."
+
 
 @pytest.mark.asyncio
 async def test_handle_lnurl_interactive_amount():
@@ -61,22 +61,19 @@ async def test_handle_lnurl_interactive_amount():
 
     with patch("cashu.wallet.lnurl.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         mock_response_1 = MagicMock()
         mock_response_1.json.return_value = {
             "tag": "payRequest",
             "callback": callback_url,
-            "minSendable": 1000, # 1 sat
+            "minSendable": 1000,  # 1 sat
             "maxSendable": 10000000,
-            "metadata": "[[\"text/plain\", \"Description\"]]"
+            "metadata": '[["text/plain", "Description"]]',
         }
         mock_response_1.status_code = 200
 
         mock_response_2 = MagicMock()
-        mock_response_2.json.return_value = {
-            "pr": "lnbc1...",
-            "status": "OK"
-        }
+        mock_response_2.json.return_value = {"pr": "lnbc1...", "status": "OK"}
         mock_response_2.status_code = 200
 
         mock_instance.get.side_effect = [mock_response_1, mock_response_2]
@@ -86,27 +83,29 @@ async def test_handle_lnurl_interactive_amount():
             invoice = await handle_lnurl(lnurl, None)
             assert invoice == "lnbc1..."
 
+
 @pytest.mark.asyncio
 async def test_handle_lnurl_amount_out_of_range():
     lnurl = "user@domain.com"
-    amount = 1 # 1 sat = 1000 msat
+    amount = 1  # 1 sat = 1000 msat
 
     with patch("cashu.wallet.lnurl.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "tag": "payRequest",
             "callback": "https://callback",
-            "minSendable": 2000, # Min 2 sats
+            "minSendable": 2000,  # Min 2 sats
             "maxSendable": 10000000,
-            "metadata": "[]"
+            "metadata": "[]",
         }
         mock_response.status_code = 200
         mock_instance.get.return_value = mock_response
 
         invoice = await handle_lnurl(lnurl, amount)
         assert invoice is None
+
 
 @pytest.mark.asyncio
 async def test_handle_lnurl_network_error():

@@ -84,7 +84,7 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     assert wallet.balance == 64
 
 
-'''
+"""
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger):
@@ -147,7 +147,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     await asyncio.sleep(2)
 
     assert wallet.balance <= 384 - 64
-'''
+"""
 
 
 @pytest.mark.asyncio

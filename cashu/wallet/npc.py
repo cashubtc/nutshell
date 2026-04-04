@@ -13,9 +13,10 @@ from cashu.wallet.wallet import Wallet
 # Constant holding the npub cash hostname
 NPUB_CASH = settings.npub_cash_hostname
 
+
 class NpubCash:
     """Client for npub.cash API"""
-    
+
     API_URL = f"https://{NPUB_CASH}/api/v2"
     LNURL_BASE = f"https://{NPUB_CASH}/.well-known/lnurlp"
 
@@ -30,23 +31,27 @@ class NpubCash:
     def _derive_keys(self):
         """Derives Nostr keys from wallet seed."""
         if not self.wallet.seed:
-             raise ValueError("Wallet seed not initialized")
+            raise ValueError("Wallet seed not initialized")
         self.privkey_hex, self.pubkey_hex = derive_nostr_keypair(self.wallet.seed)
         assert self.pubkey_hex
         self.npub = get_npub(self.pubkey_hex)
 
-    async def _request(self, method: str, path: str, body: Optional[Dict] = None, auth: bool = True) -> Any:
+    async def _request(
+        self, method: str, path: str, body: Optional[Dict] = None, auth: bool = True
+    ) -> Any:
         """Executes an HTTP request with optional NIP-98 authentication."""
         url = f"{self.API_URL}{path}"
         headers: Dict[str, str] = {}
-        
+
         if auth:
             if not self.privkey_hex:
-                 self._derive_keys()
+                self._derive_keys()
             if not self.privkey_hex:
-                 raise ValueError("Private key not initialized. Cannot authenticate.")
-            headers["Authorization"] = create_nip98_header(url, method, self.privkey_hex, body)
-            
+                raise ValueError("Private key not initialized. Cannot authenticate.")
+            headers["Authorization"] = create_nip98_header(
+                url, method, self.privkey_hex, body
+            )
+
         async with httpx.AsyncClient() as client:
             try:
                 if method == "GET":
@@ -57,13 +62,13 @@ class NpubCash:
                     resp = await client.patch(url, headers=headers, json=body)
                 else:
                     raise ValueError(f"Unsupported method: {method}")
-                
+
                 resp.raise_for_status()
                 data = resp.json()
-                
+
                 if data.get("error"):
                     raise Exception(data.get("message", "Unknown error"))
-                    
+
                 return data.get("data", {})
             except httpx.HTTPStatusError as e:
                 try:
@@ -94,7 +99,7 @@ class NpubCash:
             data = await self._request("GET", "/user/info")
             user = data.get("user", {})
             if user.get("mintUrl"):
-                 raise Exception(f"LNURL already created: {self.npub}@{NPUB_CASH}")
+                raise Exception(f"LNURL already created: {self.npub}@{NPUB_CASH}")
         except Exception as e:
             if "LNURL already created" in str(e):
                 raise e
@@ -104,21 +109,21 @@ class NpubCash:
 
         mint_to_use = mint_url or self.wallet.url
         if not mint_to_use:
-             raise ValueError("No mint URL provided or found in wallet")
+            raise ValueError("No mint URL provided or found in wallet")
 
         # Use PATCH /api/v2/user/mint with mint_url body
         await self._request("PATCH", "/user/mint", body={"mint_url": mint_to_use})
-        
+
         return await self.get_lnurl()
 
     async def update_mint_url(self, mint_url: Optional[str] = None) -> str:
         """Updates the mint URL for the LNURL."""
         if not self.npub:
             self._derive_keys()
-            
+
         mint_to_use = mint_url or self.wallet.url
         if not mint_to_use:
-             raise ValueError("No mint URL provided or found in wallet")
+            raise ValueError("No mint URL provided or found in wallet")
 
         await self._request("PATCH", "/user/mint", body={"mint_url": mint_to_use})
         return await self.get_lnurl()
@@ -127,7 +132,7 @@ class NpubCash:
         """Fetches all paid quotes from the API."""
         if not self.privkey_hex:
             self._derive_keys()
-        
+
         try:
             data = await self._request("GET", "/wallet/quotes")
             # API v2 returns data object containing 'quotes' list
@@ -147,11 +152,11 @@ class NpubCash:
         Returns a list of minted proofs.
         """
         if not self.wallet.url:
-             raise ValueError("Wallet mint URL not set")
-             
+            raise ValueError("Wallet mint URL not set")
+
         quotes = await self.check_quotes()
         minted_proofs = []
-        
+
         for quote_dict in quotes:
             # quote['mintUrl'] contains the mint URL used for this quote
             quote_mint = quote_dict.get("mintUrl") or quote_dict.get("mint")
@@ -159,15 +164,17 @@ class NpubCash:
                 continue
 
             if quote_mint.rstrip("/") != self.wallet.url.rstrip("/"):
-                print(f"Skipping quote {quote_dict.get('id', 'unknown')} from different mint: {quote_mint} (Wallet: {self.wallet.url})")
+                print(
+                    f"Skipping quote {quote_dict.get('id', 'unknown')} from different mint: {quote_mint} (Wallet: {self.wallet.url})"
+                )
                 continue
-            
+
             quote_id = quote_dict.get("quoteId") or quote_dict.get("id")
             amount = quote_dict.get("amount")
-            
+
             if not quote_id or not amount:
                 continue
-                
+
             try:
                 # Mint tokens
                 # For v2, we are minting the quote ID that NPC created.
@@ -188,8 +195,12 @@ class NpubCash:
                 minted_proofs.extend(proofs)
             except Exception as e:
                 # If the mint returns an error that the quote is already issued, we assume it is issued
-                if "Code: 11000" in str(e) or (isinstance(e, CashuError) and e.code == 11000):
-                    print(f"Quote {quote_id} already issued (mint). Updating local state.")
+                if "Code: 11000" in str(e) or (
+                    isinstance(e, CashuError) and e.code == 11000
+                ):
+                    print(
+                        f"Quote {quote_id} already issued (mint). Updating local state."
+                    )
                     await update_bolt11_mint_quote(
                         db=self.wallet.db,
                         quote=quote_id,
@@ -199,5 +210,5 @@ class NpubCash:
                     continue
                 print(f"Failed to mint quote {quote_id}: {e}")
                 pass
-                
+
         return minted_proofs
