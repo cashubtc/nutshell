@@ -7,9 +7,12 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
       - id: check-docstring-first
+        # Large commented-out tests use triple-quoted blocks; hook treats them as misplaced docstrings.
+        exclude: ^tests/wallet/test_wallet_regtest_mpp\.py$
       - id: check-json
       - id: debug-statements
       - id: mixed-line-ending
+        args: [--fix=lf]
       - id: check-case-conflict
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.4
@@ -21,8 +24,11 @@ repos:
     rev: v1.19.1
     hooks:
       - id: mypy
+        # Match `.github/workflows/checks.yml`: only type-check package code, not tests.
+        pass_filenames: false
         args:
           - --ignore-missing
           - --check-untyped-defs
+          - cashu
         additional_dependencies:
           - types-redis

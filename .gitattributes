@@ -1,0 +1,2 @@
+# Repository line endings: LF everywhere (see .editorconfig and pre-commit mixed-line-ending).
+* text=auto eol=lf
