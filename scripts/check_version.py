@@ -13,11 +13,12 @@ def get_nutshell_version():
     except FileNotFoundError:
         print(f"File not found: {settings_path}")
         sys.exit(1)
-        
+
     match = re.search(r'VERSION = "(.*?)"', content)
     if match:
         return match.group(1)
     raise ValueError("Could not find VERSION in cashu/core/settings.py")
+
 
 def get_pyproject_version():
     pyproject_path = Path("pyproject.toml")
@@ -34,6 +35,7 @@ def get_pyproject_version():
         print(f"version not found inside {pyproject_path}")
         sys.exit(1)
 
+
 def get_setuptools_version():
     setup_path = Path("setup.py")
     try:
@@ -47,9 +49,12 @@ def get_setuptools_version():
         return match.group(1)
     raise ValueError("Could not find version in setup.py")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Verify versions match the tag.")
-    parser.add_argument("tag_version", help="The version from the git tag (e.g. v0.1.0)")
+    parser.add_argument(
+        "tag_version", help="The version from the git tag (e.g. v0.1.0)"
+    )
     args = parser.parse_args()
 
     tag_version = args.tag_version
@@ -72,18 +77,25 @@ def main():
 
     errors = []
     if tag_version != nutshell_version:
-        errors.append(f"Tag version {tag_version} does not match Nutshell version {nutshell_version}")
+        errors.append(
+            f"Tag version {tag_version} does not match Nutshell version {nutshell_version}"
+        )
     if tag_version != pyproject_version:
-        errors.append(f"Tag version {tag_version} does not match Pyproject version {pyproject_version}")
+        errors.append(
+            f"Tag version {tag_version} does not match Pyproject version {pyproject_version}"
+        )
     if tag_version != setuptools_version:
-        errors.append(f"Tag version {tag_version} does not match Setuptools version {setuptools_version}")
+        errors.append(
+            f"Tag version {tag_version} does not match Setuptools version {setuptools_version}"
+        )
 
     if errors:
         for error in errors:
             print(f"ERROR: {error}")
         sys.exit(1)
-    
+
     print("All versions match!")
+
 
 if __name__ == "__main__":
     main()

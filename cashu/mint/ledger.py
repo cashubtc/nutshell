@@ -217,7 +217,6 @@ class Ledger(
     # ------- ECASH -------
 
     async def _generate_change_promises(
-
         self,
         fee_provided: int,
         fee_paid: int,
@@ -723,11 +722,13 @@ class Ledger(
                 for keyset_id, keyset_proofs in proofs_by_keyset.items():
                     keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
 
-                melt_quote = await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
-                    quote=melt_quote,
-                    proofs=pending_proofs,
-                    keysets=self.keysets,
-                    keyset_fees=keyset_fees,
+                melt_quote = (
+                    await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
+                        quote=melt_quote,
+                        proofs=pending_proofs,
+                        keysets=self.keysets,
+                        keyset_fees=keyset_fees,
+                    )
                 )
 
             if status.failed or (rollback_unknown and status.unknown):
@@ -741,7 +742,6 @@ class Ledger(
                     keysets=self.keysets,
                     state=MeltQuoteState.unpaid,
                 )
-
 
         return melt_quote
 
@@ -1020,7 +1020,6 @@ class Ledger(
         )
 
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
-
 
     async def swap(
         self,

@@ -346,9 +346,9 @@ async def pay(
                 print(f"Sending token via POST to {url}...", end="", flush=True)
 
                 token_obj = deserialize_token_from_string(token)
-                assert isinstance(
-                    token_obj, TokenV4
-                ), "Only TokenV4 supported for POST transport"
+                assert isinstance(token_obj, TokenV4), (
+                    "Only TokenV4 supported for POST transport"
+                )
 
                 proofs = token_obj.proofs
 
@@ -706,7 +706,7 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i + 1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -718,7 +718,7 @@ async def balance(ctx: Context, verbose):
                 unit = Unit[str(v["unit"])]
                 print(
                     f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
-                    f" {unit.str(int(v['balance'])-int(v['available']))})"
+                    f" {unit.str(int(v['balance']) - int(v['available']))})"
                 )
             print("")
 
@@ -727,7 +727,7 @@ async def balance(ctx: Context, verbose):
     if verbose:
         print(
             f"Balance: {wallet.available_balance} (pending:"
-            f" {wallet.balance-wallet.available_balance}) in"
+            f" {wallet.balance - wallet.available_balance}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:

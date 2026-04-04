@@ -43,7 +43,9 @@ class InfoContact(google.protobuf.message.Message):
         method: builtins.str = ...,
         info: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["info", b"info", "method", b"method"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["info", b"info", "method", b"method"]
+    ) -> None: ...
 
 global___InfoContact = InfoContact
 
@@ -83,11 +85,17 @@ class GetInfoResponse(google.protobuf.message.Message):
     tos_url: builtins.str
     """The URL to the mint's Terms of Service."""
     @property
-    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___InfoContact]:
+    def contact(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___InfoContact
+    ]:
         """A list of contact methods for the mint."""
 
     @property
-    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+    def urls(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """A list of URLs associated with the mint."""
 
     def __init__(
@@ -105,26 +113,128 @@ class GetInfoResponse(google.protobuf.message.Message):
         time: builtins.int | None = ...,
         tos_url: builtins.str | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_description", b"_description", "_icon_url", b"_icon_url", "_long_description", b"_long_description", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "description", b"description", "icon_url", b"icon_url", "long_description", b"long_description", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "version", b"version"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_icon_url", b"_icon_url", "_long_description", b"_long_description", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "contact", b"contact", "description", b"description", "icon_url", b"icon_url", "long_description", b"long_description", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "urls", b"urls", "version", b"version"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_description",
+            b"_description",
+            "_icon_url",
+            b"_icon_url",
+            "_long_description",
+            b"_long_description",
+            "_motd",
+            b"_motd",
+            "_name",
+            b"_name",
+            "_pubkey",
+            b"_pubkey",
+            "_time",
+            b"_time",
+            "_tos_url",
+            b"_tos_url",
+            "_version",
+            b"_version",
+            "description",
+            b"description",
+            "icon_url",
+            b"icon_url",
+            "long_description",
+            b"long_description",
+            "motd",
+            b"motd",
+            "name",
+            b"name",
+            "pubkey",
+            b"pubkey",
+            "time",
+            b"time",
+            "tos_url",
+            b"tos_url",
+            "version",
+            b"version",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_description",
+            b"_description",
+            "_icon_url",
+            b"_icon_url",
+            "_long_description",
+            b"_long_description",
+            "_motd",
+            b"_motd",
+            "_name",
+            b"_name",
+            "_pubkey",
+            b"_pubkey",
+            "_time",
+            b"_time",
+            "_tos_url",
+            b"_tos_url",
+            "_version",
+            b"_version",
+            "contact",
+            b"contact",
+            "description",
+            b"description",
+            "icon_url",
+            b"icon_url",
+            "long_description",
+            b"long_description",
+            "motd",
+            b"motd",
+            "name",
+            b"name",
+            "pubkey",
+            b"pubkey",
+            "time",
+            b"time",
+            "tos_url",
+            b"tos_url",
+            "urls",
+            b"urls",
+            "version",
+            b"version",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_description", b"_description"]) -> typing.Literal["description"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_description", b"_description"]
+    ) -> typing.Literal["description"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_icon_url", b"_icon_url"]) -> typing.Literal["icon_url"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_icon_url", b"_icon_url"]
+    ) -> typing.Literal["icon_url"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_long_description", b"_long_description"]) -> typing.Literal["long_description"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_long_description", b"_long_description"]
+    ) -> typing.Literal["long_description"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_motd", b"_motd"]) -> typing.Literal["motd"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_motd", b"_motd"]
+    ) -> typing.Literal["motd"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_name", b"_name"]) -> typing.Literal["name"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_name", b"_name"]
+    ) -> typing.Literal["name"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]) -> typing.Literal["pubkey"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]
+    ) -> typing.Literal["pubkey"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_time", b"_time"]) -> typing.Literal["time"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_time", b"_time"]
+    ) -> typing.Literal["time"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_tos_url", b"_tos_url"]) -> typing.Literal["tos_url"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_tos_url", b"_tos_url"]
+    ) -> typing.Literal["tos_url"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_version", b"_version"]) -> typing.Literal["version"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_version", b"_version"]
+    ) -> typing.Literal["version"] | None: ...
 
 global___GetInfoResponse = GetInfoResponse
 
@@ -172,7 +282,9 @@ class UpdateDescriptionRequest(google.protobuf.message.Message):
         *,
         description: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["description", b"description"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["description", b"description"]
+    ) -> None: ...
 
 global___UpdateDescriptionRequest = UpdateDescriptionRequest
 
@@ -190,7 +302,9 @@ class UpdateIconUrlRequest(google.protobuf.message.Message):
         *,
         icon_url: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["icon_url", b"icon_url"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["icon_url", b"icon_url"]
+    ) -> None: ...
 
 global___UpdateIconUrlRequest = UpdateIconUrlRequest
 
@@ -248,7 +362,9 @@ class UpdateContactRequest(google.protobuf.message.Message):
         method: builtins.str = ...,
         info: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["info", b"info", "method", b"method"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["info", b"info", "method", b"method"]
+    ) -> None: ...
 
 global___UpdateContactRequest = UpdateContactRequest
 
@@ -268,7 +384,9 @@ class MintMethodOptions(google.protobuf.message.Message):
         *,
         description: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["description", b"description"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["description", b"description"]
+    ) -> None: ...
 
 global___MintMethodOptions = MintMethodOptions
 
@@ -308,16 +426,68 @@ class UpdateNut04Request(google.protobuf.message.Message):
         max_amount: builtins.int | None = ...,
         options: global___MintMethodOptions | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "min_amount", b"min_amount", "options", b"options"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "method", b"method", "min_amount", b"min_amount", "options", b"options", "unit", b"unit"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_disabled",
+            b"_disabled",
+            "_max_amount",
+            b"_max_amount",
+            "_min_amount",
+            b"_min_amount",
+            "_options",
+            b"_options",
+            "disabled",
+            b"disabled",
+            "max_amount",
+            b"max_amount",
+            "min_amount",
+            b"min_amount",
+            "options",
+            b"options",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_disabled",
+            b"_disabled",
+            "_max_amount",
+            b"_max_amount",
+            "_min_amount",
+            b"_min_amount",
+            "_options",
+            b"_options",
+            "disabled",
+            b"disabled",
+            "max_amount",
+            b"max_amount",
+            "method",
+            b"method",
+            "min_amount",
+            b"min_amount",
+            "options",
+            b"options",
+            "unit",
+            b"unit",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_disabled", b"_disabled"]) -> typing.Literal["disabled"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_disabled", b"_disabled"]
+    ) -> typing.Literal["disabled"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_max_amount", b"_max_amount"]) -> typing.Literal["max_amount"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_max_amount", b"_max_amount"]
+    ) -> typing.Literal["max_amount"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_min_amount", b"_min_amount"]) -> typing.Literal["min_amount"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_min_amount", b"_min_amount"]
+    ) -> typing.Literal["min_amount"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_options", b"_options"]) -> typing.Literal["options"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_options", b"_options"]
+    ) -> typing.Literal["options"] | None: ...
 
 global___UpdateNut04Request = UpdateNut04Request
 
@@ -337,7 +507,9 @@ class MeltMethodOptions(google.protobuf.message.Message):
         *,
         amountless: builtins.bool = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["amountless", b"amountless"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["amountless", b"amountless"]
+    ) -> None: ...
 
 global___MeltMethodOptions = MeltMethodOptions
 
@@ -377,16 +549,68 @@ class UpdateNut05Request(google.protobuf.message.Message):
         max_amount: builtins.int | None = ...,
         options: global___MeltMethodOptions | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "min_amount", b"min_amount", "options", b"options"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "method", b"method", "min_amount", b"min_amount", "options", b"options", "unit", b"unit"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_disabled",
+            b"_disabled",
+            "_max_amount",
+            b"_max_amount",
+            "_min_amount",
+            b"_min_amount",
+            "_options",
+            b"_options",
+            "disabled",
+            b"disabled",
+            "max_amount",
+            b"max_amount",
+            "min_amount",
+            b"min_amount",
+            "options",
+            b"options",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_disabled",
+            b"_disabled",
+            "_max_amount",
+            b"_max_amount",
+            "_min_amount",
+            b"_min_amount",
+            "_options",
+            b"_options",
+            "disabled",
+            b"disabled",
+            "max_amount",
+            b"max_amount",
+            "method",
+            b"method",
+            "min_amount",
+            b"min_amount",
+            "options",
+            b"options",
+            "unit",
+            b"unit",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_disabled", b"_disabled"]) -> typing.Literal["disabled"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_disabled", b"_disabled"]
+    ) -> typing.Literal["disabled"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_max_amount", b"_max_amount"]) -> typing.Literal["max_amount"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_max_amount", b"_max_amount"]
+    ) -> typing.Literal["max_amount"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_min_amount", b"_min_amount"]) -> typing.Literal["min_amount"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_min_amount", b"_min_amount"]
+    ) -> typing.Literal["min_amount"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_options", b"_options"]) -> typing.Literal["options"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_options", b"_options"]
+    ) -> typing.Literal["options"] | None: ...
 
 global___UpdateNut05Request = UpdateNut05Request
 
@@ -408,12 +632,40 @@ class UpdateQuoteTtlRequest(google.protobuf.message.Message):
         mint_ttl: builtins.int | None = ...,
         melt_ttl: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_melt_ttl", b"_melt_ttl", "_mint_ttl", b"_mint_ttl", "melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_melt_ttl", b"_melt_ttl", "_mint_ttl", b"_mint_ttl", "melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_melt_ttl",
+            b"_melt_ttl",
+            "_mint_ttl",
+            b"_mint_ttl",
+            "melt_ttl",
+            b"melt_ttl",
+            "mint_ttl",
+            b"mint_ttl",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_melt_ttl",
+            b"_melt_ttl",
+            "_mint_ttl",
+            b"_mint_ttl",
+            "melt_ttl",
+            b"melt_ttl",
+            "mint_ttl",
+            b"mint_ttl",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_melt_ttl", b"_melt_ttl"]) -> typing.Literal["melt_ttl"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_melt_ttl", b"_melt_ttl"]
+    ) -> typing.Literal["melt_ttl"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_mint_ttl", b"_mint_ttl"]) -> typing.Literal["mint_ttl"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_mint_ttl", b"_mint_ttl"]
+    ) -> typing.Literal["mint_ttl"] | None: ...
 
 global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
 
@@ -431,7 +683,9 @@ class GetQuoteTtlRequest(google.protobuf.message.Message):
         *,
         quote_id: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["quote_id", b"quote_id"]
+    ) -> None: ...
 
 global___GetQuoteTtlRequest = GetQuoteTtlRequest
 
@@ -507,18 +761,88 @@ class Nut04Quote(google.protobuf.message.Message):
         expiry: builtins.int | None = ...,
         pubkey: builtins.str | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "pubkey", b"pubkey", "state", b"state"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "amount", b"amount", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "method", b"method", "paid_time", b"paid_time", "pubkey", b"pubkey", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_created_time",
+            b"_created_time",
+            "_expiry",
+            b"_expiry",
+            "_paid_time",
+            b"_paid_time",
+            "_pubkey",
+            b"_pubkey",
+            "_state",
+            b"_state",
+            "created_time",
+            b"created_time",
+            "expiry",
+            b"expiry",
+            "paid_time",
+            b"paid_time",
+            "pubkey",
+            b"pubkey",
+            "state",
+            b"state",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_created_time",
+            b"_created_time",
+            "_expiry",
+            b"_expiry",
+            "_paid_time",
+            b"_paid_time",
+            "_pubkey",
+            b"_pubkey",
+            "_state",
+            b"_state",
+            "amount",
+            b"amount",
+            "checking_id",
+            b"checking_id",
+            "created_time",
+            b"created_time",
+            "expiry",
+            b"expiry",
+            "method",
+            b"method",
+            "paid_time",
+            b"paid_time",
+            "pubkey",
+            b"pubkey",
+            "quote",
+            b"quote",
+            "request",
+            b"request",
+            "state",
+            b"state",
+            "unit",
+            b"unit",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_created_time", b"_created_time"]) -> typing.Literal["created_time"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_created_time", b"_created_time"]
+    ) -> typing.Literal["created_time"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_expiry", b"_expiry"]) -> typing.Literal["expiry"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_expiry", b"_expiry"]
+    ) -> typing.Literal["expiry"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]) -> typing.Literal["paid_time"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]
+    ) -> typing.Literal["paid_time"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]) -> typing.Literal["pubkey"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]
+    ) -> typing.Literal["pubkey"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_state", b"_state"]) -> typing.Literal["state"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_state", b"_state"]
+    ) -> typing.Literal["state"] | None: ...
 
 global___Nut04Quote = Nut04Quote
 
@@ -548,9 +872,27 @@ class BlindedMessage(google.protobuf.message.Message):
         B_: builtins.str = ...,
         witness: builtins.str | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_witness", b"_witness", "witness", b"witness"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["B_", b"B_", "_witness", b"_witness", "amount", b"amount", "id", b"id", "witness", b"witness"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_witness", b"_witness"]) -> typing.Literal["witness"] | None: ...
+    def HasField(
+        self, field_name: typing.Literal["_witness", b"_witness", "witness", b"witness"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "B_",
+            b"B_",
+            "_witness",
+            b"_witness",
+            "amount",
+            b"amount",
+            "id",
+            b"id",
+            "witness",
+            b"witness",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_witness", b"_witness"]
+    ) -> typing.Literal["witness"] | None: ...
 
 global___BlindedMessage = BlindedMessage
 
@@ -604,9 +946,27 @@ class BlindedSignature(google.protobuf.message.Message):
         C_: builtins.str = ...,
         dleq: global___DLEQ | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_dleq", b"_dleq", "dleq", b"dleq"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["C_", b"C_", "_dleq", b"_dleq", "amount", b"amount", "dleq", b"dleq", "id", b"id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_dleq", b"_dleq"]) -> typing.Literal["dleq"] | None: ...
+    def HasField(
+        self, field_name: typing.Literal["_dleq", b"_dleq", "dleq", b"dleq"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "C_",
+            b"C_",
+            "_dleq",
+            b"_dleq",
+            "amount",
+            b"amount",
+            "dleq",
+            b"dleq",
+            "id",
+            b"id",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_dleq", b"_dleq"]
+    ) -> typing.Literal["dleq"] | None: ...
 
 global___BlindedSignature = BlindedSignature
 
@@ -658,11 +1018,19 @@ class Nut05Quote(google.protobuf.message.Message):
     expiry: builtins.int
     """Optional: The Unix timestamp when the quote expires."""
     @property
-    def outputs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedMessage]:
+    def outputs(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BlindedMessage
+    ]:
         """A list of blinded messages representing the outputs (e.g., change)."""
 
     @property
-    def change(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedSignature]:
+    def change(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___BlindedSignature
+    ]:
         """A list of blinded signatures representing the change."""
 
     def __init__(
@@ -684,16 +1052,86 @@ class Nut05Quote(google.protobuf.message.Message):
         outputs: collections.abc.Iterable[global___BlindedMessage] | None = ...,
         change: collections.abc.Iterable[global___BlindedSignature] | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_payment_preimage", b"_payment_preimage", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "payment_preimage", b"payment_preimage"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_payment_preimage", b"_payment_preimage", "amount", b"amount", "change", b"change", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "fee_paid", b"fee_paid", "fee_reserve", b"fee_reserve", "method", b"method", "outputs", b"outputs", "paid_time", b"paid_time", "payment_preimage", b"payment_preimage", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_created_time",
+            b"_created_time",
+            "_expiry",
+            b"_expiry",
+            "_paid_time",
+            b"_paid_time",
+            "_payment_preimage",
+            b"_payment_preimage",
+            "created_time",
+            b"created_time",
+            "expiry",
+            b"expiry",
+            "paid_time",
+            b"paid_time",
+            "payment_preimage",
+            b"payment_preimage",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_created_time",
+            b"_created_time",
+            "_expiry",
+            b"_expiry",
+            "_paid_time",
+            b"_paid_time",
+            "_payment_preimage",
+            b"_payment_preimage",
+            "amount",
+            b"amount",
+            "change",
+            b"change",
+            "checking_id",
+            b"checking_id",
+            "created_time",
+            b"created_time",
+            "expiry",
+            b"expiry",
+            "fee_paid",
+            b"fee_paid",
+            "fee_reserve",
+            b"fee_reserve",
+            "method",
+            b"method",
+            "outputs",
+            b"outputs",
+            "paid_time",
+            b"paid_time",
+            "payment_preimage",
+            b"payment_preimage",
+            "quote",
+            b"quote",
+            "request",
+            b"request",
+            "state",
+            b"state",
+            "unit",
+            b"unit",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_created_time", b"_created_time"]) -> typing.Literal["created_time"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_created_time", b"_created_time"]
+    ) -> typing.Literal["created_time"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_expiry", b"_expiry"]) -> typing.Literal["expiry"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_expiry", b"_expiry"]
+    ) -> typing.Literal["expiry"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]) -> typing.Literal["paid_time"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]
+    ) -> typing.Literal["paid_time"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_payment_preimage", b"_payment_preimage"]) -> typing.Literal["payment_preimage"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_payment_preimage", b"_payment_preimage"]
+    ) -> typing.Literal["payment_preimage"] | None: ...
 
 global___Nut05Quote = Nut05Quote
 
@@ -711,7 +1149,9 @@ class GetNut04QuoteRequest(google.protobuf.message.Message):
         *,
         quote_id: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["quote_id", b"quote_id"]
+    ) -> None: ...
 
 global___GetNut04QuoteRequest = GetNut04QuoteRequest
 
@@ -731,7 +1171,9 @@ class GetNut04QuoteResponse(google.protobuf.message.Message):
         *,
         quote: global___Nut04Quote | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["quote", b"quote"]) -> builtins.bool: ...
+    def HasField(
+        self, field_name: typing.Literal["quote", b"quote"]
+    ) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["quote", b"quote"]) -> None: ...
 
 global___GetNut04QuoteResponse = GetNut04QuoteResponse
@@ -750,7 +1192,9 @@ class GetNut05QuoteRequest(google.protobuf.message.Message):
         *,
         quote_id: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["quote_id", b"quote_id"]
+    ) -> None: ...
 
 global___GetNut05QuoteRequest = GetNut05QuoteRequest
 
@@ -770,7 +1214,9 @@ class GetNut05QuoteResponse(google.protobuf.message.Message):
         *,
         quote: global___Nut05Quote | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["quote", b"quote"]) -> builtins.bool: ...
+    def HasField(
+        self, field_name: typing.Literal["quote", b"quote"]
+    ) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["quote", b"quote"]) -> None: ...
 
 global___GetNut05QuoteResponse = GetNut05QuoteResponse
@@ -793,7 +1239,9 @@ class UpdateQuoteRequest(google.protobuf.message.Message):
         quote_id: builtins.str = ...,
         state: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id", "state", b"state"]) -> None: ...
+    def ClearField(
+        self, field_name: typing.Literal["quote_id", b"quote_id", "state", b"state"]
+    ) -> None: ...
 
 global___UpdateQuoteRequest = UpdateQuoteRequest
 
@@ -823,14 +1271,54 @@ class RotateNextKeysetRequest(google.protobuf.message.Message):
         input_fee_ppk: builtins.int | None = ...,
         final_expiry: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "final_expiry", b"final_expiry", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "final_expiry", b"final_expiry", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_final_expiry",
+            b"_final_expiry",
+            "_input_fee_ppk",
+            b"_input_fee_ppk",
+            "_max_order",
+            b"_max_order",
+            "final_expiry",
+            b"final_expiry",
+            "input_fee_ppk",
+            b"input_fee_ppk",
+            "max_order",
+            b"max_order",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_final_expiry",
+            b"_final_expiry",
+            "_input_fee_ppk",
+            b"_input_fee_ppk",
+            "_max_order",
+            b"_max_order",
+            "final_expiry",
+            b"final_expiry",
+            "input_fee_ppk",
+            b"input_fee_ppk",
+            "max_order",
+            b"max_order",
+            "unit",
+            b"unit",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]
+    ) -> typing.Literal["final_expiry"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_input_fee_ppk", b"_input_fee_ppk"]) -> typing.Literal["input_fee_ppk"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_input_fee_ppk", b"_input_fee_ppk"]
+    ) -> typing.Literal["input_fee_ppk"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_max_order", b"_max_order"]) -> typing.Literal["max_order"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_max_order", b"_max_order"]
+    ) -> typing.Literal["max_order"] | None: ...
 
 global___RotateNextKeysetRequest = RotateNextKeysetRequest
 
@@ -864,9 +1352,32 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
         input_fee_ppk: builtins.int = ...,
         final_expiry: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry", "id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_final_expiry",
+            b"_final_expiry",
+            "final_expiry",
+            b"final_expiry",
+            "id",
+            b"id",
+            "input_fee_ppk",
+            b"input_fee_ppk",
+            "max_order",
+            b"max_order",
+            "unit",
+            b"unit",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]
+    ) -> typing.Literal["final_expiry"] | None: ...
 
 global___RotateNextKeysetResponse = RotateNextKeysetResponse
 
@@ -888,12 +1399,40 @@ class UpdateLightningFeeRequest(google.protobuf.message.Message):
         fee_percent: builtins.float | None = ...,
         fee_min_reserve: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_fee_min_reserve", b"_fee_min_reserve", "_fee_percent", b"_fee_percent", "fee_min_reserve", b"fee_min_reserve", "fee_percent", b"fee_percent"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_fee_min_reserve", b"_fee_min_reserve", "_fee_percent", b"_fee_percent", "fee_min_reserve", b"fee_min_reserve", "fee_percent", b"fee_percent"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_fee_min_reserve",
+            b"_fee_min_reserve",
+            "_fee_percent",
+            b"_fee_percent",
+            "fee_min_reserve",
+            b"fee_min_reserve",
+            "fee_percent",
+            b"fee_percent",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_fee_min_reserve",
+            b"_fee_min_reserve",
+            "_fee_percent",
+            b"_fee_percent",
+            "fee_min_reserve",
+            b"fee_min_reserve",
+            "fee_percent",
+            b"fee_percent",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_fee_min_reserve", b"_fee_min_reserve"]) -> typing.Literal["fee_min_reserve"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_fee_min_reserve", b"_fee_min_reserve"]
+    ) -> typing.Literal["fee_min_reserve"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_fee_percent", b"_fee_percent"]) -> typing.Literal["fee_percent"] | None: ...
+    def WhichOneof(
+        self, oneof_group: typing.Literal["_fee_percent", b"_fee_percent"]
+    ) -> typing.Literal["fee_percent"] | None: ...
 
 global___UpdateLightningFeeRequest = UpdateLightningFeeRequest
 
@@ -915,11 +1454,45 @@ class UpdateAuthLimitsRequest(google.protobuf.message.Message):
         auth_rate_limit_per_minute: builtins.int | None = ...,
         auth_max_blind_tokens: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_auth_max_blind_tokens", b"_auth_max_blind_tokens", "_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute", "auth_max_blind_tokens", b"auth_max_blind_tokens", "auth_rate_limit_per_minute", b"auth_rate_limit_per_minute"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_auth_max_blind_tokens", b"_auth_max_blind_tokens", "_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute", "auth_max_blind_tokens", b"auth_max_blind_tokens", "auth_rate_limit_per_minute", b"auth_rate_limit_per_minute"]) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "_auth_max_blind_tokens",
+            b"_auth_max_blind_tokens",
+            "_auth_rate_limit_per_minute",
+            b"_auth_rate_limit_per_minute",
+            "auth_max_blind_tokens",
+            b"auth_max_blind_tokens",
+            "auth_rate_limit_per_minute",
+            b"auth_rate_limit_per_minute",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "_auth_max_blind_tokens",
+            b"_auth_max_blind_tokens",
+            "_auth_rate_limit_per_minute",
+            b"_auth_rate_limit_per_minute",
+            "auth_max_blind_tokens",
+            b"auth_max_blind_tokens",
+            "auth_rate_limit_per_minute",
+            b"auth_rate_limit_per_minute",
+        ],
+    ) -> None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_auth_max_blind_tokens", b"_auth_max_blind_tokens"]) -> typing.Literal["auth_max_blind_tokens"] | None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing.Literal[
+            "_auth_max_blind_tokens", b"_auth_max_blind_tokens"
+        ],
+    ) -> typing.Literal["auth_max_blind_tokens"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute"]) -> typing.Literal["auth_rate_limit_per_minute"] | None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing.Literal[
+            "_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute"
+        ],
+    ) -> typing.Literal["auth_rate_limit_per_minute"] | None: ...
 
 global___UpdateAuthLimitsRequest = UpdateAuthLimitsRequest

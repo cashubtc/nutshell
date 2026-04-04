@@ -4,7 +4,7 @@ RUN apt-get update && \
     apt-get install -y tor && \
     rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /var/lib/tor/hidden_service 
+RUN mkdir -p /var/lib/tor/hidden_service
 USER root
 
 # Entry script will fix permissions THEN start Tor

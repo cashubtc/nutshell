@@ -61,16 +61,16 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
     )
 
     # Test that _inputs_require_sigall correctly detects SIG_ALL flag
-    assert not ledger._inputs_require_sigall(
-        send_proofs_inputs
-    ), "Should not detect SIG_ALL"
+    assert not ledger._inputs_require_sigall(send_proofs_inputs), (
+        "Should not detect SIG_ALL"
+    )
     assert ledger._inputs_require_sigall(send_proofs_all), "Should detect SIG_ALL"
 
     # Test with a mixed list of proofs (should detect SIG_ALL if any proof has it)
     mixed_proofs = send_proofs_inputs + send_proofs_all
-    assert ledger._inputs_require_sigall(
-        mixed_proofs
-    ), "Should detect SIG_ALL in mixed list"
+    assert ledger._inputs_require_sigall(mixed_proofs), (
+        "Should detect SIG_ALL in mixed list"
+    )
 
 
 @pytest.mark.asyncio
@@ -112,9 +112,9 @@ async def test_ledger_verify_p2pk_signature_validation(
 
     # The swap should succeed because the signatures are valid
     promises = await ledger.swap(proofs=signed_proofs, outputs=outputs)
-    assert len(promises) == len(
-        outputs
-    ), "Should have the same number of promises as outputs"
+    assert len(promises) == len(outputs), (
+        "Should have the same number of promises as outputs"
+    )
 
     # Test for a failure
     # Create a fake witness with an incorrect signature
@@ -202,9 +202,9 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
 
     # The swap should succeed because the SIG_ALL signature is valid
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
-    assert len(promises) == len(
-        outputs
-    ), "Should have the same number of promises as outputs"
+    assert len(promises) == len(outputs), (
+        "Should have the same number of promises as outputs"
+    )
 
 
 @pytest.mark.asyncio

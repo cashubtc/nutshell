@@ -92,7 +92,10 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     )
     secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
-    assert wallet3.keyset_id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert (
+        wallet3.keyset_id
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert secrets1 == secrets2
     assert [r.to_hex() for r in rs1] == [r.to_hex() for r in rs2]
     assert derivation_paths1 == derivation_paths2
@@ -394,6 +397,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.balance == 108
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
+
 
 @pytest.mark.asyncio
 async def test_restore_promises_derivation_paths_subset(wallet3: Wallet):

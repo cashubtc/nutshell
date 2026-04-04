@@ -327,9 +327,9 @@ async def test_p2pk_timelock(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
 
     # Verify that current time is past the locktime
     assert locktime is not None, "Locktime should not be None"
-    assert (
-        int(time.time()) > locktime
-    ), f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
+    assert int(time.time()) > locktime, (
+        f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
+    )
 
     # ensure wallet1 doesn't reuse already swapped proofs later in the test suite
     await wallet1.invalidate(send_proofs)
@@ -635,9 +635,9 @@ async def test_p2pk_invalid_pubkey_check(
         )
     except Exception as e:
         # If it fails during creation, that's fine too
-        assert (
-            "pubkey" in str(e).lower() or "key" in str(e).lower()
-        ), f"Expected error about invalid public key, got: {str(e)}"
+        assert "pubkey" in str(e).lower() or "key" in str(e).lower(), (
+            f"Expected error about invalid public key, got: {str(e)}"
+        )
 
 
 @pytest.mark.asyncio
@@ -677,7 +677,9 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     signature2 = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add both signatures to the first proof only (SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).model_dump_json()
+    send_proofs[0].witness = P2PKWitness(
+        signatures=[signature1, signature2]
+    ).model_dump_json()
 
     # This should succeed with 2 valid signatures
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)

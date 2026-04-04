@@ -137,9 +137,7 @@ async def test_schnorr_sign_message(wallet1: Wallet):
     # Make sure wallet has a pubkey
     assert wallet1.private_key.public_key is not None
     xonly_pub = PublicKeyXOnly(wallet1.private_key.public_key.format()[1:])
-    assert xonly_pub.verify(
-        sig_bytes, hashlib.sha256(message.encode("utf-8")).digest()
-    )
+    assert xonly_pub.verify(sig_bytes, hashlib.sha256(message.encode("utf-8")).digest())
 
 
 @pytest.mark.asyncio

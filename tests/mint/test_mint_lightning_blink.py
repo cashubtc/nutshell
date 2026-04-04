@@ -269,8 +269,16 @@ async def test_blink_status_usd():
             "me": {
                 "defaultAccount": {
                     "wallets": [
-                        {"walletCurrency": "USD", "id": "usd-wallet-123", "balance": 10000},
-                        {"walletCurrency": "BTC", "id": "btc-wallet-456", "balance": 100000},
+                        {
+                            "walletCurrency": "USD",
+                            "id": "usd-wallet-123",
+                            "balance": 10000,
+                        },
+                        {
+                            "walletCurrency": "BTC",
+                            "id": "btc-wallet-456",
+                            "balance": 100000,
+                        },
                     ]
                 }
             }

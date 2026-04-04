@@ -79,13 +79,15 @@ async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledg
 
     if not settings.debug_mint_only_deprecated:
         melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
-        assert (
-            not melt_quote_response_pre_payment.state == MeltQuoteState.paid.value
-        ), "melt quote should not be paid"
+        assert not melt_quote_response_pre_payment.state == MeltQuoteState.paid.value, (
+            "melt quote should not be paid"
+        )
         assert melt_quote_response_pre_payment.amount == payment_amount
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
+        "melt quote should not be paid"
+    )
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, payment_amount)
@@ -94,7 +96,9 @@ async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledg
     assert wallet.balance == 64
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
+        "melt quote should be paid"
+    )
 
     balance_after, fees_paid_after = await ledger.get_unit_balance_and_fees(
         Unit.sat, ledger.db
@@ -142,9 +146,9 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
 
     if not settings.debug_mint_only_deprecated:
         melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
-        assert (
-            melt_quote_response_pre_payment.state == MeltQuoteState.unpaid.value
-        ), "melt quote should not be paid"
+        assert melt_quote_response_pre_payment.state == MeltQuoteState.unpaid.value, (
+            "melt quote should not be paid"
+        )
         assert melt_quote_response_pre_payment.amount == melt_quote.amount
 
     melt_quote_resp = await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
@@ -153,7 +157,9 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
     )
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
+        "melt quote should be paid"
+    )
 
     balance_after, fees_paid_after = await ledger.get_unit_balance_and_fees(
         Unit.sat, ledger.db

@@ -56,7 +56,10 @@ async def test_privatekeys(ledger: Ledger):
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets)
     assert len(list(ledger.keysets.keys()))
-    assert ledger.keyset.id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert (
+        ledger.keyset.id
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
 
 
 @pytest.mark.asyncio
@@ -135,7 +138,10 @@ async def test_generate_promises(ledger: Ledger):
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
     )
     assert promises[0].amount == 8
-    assert promises[0].id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert (
+        promises[0].id
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
 
     # DLEQ proof present
     assert promises[0].dleq
@@ -296,7 +302,7 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
     async with ledger.db.connect() as conn:
         rows = await conn.fetchall(
             f"""
-            SELECT amount, c_ FROM {ledger.db.table_with_schema('promises')}
+            SELECT amount, c_ FROM {ledger.db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id
             """,
             {"melt_id": melt_id},
@@ -356,7 +362,7 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     async with ledger.db.connect() as conn:
         rows = await conn.fetchall(
             f"""
-            SELECT amount, c_ FROM {ledger.db.table_with_schema('promises')}
+            SELECT amount, c_ FROM {ledger.db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id
             """,
             {"melt_id": melt_id},

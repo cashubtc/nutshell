@@ -4,7 +4,7 @@ from ...core.db import Connection, Database
 async def m000_create_migrations_table(conn: Connection):
     await conn.execute(
         f"""
-    CREATE TABLE IF NOT EXISTS {conn.table_with_schema('dbversions')} (
+    CREATE TABLE IF NOT EXISTS {conn.table_with_schema("dbversions")} (
         db TEXT PRIMARY KEY,
         version INT NOT NULL
     )
@@ -16,7 +16,7 @@ async def m001_initial(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"""
-                CREATE TABLE IF NOT EXISTS {db.table_with_schema('users')} (
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema("users")} (
                     id TEXT PRIMARY KEY,
                     last_access TIMESTAMP,
 
@@ -27,7 +27,7 @@ async def m001_initial(db: Database):
         # columns: (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk)
         await conn.execute(
             f"""
-                    CREATE TABLE IF NOT EXISTS {db.table_with_schema('keysets')} (
+                    CREATE TABLE IF NOT EXISTS {db.table_with_schema("keysets")} (
                         id TEXT NOT NULL,
                         seed TEXT NOT NULL,
                         encrypted_seed TEXT,
@@ -49,7 +49,7 @@ async def m001_initial(db: Database):
 
         await conn.execute(
             f"""
-                CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises')} (
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema("promises")} (
                     id TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
                     b_ TEXT NOT NULL,
@@ -65,7 +65,7 @@ async def m001_initial(db: Database):
         )
         await conn.execute(
             f"""
-                CREATE TABLE IF NOT EXISTS {db.table_with_schema('proofs_used')} (
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema("proofs_used")} (
                     id TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
                     c TEXT NOT NULL,
@@ -83,7 +83,7 @@ async def m001_initial(db: Database):
 
         await conn.execute(
             f"""
-                CREATE TABLE IF NOT EXISTS {db.table_with_schema('proofs_pending')} (
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema("proofs_pending")} (
                     id TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
                     c TEXT NOT NULL,
@@ -104,13 +104,13 @@ async def m002_add_balance_to_keysets_and_log_table(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"""
-                ALTER TABLE {db.table_with_schema('keysets')}
+                ALTER TABLE {db.table_with_schema("keysets")}
                 ADD COLUMN balance INTEGER NOT NULL DEFAULT 0
             """
         )
         await conn.execute(
             f"""
-                ALTER TABLE {db.table_with_schema('keysets')}
+                ALTER TABLE {db.table_with_schema("keysets")}
                 ADD COLUMN fees_paid INTEGER NOT NULL DEFAULT 0
             """
         )

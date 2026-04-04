@@ -15,8 +15,11 @@ import cashu.lightning.lnd_grpc.protos.router_pb2
 
 _T = typing.TypeVar("_T")
 
-class _MaybeAsyncIterator(collections.abc.AsyncIterator[_T], collections.abc.Iterator[_T], metaclass=abc.ABCMeta): ...
-
+class _MaybeAsyncIterator(
+    collections.abc.AsyncIterator[_T],
+    collections.abc.Iterator[_T],
+    metaclass=abc.ABCMeta,
+): ...
 class _ServicerContext(grpc.ServicerContext, grpc.aio.ServicerContext):  # type: ignore[misc, type-arg]
     ...
 
@@ -42,7 +45,9 @@ class RouterStub:
     subsystem of the daemon.
     """
 
-    def __init__(self, channel: typing.Union[grpc.Channel, grpc.aio.Channel]) -> None: ...
+    def __init__(
+        self, channel: typing.Union[grpc.Channel, grpc.aio.Channel]
+    ) -> None: ...
     SendPaymentV2: grpc.UnaryStreamMultiCallable[
         cashu.lightning.lnd_grpc.protos.router_pb2.SendPaymentRequest,
         cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment,
@@ -470,7 +475,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.SendPaymentRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment
+        ],
+    ]:
         """
         SendPaymentV2 attempts to route a payment described by the passed
         PaymentRequest to the final destination. The call returns a stream of
@@ -485,7 +495,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.TrackPaymentRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment
+        ],
+    ]:
         """lncli: `trackpayment`
         TrackPaymentV2 returns an update stream for the payment identified by the
         payment hash.
@@ -496,7 +511,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.TrackPaymentsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Payment
+        ],
+    ]:
         """
         TrackPayments returns an update stream for every payment that is not in a
         terminal state. Note that if payments are in-flight while starting a new
@@ -511,7 +531,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.RouteFeeRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.RouteFeeResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.RouteFeeResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.RouteFeeResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.RouteFeeResponse
+        ],
+    ]:
         """
         EstimateRouteFee allows callers to obtain a lower bound w.r.t how much it
         may cost to send an HTLC to the target end destination.
@@ -522,7 +547,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.SendToRouteRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.SendToRouteResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.SendToRouteResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.SendToRouteResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.SendToRouteResponse
+        ],
+    ]:
         """
         Deprecated, use SendToRouteV2. SendToRoute attempts to make a payment via
         the specified route. This method differs from SendPayment in that it
@@ -536,7 +566,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.SendToRouteRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt
+        ],
+    ]:
         """
         SendToRouteV2 attempts to make a payment via the specified route. This
         method differs from SendPayment in that it allows users to specify a full
@@ -549,7 +584,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.ResetMissionControlRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.ResetMissionControlResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.ResetMissionControlResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.ResetMissionControlResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.ResetMissionControlResponse
+        ],
+    ]:
         """lncli: `resetmc`
         ResetMissionControl clears all mission control state and starts with a clean
         slate.
@@ -560,7 +600,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.QueryMissionControlRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.QueryMissionControlResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.QueryMissionControlResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.QueryMissionControlResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.QueryMissionControlResponse
+        ],
+    ]:
         """lncli: `querymc`
         QueryMissionControl exposes the internal mission control state to callers.
         It is a development feature.
@@ -571,7 +616,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.XImportMissionControlRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.XImportMissionControlResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.XImportMissionControlResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.XImportMissionControlResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.XImportMissionControlResponse
+        ],
+    ]:
         """lncli: `importmc`
         XImportMissionControl is an experimental API that imports the state provided
         to the internal mission control's state, using all results which are more
@@ -584,7 +634,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.GetMissionControlConfigRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.GetMissionControlConfigResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.GetMissionControlConfigResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.GetMissionControlConfigResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.GetMissionControlConfigResponse
+        ],
+    ]:
         """lncli: `getmccfg`
         GetMissionControlConfig returns mission control's current config.
         """
@@ -594,7 +649,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.SetMissionControlConfigRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.SetMissionControlConfigResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.SetMissionControlConfigResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.SetMissionControlConfigResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.SetMissionControlConfigResponse
+        ],
+    ]:
         """lncli: `setmccfg`
         SetMissionControlConfig will set mission control's config, if the config
         provided is valid.
@@ -605,7 +665,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.QueryProbabilityRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.QueryProbabilityResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.QueryProbabilityResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.QueryProbabilityResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.QueryProbabilityResponse
+        ],
+    ]:
         """lncli: `queryprob`
         Deprecated. QueryProbability returns the current success probability
         estimate for a given node pair and amount. The call returns a zero success
@@ -618,7 +683,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.BuildRouteRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.BuildRouteResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.BuildRouteResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.BuildRouteResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.BuildRouteResponse
+        ],
+    ]:
         """lncli: `buildroute`
         BuildRoute builds a fully specified route based on a list of hop public
         keys. It retrieves the relevant channel policies from the graph in order to
@@ -634,7 +704,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.SubscribeHtlcEventsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.router_pb2.HtlcEvent], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.router_pb2.HtlcEvent]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.router_pb2.HtlcEvent],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.HtlcEvent
+        ],
+    ]:
         """
         SubscribeHtlcEvents creates a uni-directional stream from the server to
         the client which delivers a stream of htlc events.
@@ -645,7 +720,14 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.SendPaymentRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus
+        ],
+    ]:
         """
         Deprecated, use SendPaymentV2. SendPayment attempts to route a payment
         described by the passed PaymentRequest to the final destination. The call
@@ -657,7 +739,14 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.TrackPaymentRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.PaymentStatus
+        ],
+    ]:
         """
         Deprecated, use TrackPaymentV2. TrackPayment returns an update stream for
         the payment identified by the payment hash.
@@ -666,9 +755,18 @@ class RouterServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def HtlcInterceptor(
         self,
-        request_iterator: _MaybeAsyncIterator[cashu.lightning.lnd_grpc.protos.router_pb2.ForwardHtlcInterceptResponse],
+        request_iterator: _MaybeAsyncIterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.ForwardHtlcInterceptResponse
+        ],
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.router_pb2.ForwardHtlcInterceptRequest], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.router_pb2.ForwardHtlcInterceptRequest]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.ForwardHtlcInterceptRequest
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.router_pb2.ForwardHtlcInterceptRequest
+        ],
+    ]:
         """*
         HtlcInterceptor dispatches a bi-directional streaming RPC in which
         Forwarded HTLC requests are sent to the client and the client responds with
@@ -682,7 +780,12 @@ class RouterServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.router_pb2.UpdateChanStatusRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.router_pb2.UpdateChanStatusResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.router_pb2.UpdateChanStatusResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.router_pb2.UpdateChanStatusResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.router_pb2.UpdateChanStatusResponse
+        ],
+    ]:
         """lncli: `updatechanstatus`
         UpdateChanStatus attempts to manually set the state of a channel
         (enabled, disabled, or auto). A manual "disable" request will cause the
@@ -690,4 +793,6 @@ class RouterServicer(metaclass=abc.ABCMeta):
         "enable" or "auto".
         """
 
-def add_RouterServicer_to_server(servicer: RouterServicer, server: typing.Union[grpc.Server, grpc.aio.Server]) -> None: ...
+def add_RouterServicer_to_server(
+    servicer: RouterServicer, server: typing.Union[grpc.Server, grpc.aio.Server]
+) -> None: ...

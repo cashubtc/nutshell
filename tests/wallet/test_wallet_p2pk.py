@@ -362,24 +362,24 @@ async def test_p2pk_multisig_case_bypass(wallet1: Wallet, wallet2: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    
+
     # We use wallet2's pubkey, but provide it twice: once lower, once upper.
     pubkey_wallet2_lower = await wallet2.create_p2pk_pubkey()
     pubkey_wallet2_upper = pubkey_wallet2_lower.upper()
-    
+
     # p2pk test: require 2 signatures, but provide the same pubkey (just cased differently)
     secret_lock = await wallet1.create_p2pk_lock(
         pubkey_wallet2_lower, tags=Tags([["pubkeys", pubkey_wallet2_upper]]), n_sigs=2
     )
-    
+
     # wallet1 locks the proofs to the bypass 2-of-2 secret
     _, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
-    
+
     # wallet2 creates one valid signature
     send_proofs = wallet2.sign_p2pk_sig_inputs(send_proofs)
-    
+
     # duplicate the signature using upper/lower case
     for proof in send_proofs:
         sig_lower = proof.p2pksigs[0]
@@ -388,9 +388,7 @@ async def test_p2pk_multisig_case_bypass(wallet1: Wallet, wallet2: Wallet):
         proof.witness = P2PKWitness(signatures=[sig_lower, sig_upper]).model_dump_json()
 
     # Execute the attack: the mint should reject this as pubkeys are not unique
-    await assert_err(
-        wallet2.redeem(send_proofs), "Mint Error: pubkeys must be unique."
-    )
+    await assert_err(wallet2.redeem(send_proofs), "Mint Error: pubkeys must be unique.")
 
 
 @pytest.mark.asyncio
@@ -432,14 +430,12 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
 
     # verify both signatures:
     xonly_pub = PublicKeyXOnly(bytes.fromhex(pubkey_wallet2)[1:])
-    assert xonly_pub.verify(
-        bytes.fromhex(proof.p2pksigs[0]), msg
-    )
-    assert xonly_pub.verify(
-        coincurve_signature, msg
-    )
+    assert xonly_pub.verify(bytes.fromhex(proof.p2pksigs[0]), msg)
+    assert xonly_pub.verify(coincurve_signature, msg)
     # add coincurve signature, and the wallet2 signature will be added during .redeem
-    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).model_dump_json()
+    send_proofs[0].witness = P2PKWitness(
+        signatures=[coincurve_signature.hex()]
+    ).model_dump_json()
 
     # here we add the signatures of wallet2
     await assert_err(

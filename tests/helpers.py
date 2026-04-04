@@ -179,14 +179,19 @@ def pay_real_invoice(invoice: str) -> str:
 
 def partial_pay_real_invoice(invoice: str, amount: int, node: int) -> str:
     cmd = docker_clightning_cli(node)
-    cmd.extend(["pay", f"bolt11={invoice}", f"partial_msat={amount*1000}"])
+    cmd.extend(["pay", f"bolt11={invoice}", f"partial_msat={amount * 1000}"])
     return run_cmd(cmd)
 
 
 def get_real_invoice_cln(sats: int) -> str:
     cmd = docker_clightning_cli(1)
     cmd.extend(
-        ["invoice", f"{sats*1000}", hashlib.sha256(os.urandom(32)).hexdigest(), "test"]
+        [
+            "invoice",
+            f"{sats * 1000}",
+            hashlib.sha256(os.urandom(32)).hexdigest(),
+            "test",
+        ]
     )
     result = run_cmd_json(cmd)
     return result["bolt11"]

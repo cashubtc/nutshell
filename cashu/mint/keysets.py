@@ -99,7 +99,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             amounts=amounts,
             input_fee_ppk=input_fee_ppk,
             active=True,
-            final_expiry=final_expiry
+            final_expiry=final_expiry,
         )
 
         logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")

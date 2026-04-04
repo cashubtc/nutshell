@@ -14,8 +14,11 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2
 
 _T = typing.TypeVar("_T")
 
-class _MaybeAsyncIterator(collections.abc.AsyncIterator[_T], collections.abc.Iterator[_T], metaclass=abc.ABCMeta): ...
-
+class _MaybeAsyncIterator(
+    collections.abc.AsyncIterator[_T],
+    collections.abc.Iterator[_T],
+    metaclass=abc.ABCMeta,
+): ...
 class _ServicerContext(grpc.ServicerContext, grpc.aio.ServicerContext):  # type: ignore[misc, type-arg]
     ...
 
@@ -40,7 +43,9 @@ class LightningStub:
     Lightning is the main RPC server of the daemon.
     """
 
-    def __init__(self, channel: typing.Union[grpc.Channel, grpc.aio.Channel]) -> None: ...
+    def __init__(
+        self, channel: typing.Union[grpc.Channel, grpc.aio.Channel]
+    ) -> None: ...
     WalletBalance: grpc.UnaryUnaryMultiCallable[
         cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceRequest,
         cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceResponse,
@@ -1594,7 +1599,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.WalletBalanceResponse
+        ],
+    ]:
         """lncli: `walletbalance`
         WalletBalance returns total unspent outputs(confirmed and unconfirmed), all
         confirmed unspent outputs and all unconfirmed unspent outputs under control
@@ -1606,7 +1616,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBalanceRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBalanceResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBalanceResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBalanceResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBalanceResponse
+        ],
+    ]:
         """lncli: `channelbalance`
         ChannelBalance returns a report on the total funds across all open channels,
         categorized in local/remote, pending local/remote and unsettled local/remote
@@ -1618,7 +1633,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.GetTransactionsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.TransactionDetails, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.TransactionDetails]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.TransactionDetails,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.TransactionDetails
+        ],
+    ]:
         """lncli: `listchaintxns`
         GetTransactions returns a list describing all the known transactions
         relevant to the wallet.
@@ -1629,7 +1649,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.EstimateFeeRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.EstimateFeeResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.EstimateFeeResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.EstimateFeeResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.EstimateFeeResponse
+        ],
+    ]:
         """lncli: `estimatefee`
         EstimateFee asks the chain backend to estimate the fee rate and total fees
         for a transaction that pays to multiple specified outputs.
@@ -1645,7 +1670,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCoinsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCoinsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCoinsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCoinsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCoinsResponse
+        ],
+    ]:
         """lncli: `sendcoins`
         SendCoins executes a request to send coins to a particular address. Unlike
         SendMany, this RPC call only allows creating a single output at a time. If
@@ -1659,7 +1689,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListUnspentRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListUnspentResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListUnspentResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListUnspentResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListUnspentResponse
+        ],
+    ]:
         """lncli: `listunspent`
         Deprecated, use walletrpc.ListUnspent instead.
 
@@ -1672,7 +1707,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.GetTransactionsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Transaction], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Transaction]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Transaction
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Transaction
+        ],
+    ]:
         """
         SubscribeTransactions creates a uni-directional stream from the server to
         the client in which any newly discovered transactions relevant to the
@@ -1684,7 +1726,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SendManyRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendManyResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendManyResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.SendManyResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendManyResponse
+        ],
+    ]:
         """lncli: `sendmany`
         SendMany handles a request for a transaction that creates multiple specified
         outputs in parallel. If neither target_conf, or sat_per_vbyte are set, then
@@ -1697,7 +1744,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.NewAddressRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.NewAddressResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.NewAddressResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.NewAddressResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.NewAddressResponse
+        ],
+    ]:
         """lncli: `newaddress`
         NewAddress creates a new address under control of the local wallet.
         """
@@ -1707,7 +1759,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SignMessageRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.SignMessageResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.SignMessageResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.SignMessageResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SignMessageResponse
+        ],
+    ]:
         """lncli: `signmessage`
         SignMessage signs a message with this node's private key. The returned
         signature string is `zbase32` encoded and pubkey recoverable, meaning that
@@ -1719,7 +1776,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyMessageRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyMessageResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyMessageResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyMessageResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyMessageResponse
+        ],
+    ]:
         """lncli: `verifymessage`
         VerifyMessage verifies a signature over a message and recovers the signer's
         public key. The signature is only deemed valid if the recovered public key
@@ -1734,7 +1796,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ConnectPeerRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ConnectPeerResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ConnectPeerResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ConnectPeerResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ConnectPeerResponse
+        ],
+    ]:
         """lncli: `connect`
         ConnectPeer attempts to establish a connection to a remote peer. This is at
         the networking level, and is used for communication between nodes. This is
@@ -1746,7 +1813,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.DisconnectPeerRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.DisconnectPeerResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.DisconnectPeerResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.DisconnectPeerResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.DisconnectPeerResponse
+        ],
+    ]:
         """lncli: `disconnect`
         DisconnectPeer attempts to disconnect one peer from another identified by a
         given pubKey. In the case that we currently have a pending or active channel
@@ -1758,7 +1830,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPeersRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPeersResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPeersResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPeersResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPeersResponse
+        ],
+    ]:
         """lncli: `listpeers`
         ListPeers returns a verbose listing of all currently active peers.
         """
@@ -1768,7 +1845,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.PeerEventSubscription,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.PeerEvent], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.PeerEvent]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.PeerEvent
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.PeerEvent
+        ],
+    ]:
         """
         SubscribePeerEvents creates a uni-directional stream from the server to
         the client in which any events relevant to the state of peers are sent
@@ -1780,7 +1864,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.GetInfoRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.GetInfoResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.GetInfoResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.GetInfoResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.GetInfoResponse
+        ],
+    ]:
         """lncli: `getinfo`
         GetInfo returns general information concerning the lightning node including
         it's identity pubkey, alias, the chains it is connected to, and information
@@ -1792,7 +1881,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.GetDebugInfoRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.GetDebugInfoResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.GetDebugInfoResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.GetDebugInfoResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.GetDebugInfoResponse
+        ],
+    ]:
         """lncli: 'getdebuginfo'
         GetDebugInfo returns debug information concerning the state of the daemon
         and its subsystems. This includes the full configuration and the latest log
@@ -1804,7 +1898,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.GetRecoveryInfoRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.GetRecoveryInfoResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.GetRecoveryInfoResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.GetRecoveryInfoResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.GetRecoveryInfoResponse
+        ],
+    ]:
         """* lncli: `getrecoveryinfo`
         GetRecoveryInfo returns information concerning the recovery mode including
         whether it's in a recovery mode, whether the recovery is finished, and the
@@ -1816,7 +1915,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.PendingChannelsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.PendingChannelsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.PendingChannelsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.PendingChannelsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.PendingChannelsResponse
+        ],
+    ]:
         """TODO(roasbeef): merge with below with bool?
 
         lncli: `pendingchannels`
@@ -1831,7 +1935,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListChannelsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListChannelsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListChannelsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListChannelsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListChannelsResponse
+        ],
+    ]:
         """lncli: `listchannels`
         ListChannels returns a description of all the open channels that this node
         is a participant in.
@@ -1842,7 +1951,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEventSubscription,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEventUpdate], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEventUpdate]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEventUpdate
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEventUpdate
+        ],
+    ]:
         """
         SubscribeChannelEvents creates a uni-directional stream from the server to
         the client in which any updates relevant to the state of the channels are
@@ -1855,7 +1971,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ClosedChannelsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ClosedChannelsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ClosedChannelsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ClosedChannelsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ClosedChannelsResponse
+        ],
+    ]:
         """lncli: `closedchannels`
         ClosedChannels returns a description of all the closed channels that
         this node was a participant in.
@@ -1866,7 +1987,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.OpenChannelRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint
+        ],
+    ]:
         """
         OpenChannelSync is a synchronous version of the OpenChannel RPC call. This
         call is meant to be consumed by clients to the REST proxy. As with all
@@ -1879,7 +2005,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.OpenChannelRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.OpenStatusUpdate], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.OpenStatusUpdate]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.OpenStatusUpdate
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.OpenStatusUpdate
+        ],
+    ]:
         """lncli: `openchannel`
         OpenChannel attempts to open a singly funded channel specified in the
         request to a remote peer. Users are able to specify a target number of
@@ -1896,7 +2029,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.BatchOpenChannelRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.BatchOpenChannelResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.BatchOpenChannelResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.BatchOpenChannelResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.BatchOpenChannelResponse
+        ],
+    ]:
         """lncli: `batchopenchannel`
         BatchOpenChannel attempts to open multiple single-funded channels in a
         single transaction in an atomic way. This means either all channel open
@@ -1910,7 +2048,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.FundingTransitionMsg,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.FundingStateStepResp, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.FundingStateStepResp]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.FundingStateStepResp,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.FundingStateStepResp
+        ],
+    ]:
         """
         FundingStateStep is an advanced funding related call that allows the caller
         to either execute some preparatory steps for a funding workflow, or
@@ -1925,9 +2068,18 @@ class LightningServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def ChannelAcceptor(
         self,
-        request_iterator: _MaybeAsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelAcceptResponse],
+        request_iterator: _MaybeAsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelAcceptResponse
+        ],
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelAcceptRequest], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelAcceptRequest]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelAcceptRequest
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelAcceptRequest
+        ],
+    ]:
         """
         ChannelAcceptor dispatches a bi-directional streaming RPC in which
         OpenChannel requests are sent to the client and the client responds with
@@ -1941,7 +2093,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.CloseChannelRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.CloseStatusUpdate], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.CloseStatusUpdate]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.CloseStatusUpdate
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.CloseStatusUpdate
+        ],
+    ]:
         """lncli: `closechannel`
         CloseChannel attempts to close an active channel identified by its channel
         outpoint (ChannelPoint). The actions of this method can additionally be
@@ -1957,7 +2116,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.AbandonChannelRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.AbandonChannelResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.AbandonChannelResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.AbandonChannelResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.AbandonChannelResponse
+        ],
+    ]:
         """lncli: `abandonchannel`
         AbandonChannel removes all channel state from the database except for a
         close summary. This method can be used to get rid of permanently unusable
@@ -1970,9 +2134,18 @@ class LightningServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def SendPayment(
         self,
-        request_iterator: _MaybeAsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendRequest],
+        request_iterator: _MaybeAsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendRequest
+        ],
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse
+        ],
+    ]:
         """lncli: `sendpayment`
         Deprecated, use routerrpc.SendPaymentV2. SendPayment dispatches a
         bi-directional streaming RPC for sending payments through the Lightning
@@ -1986,7 +2159,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SendRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse
+        ],
+    ]:
         """
         SendPaymentSync is the synchronous non-streaming version of SendPayment.
         This RPC is intended to be consumed by clients of the REST proxy.
@@ -1997,9 +2175,18 @@ class LightningServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def SendToRoute(
         self,
-        request_iterator: _MaybeAsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendToRouteRequest],
+        request_iterator: _MaybeAsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendToRouteRequest
+        ],
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse
+        ],
+    ]:
         """lncli: `sendtoroute`
         Deprecated, use routerrpc.SendToRouteV2. SendToRoute is a bi-directional
         streaming RPC for sending payment through the Lightning Network. This
@@ -2013,7 +2200,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SendToRouteRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendResponse
+        ],
+    ]:
         """
         SendToRouteSync is a synchronous version of SendToRoute. It Will block
         until the payment either fails or succeeds.
@@ -2024,7 +2216,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.AddInvoiceResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.AddInvoiceResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.AddInvoiceResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.AddInvoiceResponse
+        ],
+    ]:
         """lncli: `addinvoice`
         AddInvoice attempts to add a new invoice to the invoice database. Any
         duplicated invoices are rejected, therefore all invoices *must* have a
@@ -2036,7 +2233,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListInvoiceRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListInvoiceResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListInvoiceResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListInvoiceResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListInvoiceResponse
+        ],
+    ]:
         """lncli: `listinvoices`
         ListInvoices returns a list of all the invoices currently stored within the
         database. Any active debug invoices are ignored. It has full support for
@@ -2052,7 +2254,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.PaymentHash,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice
+        ],
+    ]:
         """lncli: `lookupinvoice`
         LookupInvoice attempts to look up an invoice according to its payment hash.
         The passed payment hash *must* be exactly 32 bytes, if not, an error is
@@ -2064,7 +2271,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.InvoiceSubscription,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.Invoice
+        ],
+    ]:
         """
         SubscribeInvoices returns a uni-directional stream (server -> client) for
         notifying the client of newly added/settled invoices. The caller can
@@ -2082,7 +2294,10 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.PayReqString,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.PayReq, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.PayReq]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.PayReq,
+        collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.PayReq],
+    ]:
         """lncli: `decodepayreq`
         DecodePayReq takes an encoded payment request string and attempts to decode
         it, returning a full description of the conditions encoded within the
@@ -2094,7 +2309,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPaymentsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPaymentsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPaymentsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPaymentsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPaymentsResponse
+        ],
+    ]:
         """lncli: `listpayments`
         ListPayments returns a list of all outgoing payments.
         """
@@ -2104,7 +2324,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.DeletePaymentRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.DeletePaymentResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.DeletePaymentResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.DeletePaymentResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.DeletePaymentResponse
+        ],
+    ]:
         """lncli: `deletepayments`
         DeletePayment deletes an outgoing payment from DB. Note that it will not
         attempt to delete an In-Flight payment, since that would be unsafe.
@@ -2115,7 +2340,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteAllPaymentsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteAllPaymentsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteAllPaymentsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteAllPaymentsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteAllPaymentsResponse
+        ],
+    ]:
         """lncli: `deletepayments --all`
         DeleteAllPayments deletes all outgoing payments from DB. Note that it will
         not attempt to delete In-Flight payments, since that would be unsafe.
@@ -2126,7 +2356,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelGraphRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelGraph, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelGraph]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelGraph,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelGraph
+        ],
+    ]:
         """lncli: `describegraph`
         DescribeGraph returns a description of the latest graph state from the
         point of view of the node. The graph information is partitioned into two
@@ -2141,7 +2376,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeMetricsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeMetricsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeMetricsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeMetricsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeMetricsResponse
+        ],
+    ]:
         """lncli: `getnodemetrics`
         GetNodeMetrics returns node metrics calculated from the graph. Currently
         the only supported metric is betweenness centrality of individual nodes.
@@ -2152,7 +2392,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanInfoRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEdge, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEdge]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEdge,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelEdge
+        ],
+    ]:
         """lncli: `getchaninfo`
         GetChanInfo returns the latest authenticated network announcement for the
         given channel identified by its channel ID: an 8-byte integer which
@@ -2165,7 +2410,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeInfoRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeInfo, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeInfo]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeInfo,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.NodeInfo
+        ],
+    ]:
         """lncli: `getnodeinfo`
         GetNodeInfo returns the latest advertised, aggregated, and authenticated
         channel information for the specified node identified by its public key.
@@ -2176,7 +2426,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.QueryRoutesRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.QueryRoutesResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.QueryRoutesResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.QueryRoutesResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.QueryRoutesResponse
+        ],
+    ]:
         """lncli: `queryroutes`
         QueryRoutes attempts to query the daemon's Channel Router for a possible
         route to a target destination capable of carrying a specific amount of
@@ -2195,7 +2450,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.NetworkInfoRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.NetworkInfo, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.NetworkInfo]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.NetworkInfo,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.NetworkInfo
+        ],
+    ]:
         """lncli: `getnetworkinfo`
         GetNetworkInfo returns some basic stats about the known channel graph from
         the point of view of the node.
@@ -2206,7 +2466,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.StopRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.StopResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.StopResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.StopResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.StopResponse
+        ],
+    ]:
         """lncli: `stop`
         StopDaemon will send a shutdown request to the interrupt handler, triggering
         a graceful shutdown of the daemon.
@@ -2217,7 +2482,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.GraphTopologySubscription,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.GraphTopologyUpdate], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.GraphTopologyUpdate]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.GraphTopologyUpdate
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.GraphTopologyUpdate
+        ],
+    ]:
         """
         SubscribeChannelGraph launches a streaming RPC that allows the caller to
         receive notifications upon any changes to the channel graph topology from
@@ -2232,7 +2504,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.DebugLevelRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.DebugLevelResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.DebugLevelResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.DebugLevelResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.DebugLevelResponse
+        ],
+    ]:
         """lncli: `debuglevel`
         DebugLevel allows a caller to programmatically set the logging verbosity of
         lnd. The logging can be targeted according to a coarse daemon-wide logging
@@ -2245,7 +2522,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.FeeReportRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.FeeReportResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.FeeReportResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.FeeReportResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.FeeReportResponse
+        ],
+    ]:
         """lncli: `feereport`
         FeeReport allows the caller to obtain a report detailing the current fee
         schedule enforced by the node globally for each channel.
@@ -2256,7 +2538,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.PolicyUpdateRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.PolicyUpdateResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.PolicyUpdateResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.PolicyUpdateResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.PolicyUpdateResponse
+        ],
+    ]:
         """lncli: `updatechanpolicy`
         UpdateChannelPolicy allows the caller to update the fee schedule and
         channel policies for all channels globally, or a particular channel.
@@ -2267,7 +2554,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ForwardingHistoryRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ForwardingHistoryResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ForwardingHistoryResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ForwardingHistoryResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ForwardingHistoryResponse
+        ],
+    ]:
         """lncli: `fwdinghistory`
         ForwardingHistory allows the caller to query the htlcswitch for a record of
         all HTLCs forwarded within the target time range, and integer offset
@@ -2287,7 +2579,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ExportChannelBackupRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBackup, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBackup]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBackup,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBackup
+        ],
+    ]:
         """lncli: `exportchanbackup`
         ExportChannelBackup attempts to return an encrypted static channel backup
         for the target channel identified by it channel point. The backup is
@@ -2302,7 +2599,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupExportRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot
+        ],
+    ]:
         """
         ExportAllChannelBackups returns static channel backups for all existing
         channels known to lnd. A set of regular singular static channel backups for
@@ -2316,7 +2618,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyChanBackupResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyChanBackupResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyChanBackupResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.VerifyChanBackupResponse
+        ],
+    ]:
         """lncli: `verifychanbackup`
         VerifyChanBackup allows a caller to verify the integrity of a channel backup
         snapshot. This method will accept either a packed Single or a packed Multi.
@@ -2328,7 +2635,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.RestoreChanBackupRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.RestoreBackupResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.RestoreBackupResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.RestoreBackupResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.RestoreBackupResponse
+        ],
+    ]:
         """lncli: `restorechanbackup`
         RestoreChannelBackups accepts a set of singular channel backups, or a
         single encrypted multi-chan backup and attempts to recover any funds
@@ -2341,7 +2653,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelBackupSubscription,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ChanBackupSnapshot
+        ],
+    ]:
         """
         SubscribeChannelBackups allows a client to sub-subscribe to the most up to
         date information concerning the state of all channel backups. Each time a
@@ -2357,7 +2676,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.BakeMacaroonRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.BakeMacaroonResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.BakeMacaroonResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.BakeMacaroonResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.BakeMacaroonResponse
+        ],
+    ]:
         """lncli: `bakemacaroon`
         BakeMacaroon allows the creation of a new macaroon with custom read and
         write permissions. No first-party caveats are added since this can be done
@@ -2369,7 +2693,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListMacaroonIDsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListMacaroonIDsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListMacaroonIDsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListMacaroonIDsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListMacaroonIDsResponse
+        ],
+    ]:
         """lncli: `listmacaroonids`
         ListMacaroonIDs returns all root key IDs that are in use.
         """
@@ -2379,7 +2708,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteMacaroonIDRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteMacaroonIDResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteMacaroonIDResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteMacaroonIDResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.DeleteMacaroonIDResponse
+        ],
+    ]:
         """lncli: `deletemacaroonid`
         DeleteMacaroonID deletes the specified macaroon ID and invalidates all
         macaroons derived from that ID.
@@ -2390,7 +2724,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPermissionsRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPermissionsResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPermissionsResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPermissionsResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListPermissionsResponse
+        ],
+    ]:
         """lncli: `listpermissions`
         ListPermissions lists all RPC method URIs and their required macaroon
         permissions to access them.
@@ -2401,7 +2740,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.CheckMacPermRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.CheckMacPermResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.CheckMacPermResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.CheckMacPermResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.CheckMacPermResponse
+        ],
+    ]:
         """
         CheckMacaroonPermissions checks whether a request follows the constraints
         imposed on the macaroon and that the macaroon is authorized to follow the
@@ -2411,9 +2755,18 @@ class LightningServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def RegisterRPCMiddleware(
         self,
-        request_iterator: _MaybeAsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.RPCMiddlewareResponse],
+        request_iterator: _MaybeAsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.RPCMiddlewareResponse
+        ],
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.RPCMiddlewareRequest], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.RPCMiddlewareRequest]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.RPCMiddlewareRequest
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.RPCMiddlewareRequest
+        ],
+    ]:
         """
         RegisterRPCMiddleware adds a new gRPC middleware to the interceptor chain. A
         gRPC middleware is software component external to lnd that aims to add
@@ -2434,7 +2787,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCustomMessageRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCustomMessageResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCustomMessageResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCustomMessageResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.SendCustomMessageResponse
+        ],
+    ]:
         """lncli: `sendcustom`
         SendCustomMessage sends a custom peer message.
         """
@@ -2444,7 +2802,14 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.SubscribeCustomMessagesRequest,
         context: _ServicerContext,
-    ) -> typing.Union[collections.abc.Iterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.CustomMessage], collections.abc.AsyncIterator[cashu.lightning.lnd_grpc.protos.lightning_pb2.CustomMessage]]:
+    ) -> typing.Union[
+        collections.abc.Iterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.CustomMessage
+        ],
+        collections.abc.AsyncIterator[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.CustomMessage
+        ],
+    ]:
         """lncli: `subscribecustom`
         SubscribeCustomMessages subscribes to a stream of incoming custom peer
         messages.
@@ -2459,7 +2824,12 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.ListAliasesRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListAliasesResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.ListAliasesResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.ListAliasesResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.ListAliasesResponse
+        ],
+    ]:
         """lncli: `listaliases`
         ListAliases returns the set of all aliases that have ever existed with
         their confirmed SCID (if it exists) and/or the base SCID (in the case of
@@ -2471,11 +2841,18 @@ class LightningServicer(metaclass=abc.ABCMeta):
         self,
         request: cashu.lightning.lnd_grpc.protos.lightning_pb2.LookupHtlcResolutionRequest,
         context: _ServicerContext,
-    ) -> typing.Union[cashu.lightning.lnd_grpc.protos.lightning_pb2.LookupHtlcResolutionResponse, collections.abc.Awaitable[cashu.lightning.lnd_grpc.protos.lightning_pb2.LookupHtlcResolutionResponse]]:
+    ) -> typing.Union[
+        cashu.lightning.lnd_grpc.protos.lightning_pb2.LookupHtlcResolutionResponse,
+        collections.abc.Awaitable[
+            cashu.lightning.lnd_grpc.protos.lightning_pb2.LookupHtlcResolutionResponse
+        ],
+    ]:
         """
         LookupHtlcResolution retrieves a final htlc resolution from the database.
         If the htlc has no final resolution yet, a NotFound grpc status code is
         returned.
         """
 
-def add_LightningServicer_to_server(servicer: LightningServicer, server: typing.Union[grpc.Server, grpc.aio.Server]) -> None: ...
+def add_LightningServicer_to_server(
+    servicer: LightningServicer, server: typing.Union[grpc.Server, grpc.aio.Server]
+) -> None: ...

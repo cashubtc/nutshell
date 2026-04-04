@@ -19,14 +19,14 @@ async def test_m029_witness_cleanup():
         # Insert into proofs_used
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_used')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_used")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_used_long', 's_used_long', 'y_used_long', :w, {db.timestamp_now}, NULL)
             """,
             {"w": long_witness},
         )
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_used')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_used")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_used_short', 's_used_short', 'y_used_short', :w, {db.timestamp_now}, NULL)
             """,
             {"w": short_witness},
@@ -35,14 +35,14 @@ async def test_m029_witness_cleanup():
         # Insert into proofs_pending
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_pending')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_pending")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_pend_long', 's_pend_long', 'y_pend_long', :w, {db.timestamp_now}, NULL)
             """,
             {"w": long_witness},
         )
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_pending')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_pending")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_pend_short', 's_pend_short', 'y_pend_short', :w, {db.timestamp_now}, NULL)
             """,
             {"w": short_witness},

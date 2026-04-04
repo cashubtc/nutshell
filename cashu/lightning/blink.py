@@ -300,9 +300,7 @@ class BlinkWallet(LightningBackend):
             )
 
         transaction = (
-            resp.get("data", {})
-            .get("lnInvoicePaymentSend", {})
-            .get("transaction", {})
+            resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {})
         )
 
         checking_id = quote.request
@@ -480,10 +478,7 @@ class BlinkWallet(LightningBackend):
                 }
             }
             """,
-            "variables": {
-                "amount": 1,
-                "currency": "USD"
-            },
+            "variables": {"amount": 1, "currency": "USD"},
         }
         try:
             r = await self.client.post(
@@ -505,7 +500,9 @@ class BlinkWallet(LightningBackend):
         sats_per_usd = conversion.get("btcSatAmount")
 
         if not sats_per_usd or sats_per_usd == 0:
-            logger.error(f"Invalid conversion data from Blink: btcSatAmount={sats_per_usd}")
+            logger.error(
+                f"Invalid conversion data from Blink: btcSatAmount={sats_per_usd}"
+            )
             raise Exception("Invalid conversion data: btcSatAmount is missing or zero")
 
         return int(sats_per_usd)
@@ -582,8 +579,7 @@ class BlinkWallet(LightningBackend):
                 )
             else:
                 fees_response_msat = (
-                    int(resp.get("data", {}).get(response_key, {}).get("amount"))
-                    * 1000
+                    int(resp.get("data", {}).get(response_key, {}).get("amount")) * 1000
                 )
         except httpx.ReadTimeout:
             pass

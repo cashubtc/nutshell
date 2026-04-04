@@ -123,7 +123,6 @@ class LedgerVerification(
         expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
     ):
-
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         if not outputs:
