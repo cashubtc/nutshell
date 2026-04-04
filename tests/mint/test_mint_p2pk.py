@@ -64,8 +64,8 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
     assert not ledger._inputs_require_sigall(
         send_proofs_inputs
     ), "Should not detect SIG_ALL"
-    assert ledger._inputs_require_sigall(send_proofs_all), "Should detect SIG_ALL"
-
+    assert ledger._inputs_require_sigall(send_proofs_all), "False negative: SIG_ALL not detected when present"
+    
     # Test with a mixed list of proofs (should detect SIG_ALL if any proof has it)
     mixed_proofs = send_proofs_inputs + send_proofs_all
     assert ledger._inputs_require_sigall(
@@ -101,8 +101,7 @@ async def test_ledger_verify_p2pk_signature_validation(
     for proof in signed_proofs:
         assert proof.witness is not None, "Proof should have a witness"
         witness = P2PKWitness.from_witness(proof.witness)
-        assert len(witness.signatures) > 0, "Witness should have a signature"
-
+        assert len(witness.signatures) > 0, f"P2PK signature missing in witness for secret {proof.secret[:8]}..."
     # Generate outputs for the swap
     output_amounts = [32]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -320,4 +319,4 @@ async def test_ledger_swap_p2pk_with_signature(wallet1: Wallet1, ledger: Ledger)
 
     # Verify the result
     assert len(promises) == len(outputs)
-    assert [p.amount for p in promises] == [o.amount for o in outputs]
+    assert [p.amount for p in promises] == [o.amount for o in outputs], "P2PK swap promise amounts do not match requested output amounts"
