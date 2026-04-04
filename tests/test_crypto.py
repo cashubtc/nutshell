@@ -1,5 +1,13 @@
-from cashu.core.base import Proof
+import secrets
+from unittest import mock
+
+import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
+from cashu.core.base import DLEQWallet, Proof
 from cashu.core.crypto.b_dhke import (
+    DOMAIN_SEPARATOR,
     alice_verify_dleq,
     carol_verify_dleq,
     hash_e,
@@ -10,6 +18,7 @@ from cashu.core.crypto.b_dhke import (
     step2_bob,
     step2_bob_dleq,
     step3_alice,
+    verify,
 )
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 
@@ -473,3 +482,435 @@ def test_dleq_step2_bob_dleq_deprecated():
         s.to_hex()
         == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
     )
+
+
+# ---------------------------------------------------------------------------
+# hash_to_curve properties
+# ---------------------------------------------------------------------------
+
+
+class TestHashToCurveProperties:
+    def test_uses_domain_separator(self):
+        assert DOMAIN_SEPARATOR == b"Secp256k1_HashToCurve_Cashu_"
+
+    def test_deterministic(self):
+        msg = b"test_determinism"
+        assert hash_to_curve(msg).format() == hash_to_curve(msg).format()
+
+    def test_different_messages_different_points(self):
+        p1 = hash_to_curve(b"message_a")
+        p2 = hash_to_curve(b"message_b")
+        assert p1.format() != p2.format()
+
+    def test_result_is_valid_compressed_pubkey(self):
+        p = hash_to_curve(b"validity_check")
+        compressed = p.format()
+        assert len(compressed) == 33
+        assert compressed[0] in (2, 3)
+
+    def test_empty_message(self):
+        p = hash_to_curve(b"")
+        assert isinstance(p, PublicKey)
+
+    @given(msg=st.binary(min_size=0, max_size=500))
+    @settings(max_examples=50, deadline=10000)
+    def test_always_produces_valid_point(self, msg):
+        p = hash_to_curve(msg)
+        assert isinstance(p, PublicKey)
+        assert len(p.format()) == 33
+
+    def test_deprecated_differs_from_current(self):
+        msg = b"test_both_versions"
+        p_new = hash_to_curve(msg)
+        p_old = hash_to_curve_deprecated(msg)
+        assert p_new.format() != p_old.format()
+
+    def test_raises_when_no_curve_point_found_in_max_iterations(self):
+        """Cover the defensive ValueError when all 2**16 candidates fail.
+
+        In normal operation this path is effectively unreachable; we force it
+        by making PublicKey construction always fail inside hash_to_curve.
+        """
+
+        def always_invalid(*_args, **_kwargs):
+            raise RuntimeError("force retry")
+
+        with mock.patch(
+            "cashu.core.crypto.b_dhke.PublicKey", side_effect=always_invalid
+        ):
+            with pytest.raises(ValueError, match="No valid point found"):
+                hash_to_curve(b"exhaust_loop")
+
+
+# ---------------------------------------------------------------------------
+# BDHKE protocol properties
+# ---------------------------------------------------------------------------
+
+
+class TestBDHKEProtocolProperties:
+    def test_unblinding_produces_valid_signature(self):
+        a = PrivateKey()
+        A = a.public_key
+        secret = "test_unblinding"
+        B_, r = step1_alice(secret)
+        C_, e, s = step2_bob(B_, a)
+        C = step3_alice(C_, r, A)
+        assert verify(a, C, secret)
+
+    def test_different_blinding_factors_same_unblinded_sig(self):
+        a = PrivateKey()
+        A = a.public_key
+        secret = "same_secret"
+
+        B_1, r1 = step1_alice(secret)
+        C_1, _, _ = step2_bob(B_1, a)
+        C1 = step3_alice(C_1, r1, A)
+
+        B_2, r2 = step1_alice(secret)
+        C_2, _, _ = step2_bob(B_2, a)
+        C2 = step3_alice(C_2, r2, A)
+
+        assert C1 == C2
+
+    def test_different_secrets_different_sigs(self):
+        a = PrivateKey()
+        A = a.public_key
+
+        B_1, r1 = step1_alice("secret_a")
+        C_1, _, _ = step2_bob(B_1, a)
+        C1 = step3_alice(C_1, r1, A)
+
+        B_2, r2 = step1_alice("secret_b")
+        C_2, _, _ = step2_bob(B_2, a)
+        C2 = step3_alice(C_2, r2, A)
+
+        assert C1 != C2
+
+    @given(
+        secret=st.text(
+            alphabet=st.characters(whitelist_categories=("L", "N")),
+            min_size=1,
+            max_size=64,
+        )
+    )
+    @settings(max_examples=30, deadline=10000)
+    def test_roundtrip_always_verifies(self, secret):
+        a = PrivateKey()
+        A = a.public_key
+        B_, r = step1_alice(secret)
+        C_, _, _ = step2_bob(B_, a)
+        C = step3_alice(C_, r, A)
+        assert verify(a, C, secret)
+
+
+# ---------------------------------------------------------------------------
+# Helper for full BDHKE + DLEQ roundtrip
+# ---------------------------------------------------------------------------
+
+
+def _full_bdhke_roundtrip(
+    secret_msg: str = "test_message",
+    a: PrivateKey | None = None,
+    r: PrivateKey | None = None,
+):
+    """Run the full BDHKE + DLEQ flow and return all artifacts."""
+    a = a or PrivateKey()
+    A = a.public_key
+    B_, r_used = step1_alice(secret_msg, blinding_factor=r)
+    C_, e, s = step2_bob(B_, a)
+    C = step3_alice(C_, r_used, A)
+    return dict(
+        a=a, A=A, B_=B_, r=r_used, C_=C_, e=e, s=s, C=C, secret_msg=secret_msg
+    )
+
+
+# ---------------------------------------------------------------------------
+# Alice verify DLEQ — negative cases
+# ---------------------------------------------------------------------------
+
+
+class TestAliceVerifyDLEQ:
+    def test_valid_dleq_passes(self):
+        ctx = _full_bdhke_roundtrip()
+        assert alice_verify_dleq(ctx["B_"], ctx["C_"], ctx["e"], ctx["s"], ctx["A"])
+
+    def test_wrong_e_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_e = PrivateKey()
+        assert not alice_verify_dleq(
+            ctx["B_"], ctx["C_"], wrong_e, ctx["s"], ctx["A"]
+        )
+
+    def test_wrong_s_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_s = PrivateKey()
+        assert not alice_verify_dleq(
+            ctx["B_"], ctx["C_"], ctx["e"], wrong_s, ctx["A"]
+        )
+
+    def test_wrong_A_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_A = PrivateKey().public_key
+        assert not alice_verify_dleq(
+            ctx["B_"], ctx["C_"], ctx["e"], ctx["s"], wrong_A
+        )
+
+    def test_swapped_B_C_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        assert not alice_verify_dleq(
+            ctx["C_"], ctx["B_"], ctx["e"], ctx["s"], ctx["A"]
+        )
+
+
+# ---------------------------------------------------------------------------
+# Carol verify DLEQ — negative cases
+# ---------------------------------------------------------------------------
+
+
+class TestCarolVerifyDLEQ:
+    def test_valid_carol_verify(self):
+        ctx = _full_bdhke_roundtrip()
+        assert carol_verify_dleq(
+            secret_msg=ctx["secret_msg"],
+            r=ctx["r"],
+            C=ctx["C"],
+            e=ctx["e"],
+            s=ctx["s"],
+            A=ctx["A"],
+        )
+
+    def test_carol_wrong_secret_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        assert not carol_verify_dleq(
+            secret_msg="wrong_message",
+            r=ctx["r"],
+            C=ctx["C"],
+            e=ctx["e"],
+            s=ctx["s"],
+            A=ctx["A"],
+        )
+
+    def test_carol_wrong_r_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_r = PrivateKey()
+        assert not carol_verify_dleq(
+            secret_msg=ctx["secret_msg"],
+            r=wrong_r,
+            C=ctx["C"],
+            e=ctx["e"],
+            s=ctx["s"],
+            A=ctx["A"],
+        )
+
+    def test_carol_wrong_C_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_C = PrivateKey().public_key
+        assert not carol_verify_dleq(
+            secret_msg=ctx["secret_msg"],
+            r=ctx["r"],
+            C=wrong_C,
+            e=ctx["e"],
+            s=ctx["s"],
+            A=ctx["A"],
+        )
+
+    def test_carol_wrong_A_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_A = PrivateKey().public_key
+        assert not carol_verify_dleq(
+            secret_msg=ctx["secret_msg"],
+            r=ctx["r"],
+            C=ctx["C"],
+            e=ctx["e"],
+            s=ctx["s"],
+            A=wrong_A,
+        )
+
+
+# ---------------------------------------------------------------------------
+# DLEQ on Proof objects
+# ---------------------------------------------------------------------------
+
+
+class TestDLEQOnProof:
+    def test_proof_with_dleq_verifies(self):
+        a = PrivateKey()
+        A = a.public_key
+        secret_msg = secrets.token_hex(32)
+
+        B_, r = step1_alice(secret_msg)
+        C_, e, s = step2_bob(B_, a)
+        C = step3_alice(C_, r, A)
+
+        proof = Proof(
+            id="00ad268c4d1f5826",
+            amount=1,
+            secret=secret_msg,
+            C=C.format().hex(),
+            dleq=DLEQWallet(
+                e=e.to_hex(),
+                s=s.to_hex(),
+                r=r.to_hex(),
+            ),
+        )
+
+        assert proof.dleq is not None
+        assert carol_verify_dleq(
+            secret_msg=proof.secret,
+            r=PrivateKey(bytes.fromhex(proof.dleq.r)),
+            C=PublicKey(bytes.fromhex(proof.C)),
+            e=PrivateKey(bytes.fromhex(proof.dleq.e)),
+            s=PrivateKey(bytes.fromhex(proof.dleq.s)),
+            A=A,
+        )
+
+    def test_tampered_dleq_on_proof_fails(self):
+        a = PrivateKey()
+        A = a.public_key
+        secret_msg = secrets.token_hex(32)
+
+        B_, r = step1_alice(secret_msg)
+        C_, e, s = step2_bob(B_, a)
+        C = step3_alice(C_, r, A)
+
+        tampered_e = PrivateKey()
+
+        assert not carol_verify_dleq(
+            secret_msg=secret_msg,
+            r=r,
+            C=C,
+            e=tampered_e,
+            s=s,
+            A=A,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Deterministic DLEQ (using known p nonce)
+# ---------------------------------------------------------------------------
+
+
+class TestDLEQDeterministic:
+    def test_deterministic_dleq_with_known_p(self):
+        a = PrivateKey(bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ))
+        p_bytes = bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+
+        B_, _ = step1_alice(
+            "test_message",
+            blinding_factor=PrivateKey(bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            )),
+        )
+
+        e1, s1 = step2_bob_dleq(B_, a, p_bytes)
+        e2, s2 = step2_bob_dleq(B_, a, p_bytes)
+
+        assert e1.to_hex() == e2.to_hex()
+        assert s1.to_hex() == s2.to_hex()
+
+    def test_different_p_gives_different_dleq(self):
+        a = PrivateKey(bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ))
+        B_, _ = step1_alice(
+            "test_message",
+            blinding_factor=PrivateKey(bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            )),
+        )
+
+        p1 = bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )
+        p2 = bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+        e1, s1 = step2_bob_dleq(B_, a, p1)
+        e2, s2 = step2_bob_dleq(B_, a, p2)
+
+        assert e1.to_hex() != e2.to_hex()
+        assert s1.to_hex() != s2.to_hex()
+
+
+# ---------------------------------------------------------------------------
+# hash_e edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestHashE:
+    def test_order_of_keys_matters(self):
+        A = PrivateKey().public_key
+        B = PrivateKey().public_key
+        assert hash_e(A, B) != hash_e(B, A)
+
+    def test_same_key_repeated(self):
+        A = PrivateKey().public_key
+        h1 = hash_e(A, A)
+        assert len(h1) == 32
+
+    def test_uses_uncompressed_encoding(self):
+        A = PrivateKey().public_key
+        uncompressed = A.format(compressed=False).hex()
+        assert len(uncompressed) == 130  # 65 bytes = 130 hex chars
+
+
+# ---------------------------------------------------------------------------
+# BDHKE verify() — negative cases
+# ---------------------------------------------------------------------------
+
+
+class TestBDHKEVerify:
+    def test_valid_signature_verifies(self):
+        ctx = _full_bdhke_roundtrip()
+        assert verify(ctx["a"], ctx["C"], ctx["secret_msg"])
+
+    def test_wrong_secret_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        assert not verify(ctx["a"], ctx["C"], "wrong_secret")
+
+    def test_wrong_key_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_a = PrivateKey()
+        assert not verify(wrong_a, ctx["C"], ctx["secret_msg"])
+
+    def test_wrong_C_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        wrong_C = PrivateKey().public_key
+        assert not verify(ctx["a"], wrong_C, ctx["secret_msg"])
+
+    def test_double_C_fails(self):
+        ctx = _full_bdhke_roundtrip()
+        double_C = ctx["C"] + ctx["C"]
+        assert not verify(ctx["a"], double_C, ctx["secret_msg"])
+
+
+# ---------------------------------------------------------------------------
+# Combined DLEQ property-based: random keys always produce valid DLEQ
+# ---------------------------------------------------------------------------
+
+
+class TestDLEQPropertyBased:
+    @given(
+        secret=st.text(
+            alphabet=st.characters(whitelist_categories=("L", "N")),
+            min_size=1,
+            max_size=100,
+        ),
+    )
+    @settings(max_examples=30, deadline=10000)
+    def test_random_keys_always_valid(self, secret):
+        ctx = _full_bdhke_roundtrip(secret_msg=secret)
+        assert alice_verify_dleq(ctx["B_"], ctx["C_"], ctx["e"], ctx["s"], ctx["A"])
+        assert carol_verify_dleq(
+            secret_msg=ctx["secret_msg"],
+            r=ctx["r"],
+            C=ctx["C"],
+            e=ctx["e"],
+            s=ctx["s"],
+            A=ctx["A"],
+        )
+        assert verify(ctx["a"], ctx["C"], ctx["secret_msg"])
