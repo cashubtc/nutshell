@@ -19,7 +19,7 @@ from cashu.core.p2bk import (
     derive_blinding_scalar,
     ecdh_shared_secret,
 )
-from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
+from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign, verify_schnorr_signature
 from cashu.core.secret import Secret, SecretKind
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
@@ -137,7 +137,6 @@ def test_blind_pubkeys_roundtrip():
         data_pubkey=receiver_pub_hex,
         additional_pubkeys=[],
         refund_pubkeys=[],
-        receiver_pubkey=receiver_pub_hex,
     )
 
     # Receiver should be able to derive the private key for slot 0
@@ -170,7 +169,6 @@ def test_blind_pubkeys_with_additional_and_refund():
         data_pubkey=receiver_pub,
         additional_pubkeys=[add_pub],
         refund_pubkeys=[refund_pub],
-        receiver_pubkey=receiver_pub,
     )
 
     assert len(blinded_add) == 1
@@ -200,7 +198,6 @@ def test_wrong_receiver_cannot_unblind():
         data_pubkey=receiver_pub,
         additional_pubkeys=[],
         refund_pubkeys=[],
-        receiver_pubkey=receiver_pub,
     )
 
     derived = derive_blinded_private_key(
@@ -222,7 +219,6 @@ def test_blinded_pubkey_differs_from_original():
         data_pubkey=pub,
         additional_pubkeys=[],
         refund_pubkeys=[],
-        receiver_pubkey=pub,
     )
     assert blinded_data.lower() != pub.lower()
 
@@ -237,13 +233,11 @@ def test_different_ephemeral_keys_produce_different_blinding():
         data_pubkey=pub,
         additional_pubkeys=[],
         refund_pubkeys=[],
-        receiver_pubkey=pub,
     )
     blinded2, _, _, E2 = blind_pubkeys(
         data_pubkey=pub,
         additional_pubkeys=[],
         refund_pubkeys=[],
-        receiver_pubkey=pub,
     )
     assert E1 != E2  # random ephemeral keys
     assert blinded1 != blinded2  # different blinding
@@ -259,7 +253,6 @@ def test_derived_key_can_sign_and_verify():
         data_pubkey=receiver_pub,
         additional_pubkeys=[],
         refund_pubkeys=[],
-        receiver_pubkey=receiver_pub,
     )
 
     derived_key = derive_blinded_private_key(
@@ -508,6 +501,69 @@ async def test_v4_roundtrip_without_pe(wallet1: Wallet, wallet2: Wallet):
     # pe must remain absent — not an empty string, not zero-bytes
     for p in deserialized_proofs:
         assert p.p2pk_e is None
+
+
+def test_p2bk_refund_key_unblind():
+    """Sender's refund key can be unblinded independently of receiver's key.
+
+    This verifies per-key ECDH: the sender uses their own private key
+    against the ephemeral public key E to derive the blinded refund
+    private key, without needing the receiver's secret.
+    """
+    receiver_priv = PrivateKey()
+    sender_priv = PrivateKey()
+    assert receiver_priv.public_key and sender_priv.public_key
+    receiver_pub = receiver_priv.public_key.format(compressed=True).hex()
+    sender_pub = sender_priv.public_key.format(compressed=True).hex()
+
+    # Blind with receiver as data, sender as refund
+    blinded_data, _, blinded_refund, E = blind_pubkeys(
+        data_pubkey=receiver_pub,
+        additional_pubkeys=[],
+        refund_pubkeys=[sender_pub],
+    )
+    assert len(blinded_refund) == 1
+
+    # Receiver can unblind the data slot (slot 0)
+    receiver_derived = derive_blinded_private_key(
+        privkey=receiver_priv,
+        ephemeral_pubkey_hex=E,
+        blinded_pubkey_hex=blinded_data,
+        slot_index=0,
+    )
+    assert receiver_derived is not None
+
+    # Sender can unblind the refund slot (slot 1)
+    sender_derived = derive_blinded_private_key(
+        privkey=sender_priv,
+        ephemeral_pubkey_hex=E,
+        blinded_pubkey_hex=blinded_refund[0],
+        slot_index=1,
+    )
+    assert sender_derived is not None
+
+    # Cross-check: sender CANNOT unblind data slot, receiver CANNOT unblind refund slot
+    assert derive_blinded_private_key(
+        privkey=sender_priv,
+        ephemeral_pubkey_hex=E,
+        blinded_pubkey_hex=blinded_data,
+        slot_index=0,
+    ) is None
+    assert derive_blinded_private_key(
+        privkey=receiver_priv,
+        ephemeral_pubkey_hex=E,
+        blinded_pubkey_hex=blinded_refund[0],
+        slot_index=1,
+    ) is None
+
+    # Both derived keys can sign and verify
+    msg = b"refund path works"
+    sig_r = schnorr_sign(msg, receiver_derived)
+    sig_s = schnorr_sign(msg, sender_derived)
+
+    assert receiver_derived.public_key and sender_derived.public_key
+    assert verify_schnorr_signature(msg, receiver_derived.public_key, sig_r)
+    assert verify_schnorr_signature(msg, sender_derived.public_key, sig_s)
 
 
 async def _create_outputs(wallet: Wallet, amount: int) -> List[BlindedMessage]:

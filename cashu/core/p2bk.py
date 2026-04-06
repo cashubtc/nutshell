@@ -54,32 +54,27 @@ def blind_pubkeys(
     data_pubkey: str, 
     additional_pubkeys: List[str], 
     refund_pubkeys: List[str], 
-    receiver_pubkey: str,
     ephemeral_privkey: Optional[PrivateKey] = None,
 ) -> Tuple[str, List[str], List[str], str]:
-    """blind all pubkeys in a P2PK secret using ECDH.
+    """Blind all pubkeys in a P2PK secret using per-key ECDH.
+
+    Each pubkey P_i gets its own shared secret Zx_i = x(e * P_i), as required
+    by NUT-28: "For each receiver key P, compute: Unique shared secret Zx = x(eP)."
 
     Args:
         data_pubkey: The main locking pubkey.
         additional_pubkeys: Additional pubkeys from the "pubkeys" tag.
         refund_pubkeys: Refund pubkeys from the "refund" tag.
-        receiver_pubkey: The receiver's long-lived pubkey P (used for ECDH).
         ephemeral_privkey: Optional ephemeral private key. Generated if None.
 
     Returns:
         Tuple of (blinded_data_pubkey, blinded_additional, blinded_refund, ephemeral_pubkey_hex)
     """
-    receiver_pubkey_hex = _compressed_pubkey(receiver_pubkey)
-    receiver_pk = PublicKey(bytes.fromhex(receiver_pubkey_hex))
-
     if ephemeral_privkey is None:
         ephemeral_privkey = PrivateKey(os.urandom(32))
 
     assert ephemeral_privkey.public_key
     ephemeral_pubkey_hex = ephemeral_privkey.public_key.format(compressed=True).hex()
-
-    # compute ECDH shared secret Zx = x(e * P)
-    zx = ecdh_shared_secret(receiver_pk, ephemeral_privkey)
 
     # collect all pubkeys in slot order: [data, ...pubkeys, ...refund]
     all_pubkeys = [data_pubkey] + additional_pubkeys + refund_pubkeys
@@ -87,10 +82,12 @@ def blind_pubkeys(
     for i, pk_hex in enumerate(all_pubkeys):
         pk_hex = _compressed_pubkey(pk_hex)
         pk = PublicKey(bytes.fromhex(pk_hex))
-        r_i = derive_blinding_scalar(zx, i)
+        # Per-key ECDH: Zx_i = x(e * P_i)
+        zx_i = ecdh_shared_secret(pk, ephemeral_privkey)
+        r_i = derive_blinding_scalar(zx_i, i)
         blinding_point = _scalar_to_privkey(r_i).public_key
         assert blinding_point
-        blinded_pk = pk + blinding_point  # P' = P + r_i*G
+        blinded_pk = pk + blinding_point  # type: ignore[operator]  # P' = P + r_i*G
         blinded.append(blinded_pk.format(compressed=True).hex())
 
     # split back into data, pubkeys, refund
