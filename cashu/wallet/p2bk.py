@@ -46,6 +46,16 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
 
         if not tags:
             tags = Tags()
+
+        if tags:
+            for refund_pk in tags.get_tag_all("refund"):
+                if refund_pk.lower() != data.lower():
+                    raise ValueError(
+                        "P2BK refund keys must match the receiver pubkey. "
+                        "Multi-party refund requires per-receiver ECDH which "
+                        "is not yet implemented."
+                    )
+
         if locktime_seconds:
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())

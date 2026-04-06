@@ -32,8 +32,9 @@ async def assert_err(f, msg):
     try:
         await f
     except Exception as exc:
-        if msg not in str(exc.args[0]):
-            raise Exception(f"Expected error: {msg}, got: {exc.args[0]}")
+        exc_msg = str(exc)
+        if msg and msg not in exc_msg:
+            raise Exception(f"Expected error: {msg}, got: {exc_msg}")
         return
     raise Exception(f"Expected error: {msg}, got no error")
 
