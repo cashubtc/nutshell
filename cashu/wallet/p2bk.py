@@ -47,15 +47,6 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
         if not tags:
             tags = Tags()
 
-        if tags:
-            for refund_pk in tags.get_tag_all("refund"):
-                if refund_pk.lower() != data.lower():
-                    raise ValueError(
-                        "P2BK refund keys must match the receiver pubkey. "
-                        "Multi-party refund requires per-receiver ECDH which "
-                        "is not yet implemented."
-                    )
-
         if locktime_seconds:
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
@@ -70,15 +61,13 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
         additional_pubkeys = tags.get_tag_all("pubkeys")
         refund_pubkeys = tags.get_tag_all("refund")
 
-        # P2BK single-receiver: all slots use the same ECDH (data == receiver).
-        # Multi-receiver multisig (each key has a distinct owner) is not supported
-        # here — each receiver would need their own ECDH and ephemeral keypair.
+        # Per-key ECDH: each pubkey P_i gets its own Zx_i = x(e * P_i).
+        # Multi-party refund keys are handled correctly by this approach.
         blinded_data, blinded_additional, blinded_refund, ephemeral_pubkey_hex = (
             blind_pubkeys(
                 data_pubkey=data,
                 additional_pubkeys=additional_pubkeys,
                 refund_pubkeys=refund_pubkeys,
-                receiver_pubkey=data,
                 ephemeral_privkey=ephemeral_privkey,
             )
         )
