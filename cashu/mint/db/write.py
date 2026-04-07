@@ -183,8 +183,10 @@ class DbWriteHelper:
             return []
 
         quotes: List[MintQuote] = []
-        lock_parameters = {f"quote_{i}": q for i, q in enumerate(quote_ids)}
-        lock_select_statement = "quote IN (" + ", ".join([f":quote_{i}" for i in range(len(quote_ids))]) + ")"
+        # Sort quote_ids to ensure consistent locking order
+        sorted_quote_ids = sorted(quote_ids)
+        lock_parameters = {f"quote_{i}": q for i, q in enumerate(sorted_quote_ids)}
+        lock_select_statement = "quote IN (" + ", ".join([f":quote_{i}" for i in range(len(sorted_quote_ids))]) + ")"
 
         async with self.db.get_connection(
             lock_table="mint_quotes",
@@ -199,6 +201,8 @@ class DbWriteHelper:
                     raise TransactionError(f"Mint quote {quote_id} not found.")
                 if quote.pending:
                     raise TransactionError(f"Mint quote {quote_id} already pending.")
+                if quote.issued:
+                    raise TransactionError(f"Mint quote {quote_id} is already issued.")
                 if not quote.paid:
                     raise TransactionError(f"Mint quote {quote_id} is not paid yet.")
                 
