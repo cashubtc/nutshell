@@ -1234,3 +1234,15 @@ async def m033_add_issued_time_to_mint_quote(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN issued_time TIMESTAMP"
         )
+
+async def m034_add_last_checked_to_mint_quotes(db: Database):
+    """
+    Add last_checked column to mint_quotes table for rate limiting backend checks.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('mint_quotes')}
+                ADD COLUMN last_checked TIMESTAMP NULL
+            """
+        )
