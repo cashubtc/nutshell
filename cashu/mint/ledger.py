@@ -430,7 +430,9 @@ class Ledger(
                         await self.events.submit(quote)
             else:
                 # update the last_checked time even if not paid
-                await self.crud.update_mint_quote(quote=quote, db=self.db)
+                await self.crud.update_mint_quote_last_checked(
+                    quote_id=quote_id, last_checked=now, db=self.db
+                )
 
         return quote
 
