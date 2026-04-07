@@ -165,6 +165,56 @@ async def test_ledger_mint_batch_race(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_ledger_mint_batch_race_permutations(ledger: Ledger, wallet: Wallet):
+    """Test to ensure that locking order is deterministic and prevents deadlocks when two requests provide different permutations of quotes"""
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+
+    assert mint_quote1.privkey
+    assert mint_quote2.privkey
+
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+
+    req1 = PostMintBatchRequest(
+        quotes=[mint_quote1.quote, mint_quote2.quote],
+        quote_amounts=[64, 32],
+        outputs=outputs,
+        signatures=[sig1, sig2],
+    )
+    
+    # Different permutation
+    req2 = PostMintBatchRequest(
+        quotes=[mint_quote2.quote, mint_quote1.quote],
+        quote_amounts=[32, 64],
+        outputs=outputs,
+        signatures=[sig2, sig1],
+    )
+
+    results = await asyncio.gather(
+        ledger.mint_batch(req1),
+        ledger.mint_batch(req2),
+        return_exceptions=True
+    )
+
+    successes = [r for r in results if not isinstance(r, Exception)]
+    exceptions = [r for r in results if isinstance(r, Exception)]
+
+    assert len(successes) == 1, f"Expected 1 success, got {len(successes)}"
+    assert len(exceptions) == 1, f"Expected 1 exception, got {len(exceptions)}"
+    
+    # Ensure the exception is not a timeout or deadlock error but a transaction error
+    assert any("already pending" in str(e) or "already issued" in str(e) for e in exceptions), f"Unexpected exception: {exceptions}"
+
+
+@pytest.mark.asyncio
 async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wallet):
     await wallet.load_mint()
     mint_quote1 = await wallet.request_mint(64)
