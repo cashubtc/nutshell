@@ -143,6 +143,11 @@ class MintLimits(MintSettings):
         title="Transaction rate limit per minute",
         description="Number of requests an IP can make per minute to transaction endpoints.",
     )
+    mint_quote_backend_check_rate_limit: int = Field(
+        default=10,
+        title="Quote backend check rate limit",
+        description="Minimum seconds between checks with the backend for unpaid mint quotes.",
+    )
     mint_max_request_length: int = Field(
         default=1000,
         gt=0,

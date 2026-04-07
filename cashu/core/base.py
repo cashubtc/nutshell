@@ -425,6 +425,7 @@ class MintQuote(LedgerEvent):
     state: MintQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
+    last_checked: Union[int, None] = None
     expiry: Optional[int] = None
     mint: Optional[str] = None
     privkey: Optional[str] = None
@@ -436,12 +437,14 @@ class MintQuote(LedgerEvent):
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
+            last_checked = int(row["last_checked"]) if "last_checked" in row.keys() and row["last_checked"] else None
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
                 int(row["created_time"].timestamp()) if row["created_time"] else None
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+            last_checked = int(row["last_checked"].timestamp()) if "last_checked" in row.keys() and row["last_checked"] else None
         return cls(
             quote=row["quote"],
             method=row["method"],
@@ -452,6 +455,7 @@ class MintQuote(LedgerEvent):
             state=MintQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
+            last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
         )

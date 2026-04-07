@@ -605,8 +605,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, pubkey)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :pubkey)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, last_checked, pubkey)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :last_checked, :pubkey)
             """,
             {
                 "quote": quote.quote,
@@ -623,6 +623,11 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 )
                 if quote.paid_time
+                else None,
+                "last_checked": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.last_checked) or ""
+                )
+                if quote.last_checked
                 else None,
                 "pubkey": quote.pubkey or "",
             },
@@ -686,7 +691,7 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, last_checked = :last_checked WHERE quote = :quote",
             {
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(
@@ -694,7 +699,32 @@ class LedgerCrudSqlite(LedgerCrud):
                 )
                 if quote.paid_time
                 else None,
+                "last_checked": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.last_checked) or ""
+                )
+                if quote.last_checked
+                else None,
                 "quote": quote.quote,
+            },
+        )
+
+    async def update_mint_quote_last_checked(
+        self,
+        *,
+        quote_id: str,
+        last_checked: int,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET last_checked = :last_checked WHERE quote = :quote",
+            {
+                "last_checked": db.to_timestamp(
+                    db.timestamp_from_seconds(last_checked) or ""
+                )
+                if last_checked
+                else None,
+                "quote": quote_id,
             },
         )
 
