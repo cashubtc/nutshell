@@ -394,10 +394,18 @@ class Ledger(
         if quote.unpaid:
             if not quote.checking_id:
                 raise CashuError("quote has no checking id")
+                
+            now = int(time.time())
+            if quote.last_checked and now - quote.last_checked < settings.mint_quote_backend_check_rate_limit:
+                logger.trace(f"Lightning: checking invoice {quote.checking_id} skipped due to rate limit")
+                return quote
+
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_invoice_status(quote.checking_id)
+
+            quote.last_checked = now
             if status.settled:
                 # change state to paid in one transaction, it could have been marked paid
                 # by the invoice listener in the mean time
@@ -414,11 +422,15 @@ class Ledger(
                     if quote.unpaid:
                         logger.trace(f"Setting quote {quote_id} as paid")
                         quote.state = MintQuoteState.paid
-                        quote.paid_time = int(time.time())
+                        quote.paid_time = now
+                        quote.last_checked = now
                         await self.crud.update_mint_quote(
                             quote=quote, db=self.db, conn=conn
                         )
                         await self.events.submit(quote)
+            else:
+                # update the last_checked time even if not paid
+                await self.crud.update_mint_quote(quote=quote, db=self.db)
 
         return quote
 
