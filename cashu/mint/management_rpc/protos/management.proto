@@ -218,6 +218,8 @@ message Nut04Quote {
     optional int64 paid_time = 9;
     // Optional: The Unix timestamp when the quote expires.
     optional int64 expiry = 10;
+    // Optional: The Unix timestamp when the quote was last checked.
+    optional int64 last_checked = 11;
     // Optional: The public key associated with the quote, if applicable.
     optional string pubkey = 13;
     // Optional: The Unix timestamp when the ecash has been issued.
