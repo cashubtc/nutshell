@@ -1244,3 +1244,14 @@ async def m034_promises_order_index(db: Database):
             f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN order_index INTEGER DEFAULT 0"
         )
 
+async def m034_add_last_checked_to_mint_quotes(db: Database):
+    """
+    Add last_checked column to mint_quotes table for rate limiting backend checks.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('mint_quotes')}
+                ADD COLUMN last_checked TIMESTAMP NULL
+            """
+        )
