@@ -708,6 +708,26 @@ class LedgerCrudSqlite(LedgerCrud):
             },
         )
 
+    async def update_mint_quote_last_checked(
+        self,
+        *,
+        quote_id: str,
+        last_checked: int,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET last_checked = :last_checked WHERE quote = :quote",
+            {
+                "last_checked": db.to_timestamp(
+                    db.timestamp_from_seconds(last_checked) or ""
+                )
+                if last_checked
+                else None,
+                "quote": quote_id,
+            },
+        )
+
     async def store_melt_quote(
         self,
         *,
