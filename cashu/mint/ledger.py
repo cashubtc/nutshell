@@ -44,6 +44,7 @@ from ..core.models import (
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
 )
+from ..core.p2pk import verify_schnorr_signature
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -419,6 +420,47 @@ class Ledger(
                         await self.events.submit(quote)
 
         return quote
+
+    async def get_mint_quotes_by_pubkeys(
+        self, pubkeys: List[str], pubkey_signatures: List[str]
+    ) -> List[MintQuote]:
+        """Returns mint quotes associated with given public keys.
+
+        Args:
+            pubkeys (List[str]): List of public keys.
+            pubkey_signatures (List[str]): List of signatures for the public keys.
+
+        Raises:
+            Exception: Signatures invalid or missing.
+
+        Returns:
+            List[MintQuote]: List of mint quotes.
+        """
+        if len(pubkeys) != len(pubkey_signatures):
+            raise Exception("pubkeys and pubkey_signatures must have the same length")
+
+        for pubkey, signature in zip(pubkeys, pubkey_signatures):
+            pk = PublicKey(bytes.fromhex(pubkey))
+            if not verify_schnorr_signature(
+                bytes.fromhex(pubkey), pk, bytes.fromhex(signature)
+            ):
+                raise Exception(f"invalid signature for pubkey {pubkey}")
+
+        quotes = await self.crud.get_mint_quotes_by_pubkeys(pubkeys=pubkeys, db=self.db)
+        
+        # update unpaid quotes
+        unpaid_quotes = [q for q in quotes if q.unpaid][:settings.mint_max_request_length]
+        for quote in unpaid_quotes:
+            try:
+                await self.get_mint_quote(quote.quote)
+            except Exception as e:
+                logger.debug(f"Error checking quote status: {e}")
+
+        # get quotes again to get the updated states
+        if unpaid_quotes:
+             quotes = await self.crud.get_mint_quotes_by_pubkeys(pubkeys=pubkeys, db=self.db)
+
+        return quotes
 
     async def mint(
         self,
