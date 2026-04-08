@@ -671,9 +671,11 @@ class Ledger(
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
-        is_internal = await self.crud.get_mint_quote(
+        mint_quote = await self.crud.get_mint_quote(
             request=melt_quote.request, db=self.db
         )
+
+        is_internal = mint_quote is not None and mint_quote.unit == melt_quote.unit
 
         if melt_quote.pending and not is_internal:
             logger.debug(
@@ -895,12 +897,23 @@ class Ledger(
             quote=melt_quote, proofs=proofs, keysets=self.keysets
         )
 
-        # store the change outputs
-        if outputs:
-            await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
+        try:
+            # store the change outputs
+            if outputs:
+                await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
 
-        # if the melt corresponds to an internal mint, mark both as paid
-        melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
+            # if the melt corresponds to an internal mint, mark both as paid
+            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
+        except Exception as e:
+            logger.debug(f"Melt failed before backend payment: {e}")
+            await self.db_write.unset_melt_quote_pending_and_proofs(
+                quote=melt_quote,
+                proofs=proofs,
+                keysets=self.keysets,
+                state=MeltQuoteState.unpaid,
+            )
+            raise e
+
         # quote not paid yet (not internal), pay it with the backend
         if not melt_quote.paid:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
