@@ -25,6 +25,8 @@ from ..core.models import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
+    PostMintQuotesByPubkeyRequest,
+    PostMintQuotesByPubkeyResponse,
     PostMintRequest,
     PostMintResponse,
     PostRestoreRequest,
@@ -108,9 +110,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -382,6 +382,41 @@ async def mint_quote(
         updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/quote/bolt11/pubkey",
+    summary="Get mint quotes by pubkey",
+    response_model=PostMintQuotesByPubkeyResponse,
+    response_description="Get all pending and paid mint quotes for a given set of public keys.",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_mint_quotes_by_pubkey(
+    request: Request, payload: PostMintQuotesByPubkeyRequest
+) -> PostMintQuotesByPubkeyResponse:
+    """
+    Get mint quotes by pubkey.
+    """
+    logger.trace(f"> POST /v1/mint/quote/bolt11/pubkey: payload={payload}")
+    mint_quotes = await ledger.get_mint_quotes_by_pubkeys(
+        payload.pubkeys, payload.pubkey_signatures
+    )
+    quotes_response = [
+        PostMintQuoteResponse(
+            quote=mint_quote.quote,
+            request=mint_quote.request,
+            state=mint_quote.state.value,
+            amount=mint_quote.amount,
+            unit=mint_quote.unit,
+            method=mint_quote.method,
+            expiry=mint_quote.expiry,
+            pubkey=mint_quote.pubkey,
+        )
+        for mint_quote in mint_quotes
+    ]
+    resp = PostMintQuotesByPubkeyResponse(quotes=quotes_response)
+    logger.trace(f"< POST /v1/mint/quote/bolt11/pubkey: {resp}")
     return resp
 
 

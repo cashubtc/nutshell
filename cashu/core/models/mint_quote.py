@@ -29,6 +29,13 @@ class PostMintQuoteCheckRequest(BaseModel):
     )
 
 
+class PostMintQuotesByPubkeyRequest(BaseModel):
+    pubkeys: List[str] = Field(..., max_length=settings.mint_max_request_length)
+    pubkey_signatures: List[str] = Field(
+        ..., max_length=settings.mint_max_request_length
+    )
+
+
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
@@ -51,3 +58,7 @@ class PostMintQuoteResponse(BaseModel):
         to_dict["amount_issued"] = mint_quote.amount_issued
         to_dict["updated_at"] = mint_quote.updated_at
         return cls.model_validate(to_dict)
+
+
+class PostMintQuotesByPubkeyResponse(BaseModel):
+    quotes: List[PostMintQuoteResponse]
