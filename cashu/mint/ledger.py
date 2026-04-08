@@ -677,25 +677,8 @@ class Ledger(
 
         is_internal = mint_quote is not None and mint_quote.unit == melt_quote.unit
 
-        if melt_quote.pending:
-            if is_internal:
-                # Internal settlement is synchronous. If it's pending, it might be stuck.
-                # If the mint quote is no longer unpaid, internal settlement is impossible.
-                if mint_quote.state != MintQuoteState.unpaid:
-                    logger.debug(
-                        f"Internal melt quote {quote_id} stuck pending while mint quote is {mint_quote.state}. Setting as unpaid."
-                    )
-                    pending_proofs = await self.crud.get_pending_proofs_for_quote(
-                        quote_id=quote_id, db=self.db
-                    )
-                    melt_quote = await self.db_write.unset_melt_quote_pending_and_proofs(
-                        quote=melt_quote,
-                        proofs=pending_proofs,
-                        keysets=self.keysets,
-                        state=MeltQuoteState.unpaid,
-                    )
-            else:
-                logger.debug(
+        if melt_quote.pending and not is_internal:
+            logger.debug(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
             )
