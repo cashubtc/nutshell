@@ -224,10 +224,12 @@ def conflict_ignore(db_type: str, table: str, pk: str) -> str:
     return "INSERT"
 
 
-def conflict_suffix(db_type: str, pk: str) -> str:
+def conflict_suffix(db_type: str, pk: str = "") -> str:
     if db_type == "sqlite":
         return ""
-    return f" ON CONFLICT ({pk}) DO NOTHING"
+    if pk:
+        return f" ON CONFLICT ({pk}) DO NOTHING"
+    return " ON CONFLICT DO NOTHING"
 
 
 def preflight_checks(
@@ -604,7 +606,7 @@ def migrate_melt_quotes(
         " payment_preimage, request_lookup_id, request_lookup_id_kind,"
         " created_time, paid_time, payment_method, options)"
         f" VALUES ({', '.join([p] * 14)})"
-        f"{conflict_suffix(dst_type, 'id')}"
+        f"{conflict_suffix(dst_type)}"
     )
 
     sql_saga = (
