@@ -18,6 +18,7 @@ from ..core.nuts.nuts import (
     HTLC_NUT,
     MELT_NUT,
     MINT_NUT,
+    MINT_QUOTE_PUBKEY_NUT,
     MINT_QUOTE_SIGNATURE_NUT,
     MPP_NUT,
     P2PK_NUT,
@@ -123,6 +124,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
+        mint_features[MINT_QUOTE_PUBKEY_NUT] = supported_dict
         return mint_features
 
     def add_mpp_features(
