@@ -624,9 +624,10 @@ def migrate_melt_quotes(
     )
 
     count = 0
+    skipped = 0
     for batch in fetch_batched(src_conn, sql_read, batch_size):
         quote_rows = []
-        saga_rows = []
+        pending_ids = []
 
         for row in batch:
             r = dict(row)
@@ -659,23 +660,44 @@ def migrate_melt_quotes(
             )
 
             if state == "PENDING":
-                op_id = str(uuid.uuid4())
-                now = int(datetime.now(timezone.utc).timestamp())
-                saga_rows.append(
-                    (op_id, "melt", "payment_attempted", quote_id, now, now)
-                )
-                melt_quote_ops[quote_id] = op_id
+                pending_ids.append(quote_id)
 
         cur = dst_conn.cursor()
         if quote_rows:
             cur.executemany(sql_quote, quote_rows)
             count += len(quote_rows)
-        if saga_rows:
-            cur.executemany(sql_saga, saga_rows)
+
+        if pending_ids:
+            placeholders = ", ".join([p] * len(pending_ids))
+            cur.execute(
+                f"SELECT id FROM melt_quote WHERE id IN ({placeholders})",
+                pending_ids,
+            )
+            inserted_ids = {row[0] for row in cur.fetchall()}
+            saga_rows = []
+            for qid in pending_ids:
+                if qid in inserted_ids:
+                    op_id = str(uuid.uuid4())
+                    now = int(datetime.now(timezone.utc).timestamp())
+                    saga_rows.append(
+                        (op_id, "melt", "payment_attempted", qid, now, now)
+                    )
+                    melt_quote_ops[qid] = op_id
+                else:
+                    skipped += 1
+                    logger.warning(
+                        f"Melt quote {qid} dropped by constraint, skipping saga"
+                    )
+            if saga_rows:
+                cur.executemany(sql_saga, saga_rows)
+
         cur.close()
 
     dst_conn.commit()
-    logger.info(f"Melt quotes migrated: {count}")
+    if skipped:
+        logger.warning(f"Melt quotes migrated: {count} ({skipped} sagas skipped)")
+    else:
+        logger.info(f"Melt quotes migrated: {count}")
     return count, melt_quote_ops
 
 
