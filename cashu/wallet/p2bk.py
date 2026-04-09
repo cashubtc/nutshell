@@ -104,12 +104,16 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
             + secret.tags.get_tag_all("refund")
         )
         for i, blinded_pk in enumerate(all_blinded_pubkeys):
-            derived = derive_blinded_private_key(
-                privkey=self.private_key,
-                ephemeral_pubkey_hex=proof.p2pk_e,
-                blinded_pubkey_hex=blinded_pk,
-                slot_index=i,
-            )
+            try:
+                derived = derive_blinded_private_key(
+                    privkey=self.private_key,
+                    ephemeral_pubkey_hex=proof.p2pk_e,
+                    blinded_pubkey_hex=blinded_pk,
+                    slot_index=i,
+                )
+            except Exception:
+                # Slot value is not a valid pubkey (e.g. HTLC preimage hash)
+                continue
             if derived is not None:
                 return derived
         return None
