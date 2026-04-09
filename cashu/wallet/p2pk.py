@@ -313,7 +313,9 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
                 if secret.kind == SecretKind.HTLC.value and (
                     secret.tags.get_tag("pubkeys") or secret.tags.get_tag("refund")
                 ):
-                    # HTLC secret with pubkeys tag is a P2PK secret
+                    # NUT-28: P2BK is inherited here — HTLC reuses the P2PK
+                    # signature path which calls _derive_p2bk_signing_key.
+                    # No HTLC-specific P2BK handling is needed.
                     p2pk_proofs.append(p)
             except Exception:
                 pass

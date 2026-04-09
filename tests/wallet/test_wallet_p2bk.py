@@ -20,7 +20,7 @@ from cashu.core.p2bk import (
     ecdh_shared_secret,
 )
 from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign, verify_schnorr_signature
-from cashu.core.secret import Secret, SecretKind
+from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -564,6 +564,122 @@ def test_p2bk_refund_key_unblind():
     assert receiver_derived.public_key and sender_derived.public_key
     assert verify_schnorr_signature(msg, receiver_derived.public_key, sig_r)
     assert verify_schnorr_signature(msg, sender_derived.public_key, sig_s)
+
+
+def test_p2bk_multisig_slot_independence():
+    """Each receiver unblind only their own slot, not the other's."""
+    receiver1_priv = PrivateKey()
+    receiver2_priv = PrivateKey()
+    assert receiver1_priv.public_key and receiver2_priv.public_key
+
+    r1_pub = receiver1_priv.public_key.format(compressed=True).hex()
+    r2_pub = receiver2_priv.public_key.format(compressed=True).hex()
+
+    blinded_data, blinded_add, _, E = blind_pubkeys(
+        data_pubkey=r1_pub,
+        additional_pubkeys=[r2_pub],
+        refund_pubkeys=[],
+    )
+
+    # receiver1 unblind slot 0 only
+    assert derive_blinded_private_key(receiver1_priv, E, blinded_data, 0) is not None
+    assert derive_blinded_private_key(receiver1_priv, E, blinded_add[0], 1) is None
+
+    # receiver2 unblind slot 1 only
+    assert derive_blinded_private_key(receiver2_priv, E, blinded_add[0], 1) is not None
+    assert derive_blinded_private_key(receiver2_priv, E, blinded_data, 0) is None
+
+
+def test_p2bk_tampered_ephemeral_pubkey_fails():
+    """Tampered p2pk_e changes Zx, wrong scalars, signature fails."""
+    receiver_priv = PrivateKey()
+    assert receiver_priv.public_key
+    receiver_pub = receiver_priv.public_key.format(compressed=True).hex()
+
+    blinded_data, _, _, E = blind_pubkeys(
+        data_pubkey=receiver_pub,
+        additional_pubkeys=[],
+        refund_pubkeys=[],
+    )
+    # Generate a different ephemeral pubkey (tampered)
+    tampered_E = PrivateKey().public_key.format(compressed=True).hex()
+    assert tampered_E != E
+
+    derived = derive_blinded_private_key(
+        privkey=receiver_priv,
+        ephemeral_pubkey_hex=tampered_E,
+        blinded_pubkey_hex=blinded_data,
+        slot_index=0,
+    )
+    assert derived is None  # tampered E → wrong Zx → unblind fails
+
+
+def test_p2bk_non_sigall_outputs_have_distinct_ephemeral_keys():
+    """Two independent non-SIG_ALL outputs must carry distinct E values."""
+    priv = PrivateKey()
+    assert priv.public_key
+    pub = priv.public_key.format(compressed=True).hex()
+
+    _, _, _, E1 = blind_pubkeys(
+        data_pubkey=pub,
+        additional_pubkeys=[],
+        refund_pubkeys=[],
+    )
+    _, _, _, E2 = blind_pubkeys(
+        data_pubkey=pub,
+        additional_pubkeys=[],
+        refund_pubkeys=[],
+    )
+    assert E1 != E2
+
+
+@pytest.mark.asyncio
+async def test_p2bk_htlc_inheritance(wallet1: Wallet, wallet2: Wallet):
+    """HTLC proof with P2BK: blinded pubkey, preimage spend works."""
+    import hashlib as hl
+
+    from cashu.core.base import HTLCWitness
+    from cashu.core.htlc import HTLCSecret
+
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    preimage = "00" * 32
+    preimage_hash = hl.sha256(bytes.fromhex(preimage)).hexdigest()
+
+    # Blind wallet2's pubkey at slot 1 (HTLC: slot 0 = data = preimage_hash)
+    dummy_pub = PrivateKey().public_key.format(compressed=True).hex()
+    _, blinded_hashlock, _, ephemeral_pub = blind_pubkeys(
+        data_pubkey=dummy_pub,
+        additional_pubkeys=[pubkey_wallet2],
+        refund_pubkeys=[],
+    )
+
+    # Build HTLC secret with the P2BK-blinded hashlock pubkey
+    tags = Tags()
+    tags["pubkeys"] = [blinded_hashlock[0]]
+    htlc_secret = HTLCSecret(
+        kind=SecretKind.HTLC.value,
+        data=preimage_hash,
+        tags=tags,
+    )
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 8, secret_lock=htlc_secret, p2pk_e=ephemeral_pub
+    )
+
+    # Verify wallet2 can derive the P2BK signing key for the HTLC proof
+    for p in send_proofs:
+        assert p.p2pk_e == ephemeral_pub
+        assert wallet2._derive_p2bk_signing_key(p) is not None
+
+    # Set preimage on witness before redemption
+    for p in send_proofs:
+        p.witness = HTLCWitness(preimage=preimage).model_dump_json()
+
+    # Redeem — sign_proofs_inplace_swap adds P2BK-derived signature alongside preimage
+    await wallet2.redeem(send_proofs)
 
 
 async def _create_outputs(wallet: Wallet, amount: int) -> List[BlindedMessage]:
