@@ -658,13 +658,12 @@ def migrate_melt_quotes(
                 )
             )
 
-            if state in ("UNPAID", "PENDING"):
+            if state == "PENDING":
                 op_id = str(uuid.uuid4())
                 now = int(datetime.now(timezone.utc).timestamp())
-                saga_state = (
-                    "payment_attempted" if state == "PENDING" else "setup_complete"
+                saga_rows.append(
+                    (op_id, "melt", "payment_attempted", quote_id, now, now)
                 )
-                saga_rows.append((op_id, "melt", saga_state, quote_id, now, now))
                 melt_quote_ops[quote_id] = op_id
 
         cur = dst_conn.cursor()
