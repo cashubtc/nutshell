@@ -63,6 +63,16 @@ class FakeWallet(LightningBackend):
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
+        self.tasks: set[asyncio.Task] = set()
+
+    async def cleanup(self) -> None:
+        """Cancel any running background tasks when the backend is cleaned up."""
+        for task in self.tasks:
+            if not task.done():
+                task.cancel()
+        if self.tasks:
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+            self.tasks.clear()
 
     async def status(self) -> StatusResponse:
         return StatusResponse(
@@ -179,7 +189,9 @@ class FakeWallet(LightningBackend):
         payment_request = encode(bolt11, self.privkey)
 
         if settings.fakewallet_brr:
-            asyncio.create_task(self.mark_invoice_paid(bolt11))
+            task = asyncio.create_task(self.mark_invoice_paid(bolt11))
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
 
         return InvoiceResponse(
             ok=True, checking_id=payment_hash, payment_request=payment_request
