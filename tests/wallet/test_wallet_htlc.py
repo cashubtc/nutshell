@@ -601,4 +601,10 @@ async def test_htlc_redeem_with_automatic_signature(wallet1: Wallet, wallet2: Wa
     # let the wallet automatically add the signature
     send_proofs = wallet1.sign_proofs_inplace_swap(send_proofs, [])
 
+    # ensure the signer appended HTLC signatures without clobbering the preimage
+    for p in send_proofs:
+        witness = HTLCWitness.from_witness(p.witness)
+        assert witness.preimage == preimage
+        assert witness.signatures
+
     await wallet1.redeem(send_proofs)
