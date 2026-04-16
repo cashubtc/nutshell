@@ -72,17 +72,21 @@ class LedgerSpendingConditions:
             exception_to_raise = TransactionError("HTLC requires preimage for main path.")
 
         # Check if we can spend via the normal path (main pubkeys)
-        if main_pubkeys and can_use_main_path:
-            try:
-                if self._verify_p2pk_signatures(
-                    message_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
-                ):
-                    logger.trace("Spending condition satisfied via main pubkeys.")
-                    return True
-            except Exception as e:
-                # Main path failed, continue to check refund path
-                exception_to_raise = e
-                pass
+        if can_use_main_path:
+            if main_pubkeys:
+                try:
+                    if self._verify_p2pk_signatures(
+                        message_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
+                    ):
+                        logger.trace("Spending condition satisfied via main pubkeys.")
+                        return True
+                except Exception as e:
+                    # Main path failed, continue to check refund path
+                    exception_to_raise = e
+                    pass
+            else:
+                # HTLC with no main pubkeys and a valid preimage
+                return True
 
         # Check if locktime has passed and refund path is available
         now = time.time()
@@ -349,17 +353,21 @@ class LedgerSpendingConditions:
             exception_to_raise = TransactionError("HTLC requires preimage for main path.")
 
         # Check if we can spend via the normal path (main pubkeys)
-        if main_pubkeys and can_use_main_path:
-            try:
-                if self._verify_p2pk_signatures(
-                    message_to_sign, main_pubkeys, signatures.copy(), main_n_sigs
-                ):
-                    logger.trace("Spending condition satisfied via main pubkeys.")
-                    return True
-            except Exception as e:
-                # Main path failed, continue to check refund path
-                exception_to_raise = e
-                pass
+        if can_use_main_path:
+            if main_pubkeys:
+                try:
+                    if self._verify_p2pk_signatures(
+                        message_to_sign, main_pubkeys, signatures.copy(), main_n_sigs
+                    ):
+                        logger.trace("Spending condition satisfied via main pubkeys.")
+                        return True
+                except Exception as e:
+                    # Main path failed, continue to check refund path
+                    exception_to_raise = e
+                    pass
+            else:
+                # HTLC with no main pubkeys and a valid preimage
+                return True
 
         # Check if locktime has passed and refund path is available
         now = time.time()
