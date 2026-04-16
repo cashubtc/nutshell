@@ -400,12 +400,15 @@ class Ledger(
                 logger.trace(f"Lightning: checking invoice {quote.checking_id} skipped due to rate limit")
                 return quote
 
+            quote.last_checked = now
+            await self.crud.update_mint_quote_last_checked(
+                quote_id=quote_id, last_checked=now, db=self.db
+            )
+
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_invoice_status(quote.checking_id)
-
-            quote.last_checked = now
             if status.settled:
                 # change state to paid in one transaction, it could have been marked paid
                 # by the invoice listener in the mean time
@@ -428,11 +431,6 @@ class Ledger(
                             quote=quote, db=self.db, conn=conn
                         )
                         await self.events.submit(quote)
-            else:
-                # update the last_checked time even if not paid
-                await self.crud.update_mint_quote_last_checked(
-                    quote_id=quote_id, last_checked=now, db=self.db
-                )
 
         return quote
 
