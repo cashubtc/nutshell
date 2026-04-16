@@ -22,44 +22,33 @@ from .base import (
     Unsupported,
 )
 
-try:
-    from breez_sdk_spark import (
-        BreezSdk,
-        ConnectRequest,
-        EventListener,
-        GetInfoRequest,
-        ListPaymentsRequest,
-        Network,
-        PaymentMethod,
-        PaymentType,
-        PrepareSendPaymentRequest,
-        ReceivePaymentMethod,
-        ReceivePaymentRequest,
-        SdkEvent,
-        Seed,
-        SendPaymentOptions,
-        SendPaymentRequest,
-        connect,
-        default_config,
-    )
-    from breez_sdk_spark import (
-        PaymentStatus as SparkPaymentStatus,
-    )
-    from breez_sdk_spark import breez_sdk_spark as spark_bindings
-except ImportError as exc:  # pragma: no cover - optional dependency
-    logger.warning("Breez Spark SDK not available - Spark backend disabled: %s", exc)
-    BreezSdk = None  # type: ignore[assignment]
-    EventListener = object  # type: ignore[assignment]
-    PaymentMethod = None
-    PaymentType = None
-    SparkPaymentStatus = None
-    spark_bindings = None
+from breez_sdk_spark import (
+    BreezSdk,
+    ConnectRequest,
+    EventListener,
+    GetInfoRequest,
+    ListPaymentsRequest,
+    Network,
+    PaymentMethod,
+    PaymentType,
+    PrepareSendPaymentRequest,
+    ReceivePaymentMethod,
+    ReceivePaymentRequest,
+    SdkEvent,
+    Seed,
+    SendPaymentOptions,
+    SendPaymentRequest,
+    connect,
+    default_config,
+)
+from breez_sdk_spark import (
+    PaymentStatus as SparkPaymentStatus,
+)
+from breez_sdk_spark import breez_sdk_spark as spark_bindings
 
 
 def _register_sdk_event_loop(loop: asyncio.AbstractEventLoop) -> None:
     """Inform the Spark SDK which asyncio loop to talk to."""
-    if spark_bindings is None:  # pragma: no cover - SDK missing
-        return
     try:
         spark_bindings._uniffi_get_event_loop = lambda: loop
     except Exception as exc:  # pragma: no cover - defensive measure
@@ -125,20 +114,18 @@ def _payment_preimage(payment) -> Optional[str]:
 
 def _is_lightning_payment(payment) -> bool:
     method = getattr(payment, "method", None)
-    lightning_method = getattr(PaymentMethod, "LIGHTNING", None) if PaymentMethod else None
+    lightning_method = getattr(PaymentMethod, "LIGHTNING", None)
     if lightning_method is None or method is None:
         return True
     return method == lightning_method
 
 
-SPARK_PAYMENT_RESULT_MAP = {}
-if SparkPaymentStatus is not None:
-    SPARK_PAYMENT_RESULT_MAP = {
-        SparkPaymentStatus.COMPLETED: PaymentResult.SETTLED,
-        getattr(SparkPaymentStatus, "SETTLED", SparkPaymentStatus.COMPLETED): PaymentResult.SETTLED,
-        SparkPaymentStatus.FAILED: PaymentResult.FAILED,
-        SparkPaymentStatus.PENDING: PaymentResult.PENDING,
-    }
+SPARK_PAYMENT_RESULT_MAP = {
+    SparkPaymentStatus.COMPLETED: PaymentResult.SETTLED,
+    getattr(SparkPaymentStatus, "SETTLED", SparkPaymentStatus.COMPLETED): PaymentResult.SETTLED,
+    SparkPaymentStatus.FAILED: PaymentResult.FAILED,
+    SparkPaymentStatus.PENDING: PaymentResult.PENDING,
+}
 
 
 class SparkEventListener(EventListener):  # type: ignore[misc]
@@ -155,7 +142,7 @@ class SparkEventListener(EventListener):  # type: ignore[misc]
             return
 
         payment_type = getattr(payment, "payment_type", None)
-        receive_type = getattr(PaymentType, "RECEIVE", None) if PaymentType else None
+        receive_type = getattr(PaymentType, "RECEIVE", None)
         if receive_type and payment_type and payment_type != receive_type:
             return
         if not _is_lightning_payment(payment):
@@ -190,9 +177,6 @@ class SparkWallet(LightningBackend):
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
-        if BreezSdk is None:
-            raise Unsupported("breez-sdk-spark is required for SparkWallet")
-
         self.assert_unit_supported(unit)
         self.unit = unit
 
@@ -306,10 +290,10 @@ class SparkWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        return await self._get_payment_status(checking_id, PaymentType.RECEIVE if PaymentType else None)
+        return await self._get_payment_status(checking_id, PaymentType.RECEIVE)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        return await self._get_payment_status(checking_id, PaymentType.SEND if PaymentType else None)
+        return await self._get_payment_status(checking_id, PaymentType.SEND)
 
     async def _get_payment_status(
         self, checking_id: str, payment_type: Optional[PaymentType]
