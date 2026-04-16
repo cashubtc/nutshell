@@ -5,23 +5,6 @@ import inspect
 from typing import AsyncGenerator, Optional
 
 from bolt11 import decode
-from loguru import logger
-
-from ..core.base import Amount, MeltQuote, Unit
-from ..core.helpers import fee_reserve
-from ..core.models import PostMeltQuoteRequest
-from ..core.settings import settings
-from .base import (
-    InvoiceResponse,
-    LightningBackend,
-    PaymentQuoteResponse,
-    PaymentResponse,
-    PaymentResult,
-    PaymentStatus,
-    StatusResponse,
-    Unsupported,
-)
-
 from breez_sdk_spark import (
     BreezSdk,
     ConnectRequest,
@@ -45,6 +28,21 @@ from breez_sdk_spark import (
     PaymentStatus as SparkPaymentStatus,
 )
 from breez_sdk_spark import breez_sdk_spark as spark_bindings
+from loguru import logger
+
+from ..core.base import Amount, MeltQuote, Unit
+from ..core.helpers import fee_reserve
+from ..core.models import PostMeltQuoteRequest
+from ..core.settings import settings
+from .base import (
+    InvoiceResponse,
+    LightningBackend,
+    PaymentQuoteResponse,
+    PaymentResponse,
+    PaymentResult,
+    PaymentStatus,
+    StatusResponse,
+)
 
 
 def _register_sdk_event_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -122,7 +120,9 @@ def _is_lightning_payment(payment) -> bool:
 
 SPARK_PAYMENT_RESULT_MAP = {
     SparkPaymentStatus.COMPLETED: PaymentResult.SETTLED,
-    getattr(SparkPaymentStatus, "SETTLED", SparkPaymentStatus.COMPLETED): PaymentResult.SETTLED,
+    getattr(
+        SparkPaymentStatus, "SETTLED", SparkPaymentStatus.COMPLETED
+    ): PaymentResult.SETTLED,
     SparkPaymentStatus.FAILED: PaymentResult.FAILED,
     SparkPaymentStatus.PENDING: PaymentResult.PENDING,
 }
@@ -136,7 +136,9 @@ class SparkEventListener(EventListener):  # type: ignore[misc]
         self.queue = queue
         self.loop = loop
 
-    async def on_event(self, event: SdkEvent) -> None:  # pragma: no cover - SDK callback
+    async def on_event(
+        self, event: SdkEvent
+    ) -> None:  # pragma: no cover - SDK callback
         payment = getattr(event, "payment", None)
         if payment is None:
             return
@@ -184,13 +186,9 @@ class SparkWallet(LightningBackend):
         assert settings.mint_spark_mnemonic, "MINT_SPARK_MNEMONIC not set"
 
         network_name = getattr(settings, "mint_spark_network", "mainnet").lower()
-        self.network = (
-            Network.MAINNET if network_name == "mainnet" else Network.TESTNET
-        )
+        self.network = Network.MAINNET if network_name == "mainnet" else Network.TESTNET
         self.storage_dir = getattr(settings, "mint_spark_storage_dir", "data/spark")
-        self.connection_timeout = getattr(
-            settings, "mint_spark_connection_timeout", 30
-        )
+        self.connection_timeout = getattr(settings, "mint_spark_connection_timeout", 30)
         self.max_retry_attempts = getattr(settings, "mint_spark_retry_attempts", 3)
 
         self._sdk: Optional[BreezSdk] = None
@@ -254,9 +252,16 @@ class SparkWallet(LightningBackend):
                 payment_request=quote.request,
                 amount=None,
             )
-            prepare_response = await sdk.prepare_send_payment(
-                request=prepare_request
+            prepare_response = await sdk.prepare_send_payment(request=prepare_request)
+
+            estimated_fee = getattr(prepare_response, "fees_sats", None) or getattr(
+                prepare_response, "fees", 0
             )
+            if int(estimated_fee) * 1000 > fee_limit_msat:
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message=f"Fee exceeded limit: {estimated_fee} sats > {fee_limit_msat / 1000} sats",
+                )
 
             options = SendPaymentOptions.BOLT11_INVOICE(
                 prefer_spark=False, completion_timeout_secs=30
@@ -417,9 +422,7 @@ class SparkWallet(LightningBackend):
         config = default_config(network=self.network)
         config.api_key = settings.mint_spark_api_key
 
-        seed = Seed.MNEMONIC(
-            mnemonic=settings.mint_spark_mnemonic, passphrase=None
-        )
+        seed = Seed.MNEMONIC(mnemonic=settings.mint_spark_mnemonic, passphrase=None)
         sdk = await asyncio.wait_for(
             connect(
                 request=ConnectRequest(
