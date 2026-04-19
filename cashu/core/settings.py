@@ -111,7 +111,7 @@ class MintLimits(MintSettings):
         description="IP-based rate limiter.",
     )
     mint_rate_limit_proxy_trust: bool = Field(
-        default=False,
+        default=True,
         title="Trust proxy headers for rate limiting",
         description=(
             "Extract client IP from proxy headers (X-Forwarded-For,"
