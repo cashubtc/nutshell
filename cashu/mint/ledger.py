@@ -351,7 +351,9 @@ class Ledger(
         request = invoice_response.payment_request.lower()
 
         expiry = None
-        if invoice_obj.expiry is not None:
+        if settings.mint_quote_ttl is not None:
+            expiry = int(time.time()) + settings.mint_quote_ttl
+        elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MintQuote(
@@ -614,7 +616,9 @@ class Ledger(
             raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
-        if invoice_obj.expiry is not None:
+        if settings.melt_quote_ttl is not None:
+            expiry = int(time.time()) + settings.melt_quote_ttl
+        elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(

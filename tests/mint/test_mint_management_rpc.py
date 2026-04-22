@@ -108,12 +108,18 @@ async def test_update_quote_ttl(rpc_servicer):
     # Test updating mint ttl
     request = management_pb2.UpdateQuoteTtlRequest(mint_ttl=12345)
     await rpc_servicer.UpdateQuoteTtl(request, None)
-    assert settings.mint_redis_cache_ttl == 12345
+    assert settings.mint_quote_ttl == 12345
 
     # Test updating melt ttl
     request = management_pb2.UpdateQuoteTtlRequest(melt_ttl=54321)
     await rpc_servicer.UpdateQuoteTtl(request, None)
-    assert settings.mint_redis_cache_ttl == 54321
+    assert settings.melt_quote_ttl == 54321
+
+    # Test both fields set in one request (ensures if/if not elif)
+    request_both = management_pb2.UpdateQuoteTtlRequest(mint_ttl=111, melt_ttl=222)
+    await rpc_servicer.UpdateQuoteTtl(request_both, None)
+    assert settings.mint_quote_ttl == 111
+    assert settings.melt_quote_ttl == 222
 
     # Test no ttl specified
     request_empty = management_pb2.UpdateQuoteTtlRequest()

@@ -63,6 +63,8 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_quote_ttl: Optional[int] = Field(default=None)
+    melt_quote_ttl: Optional[int] = Field(default=None)
 
     mint_regular_tasks_interval_seconds: int = Field(
         default=3600,
