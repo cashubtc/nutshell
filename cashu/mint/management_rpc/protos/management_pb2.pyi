@@ -470,6 +470,7 @@ class Nut04Quote(google.protobuf.message.Message):
     PAID_TIME_FIELD_NUMBER: builtins.int
     EXPIRY_FIELD_NUMBER: builtins.int
     PUBKEY_FIELD_NUMBER: builtins.int
+    ISSUED_TIME_FIELD_NUMBER: builtins.int
     quote: builtins.str
     """The unique identifier for the quote."""
     method: builtins.str
@@ -492,6 +493,8 @@ class Nut04Quote(google.protobuf.message.Message):
     """Optional: The Unix timestamp when the quote expires."""
     pubkey: builtins.str
     """Optional: The public key associated with the quote, if applicable."""
+    issued_time: builtins.int
+    """Optional: The Unix timestamp when the ecash has been issued."""
     def __init__(
         self,
         *,
@@ -506,13 +509,16 @@ class Nut04Quote(google.protobuf.message.Message):
         paid_time: builtins.int | None = ...,
         expiry: builtins.int | None = ...,
         pubkey: builtins.str | None = ...,
+        issued_time: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "pubkey", b"pubkey", "state", b"state"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "amount", b"amount", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "method", b"method", "paid_time", b"paid_time", "pubkey", b"pubkey", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_issued_time", b"_issued_time", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "created_time", b"created_time", "expiry", b"expiry", "issued_time", b"issued_time", "paid_time", b"paid_time", "pubkey", b"pubkey", "state", b"state"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_issued_time", b"_issued_time", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "amount", b"amount", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "issued_time", b"issued_time", "method", b"method", "paid_time", b"paid_time", "pubkey", b"pubkey", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_created_time", b"_created_time"]) -> typing.Literal["created_time"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_expiry", b"_expiry"]) -> typing.Literal["expiry"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_issued_time", b"_issued_time"]) -> typing.Literal["issued_time"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]) -> typing.Literal["paid_time"] | None: ...
     @typing.overload

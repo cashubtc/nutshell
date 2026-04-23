@@ -220,6 +220,8 @@ message Nut04Quote {
     optional int64 expiry = 10;
     // Optional: The public key associated with the quote, if applicable.
     optional string pubkey = 13;
+    // Optional: The Unix timestamp when the ecash has been issued.
+    optional int64 issued_time = 14;
 }
 
 // BlindedMessage represents a blinded message used in Cashu.
