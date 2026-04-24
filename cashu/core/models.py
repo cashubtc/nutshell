@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, RootModel, model_validator
 
@@ -138,13 +138,13 @@ class KeysetsResponse_deprecated(BaseModel):
 
 
 class PostMintQuoteRequest(BaseModel):
-    unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
+    unit: str = Field(..., max_length=64)  # output unit
     amount: int = Field(..., gt=0)  # output amount
     description: Optional[str] = Field(
-        default=None, max_length=settings.mint_max_request_length
+        default=None, max_length=1024
     )  # invoice description
     pubkey: Optional[str] = Field(
-        default=None, max_length=settings.mint_max_request_length
+        default=None, max_length=66
     )  # NUT-20 quote lock pubkey
 
 
@@ -173,12 +173,12 @@ class PostMintQuoteResponse(BaseModel):
 
 
 class PostMintRequest(BaseModel):
-    quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
+    quote: str = Field(..., max_length=256)  # quote id
     outputs: List[BlindedMessage] = Field(
         ..., max_length=settings.mint_max_request_length
     )
     signature: Optional[str] = Field(
-        default=None, max_length=settings.mint_max_request_length
+        default=None, max_length=130
     )  # NUT-20 quote signature
 
 
@@ -213,9 +213,9 @@ class PostMeltRequestOptions(BaseModel):
 
 
 class PostMeltQuoteRequest(BaseModel):
-    unit: str = Field(..., max_length=settings.mint_max_request_length)  # input unit
+    unit: str = Field(..., max_length=64)  # input unit
     request: str = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=10000
     )  # output payment request
     options: Optional[PostMeltRequestOptions] = None
 
@@ -266,7 +266,7 @@ class PostMeltQuoteResponse(BaseModel):
 
 
 class PostMeltRequest(BaseModel):
-    quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
+    quote: str = Field(..., max_length=256)  # quote id
     inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage], None] = Field(
         None, max_length=settings.mint_max_request_length
@@ -281,7 +281,7 @@ class PostMeltResponse_deprecated(BaseModel):
 
 class PostMeltRequest_deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
-    pr: str = Field(..., max_length=settings.mint_max_request_length)
+    pr: str = Field(..., max_length=10000)
     outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
         None, max_length=settings.mint_max_request_length
     )
@@ -324,7 +324,9 @@ class PostSwapResponse_Very_Deprecated(BaseModel):
 
 
 class PostCheckStateRequest(BaseModel):
-    Ys: List[str] = Field(..., max_length=settings.mint_max_request_length)
+    Ys: List[Annotated[str, Field(max_length=66)]] = Field(
+        ..., max_length=settings.mint_max_request_length
+    )
 
 
 class PostCheckStateResponse(BaseModel):
@@ -341,7 +343,7 @@ class CheckSpendableResponse_deprecated(BaseModel):
 
 
 class CheckFeesRequest_deprecated(BaseModel):
-    pr: str = Field(..., max_length=settings.mint_max_request_length)
+    pr: str = Field(..., max_length=10000)
 
 
 class CheckFeesResponse_deprecated(BaseModel):
