@@ -350,9 +350,10 @@ class Ledger(
         # This works with Lightning but might not work with other methods
         request = invoice_response.payment_request.lower()
 
+        now = int(time.time())
         expiry = None
         if settings.mint_quote_ttl is not None:
-            expiry = int(time.time()) + settings.mint_quote_ttl
+            expiry = now + settings.mint_quote_ttl
         elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
@@ -364,7 +365,7 @@ class Ledger(
             unit=quote_request.unit,
             amount=quote_request.amount,
             state=MintQuoteState.unpaid,
-            created_time=int(time.time()),
+            created_time=now,
             expiry=expiry,
             pubkey=quote_request.pubkey,
         )
@@ -615,9 +616,10 @@ class Ledger(
         if not invoice_obj.amount_msat:
             raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
+        now = int(time.time())
         expiry = None
         if settings.melt_quote_ttl is not None:
-            expiry = int(time.time()) + settings.melt_quote_ttl
+            expiry = now + settings.melt_quote_ttl
         elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
@@ -630,7 +632,7 @@ class Ledger(
             amount=payment_quote.amount.to(unit).amount,
             state=MeltQuoteState.unpaid,
             fee_reserve=payment_quote.fee.to(unit).amount,
-            created_time=int(time.time()),
+            created_time=now,
             expiry=expiry,
         )
         await self.db_write._store_melt_quote(quote)
