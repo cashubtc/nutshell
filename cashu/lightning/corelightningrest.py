@@ -186,7 +186,8 @@ class CoreLightningRestWallet(LightningBackend):
             data={
                 "invoice": quote.request,
                 "maxfeepercent": f"{fee_limit_percent:.11}",
-                "exemptfee": 0,
+                "exemptfee": 0,  # so fee_limit_percent is applied even on payments
+                # with fee < 5000 millisatoshi (which is default value of exemptfee)
             },
             timeout=None,
         )
