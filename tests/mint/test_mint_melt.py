@@ -402,11 +402,8 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
-    try:
-        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
+    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    assert melt_response.state == MeltQuoteState.pending.value
 
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
@@ -418,11 +415,10 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
-    try:
-        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
+    
+    # In the new logic, UNKNOWN -> UNKNOWN leaves the melt pending and disables melt
+    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    assert melt_response.state == MeltQuoteState.pending.value
 
 
 @pytest.mark.asyncio
