@@ -948,7 +948,7 @@ class Ledger(
                         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
                     match status.result:
-                        case PaymentResult.FAILED:
+                        case PaymentResult.FAILED | PaymentResult.UNKNOWN:
                             # Everything as expected. Status check returned failure. We roll back the transaction.
                             await self.db_write.unset_melt_quote_pending_and_proofs(
                                 quote=melt_quote,
@@ -963,12 +963,6 @@ class Ledger(
                             raise LightningPaymentFailedError(
                                 f"Lightning payment failed{': ' + payment.error_message if payment.error_message else ''}."
                             )
-                        case PaymentResult.UNKNOWN:
-                            # Payment state check returned unknown or pending. Keep transaction pending and return.
-                            logger.debug(
-                                f"Payment state check returned {status.result.name}. Proofs for melt quote {melt_quote.quote} are pending."
-                            )
-                            return PostMeltQuoteResponse.from_melt_quote(melt_quote)
                         case _:
                             # Something went wrong with our implementation or the backend. Status check returned different result than payment. Keep transaction pending and return.
                             logger.error(
