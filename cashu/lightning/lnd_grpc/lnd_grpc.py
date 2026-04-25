@@ -184,7 +184,7 @@ class LndRPCWallet(LightningBackend):
         except AioRpcError as e:
             error_message = f"SendPaymentSync failed: {e}"
             return PaymentResponse(
-                result=PaymentResult.FAILED,
+                result=PaymentResult.PENDING,
                 error_message=error_message,
             )
 
@@ -284,7 +284,7 @@ class LndRPCWallet(LightningBackend):
         except AioRpcError as e:
             logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
             return PaymentResponse(
-                result=PaymentResult.FAILED,
+                result=PaymentResult.PENDING,
                 error_message=str(e),
             )
 

@@ -207,9 +207,16 @@ class LndRestWallet(LightningBackend):
         )
 
         if r.is_error or r.json().get("payment_error"):
-            error_message = r.json().get("payment_error") or r.text
+            try:
+                data = r.json()
+                if data.get("payment_error"):
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=data["payment_error"]
+                    )
+            except Exception:
+                pass
             return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=error_message
+                result=PaymentResult.PENDING, error_message=r.text
             )
 
         data = r.json()

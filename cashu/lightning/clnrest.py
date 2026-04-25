@@ -213,11 +213,15 @@ class CLNRestWallet(LightningBackend):
             try:
                 data = r.json()
                 error_message = str(data["message"])
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message=error_message,
+                )
             except Exception:
-                error_message = r.text
-            return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=error_message
-            )
+                return PaymentResponse(
+                    result=PaymentResult.PENDING,
+                    error_message=r.text,
+                )
 
         data = r.json()
 

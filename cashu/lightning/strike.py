@@ -250,11 +250,25 @@ class StrikeWallet(LightningBackend):
                 timeout=None,
             )
             r.raise_for_status()
-        except Exception:
-            error_message = r.json()["data"]["message"]
-            return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=error_message
-            )
+        except httpx.HTTPStatusError as exc:
+            try:
+                error_message = r.json()["data"]["message"]
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message=error_message,
+                )
+            except Exception:
+                return PaymentResponse(
+                    result=PaymentResult.PENDING,
+                    error_message=exc.response.text,
+                )
+            except Exception:
+                return PaymentResponse(
+                    result=PaymentResult.PENDING,
+                    error_message=exc.response.text,
+                )
+        except Exception as exc:
+            return PaymentResponse(result=PaymentResult.PENDING, error_message=str(exc))
 
         payment = StrikePaymentResponse.model_validate(r.json())
         fee = self.fee_int(payment, self.unit)

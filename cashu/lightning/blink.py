@@ -272,7 +272,7 @@ class BlinkWallet(LightningBackend):
         except Exception as e:
             logger.error(f"Blink API error: {e}")
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.PENDING,
                 error_message=str(e),
             )
 
