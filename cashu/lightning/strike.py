@@ -262,11 +262,6 @@ class StrikeWallet(LightningBackend):
                     result=PaymentResult.PENDING,
                     error_message=exc.response.text,
                 )
-            except Exception:
-                return PaymentResponse(
-                    result=PaymentResult.PENDING,
-                    error_message=exc.response.text,
-                )
         except Exception as exc:
             return PaymentResponse(result=PaymentResult.PENDING, error_message=str(exc))
 
