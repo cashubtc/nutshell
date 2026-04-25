@@ -948,7 +948,7 @@ class Ledger(
                         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
                     match status.result:
-                        case PaymentResult.FAILED | PaymentResult.UNKNOWN:
+                        case PaymentResult.FAILED:
                             # Everything as expected. Payment AND a status check both agree on a failure. We roll back the transaction.
                             await self.db_write.unset_melt_quote_pending_and_proofs(
                                 quote=melt_quote,
