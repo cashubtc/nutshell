@@ -200,6 +200,8 @@ class DbWriteHelper:
                 )
             # set the quote to previous state
             quote.state = state
+            if state == MintQuoteState.issued and not quote.issued_time:
+                quote.issued_time = int(time.time())
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
