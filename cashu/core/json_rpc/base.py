@@ -3,6 +3,7 @@ from typing import Annotated, List
 
 from pydantic import BaseModel, Field
 
+from ..constants import MAX_PUBKEY_LEN
 from ..settings import settings
 
 
@@ -68,7 +69,7 @@ class JSONRPCStatus(Enum):
 
 class JSONRPCSubscribeParams(BaseModel):
     kind: JSONRPCSubscriptionKinds
-    filters: List[Annotated[str, Field(max_length=66)]] = Field(
+    filters: List[Annotated[str, Field(max_length=MAX_PUBKEY_LEN)]] = Field(
         ..., max_length=settings.mint_max_request_length
     )
     subId: str
