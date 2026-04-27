@@ -11,4 +11,15 @@ services:
       - MINT_LISTEN_HOST=0.0.0.0
       - MINT_LISTEN_PORT=3338
       - MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+      - MINT_REDIS_CACHE_ENABLED=TRUE
+      - MINT_REDIS_CACHE_URL=redis://redis:6379
+    depends_on:
+      - redis
     command: ["poetry", "run", "mint"]
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: always
