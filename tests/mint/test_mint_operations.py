@@ -465,6 +465,73 @@ async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     proof_states = await ledger.db_read.get_proofs_states(Ys=[p.Y for p in send_proofs])
     assert all([p.state.value == "UNSPENT" for p in proof_states])
 
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_melt_preserves_change_signatures_order_integration(wallet1: Wallet, ledger: Ledger):
+    # mint enough to pay invoice
+    mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(128, quote_id=mint_quote.quote)
+    assert wallet1.balance >= 64
+
+    invoice_dict = get_real_invoice(64)
+    invoice_payment_request = invoice_dict["payment_request"] if is_regtest else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    if type(invoice_payment_request) is dict:
+        invoice_payment_request = invoice_payment_request["payment_request"]
+
+    # wallet asks for quote
+    _ = await wallet1.melt_quote(invoice_payment_request)
+    
+    # Force the fee_reserve in the DB to be larger so we get multiple change outputs
+    # Let's say overpaid_fee = 7 -> [4, 2, 1]
+    total_amount = 64 + 7
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
+    
+    melt_quote_internal = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
+    )
+    # forcefully update the fee_reserve and amount to allow 7 sat overpayment
+    await ledger.db.execute(f"UPDATE {ledger.db.table_with_schema('melt_quotes')} SET fee_reserve = 7 WHERE quote = '{melt_quote_internal.quote}'")
+    melt_quote_internal.fee_reserve = 7
+
+    # prepare outputs for change
+    output_amounts = [1, 2, 4, 8] # Provide change outputs
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(len(output_amounts))
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+    
+    # We force pending state by tricking fakewallet
+    from cashu.lightning.base import PaymentResult
+    settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
+    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    
+    # Call melt with outputs
+    melt_response = await ledger.melt(proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
+    assert melt_response.state == MeltQuoteState.pending.value
+    
+    # Now fake that payment settled
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    
+    # get_melt_quote will now settle the payment and generate the change
+    quote_post = await ledger.get_melt_quote(melt_quote_internal.quote)
+    assert quote_post.state == MeltQuoteState.paid
+    assert quote_post.change is not None
+    assert len(quote_post.change) == 3 # 7 splits into [4, 2, 1]
+    
+    # Verify the order of change corresponds strictly to the B_ order of outputs
+    # To do this, we can unblind them sequentially and see if the amounts match the expected amounts
+    # If they were out of order, the wallet mapping would assign the wrong amount or fail unblinding
+    change_proofs = await wallet1._construct_proofs(
+        quote_post.change,
+        secrets[: len(quote_post.change)],
+        rs[: len(quote_post.change)],
+        derivation_paths[: len(quote_post.change)],
+    )
+    
+    # The returned change proofs must have the exact same amounts as our outputs IN ORDER
+    # The mint assigns amounts from largest to smallest, so [4, 2, 1]
+    expected_amounts = [4, 2, 1]
+    for i, proof in enumerate(change_proofs):
+        assert proof.amount == expected_amounts[i]
 
 # TODO: test keeps running forever, needs to be fixed
 # @pytest.mark.asyncio
