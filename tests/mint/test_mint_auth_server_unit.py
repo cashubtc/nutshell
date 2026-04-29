@@ -196,12 +196,11 @@ async def test_verify_blind_auth_invalidates_on_success_and_unsets_pending():
         async def _unset_proofs_pending(self, proofs, keysets):
             calls["unset"] = proofs[0].secret
 
-    async def invalidate_proofs(*, proofs):
-        calls["invalidated"] = proofs[0].secret
+        async def invalidate_proofs(self, *, proofs, keysets):
+            calls["invalidated"] = proofs[0].secret
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
     cast(Any, ledger).db_write = DbWrite()
-    cast(Any, ledger)._invalidate_proofs = invalidate_proofs
     cast(Any, ledger).keysets = {"kid": object()}
 
     async with ledger.verify_blind_auth(token):
@@ -231,12 +230,11 @@ async def test_verify_blind_auth_wraps_inner_failure_and_still_unsets_pending():
         async def _unset_proofs_pending(self, proofs, keysets):
             calls["unset"] = True
 
-    async def invalidate_proofs(*, proofs):
-        calls["invalidated"] = True
+        async def invalidate_proofs(self, *, proofs, keysets):
+            calls["invalidated"] = True
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
     cast(Any, ledger).db_write = DbWrite()
-    cast(Any, ledger)._invalidate_proofs = invalidate_proofs
     cast(Any, ledger).keysets = {"kid": object()}
 
     with pytest.raises(BlindAuthFailedError):

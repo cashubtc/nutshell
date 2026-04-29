@@ -36,6 +36,8 @@ service Mint {
     rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
     // UpdateQuoteTtl updates the Time-To-Live (TTL) for minting and melting quotes.
     rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    // GetQuoteTtl retrieves the current Time-To-Live (TTL) for minting and melting quotes.
+    rpc GetQuoteTtl(GetQuoteTtlRequest) returns (GetQuoteTtlResponse) {}
     // UpdateNut04Quote updates the state of a specific NUT-04 (minting) quote.
     rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     // UpdateNut05Quote updates the state of a specific NUT-05 (melting) quote.
@@ -182,6 +184,18 @@ message UpdateQuoteTtlRequest {
     optional uint64 melt_ttl = 2;
 }
 
+// GetQuoteTtlRequest is used to retrieve the expiry time of a specific quote.
+message GetQuoteTtlRequest {
+    // The ID of the quote to retrieve the expiry for.
+    string quote_id = 1;
+}
+
+// GetQuoteTtlResponse contains the expiry time for a specific quote.
+message GetQuoteTtlResponse {
+    // The Unix timestamp when the quote expires.
+    int64 expiry = 1;
+}
+
 // Nut04Quote represents a quote for minting (NUT-04).
 message Nut04Quote {
     // The unique identifier for the quote.
@@ -206,6 +220,8 @@ message Nut04Quote {
     optional int64 expiry = 10;
     // Optional: The public key associated with the quote, if applicable.
     optional string pubkey = 13;
+    // Optional: The Unix timestamp when the ecash has been issued.
+    optional int64 issued_time = 14;
 }
 
 // BlindedMessage represents a blinded message used in Cashu.

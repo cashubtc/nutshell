@@ -388,8 +388,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time)
             """,
             {
                 "quote": quote.quote,
@@ -404,7 +404,14 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 ),
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
+                "issued_time": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.issued_time) or ""
+                )
+                if quote.issued_time
+                else None,
             },
         )
 
@@ -466,12 +473,19 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time WHERE quote = :quote",
             {
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
+                "issued_time": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.issued_time) or ""
+                )
+                if quote.issued_time
+                else None,
                 "quote": quote.quote,
             },
         )

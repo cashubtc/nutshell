@@ -518,6 +518,16 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await wallet.mint(64, quote_id=mint_quote.quote)
 
+    wallet_usd = await Wallet.with_db(
+        url=wallet.url,
+        db="test_data/wallet_usd",
+        name="wallet_usd",
+        unit="usd",
+    )
+    await wallet_usd.load_mint()
+    mint_quote_usd = await wallet_usd.request_mint(64)
+    await wallet_usd.mint(64, quote_id=mint_quote_usd.quote)
+
     amount = 32
 
     # mint quote in sat
@@ -534,7 +544,7 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     assert usd_melt_quote.state != MeltQuoteState.paid
 
     # pay melt quote with usd
-    await ledger.melt(proofs=wallet.proofs, quote=usd_melt_quote.quote)
+    await ledger.melt(proofs=wallet_usd.proofs, quote=usd_melt_quote.quote)
 
     output_amounts = [32]
 
@@ -764,4 +774,87 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
             quote_id=melt_quote2.quote,
         ),
         "Melt quote already paid or pending.",
+    )
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_deprecated_api_only, reason="Can't run on the deprecated API")
+async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
+    import asyncio
+
+    # Setup: Get proofs and a melt quote
+    # Mint set 1 (128 sat)
+    mq1 = await wallet.request_mint(128)
+    await pay_if_regtest(mq1.request)
+    proofs1 = await wallet.mint(128, quote_id=mq1.quote)
+
+    # Mint set 2 (128 sat)
+    mq2 = await wallet.request_mint(128)
+    await pay_if_regtest(mq2.request)
+    proofs2 = await wallet.mint(128, quote_id=mq2.quote)
+
+    # Invoice for 64 sats (+2 fee = 66 sats needed)
+    invoice = get_real_invoice(64)["payment_request"] if is_regtest else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    melt_quote1 = await wallet.melt_quote(invoice)
+    melt_quote2 = await wallet.melt_quote(invoice)
+
+    assert melt_quote1.quote != melt_quote2.quote
+
+    responses = await asyncio.gather(
+        ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
+        ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
+        return_exceptions=True
+    )
+
+    failures = [r for r in responses if isinstance(r, Exception)]
+    successes = [r for r in responses if not isinstance(r, Exception)]
+
+    assert len(successes) == 1
+    assert len(failures) == 1
+    assert "Melt quote already paid or pending." in str(failures[0])
+
+    failed_proofs = proofs2 if responses[1] is failures[0] else proofs1
+
+    states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
+
+    # We expect them to NOT be pending if the bug is fixed
+    assert not any(s.pending for s in states), "Proofs from failed melt request stuck in pending!"
+
+
+@pytest.mark.asyncio
+async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
+    """
+    Test that a melt quote cannot be paid with proofs of a different unit.
+    """
+    wallet_usd = await Wallet.with_db(
+        url=wallet.url,
+        db="test_data/wallet_usd_different_unit",
+        name="wallet_usd_different_unit",
+        unit="usd",
+    )
+    await wallet_usd.load_mint()
+    
+    mint_quote_usd = await wallet_usd.request_mint(100)
+    await pay_if_regtest(mint_quote_usd.request)
+    usd_proofs = await wallet_usd.mint(100, quote_id=mint_quote_usd.quote)
+    assert wallet_usd.unit.name == "usd"
+    
+    sat_mint_quote = await ledger.mint_quote(
+        quote_request=PostMintQuoteRequest(amount=100, unit="sat")
+    )
+    sat_invoice = sat_mint_quote.request
+    
+    sat_melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=sat_invoice)
+    )
+    
+    assert sat_melt_quote.amount == 100
+    assert sat_melt_quote.unit == "sat"
+    
+    await assert_err(
+        ledger.melt(
+            proofs=usd_proofs, 
+            quote=sat_melt_quote.quote, 
+            outputs=[]
+        ),
+        "proof unit usd does not match quote unit sat"
     )

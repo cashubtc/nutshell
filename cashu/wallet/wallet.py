@@ -1508,7 +1508,7 @@ class Wallet(
                 + 1
             )
         logger.trace(f"Last restored output index: {next_restored_output_index}")
-        # now we need to filter out the secrets and rs that had a match
+        # now we need to filter out the secrets, rs and derivation_paths that had a match
         matching_indices = [
             idx
             for idx, val in enumerate(outputs)
@@ -1516,6 +1516,7 @@ class Wallet(
         ]
         secrets = [secrets[i] for i in matching_indices]
         rs = [rs[i] for i in matching_indices]
+        derivation_paths = [derivation_paths[i] for i in matching_indices]
         logger.debug(
             f"Restored {len(restored_promises)} promises. Constructing proofs."
         )

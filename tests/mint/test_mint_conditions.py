@@ -1,14 +1,17 @@
 import time
 from hashlib import sha256
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from cashu.core.base import BlindedMessage, HTLCWitness, P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
-from cashu.core.errors import TransactionError
+from cashu.core.errors import InvalidProofsError, TransactionError
 from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.mint.conditions import LedgerSpendingConditions
+from cashu.mint.ledger import Ledger
+from tests.helpers import assert_err
 
 
 def _pubkey_and_sig(message: str):
@@ -231,3 +234,79 @@ def test_verify_input_output_spending_conditions_requires_equal_secrets_with_sig
     outputs = [BlindedMessage(id="ks", amount=1, B_="b1")]
     with pytest.raises(TransactionError, match="not all secrets are equal"):
         cond._verify_input_output_spending_conditions([p1, p2], outputs)
+
+
+@pytest.mark.asyncio
+async def test_verify_inputs_and_outputs_p2pk_custom_sigflag_fails_without_outputs(
+    ledger: Ledger,
+):
+    """Unsupported sigflag must not pass melt-style verification (outputs=None)."""
+    kid = next(iter(ledger.keysets.keys()))
+    signer = PrivateKey()
+    pub = signer.public_key.format().hex()
+    secret_str = _secret(
+        kind=SecretKind.P2PK, data=pub, extra_tags=[["sigflag", "CUSTOM"]]
+    )
+    sig = schnorr_sign(secret_str.encode("utf-8"), signer).hex()
+    proof = _proof(secret_str, signatures=[sig])
+    proof.id = kid
+
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(
+            ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
+        ),
+    ):
+        await assert_err(
+            ledger.verify_inputs_and_outputs(proofs=[proof], outputs=None),
+            InvalidProofsError(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_verify_inputs_and_outputs_htlc_custom_sigflag_fails_without_outputs(
+    ledger: Ledger,
+):
+    """Unsupported sigflag must not pass melt-style verification (outputs=None)."""
+    kid = next(iter(ledger.keysets.keys()))
+    preimage = "22" * 32
+    digest = sha256(bytes.fromhex(preimage)).hexdigest()
+    secret_str = _secret(
+        kind=SecretKind.HTLC, data=digest, extra_tags=[["sigflag", "CUSTOM"]]
+    )
+    proof = _proof(secret_str, htlc_preimage=preimage)
+    proof.id = kid
+
+    with (
+        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
+        patch.object(
+            ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
+        ),
+    ):
+        await assert_err(
+            ledger.verify_inputs_and_outputs(proofs=[proof], outputs=None),
+            InvalidProofsError(),
+        )
+
+def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
+    cond = LedgerSpendingConditions()
+    message = "msg-1"
+    
+    # Generate one private key
+    priv = PrivateKey()
+    pubkey = priv.public_key.format().hex()
+    
+    # Generate the 02 and 03 version of the same pubkey
+    if pubkey.startswith("02"):
+        pub1 = pubkey
+        pub2 = "03" + pubkey[2:]
+    else:
+        pub1 = pubkey
+        pub2 = "02" + pubkey[2:]
+        
+    # Generate two different signatures for the same message using different nonces
+    sig1 = priv.sign_schnorr(sha256(message.encode()).digest(), b"1"*32).hex()
+    sig2 = priv.sign_schnorr(sha256(message.encode()).digest(), b"2"*32).hex()
+    
+    with pytest.raises(TransactionError, match="pubkeys must have unique x-coordinates"):
+        cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)

@@ -507,4 +507,3 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     assert quote.paid_time >= quote.created_time
     # Ensure it's recent (within last minute)
     assert quote.paid_time > int(time.time()) - 60
-

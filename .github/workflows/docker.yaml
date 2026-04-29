@@ -3,6 +3,12 @@ name: Docker Build
 on:
   release:
     types: [released]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to build and push (e.g. 0.20.0)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -38,16 +44,19 @@ jobs:
           if [[ "${{ github.event_name }}" == "release" ]]; then
             echo "version_tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
             echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version_tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "latest_tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Python
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: Verify Versions
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         run: |
           python3 scripts/check_version.py "${{ steps.get_tags.outputs.version_tag }}"
 
@@ -55,7 +64,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.event_name == 'release' && github.event.action == 'released' }}
+          push: ${{ (github.event_name == 'release' && github.event.action == 'released') || github.event_name == 'workflow_dispatch' }}
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ steps.get_tags.outputs.version_tag }}
             ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ steps.get_tags.outputs.latest_tag }}
