@@ -307,6 +307,14 @@ class Wallet(
 
         for key_id in (local_ids - active_ids):
             ks = keysets_in_db_dict[key_id]
+            # do not mark as deleted if there are still unspent proofs for this keyset
+            unspent = await get_proofs(db=self.db, id=key_id)
+            if unspent:
+                logger.warning(
+                    f"Keyset {key_id} no longer reported by mint but has unspent proofs."
+                    " Not marking as deleted."
+                )
+                continue
             logger.debug(
                 f"Keyset {key_id} no longer reported by mint, marking as deleted"
             )
@@ -341,6 +349,10 @@ class Wallet(
             # or the fee attributes have changed, update them in the database
             if mint_keyset.id in keysets_in_db_dict:
                 changed = False
+                # reset deleted_at if a previously-deleted keyset reappears
+                if keysets_in_db_dict[mint_keyset.id].deleted_at is not None:
+                    keysets_in_db_dict[mint_keyset.id].deleted_at = None
+                    changed = True
                 if (
                     not mint_keyset.active
                     and mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active
