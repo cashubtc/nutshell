@@ -42,6 +42,7 @@ INVOICE_RESULT_MAP = {
 }
 PAYMENT_EXECUTION_RESULT_MAP = {
     "SUCCESS": PaymentResult.SETTLED,
+    "PENDING": PaymentResult.PENDING,
     "ALREADY_PAID": PaymentResult.FAILED,
     "FAILURE": PaymentResult.FAILED,
 }
