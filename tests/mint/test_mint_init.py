@@ -526,3 +526,94 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
     )
     assert melt_quotes
     assert melt_quotes.state == MeltQuoteState.unpaid
+
+
+# ---- orphaned pending proofs (NULL melt_quote) tests ----
+
+async def create_orphaned_pending_proof(ledger: Ledger) -> Proof:
+    """Insert a pending proof with no associated melt quote (simulates an aborted swap)."""
+    proof = Proof(amount=64, C="orphan_C", secret="orphan_secret", id=ledger.keyset.id)
+    await ledger.crud.set_proof_pending(db=ledger.db, proof=proof, quote_id=None)
+    return proof
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_startup_cleans_orphaned_pending_proofs(ledger: Ledger):
+    """Startup routine must remove pending proofs that have no associated melt quote.
+    These are left over from aborted swap operations and no Lightning payment is in flight."""
+    proof = await create_orphaned_pending_proof(ledger)
+
+    # confirm proof is in pending table
+    states = await ledger.db_read.get_proofs_states([proof.Y])
+    assert states[0].pending
+
+    # confirm it shows up in the dedicated query
+    orphaned = await ledger.crud.get_pending_proofs_without_melt_quote(db=ledger.db)
+    assert any(p.secret == proof.secret for p in orphaned)
+
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
+
+    # proof must be gone from pending
+    states = await ledger.db_read.get_proofs_states([proof.Y])
+    assert states[0].unspent
+
+    # orphan query must return empty
+    orphaned = await ledger.crud.get_pending_proofs_without_melt_quote(db=ledger.db)
+    assert not any(p.secret == proof.secret for p in orphaned)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_startup_cleans_orphaned_proofs_but_leaves_melt_pending(ledger: Ledger):
+    """When both orphaned swap proofs AND a genuinely in-flight melt exist, the startup
+    routine must remove the orphaned proofs but leave the in-flight melt proofs untouched."""
+    # create an in-flight melt (PENDING state, backend will return PENDING)
+    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    melt_proof, melt_quote = await create_pending_melts(ledger)
+
+    # create an orphaned swap proof alongside it
+    orphan = await create_orphaned_pending_proof(ledger)
+
+    # both are pending before cleanup
+    states = await ledger.db_read.get_proofs_states([melt_proof.Y, orphan.Y])
+    assert all(s.pending for s in states)
+
+    await ledger._check_pending_proofs_and_melt_quotes()
+
+    # melt proof is still pending (payment in flight)
+    melt_states = await ledger.db_read.get_proofs_states([melt_proof.Y])
+    assert melt_states[0].pending
+
+    # orphan is gone
+    orphan_states = await ledger.db_read.get_proofs_states([orphan.Y])
+    assert orphan_states[0].unspent
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_get_pending_proofs_without_melt_quote_empty(ledger: Ledger):
+    """With no orphaned proofs in the table, the query returns an empty list."""
+    orphaned = await ledger.crud.get_pending_proofs_without_melt_quote(db=ledger.db)
+    assert orphaned == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_get_pending_proofs_without_melt_quote_only_returns_null_rows(
+    ledger: Ledger,
+):
+    """get_pending_proofs_without_melt_quote must NOT return proofs that do have a
+    melt_quote set."""
+    # insert a melt-linked proof
+    melt_proof, _ = await create_pending_melts(ledger)
+    # insert an orphaned proof
+    orphan = await create_orphaned_pending_proof(ledger)
+
+    result = await ledger.crud.get_pending_proofs_without_melt_quote(db=ledger.db)
+
+    # only the orphan (NULL melt_quote) should be returned
+    secrets = [p.secret for p in result]
+    assert orphan.secret in secrets
+    assert melt_proof.secret not in secrets

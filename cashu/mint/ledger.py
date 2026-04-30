@@ -143,6 +143,7 @@ class Ledger(
     async def startup_ledger(self) -> None:
         await self._startup_keysets()
         await self._check_backends()
+        await self._check_pending_proofs_and_melt_quotes()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
         if settings.mint_watchdog_enabled:
@@ -202,17 +203,29 @@ class Ledger(
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
         their pending proofs for a successful melt or deletes them if the melt failed.
+        Also removes any pending proofs that have no associated melt quote (orphaned
+        swap proofs from aborted operations where no Lightning payment is in flight).
         """
         # get all pending melt quotes
         pending_melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
             db=self.db
         )
-        if not pending_melt_quotes:
-            return
-        logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
-        for quote in pending_melt_quotes:
-            quote = await self.get_melt_quote(quote_id=quote.quote)
-            logger.info(f"Melt quote {quote.quote} state: {quote.state}")
+        if pending_melt_quotes:
+            logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
+            for quote in pending_melt_quotes:
+                quote = await self.get_melt_quote(quote_id=quote.quote)
+                logger.info(f"Melt quote {quote.quote} state: {quote.state}")
+
+        # remove orphaned pending proofs that have no associated melt quote
+        orphaned_proofs = await self.crud.get_pending_proofs_without_melt_quote(
+            db=self.db
+        )
+        if orphaned_proofs:
+            logger.info(
+                f"Removing {len(orphaned_proofs)} pending proofs without a melt quote"
+            )
+            for proof in orphaned_proofs:
+                await self.crud.unset_proof_pending(proof=proof, db=self.db)
 
     # ------- ECASH -------
 

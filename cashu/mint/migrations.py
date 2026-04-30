@@ -1234,3 +1234,14 @@ async def m033_add_issued_time_to_mint_quote(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN issued_time TIMESTAMP"
         )
+
+async def m034_cleanup_pending_proofs_without_melt_quote(db: Database):
+    """
+    Remove pending proofs that have no associated melt quote (melt_quote IS NULL).
+    These are orphaned swap proofs from aborted operations. No outgoing payment is
+    in flight for them, so they can be safely deleted.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"DELETE FROM {db.table_with_schema('proofs_pending')} WHERE melt_quote IS NULL"
+        )

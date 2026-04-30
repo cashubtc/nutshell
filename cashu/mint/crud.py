@@ -78,6 +78,14 @@ class LedgerCrud(ABC):
     ) -> List[Proof]: ...
 
     @abstractmethod
+    async def get_pending_proofs_without_melt_quote(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Proof]: ...
+
+    @abstractmethod
     async def get_proofs_pending(
         self,
         *,
@@ -536,6 +544,17 @@ class LedgerCrudSqlite(LedgerCrud):
             WHERE melt_quote = :quote_id
             """,
             {"quote_id": quote_id},
+        )
+        return [Proof(**r) for r in rows]
+
+    async def get_pending_proofs_without_melt_quote(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Proof]:
+        rows = await (conn or db).fetchall(
+            f"SELECT * from {db.table_with_schema('proofs_pending')} WHERE melt_quote IS NULL"
         )
         return [Proof(**r) for r in rows]
 
