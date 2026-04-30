@@ -1240,8 +1240,24 @@ async def m034_cleanup_pending_proofs_without_melt_quote(db: Database):
     Remove pending proofs that have no associated melt quote (melt_quote IS NULL).
     These are orphaned swap proofs from aborted operations. No outgoing payment is
     in flight for them, so they can be safely deleted.
+    Keyset balances are restored by adding back the reserved amounts before deleting.
     """
     async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET balance = balance + COALESCE((
+                SELECT SUM(amount)
+                FROM {db.table_with_schema('proofs_pending')}
+                WHERE melt_quote IS NULL
+                AND id = {db.table_with_schema('keysets')}.id
+            ), 0)
+            WHERE id IN (
+                SELECT DISTINCT id FROM {db.table_with_schema('proofs_pending')}
+                WHERE melt_quote IS NULL
+            )
+            """
+        )
         await conn.execute(
             f"DELETE FROM {db.table_with_schema('proofs_pending')} WHERE melt_quote IS NULL"
         )

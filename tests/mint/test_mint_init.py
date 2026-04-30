@@ -552,8 +552,12 @@ async def test_startup_cleans_orphaned_pending_proofs(ledger: Ledger):
     orphaned = await ledger.crud.get_pending_proofs_without_melt_quote(db=ledger.db)
     assert any(p.secret == proof.secret for p in orphaned)
 
-    # run startup routine
-    await ledger._check_pending_proofs_and_melt_quotes()
+    # record keyset balance before cleanup
+    keyset = ledger.keysets[proof.id]
+    balance_before, _ = await ledger.crud.get_balance(keyset=keyset, db=ledger.db)
+
+    # run startup-only orphan cleanup
+    await ledger._cleanup_orphaned_pending_proofs()
 
     # proof must be gone from pending
     states = await ledger.db_read.get_proofs_states([proof.Y])
@@ -562,6 +566,10 @@ async def test_startup_cleans_orphaned_pending_proofs(ledger: Ledger):
     # orphan query must return empty
     orphaned = await ledger.crud.get_pending_proofs_without_melt_quote(db=ledger.db)
     assert not any(p.secret == proof.secret for p in orphaned)
+
+    # keyset balance must be restored by the proof amount
+    balance_after, _ = await ledger.crud.get_balance(keyset=keyset, db=ledger.db)
+    assert balance_after.amount == balance_before.amount + proof.amount
 
 
 @pytest.mark.asyncio
@@ -580,7 +588,7 @@ async def test_startup_cleans_orphaned_proofs_but_leaves_melt_pending(ledger: Le
     states = await ledger.db_read.get_proofs_states([melt_proof.Y, orphan.Y])
     assert all(s.pending for s in states)
 
-    await ledger._check_pending_proofs_and_melt_quotes()
+    await ledger._cleanup_orphaned_pending_proofs()
 
     # melt proof is still pending (payment in flight)
     melt_states = await ledger.db_read.get_proofs_states([melt_proof.Y])

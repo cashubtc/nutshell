@@ -144,6 +144,7 @@ class Ledger(
         await self._startup_keysets()
         await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
+        await self._cleanup_orphaned_pending_proofs()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
         if settings.mint_watchdog_enabled:
@@ -203,29 +204,40 @@ class Ledger(
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
         their pending proofs for a successful melt or deletes them if the melt failed.
-        Also removes any pending proofs that have no associated melt quote (orphaned
-        swap proofs from aborted operations where no Lightning payment is in flight).
         """
         # get all pending melt quotes
         pending_melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
             db=self.db
         )
-        if pending_melt_quotes:
-            logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
-            for quote in pending_melt_quotes:
-                quote = await self.get_melt_quote(quote_id=quote.quote)
-                logger.info(f"Melt quote {quote.quote} state: {quote.state}")
+        if not pending_melt_quotes:
+            return
+        logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
+        for quote in pending_melt_quotes:
+            quote = await self.get_melt_quote(quote_id=quote.quote)
+            logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
-        # remove orphaned pending proofs that have no associated melt quote
+    async def _cleanup_orphaned_pending_proofs(self) -> None:
+        """Startup-only routine that removes pending proofs with no associated melt quote.
+
+        These are orphaned swap proofs left over from an interrupted swap operation.
+        No Lightning payment is in flight for them, so they can be safely removed.
+        Keyset balances are restored via _unset_proofs_pending.
+
+        This must only be called at startup, never from the periodic task, because
+        during normal operation swap proofs are legitimately pending with a NULL
+        melt_quote while the swap transaction is in progress.
+        """
         orphaned_proofs = await self.crud.get_pending_proofs_without_melt_quote(
             db=self.db
         )
-        if orphaned_proofs:
-            logger.info(
-                f"Removing {len(orphaned_proofs)} pending proofs without a melt quote"
-            )
-            for proof in orphaned_proofs:
-                await self.crud.unset_proof_pending(proof=proof, db=self.db)
+        if not orphaned_proofs:
+            return
+        logger.info(
+            f"Removing {len(orphaned_proofs)} pending proofs without a melt quote"
+        )
+        await self.db_write._unset_proofs_pending(
+            proofs=orphaned_proofs, keysets=self.keysets, spent=False
+        )
 
     # ------- ECASH -------
 
