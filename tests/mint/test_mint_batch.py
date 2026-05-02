@@ -123,7 +123,7 @@ async def test_ledger_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet
         )
         assert False, "Expected Exception"
     except Exception as e:
-        assert "quotes must be unique" in str(e)
+        assert "Duplicate quote IDs provided" in str(e)
 
 
 @pytest.mark.asyncio

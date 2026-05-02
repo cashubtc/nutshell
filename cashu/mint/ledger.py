@@ -28,6 +28,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    BatchDuplicateQuotesError,
     CashuError,
     LightningError,
     LightningPaymentFailedError,
@@ -536,7 +537,7 @@ class Ledger(
             raise TransactionError("batch must not be empty")
 
         if len(set(payload.quotes)) != len(payload.quotes):
-            raise TransactionError("quotes must be unique")
+            raise BatchDuplicateQuotesError()
 
         if payload.signatures and len(payload.signatures) != len(payload.quotes):
             raise TransactionError("signatures length must match quotes length")
