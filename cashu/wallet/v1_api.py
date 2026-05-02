@@ -19,7 +19,7 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.bls import PublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,

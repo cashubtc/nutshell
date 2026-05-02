@@ -8,8 +8,9 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
+from ..core.crypto.bls import PrivateKey as BlsPrivateKey
 from ..core.crypto.keys import get_keyset_id_version
-from ..core.crypto.secp import PrivateKey
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
 from ..core.settings import settings
@@ -88,7 +89,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         try:
             self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(
+            self.private_key = SecpPrivateKey(
                 self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
             )
         except ValueError:
@@ -189,7 +190,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
     async def generate_n_secrets(
         self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+    ) -> Tuple[List[str], List[BlsPrivateKey], List[str]]:
         """Generates n secrets and blinding factors and returns a tuple of secrets,
         blinding factors, and derivation paths.
 
@@ -223,7 +224,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
             rs = [
-                PrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                BlsPrivateKey(privkey=s[1]) for s in secrets_rs_derivationpaths
             ]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
@@ -232,7 +233,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
     async def generate_secrets_from_to(
         self, from_counter: int, to_counter: int, keyset_id: Optional[str] = None
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+    ) -> Tuple[List[str], List[BlsPrivateKey], List[str]]:
         """Generates secrets and blinding factors from `from_counter` to `to_counter`
 
         Args:
@@ -257,13 +258,13 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
-        rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+        rs = [BlsPrivateKey(privkey=s[1]) for s in secrets_rs_derivationpaths]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
         return secrets, rs, derivation_paths
 
     async def generate_locked_secrets(
         self, send_outputs: List[int], keep_outputs: List[int], secret_lock: Secret
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+    ) -> Tuple[List[str], List[BlsPrivateKey], List[str]]:
         """Generates secrets and blinding factors for a transaction with `send_outputs` and `keep_outputs`.
 
         Args:
@@ -273,7 +274,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         Returns:
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
         """
-        rs: List[PrivateKey] = []
+        rs: List[BlsPrivateKey] = []
         # generate secrets for receiver
         secret_locks = [secret_lock.serialize() for i in range(len(send_outputs))]
         logger.debug(f"Creating proofs with custom secrets: {secret_locks}")

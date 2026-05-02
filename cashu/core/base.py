@@ -19,6 +19,7 @@ from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
+from .crypto.bls import PrivateKey, PublicKey
 from .crypto.keys import (
     derive_keys,
     derive_keys_deprecated_pre_0_15,
@@ -27,7 +28,6 @@ from .crypto.keys import (
     derive_keyset_id_v2,
     derive_pubkeys,
 )
-from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
 

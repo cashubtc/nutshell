@@ -22,7 +22,7 @@ from ..core.base import (
     WalletMint,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto.bls import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -938,20 +938,17 @@ class Wallet(
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
                 return
-            logger.trace("Verifying DLEQ proof.")
+            logger.trace("Verifying Mint Signature (BLS12-381 Pairing).")
             assert proof.id
             assert (
                 proof.id in self.keysets
-            ), f"Keyset {proof.id} not known, can not verify DLEQ."
-            if not b_dhke.carol_verify_dleq(
-                secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C)),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
-                A=self.keysets[proof.id].public_keys[proof.amount],
+            ), f"Keyset {proof.id} not known, can not verify signature."
+            if not b_dhke.verify_signature(
+                self.keysets[proof.id].public_keys[proof.amount],
+                PublicKey(bytes.fromhex(proof.C)),
+                proof.secret,
             ):
-                raise Exception("DLEQ proof invalid.")
+                raise Exception("Mint signature invalid.")
             else:
                 logger.trace("DLEQ proof valid.")
         logger.debug("Verified incoming DLEQ proofs.")
@@ -989,6 +986,11 @@ class Wallet(
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
+
+            # Verify the unblinded signature using BLS pairing
+            mint_pubkey = self.keysets[promise.id].public_keys[promise.amount]
+            if not b_dhke.verify_signature(mint_pubkey, C, secret):
+                raise Exception("Mint signature failed BLS pairing verification!")
 
             if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs

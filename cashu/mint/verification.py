@@ -11,7 +11,7 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.bls import PublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,

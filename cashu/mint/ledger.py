@@ -21,11 +21,11 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.bls import PrivateKey, PublicKey
 from ..core.crypto.keys import (
     derive_pubkey,
     random_hash,
 )
-from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,

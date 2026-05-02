@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from bip32 import BIP32
 
-from .secp import PrivateKey, PublicKey
+from .bls import PrivateKey, PublicKey
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
