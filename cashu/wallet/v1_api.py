@@ -249,7 +249,7 @@ class LedgerAPI(SupportsAuth):
                 id=keyset.id,
                 unit=keyset.unit,
                 public_keys={
-                    int(amt): PublicKey(bytes.fromhex(val))
+                    int(amt): PublicKey(bytes.fromhex(val), group="G2")
                     for amt, val in keyset.keys.items()
                 },
                 mint_url=self.url,
