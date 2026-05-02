@@ -406,6 +406,7 @@ class Wallet(
         """
         logger.trace(f"Loading mint {self.url}")
         try:
+            await self.load_mint_info()
             await self.load_mint_keysets(force_old_keysets)
             await self.activate_keyset(keyset_id)
             await self.load_mint_info(reload=True)
