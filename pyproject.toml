@@ -45,7 +45,6 @@ redis = "^5.1.1"
 brotli = "^1.1.0"
 zstandard = "^0.23.0"
 jinja2 = "^3.1.5"
-blspy = "^2.0.3"
 py-ecc = "^8.0.0"
 
 [tool.poetry.group.dev.dependencies]

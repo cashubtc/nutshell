@@ -202,45 +202,6 @@ files = [
 ]
 
 [[package]]
-name = "blspy"
-version = "2.0.3"
-description = "BLS signatures in c++ (python bindings)"
-optional = false
-python-versions = ">=3.7"
-groups = ["main"]
-files = [
-    {file = "blspy-2.0.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:e8b0c4fbab2461772c05cc02cd29a356b6115368afa7202cacd83bbf3b047534"},
-    {file = "blspy-2.0.3-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:869efdb5196c8d14d07c8e92cf758e298b0829b93a565ba35dd642c333757d1a"},
-    {file = "blspy-2.0.3-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b3af4751cc5751778294deb2f561b52f4130fcfb142a3803be9151910ba38ff8"},
-    {file = "blspy-2.0.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:727ee8ccd6a9871b116e8e8b787a3fa4cf864bcab3b8b9272246f9057bd4510d"},
-    {file = "blspy-2.0.3-cp310-cp310-win_amd64.whl", hash = "sha256:a252263e4ccdebb81b03bc570a08bebe703d335c912e3488921569f9b2b2400a"},
-    {file = "blspy-2.0.3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:8089718d17bd722826a9518548e904f4dfe8da14fa9ffee4fd156fa71258f793"},
-    {file = "blspy-2.0.3-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:139772d265c3384ee3972c2d81ff0605ebabc8221fef3b699981246246ca8c41"},
-    {file = "blspy-2.0.3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c739f9d9bf322c80c3bb41c8db7b59a7771dda4583fca70e25c582d1cb00234b"},
-    {file = "blspy-2.0.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0ac98528abfd04bd11c1cad59127b3fa6e03f4d537497d6e789841c706aad5e4"},
-    {file = "blspy-2.0.3-cp311-cp311-win_amd64.whl", hash = "sha256:fe2ca8e6c4e4014b5ebbf8d67e07a93161a72fc86f9d7c193d95da6886743be6"},
-    {file = "blspy-2.0.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:96c78e035ea15c826e2330ad2a2619a6cb3519ac977f74a608911ef2c105d3ec"},
-    {file = "blspy-2.0.3-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:43e7da8f2880106d522dfb26f8015a6771ec3306c3baa7fc22561f6c0ba38a7c"},
-    {file = "blspy-2.0.3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ff263b4a8967a0337d31904837ca53678dd3982187c9d37b34804e8b682ffce9"},
-    {file = "blspy-2.0.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:903afd454563ce26c6b55c9b11500b688503103f96673e37b8424a1af0a47e96"},
-    {file = "blspy-2.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:b26199bdbbbd02aacd9ffc802aad983a76b1ffd6745a6b838629b155ec0c63fe"},
-    {file = "blspy-2.0.3-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:9103e08c1ed3efa98c220cd979580f681365e26167ebd717f4ecbda27d24b6a7"},
-    {file = "blspy-2.0.3-cp38-cp38-macosx_11_0_x86_64.whl", hash = "sha256:a1dc830abd7fd663a39315bdaef155a32a97936b6fffe84c313db9098bfdebfd"},
-    {file = "blspy-2.0.3-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0bd79a85c142afddee7a5eed58b041a28fa7c7f3c07419aa8bb03a9213a8c6e7"},
-    {file = "blspy-2.0.3-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9048930d4c7984a6aa9b4588c45f1a75532be5f0426453e895bf6b57ad792eeb"},
-    {file = "blspy-2.0.3-cp38-cp38-win_amd64.whl", hash = "sha256:df9bad403835dd6aec941089089bbf43a3a4fde038acbe0062d3efa6a7ecae83"},
-    {file = "blspy-2.0.3-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:a5805418da017833f9df22bb382afac30f46747e25562563c65dff1bd502d27b"},
-    {file = "blspy-2.0.3-cp39-cp39-macosx_11_0_x86_64.whl", hash = "sha256:647abe2f898eb99e7e9978eec2a4e42589a4378a73f1f8037f8594e4b92b3797"},
-    {file = "blspy-2.0.3-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:62491c8a4b8810771443517fd2e2738a4c96d8a1fc5a1b3ae522d7d6bace3f49"},
-    {file = "blspy-2.0.3-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d18c877523a6ab1c08f06f1962e79c49b52e8a77a8a67dab7759fd2ed0908125"},
-    {file = "blspy-2.0.3-cp39-cp39-win_amd64.whl", hash = "sha256:f0e168006f877319d29686be04c9226e03df055bf2c9583ac696639bb732a63c"},
-    {file = "blspy-2.0.3.tar.gz", hash = "sha256:246dd0c69d4e53aa66c06d674402040f2f86b352afe2135712f7ec6a62b2ad8c"},
-]
-
-[package.dependencies]
-wheel = "*"
-
-[[package]]
 name = "bolt11"
 version = "2.1.0"
 description = "A library for encoding and decoding BOLT11 payment requests."
@@ -3210,4 +3171,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "79098b9177d42d5b658f3eda8d45614c725aa18d9ff19524ce5c2677aabb09a5"
+content-hash = "99e71d2f1b08dc513a44b4ca7e14b150b0a0ea8618c7849c7a4fedfbd4d77199"
