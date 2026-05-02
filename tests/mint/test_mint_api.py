@@ -658,7 +658,7 @@ async def test_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet):
     )
     
     assert response.status_code == 400
-    assert "quotes must be unique" in response.text
+    assert "Duplicate quote IDs provided" in response.text
 
 
 @pytest.mark.asyncio
