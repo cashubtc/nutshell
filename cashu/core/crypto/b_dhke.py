@@ -1,4 +1,5 @@
 import hashlib
+import os
 from typing import Any, Optional, Tuple
 
 from py_ecc.bls.hash_to_curve import hash_to_G1
@@ -88,8 +89,6 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
     n = len(Cs)
     if n == 0:
         return True
-    
-    import os
     
     # Generate random 128-bit scalars
     rs = [int.from_bytes(os.urandom(16), "big") for _ in range(n)]
