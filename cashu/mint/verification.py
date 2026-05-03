@@ -230,7 +230,7 @@ class LedgerVerification(
         private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C))
-        valid = b_dhke.verify(private_key_amount, C, proof.secret)
+        valid = b_dhke.keyed_verification(private_key_amount, C, proof.secret)
         if valid:
             logger.trace("Proof verified.")
         else:

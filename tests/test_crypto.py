@@ -1,10 +1,10 @@
 from cashu.core.crypto.b_dhke import (
+    batch_pairing_verification,
+    keyed_verification,
+    pairing_verification,
     step1_alice,
     step2_bob,
     step3_alice,
-    verify,
-    verify_signature,
-    verify_signatures_batch,
 )
 from cashu.core.crypto.bls import PrivateKey
 
@@ -25,10 +25,10 @@ def test_bdhke_flow():
     C = step3_alice(C_, r, None) # A is unused
 
     # 5. Mint verifies
-    assert verify(mint_privkey, C, secret_msg)
+    assert keyed_verification(mint_privkey, C, secret_msg)
 
     # 6. Wallet verifies signature natively via pairing
-    assert verify_signature(mint_pubkey_g2, C, secret_msg)
+    assert pairing_verification(mint_pubkey_g2, C, secret_msg)
 
 
 def test_bdhke_batch_verification():
@@ -47,7 +47,7 @@ def test_bdhke_batch_verification():
         Cs.append(C)
         
     # Batch verify should pass
-    assert verify_signatures_batch(mint_pubkeys_g2, Cs, messages)
+    assert batch_pairing_verification(mint_pubkeys_g2, Cs, messages)
     
     # Corrupt one signature (simulate forgery or mint cheating)
     # We corrupt by multiplying the first C by 2
@@ -55,7 +55,7 @@ def test_bdhke_batch_verification():
     invalid_Cs = [corrupted_C, Cs[1], Cs[2]]
     
     # Batch verify should fail
-    assert not verify_signatures_batch(mint_pubkeys_g2, invalid_Cs, messages)
+    assert not batch_pairing_verification(mint_pubkeys_g2, invalid_Cs, messages)
     
     # Empty batch should pass
-    assert verify_signatures_batch([], [], [])
+    assert batch_pairing_verification([], [], [])

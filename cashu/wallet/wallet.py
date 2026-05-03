@@ -951,7 +951,7 @@ class Wallet(
             secret_msgs.append(proof.secret)
             
         logger.trace(f"Batch verifying {len(proofs)} Mint Signatures (BLS12-381 Pairing).")
-        if not b_dhke.verify_signatures_batch(K2s, Cs, secret_msgs):
+        if not b_dhke.batch_pairing_verification(K2s, Cs, secret_msgs):
             raise Exception("Mint signature invalid.")
             
         logger.debug("Verified incoming signatures.")
@@ -1027,7 +1027,7 @@ class Wallet(
 
         # Batch verify the unblinded signatures using BLS multi-miller loop
         logger.trace("Batch verifying Mint Signatures (BLS12-381 Pairings).")
-        if not b_dhke.verify_signatures_batch(K2s, Cs, secret_msgs):
+        if not b_dhke.batch_pairing_verification(K2s, Cs, secret_msgs):
             raise Exception("Mint signatures failed BLS aggregate pairing verification!")
 
         logger.debug("Verified incoming signatures.")

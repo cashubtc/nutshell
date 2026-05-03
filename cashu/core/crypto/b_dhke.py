@@ -59,7 +59,7 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
     C: PublicKey = C_ * r_inv
     return C
 
-def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
+def keyed_verification(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     """
     Mint verification: checks C == Y * a
     """
@@ -67,7 +67,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     valid = C == Y * a
     return valid
 
-def verify_signature(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
+def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     """
     Wallet/Public verification: e(C, G2) == e(Y, K2)
     This is what makes BLS superior - anyone can verify without a DLEQ proof!
@@ -80,7 +80,7 @@ def verify_signature(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     p2 = pairing(K2.point, Y.point)
     return p1 == p2
 
-def verify_signatures_batch(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
+def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
     """
     Batch verifies BLS12-381 signatures using random linear combinations.
     This significantly improves performance over checking each signature individually.
@@ -142,7 +142,7 @@ def step1_alice_deprecated(
     return step1_alice(secret_msg, blinding_factor)
 
 def verify_deprecated(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
-    return verify(a, C, secret_msg)
+    return keyed_verification(a, C, secret_msg)
 
 def carol_verify_dleq_deprecated(*args, **kwargs):
     return True
