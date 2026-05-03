@@ -61,7 +61,7 @@ async def test_mint(ledger: Ledger):
     blinded_messages_mock = [
             BlindedMessage(
                 amount=8,
-                B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
+                B_="a4f7e6bd88a65ea288bbbc98141d3c69ecf5a4648a44694915c12b4a075d837d170bad919e8ad7780f7ac7ff40b0e07f",
                 id=ledger.keyset.id,
             )
     ]
@@ -97,7 +97,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     blinded_messages_mock_invalid_key = [
             BlindedMessage(
                 amount=8,
-                B_="02634a2c2b34bec9e8a4aba4361f6bff02d7fa2365379b0840afe249a7a9d71237",
+                B_="a80cd9899cabffc9ff21641d2b0c4d2b69a372fc0ecf86cadbee9cb2e5c838f167e04ac3cea36bef35ebd41147756865",
                 id=ledger.keyset.id,
             )
     ]
@@ -112,7 +112,7 @@ async def test_generate_promises(ledger: Ledger):
     blinded_messages_mock = [
             BlindedMessage(
                 amount=8,
-                B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
+                B_="a4f7e6bd88a65ea288bbbc98141d3c69ecf5a4648a44694915c12b4a075d837d170bad919e8ad7780f7ac7ff40b0e07f",
                 id=ledger.keyset.id,
             )
     ]
