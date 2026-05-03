@@ -1031,6 +1031,7 @@ class Wallet(
         if not b_dhke.verify_signatures_batch(K2s, Cs, secret_msgs):
             raise Exception("Mint signatures failed BLS aggregate pairing verification!")
 
+        logger.debug("Verified incoming signatures.")
         logger.trace(f"Constructed {len(proofs)} proofs.")
 
         # add new proofs to wallet
