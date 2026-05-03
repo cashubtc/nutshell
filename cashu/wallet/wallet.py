@@ -644,7 +644,7 @@ class Wallet(
             proofs (List[Proof]): Proofs to be redeemed.
         """
         # verify DLEQ of incoming proofs
-        self.verify_proofs_dleq(proofs)
+        self.verify_proofs_signatures(proofs)
         return await self.split(proofs=proofs, amount=0)
 
     async def split(
@@ -933,12 +933,9 @@ class Wallet(
 
     # ---------- DLEQ PROOFS ----------
 
-    def verify_proofs_dleq(self, proofs: List[Proof]):
-        """Verifies DLEQ proofs in proofs."""
+    def verify_proofs_signatures(self, proofs: List[Proof]):
+        """Verifies BLS12-381 signatures in proofs."""
         for proof in proofs:
-            if not proof.dleq:
-                logger.trace("No DLEQ proof in proof.")
-                return
             logger.trace("Verifying Mint Signature (BLS12-381 Pairing).")
             assert proof.id
             assert (
@@ -951,8 +948,8 @@ class Wallet(
             ):
                 raise Exception("Mint signature invalid.")
             else:
-                logger.trace("DLEQ proof valid.")
-        logger.debug("Verified incoming DLEQ proofs.")
+                logger.trace("Signature valid.")
+        logger.debug("Verified incoming signatures.")
 
     async def _construct_proofs(
         self,
@@ -1023,7 +1020,7 @@ class Wallet(
             )
 
         # DLEQ verify
-        self.verify_proofs_dleq(proofs)
+        self.verify_proofs_signatures(proofs)
 
         logger.trace(f"Constructed {len(proofs)} proofs.")
 
