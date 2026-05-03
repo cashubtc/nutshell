@@ -11,7 +11,6 @@ from ..core.base import (
     Amount,
     BlindedMessage,
     BlindedSignature,
-    DLEQWallet,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -974,6 +973,12 @@ class Wallet(
         """
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
+        
+        # Batch verification collections
+        K2s = []
+        Cs = []
+        secret_msgs = []
+        
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
             if promise.id not in self.keysets:
                 logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
@@ -985,10 +990,11 @@ class Wallet(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
 
-            # Verify the unblinded signature using BLS pairing
+            # Store for batch verification
             mint_pubkey = self.keysets[promise.id].public_keys[promise.amount]
-            if not b_dhke.verify_signature(mint_pubkey, C, secret):
-                raise Exception("Mint signature failed BLS pairing verification!")
+            K2s.append(mint_pubkey)
+            Cs.append(C)
+            secret_msgs.append(secret)
 
             if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
@@ -1013,8 +1019,10 @@ class Wallet(
                 f"Created proof: {proof}, r: {r.to_hex()} out of promise {promise}"
             )
 
-        # DLEQ verify
-        self.verify_proofs_signatures(proofs)
+        # Batch verify the unblinded signatures using BLS multi-miller loop
+        logger.trace("Batch verifying Mint Signatures (BLS12-381 Pairings).")
+        if not b_dhke.verify_signatures_batch(K2s, Cs, secret_msgs):
+            raise Exception("Mint signatures failed BLS aggregate pairing verification!")
 
         logger.trace(f"Constructed {len(proofs)} proofs.")
 

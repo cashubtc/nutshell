@@ -2,7 +2,8 @@ import hashlib
 from typing import Optional, Tuple
 
 from py_ecc.bls.hash_to_curve import hash_to_G1
-from py_ecc.optimized_bls12_381 import G2, curve_order, pairing
+from py_ecc.optimized_bls12_381 import FQ12, G2, add, curve_order, multiply, pairing
+from py_ecc.optimized_bls12_381.optimized_pairing import final_exponentiate, miller_loop
 
 from .bls import PrivateKey, PublicKey
 
@@ -78,6 +79,37 @@ def verify_signature(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     p1 = pairing(G2, C.point)
     p2 = pairing(K2.point, Y.point)
     return p1 == p2
+
+def verify_signatures_batch(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
+    """
+    Batch verifies BLS12-381 signatures using random linear combinations.
+    This significantly improves performance over checking each signature individually.
+    """
+    n = len(Cs)
+    if n == 0:
+        return True
+    
+    import os
+    
+    # Generate random 128-bit scalars
+    rs = [int.from_bytes(os.urandom(16), "big") for _ in range(n)]
+    Ys = [hash_to_curve(msg.encode("utf-8")) for msg in secret_msgs]
+    
+    # Left side: sum(r_i * C_i)
+    sum_C = multiply(Cs[0].point, rs[0])
+    for i in range(1, n):
+        sum_C = add(sum_C, multiply(Cs[i].point, rs[i]))
+        
+    left_miller = miller_loop(G2, sum_C, final_exponentiate=False)
+    
+    # Right side: prod(e(K2_i, r_i * Y_i))
+    right_miller = FQ12.one()
+    for i in range(n):
+        rY = multiply(Ys[i].point, rs[i])
+        m = miller_loop(K2s[i].point, rY, final_exponentiate=False)
+        right_miller = right_miller * m
+        
+    return final_exponentiate(left_miller) == final_exponentiate(right_miller)
 
 def hash_e(*publickeys: PublicKey) -> bytes:
     """Dummy for backwards compatibility"""
