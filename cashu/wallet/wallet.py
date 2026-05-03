@@ -1007,12 +1007,6 @@ class Wallet(
                 derivation_path=path,
             )
 
-            # if the mint returned a dleq proof, we add it to the proof
-            if promise.dleq:
-                proof.dleq = DLEQWallet(
-                    e=promise.dleq.e, s=promise.dleq.s, r=r.to_hex()
-                )
-
             proofs.append(proof)
 
             logger.trace(

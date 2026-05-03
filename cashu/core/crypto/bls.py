@@ -43,18 +43,21 @@ class PrivateKey:
 class PublicKey:
     def __init__(self, compressed: bytes = b"", point=None, group="G1"):
         self.group = group
-        if point is not None:
-            self.point = point
-        elif compressed:
-            if self.group == "G1":
-                z = int.from_bytes(compressed, "big")
-                self.point = decompress_G1(z)  # type: ignore
+        try:
+            if point is not None:
+                self.point = point
+            elif compressed:
+                if self.group == "G1":
+                    z = int.from_bytes(compressed, "big")
+                    self.point = decompress_G1(z)  # type: ignore
+                else:
+                    z1 = int.from_bytes(compressed[:48], "big")
+                    z2 = int.from_bytes(compressed[48:], "big")
+                    self.point = decompress_G2((z1, z2))  # type: ignore
             else:
-                z1 = int.from_bytes(compressed[:48], "big")
-                z2 = int.from_bytes(compressed[48:], "big")
-                self.point = decompress_G2((z1, z2))  # type: ignore
-        else:
-            raise ValueError("Must provide point or compressed bytes")
+                raise ValueError("Must provide point or compressed bytes")
+        except Exception:
+            raise ValueError("The public key could not be parsed or is invalid.")
 
     def format(self, compressed: bool = True) -> bytes:
         if self.group == "G1":

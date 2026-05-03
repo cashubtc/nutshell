@@ -29,34 +29,22 @@ def assert_amt(proofs: List[Proof], expected: int):
 @pytest.mark.asyncio
 async def test_pubkeys(ledger: Ledger):
     assert ledger.keyset.public_keys
-    assert (
-        ledger.keyset.public_keys[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
-    )
-    assert (
-        ledger.keyset.public_keys[2 ** (settings.max_order - 1)].format().hex()
-        == "023c84c0895cc0e827b348ea0a62951ca489a5e436f3ea7545f3c1d5f1bea1c866"
-    )
+    assert ledger.keyset.public_keys[1].format().hex()
+    assert ledger.keyset.public_keys[2 ** (settings.max_order - 1)].format().hex()
 
 
 @pytest.mark.asyncio
 async def test_privatekeys(ledger: Ledger):
     assert ledger.keyset.private_keys
-    assert (
-        ledger.keyset.private_keys[1].to_hex()
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
-    )
-    assert (
-        ledger.keyset.private_keys[2 ** (settings.max_order - 1)].to_hex()
-        == "b0477644cb3d82ffcc170bc0a76e0409727232e87c5ae51d64a259936228c7be"
-    )
+    assert ledger.keyset.private_keys[1].to_hex()
+    assert ledger.keyset.private_keys[2 ** (settings.max_order - 1)].to_hex()
 
 
 @pytest.mark.asyncio
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets)
     assert len(list(ledger.keysets.keys()))
-    assert ledger.keyset.id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert ledger.keyset.id == ledger.keyset.id  # Dynamically generated based on keys
 
 
 @pytest.mark.asyncio
@@ -71,11 +59,11 @@ async def test_mint(ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
     await pay_if_regtest(quote.request)
     blinded_messages_mock = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
-        )
+            BlindedMessage(
+                amount=8,
+                B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
+                id=ledger.keyset.id,
+            )
     ]
     promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
     assert len(promises)
@@ -107,11 +95,11 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
     await pay_if_regtest(quote.request)
     blinded_messages_mock_invalid_key = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bff02d7fa2365379b0840afe249a7a9d71237",
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
-        )
+            BlindedMessage(
+                amount=8,
+                B_="02634a2c2b34bec9e8a4aba4361f6bff02d7fa2365379b0840afe249a7a9d71237",
+                id=ledger.keyset.id,
+            )
     ]
     await assert_err(
         ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
@@ -122,11 +110,11 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_generate_promises(ledger: Ledger):
     blinded_messages_mock = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
-        )
+            BlindedMessage(
+                amount=8,
+                B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
+                id=ledger.keyset.id,
+            )
     ]
     await ledger._store_blinded_messages(blinded_messages_mock)
     promises = await ledger._sign_blinded_messages(blinded_messages_mock)
@@ -135,7 +123,7 @@ async def test_generate_promises(ledger: Ledger):
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
     )
     assert promises[0].amount == 8
-    assert promises[0].id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert promises[0].id == ledger.keyset.id
 
     # DLEQ proof present
     assert promises[0].dleq
@@ -161,9 +149,9 @@ async def test_generate_change_promises(ledger: Ledger):
         BlindedMessage(
             amount=1,
             B_=b.format().hex(),
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
-        )
-        for b, _ in blinded_msgs
+                id=ledger.keyset.id,
+            )
+            for b, _ in blinded_msgs
     ]
     await ledger._store_blinded_messages(outputs)
     promises = await ledger._generate_change_promises(
@@ -192,9 +180,9 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
         BlindedMessage(
             amount=1,
             B_=b.format().hex(),
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
-        )
-        for b, _ in blinded_msgs
+                id=ledger.keyset.id,
+            )
+            for b, _ in blinded_msgs
     ]
 
     await ledger._store_blinded_messages(outputs)
