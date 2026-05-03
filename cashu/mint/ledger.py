@@ -6,7 +6,6 @@ import bolt11
 from loguru import logger
 
 from ..core.base import (
-    DLEQ,
     Amount,
     BlindedMessage,
     BlindedSignature,
