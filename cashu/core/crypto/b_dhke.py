@@ -91,7 +91,7 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
         return True
     
     # Generate random 128-bit scalars
-    rs = [int.from_bytes(os.urandom(16), "big") for _ in range(n)]
+    rs = [int.from_bytes(os.urandom(32), "big") for _ in range(n)]
     Ys = [hash_to_curve(msg.encode("utf-8")) for msg in secret_msgs]
     
     # Left side: sum(r_i * C_i)
