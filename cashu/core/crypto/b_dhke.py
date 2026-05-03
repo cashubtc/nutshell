@@ -1,5 +1,5 @@
 import hashlib
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from py_ecc.bls.hash_to_curve import hash_to_G1
 from py_ecc.optimized_bls12_381 import FQ12, G2, add, curve_order, multiply, pairing
@@ -102,11 +102,24 @@ def verify_signatures_batch(K2s: list[PublicKey], Cs: list[PublicKey], secret_ms
         
     left_miller = miller_loop(G2, sum_C, final_exponentiate=False)
     
-    # Right side: prod(e(K2_i, r_i * Y_i))
+    # Right side: prod(e(K2_i, sum(r_i * Y_i)))
     right_miller = FQ12.one()
+    grouped_rhs: dict[bytes, Any] = {}
+    unique_keys: dict[bytes, Any] = {}
+    
     for i in range(n):
         rY = multiply(Ys[i].point, rs[i])
-        m = miller_loop(K2s[i].point, rY, final_exponentiate=False)
+        k_bytes = K2s[i].serialize()
+        
+        if k_bytes in grouped_rhs:
+            grouped_rhs[k_bytes] = add(grouped_rhs[k_bytes], rY)
+        else:
+            grouped_rhs[k_bytes] = rY
+            unique_keys[k_bytes] = K2s[i].point
+            
+    for k_bytes, sum_rY in grouped_rhs.items():
+        K2_point = unique_keys[k_bytes]
+        m = miller_loop(K2_point, sum_rY, final_exponentiate=False)
         right_miller = right_miller * m
         
     return final_exponentiate(left_miller) == final_exponentiate(right_miller)

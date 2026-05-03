@@ -6,7 +6,7 @@ from cashu.core.crypto.b_dhke import (
     verify_signature,
     verify_signatures_batch,
 )
-from cashu.core.crypto.bls import PrivateKey, PublicKey
+from cashu.core.crypto.bls import PrivateKey
 
 
 def test_bdhke_flow():
