@@ -375,6 +375,7 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""
             SELECT * from {db.table_with_schema('promises')}
             WHERE melt_quote = :melt_id AND c_ IS NULL
+            ORDER BY id
             """,
             {"melt_id": melt_id},
         )
@@ -391,6 +392,7 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""
                 SELECT * from {db.table_with_schema('promises')}
                 WHERE melt_quote = :melt_id AND c_ IS NOT NULL
+                ORDER BY id
                 """,
             {"melt_id": melt_id},
         )
