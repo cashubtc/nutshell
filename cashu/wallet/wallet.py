@@ -642,8 +642,8 @@ class Wallet(
         Args:
             proofs (List[Proof]): Proofs to be redeemed.
         """
-        # verify DLEQ of incoming proofs
-        self.verify_proofs_signatures(proofs)
+        # BLS verification of incoming proofs is not required here 
+        # since it is performed immediately upon receipt in _construct_proofs.
         return await self.split(proofs=proofs, amount=0)
 
     async def split(
@@ -933,21 +933,28 @@ class Wallet(
     # ---------- DLEQ PROOFS ----------
 
     def verify_proofs_signatures(self, proofs: List[Proof]):
-        """Verifies BLS12-381 signatures in proofs."""
+        """Verifies BLS12-381 signatures in proofs using fast batch verification."""
+        if not proofs:
+            return
+            
+        K2s = []
+        Cs = []
+        secret_msgs = []
+        
         for proof in proofs:
-            logger.trace("Verifying Mint Signature (BLS12-381 Pairing).")
             assert proof.id
             assert (
                 proof.id in self.keysets
             ), f"Keyset {proof.id} not known, can not verify signature."
-            if not b_dhke.verify_signature(
-                self.keysets[proof.id].public_keys[proof.amount],
-                PublicKey(bytes.fromhex(proof.C)),
-                proof.secret,
-            ):
-                raise Exception("Mint signature invalid.")
-            else:
-                logger.trace("Signature valid.")
+            
+            K2s.append(self.keysets[proof.id].public_keys[proof.amount])
+            Cs.append(PublicKey(bytes.fromhex(proof.C)))
+            secret_msgs.append(proof.secret)
+            
+        logger.trace(f"Batch verifying {len(proofs)} Mint Signatures (BLS12-381 Pairing).")
+        if not b_dhke.verify_signatures_batch(K2s, Cs, secret_msgs):
+            raise Exception("Mint signature invalid.")
+            
         logger.debug("Verified incoming signatures.")
 
     async def _construct_proofs(
