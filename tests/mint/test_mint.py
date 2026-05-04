@@ -70,7 +70,7 @@ async def test_mint(ledger: Ledger):
     assert promises[0].amount == 8
     assert (
         promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
+        == "a61ba3cfdc5cdcdc6f16710923ce20794e146016e347993fd06126aac14aa03e0e3df7a2226aa81d986a90b0bd97ba48"
     )
 
 
@@ -120,15 +120,15 @@ async def test_generate_promises(ledger: Ledger):
     promises = await ledger._sign_blinded_messages(blinded_messages_mock)
     assert (
         promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
+        == "a61ba3cfdc5cdcdc6f16710923ce20794e146016e347993fd06126aac14aa03e0e3df7a2226aa81d986a90b0bd97ba48"
     )
     assert promises[0].amount == 8
     assert promises[0].id == ledger.keyset.id
 
-    # DLEQ proof present
-    assert promises[0].dleq
-    assert promises[0].dleq.s
-    assert promises[0].dleq.e
+    # DLEQ proof present (not anymore with BLS)
+    # assert promises[0].dleq
+    # assert promises[0].dleq.s
+    # assert promises[0].dleq.e
 
 
 @pytest.mark.asyncio
