@@ -102,10 +102,26 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
     left_miller = pyblst.miller_loop(sum_C, g2_point)
     
-    # Right side: prod(e(r_i * Y_i, K2_i))
-    right_miller = pyblst.miller_loop(Ys[0].point.scalar_mul(rs[0]), K2s[0].point)
-    for i in range(1, n):
-        right_miller = right_miller * pyblst.miller_loop(Ys[i].point.scalar_mul(rs[i]), K2s[i].point)
+    # Right side: prod(e(sum(r_i * Y_i), K2_j)) grouped by unique K2
+    # Group the Y points by their corresponding K2 point
+    grouped_Ys = {}
+    for i in range(n):
+        k2_hex = K2s[i].format().hex()
+        y_r = Ys[i].point.scalar_mul(rs[i])
+        
+        if k2_hex not in grouped_Ys:
+            grouped_Ys[k2_hex] = {"k2": K2s[i].point, "sum_y": y_r}
+        else:
+            grouped_Ys[k2_hex]["sum_y"] = grouped_Ys[k2_hex]["sum_y"] + y_r
+            
+    # Now compute the pairings for each unique K2
+    right_miller = None
+    for group in grouped_Ys.values():
+        miller = pyblst.miller_loop(group["sum_y"], group["k2"])
+        if right_miller is None:
+            right_miller = miller
+        else:
+            right_miller = right_miller * miller
         
     return pyblst.final_verify(left_miller, right_miller)
 
