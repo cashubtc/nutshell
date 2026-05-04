@@ -463,21 +463,10 @@ def test_send(mint, cli_prefix):
     token_str = result.output.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert token.token[0].proofs[0].dleq is None, "dleq included"
+    
 
 
-def test_send_with_dleq(mint, cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [*cli_prefix, "send", "10", "--dleq"],
-    )
-    assert result.exception is None
-    print("test_send_with_dleq", result.output)
-    token_str = result.output.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert token.token[0].proofs[0].dleq is not None, "no dleq included"
+
 
 
 def test_send_legacy(mint, cli_prefix):

@@ -1,18 +1,11 @@
 import os
 from typing import Optional
 
-from py_ecc.bls.point_compression import (
-    compress_G1,
-    compress_G2,
-    decompress_G1,
-    decompress_G2,
-)
-from py_ecc.optimized_bls12_381 import (
-    G2,
-    curve_order,
-    eq,
-    multiply,
-)
+
+import pyblst
+curve_order = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+_G2_HEX = '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8'
+
 
 
 class PrivateKey:
@@ -32,7 +25,7 @@ class PrivateKey:
         return self.private_key.hex()
 
     def get_g2_public_key(self) -> "PublicKey":
-        pt = multiply(G2, self.scalar)
+        pt = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX)).scalar_mul(self.scalar)
         return PublicKey(point=pt, group="G2")
 
     @property
@@ -48,36 +41,28 @@ class PublicKey:
                 self.point = point
             elif compressed:
                 if self.group == "G1":
-                    z = int.from_bytes(compressed, "big")
-                    self.point = decompress_G1(z)  # type: ignore
+                    self.point = pyblst.BlstP1Element().uncompress(compressed)
                 else:
-                    z1 = int.from_bytes(compressed[:48], "big")
-                    z2 = int.from_bytes(compressed[48:], "big")
-                    self.point = decompress_G2((z1, z2))  # type: ignore
+                    self.point = pyblst.BlstP2Element().uncompress(compressed)
             else:
                 raise ValueError("Must provide point or compressed bytes")
         except Exception:
             raise ValueError("The public key could not be parsed or is invalid.")
 
     def format(self, compressed: bool = True) -> bytes:
-        if self.group == "G1":
-            z = compress_G1(self.point)
-            return z.to_bytes(48, "big")
-        else:
-            z1, z2 = compress_G2(self.point)
-            return z1.to_bytes(48, "big") + z2.to_bytes(48, "big")
+        return self.point.compress()
 
     def serialize(self) -> bytes:
         return self.format()
 
     def __eq__(self, other):
         if isinstance(other, PublicKey):
-            return eq(self.point, other.point)
+            return self.point == other.point
         return False
 
     def __mul__(self, scalar):
         if isinstance(scalar, PrivateKey):
-            return PublicKey(point=multiply(self.point, scalar.scalar), group=self.group)
+            return PublicKey(point=self.point.scalar_mul(scalar.scalar), group=self.group)
         elif isinstance(scalar, int):
-            return PublicKey(point=multiply(self.point, scalar), group=self.group)
+            return PublicKey(point=self.point.scalar_mul(scalar), group=self.group)
         raise TypeError("Can't multiply with non-scalar")

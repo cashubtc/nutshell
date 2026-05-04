@@ -1,3 +1,4 @@
+import importlib
 import copy
 from types import SimpleNamespace
 from typing import List, Union
@@ -298,13 +299,14 @@ async def test_melt(wallet1: Wallet):
 
     invoice_payment_request = ""
     if is_regtest:
-        invoice_dict = get_real_invoice(64)
-        invoice_payment_request = invoice_dict["payment_request"]
+        if is_regtest:
+            invoice_dict = get_real_invoice(64)
+            invoice_payment_request = invoice_dict["payment_request"]
+        elif is_fake:
+            mint_quote = await wallet1.request_mint(64)
+            invoice_payment_request = mint_quote.request
 
-    if is_fake:
-        # Instead of request_mint(64) which creates an internal mint quote that gets auto-paid,
-        # we provide an external fake bolt11 invoice for 64 sats.
-        invoice_payment_request = "lnbc640n1p5lsh4tpp5d3xd0laverxyref0nvk4cet2hp47ula044grj888encyt0l5p55qsp5nxuvqhfvww4tz54slc20kmwcpu89fhw7erhzwlpflpgfxlp83fqsdq8w3jhxaqjdgr94l50lk8xgyyv3rr8jl3suh786sm2nxspjwpw49tamu2e2kk36nll8tvy3088y48pehkynqpjhcfa78yczn6u42nar63xdpjhvsqpnznee"
+
 
     quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
@@ -314,8 +316,9 @@ async def test_melt(wallet1: Wallet):
         assert total_amount == 66
         assert quote.fee_reserve == 2
     if is_fake:
-        # Since we use an external fake invoice now, it will have a fee reserve (unlike internal quotes)
-        assert total_amount == 64 + quote.fee_reserve
+        # we expect a fee reserve of 0 sat for fake
+        assert total_amount == 64
+        assert quote.fee_reserve == 0
 
     if not settings.debug_mint_only_deprecated:
         quote_resp = await wallet1.get_melt_quote(quote.quote)
@@ -363,13 +366,9 @@ async def test_melt(wallet1: Wallet):
     assert len(proofs_used) == len(send_proofs), "Not all proofs used"
     assert all([p.melt_id == melt_quote_db.quote for p in proofs_used]), "Wrong melt_id"
 
-    if is_fake:
-        # FakeWallet charges math.ceil(64 * 0.01) = 1 sat fee. Balance is 128 - 64 - 1 = 63.
-        assert wallet1.balance == 63, "Wrong balance"
-    else:
-        # the payment was without fees so we need to remove it from the total amount
-        assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
-        assert wallet1.balance == 64, "Wrong balance"
+    # the payment was without fees so we need to remove it from the total amount
+    assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
+    assert wallet1.balance == 64, "Wrong balance"
 
 
 @pytest.mark.asyncio
@@ -380,13 +379,14 @@ async def test_get_melt_quote_state(wallet1: Wallet):
     await wallet1.mint(128, quote_id=mint_quote.quote)
     invoice_payment_request = ""
     if is_regtest:
-        invoice_dict = get_real_invoice(64)
-        invoice_payment_request = invoice_dict["payment_request"]
+        if is_regtest:
+            invoice_dict = get_real_invoice(64)
+            invoice_payment_request = invoice_dict["payment_request"]
+        elif is_fake:
+            mint_quote = await wallet1.request_mint(64)
+            invoice_payment_request = mint_quote.request
 
-    if is_fake:
-        # Instead of request_mint(64) which creates an internal mint quote that gets auto-paid,
-        # we provide an external fake bolt11 invoice for 64 sats.
-        invoice_payment_request = "lnbc640n1p5lsh4tpp5d3xd0laverxyref0nvk4cet2hp47ula044grj888encyt0l5p55qsp5nxuvqhfvww4tz54slc20kmwcpu89fhw7erhzwlpflpgfxlp83fqsdq8w3jhxaqjdgr94l50lk8xgyyv3rr8jl3suh786sm2nxspjwpw49tamu2e2kk36nll8tvy3088y48pehkynqpjhcfa78yczn6u42nar63xdpjhvsqpnznee"
+
     quote = await wallet1.melt_quote(invoice_payment_request)
     assert quote.state == MeltQuoteState.unpaid
     assert quote.request == invoice_payment_request
@@ -557,7 +557,7 @@ async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     assert list(wallet1.keysets.keys()) == [wallet1.keyset_id]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
     await wallet1.activate_keyset(
-        keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+        keyset_id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20"
     )
     # expect deprecated keyset id to be present
     await assert_err(

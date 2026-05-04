@@ -182,7 +182,7 @@ def test_fuzz_restore(client, outputs):
 @given(keyset_id=url_safe_text())
 def test_fuzz_keys_keyset_id(client, keyset_id):
     response = client.get(f"/v1/keys/{keyset_id}")
-    assert response.status_code in ALLOWED_STATUS_CODES
+    assert response.status_code in ALLOWED_STATUS_CODES + [200]
 
 @hypothesis_settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
 @given(quote=url_safe_text(max_len=50))

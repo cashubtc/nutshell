@@ -2,9 +2,7 @@ import hashlib
 import os
 from typing import Any, Optional, Tuple
 
-from py_ecc.bls.hash_to_curve import hash_to_G1
-from py_ecc.optimized_bls12_381 import FQ12, G2, add, curve_order, multiply, pairing
-from py_ecc.optimized_bls12_381.optimized_pairing import final_exponentiate, miller_loop
+import pyblst
 
 from .bls import PrivateKey, PublicKey
 
@@ -27,7 +25,7 @@ def hash_to_curve(message: bytes) -> PublicKey:
     """
     Hash a message to a point on G1 using SSWU.
     """
-    pt = hash_to_G1(message, DST, hashlib.sha256)  # type: ignore
+    pt = pyblst.BlstP1Element().hash_to_group(message, DST)
     return PublicKey(point=pt, group="G1")
 
 def step1_alice(
@@ -54,8 +52,8 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
 def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
     """
     Alice unblinds the signature: C = C' * (1/r)
-    A (Mint's public key) is unused in multiplicative blinding, kept for API compatibility.
     """
+    from .bls import curve_order
     r_inv = mod_inverse(r.scalar, curve_order)
     C: PublicKey = C_ * r_inv
     return C
@@ -70,16 +68,17 @@ def keyed_verification(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 
 def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     """
-    Wallet/Public verification: e(C, G2) == e(Y, K2)
-    This is what makes BLS superior - anyone can verify without a DLEQ proof!
-    Note: K2 must be a PublicKey in group G2. C must be in G1.
+    Verify the BLS signature using pairings.
+    e(C, G2) == e(Y, K2)
     """
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    Y = hash_to_curve(secret_msg.encode("utf-8"))
     
-    # py_ecc pairing expects (G2_point, G1_point)
-    p1 = pairing(G2, C.point)
-    p2 = pairing(K2.point, Y.point)
-    return p1 == p2
+    _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
+    g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
+
+    p1 = pyblst.miller_loop(C.point, g2_point)
+    p2 = pyblst.miller_loop(Y.point, K2.point)
+    return pyblst.final_verify(p1, p2)
 
 def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
     """
@@ -90,38 +89,25 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
     if n == 0:
         return True
     
-    # Generate random 128-bit scalars
+    # Generate random 256-bit scalars
     rs = [int.from_bytes(os.urandom(32), "big") for _ in range(n)]
     Ys = [hash_to_curve(msg.encode("utf-8")) for msg in secret_msgs]
     
     # Left side: sum(r_i * C_i)
-    sum_C = multiply(Cs[0].point, rs[0])
+    sum_C = Cs[0].point.scalar_mul(rs[0])
     for i in range(1, n):
-        sum_C = add(sum_C, multiply(Cs[i].point, rs[i]))
+        sum_C = sum_C + Cs[i].point.scalar_mul(rs[i])
         
-    left_miller = miller_loop(G2, sum_C, final_exponentiate=False)
+    _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
+    g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
+    left_miller = pyblst.miller_loop(sum_C, g2_point)
     
-    # Right side: prod(e(K2_i, sum(r_i * Y_i)))
-    right_miller = FQ12.one()
-    grouped_rhs: dict[bytes, Any] = {}
-    unique_keys: dict[bytes, Any] = {}
-    
-    for i in range(n):
-        rY = multiply(Ys[i].point, rs[i])
-        k_bytes = K2s[i].serialize()
+    # Right side: prod(e(r_i * Y_i, K2_i))
+    right_miller = pyblst.miller_loop(Ys[0].point.scalar_mul(rs[0]), K2s[0].point)
+    for i in range(1, n):
+        right_miller = right_miller * pyblst.miller_loop(Ys[i].point.scalar_mul(rs[i]), K2s[i].point)
         
-        if k_bytes in grouped_rhs:
-            grouped_rhs[k_bytes] = add(grouped_rhs[k_bytes], rY)
-        else:
-            grouped_rhs[k_bytes] = rY
-            unique_keys[k_bytes] = K2s[i].point
-            
-    for k_bytes, sum_rY in grouped_rhs.items():
-        K2_point = unique_keys[k_bytes]
-        m = miller_loop(K2_point, sum_rY, final_exponentiate=False)
-        right_miller = right_miller * m
-        
-    return final_exponentiate(left_miller) == final_exponentiate(right_miller)
+    return pyblst.final_verify(left_miller, right_miller)
 
 def hash_e(*publickeys: PublicKey) -> bytes:
     """Dummy for backwards compatibility"""

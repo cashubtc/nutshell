@@ -1,3 +1,4 @@
+from cashu.core.crypto.bls import PublicKey
 import time
 
 import pytest
@@ -74,7 +75,7 @@ def _keyset(keyset_id: str = "keyset-1"):
     return WalletKeyset(
         id=keyset_id,
         unit="sat",
-        public_keys={1: PrivateKey().public_key},
+        public_keys={1: PublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2")},
         mint_url="https://mint.test",
         active=True,
         input_fee_ppk=1,
@@ -170,32 +171,32 @@ async def test_get_proofs_filters(wallet_db: Database):
 
 @pytest.mark.asyncio
 async def test_keyset_and_derivation_counter_flow(wallet_db: Database):
-    keyset = _keyset("keyset-derivation")
+    keyset = _keyset("01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20")
     await store_keyset(keyset, db=wallet_db)
 
-    fetched = await get_keysets(id="keyset-derivation", db=wallet_db)
+    fetched = await get_keysets(id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20", db=wallet_db)
     assert len(fetched) == 1
     assert fetched[0].active is True
 
     keyset.active = False
     keyset.input_fee_ppk = 77
     await update_keyset(keyset, db=wallet_db)
-    fetched_after = await get_keysets(id="keyset-derivation", db=wallet_db)
+    fetched_after = await get_keysets(id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20", db=wallet_db)
     assert fetched_after[0].active is False
     assert fetched_after[0].input_fee_ppk == 77
 
     first_counter = await bump_secret_derivation(
-        db=wallet_db, keyset_id="keyset-derivation", by=3
+        db=wallet_db, keyset_id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20", by=3
     )
     current_counter = await bump_secret_derivation(
-        db=wallet_db, keyset_id="keyset-derivation", skip=True
+        db=wallet_db, keyset_id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20", skip=True
     )
     assert first_counter == 0
     assert current_counter == 3
 
-    await set_secret_derivation(db=wallet_db, keyset_id="keyset-derivation", counter=9)
+    await set_secret_derivation(db=wallet_db, keyset_id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20", counter=9)
     set_counter = await bump_secret_derivation(
-        db=wallet_db, keyset_id="keyset-derivation", skip=True
+        db=wallet_db, keyset_id="01847b08df40a9011a940892d8bdf4953822c32699899abd7d11fb720c3f49fc20", skip=True
     )
     assert set_counter == 9
 
