@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
-from cashu.core.crypto.secp import PrivateKey
+from cashu.core.crypto.bls import PrivateKey
 from cashu.core.db import Database
 from cashu.core.settings import settings
 from cashu.wallet.v1_api import LedgerAPI

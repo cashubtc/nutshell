@@ -94,13 +94,13 @@ async def test_decrypt_seed():
     )
     assert (
         private_key_1
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
+        == "0f125db12a53112679d8beb37cacb85680a9bdbbed245c1210fae0761d84604c"
     )
     pubkeys = ledger.keysets[list(ledger.keysets.keys())[0]].public_keys
     assert pubkeys
     assert (
         pubkeys[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+        == "830ed4ff501ddfd496adeca0a7e60c6ffb2dcb2463ca695190e16279cb078da318025fe89b719b9e7a10aac3de9c6d771686b337fa97ebc931a122626ba1cdd9a78c154f5864e8f68f7b3a82bc3ca847bf6ef8874a9a66172a086f960147fad6"
     )
 
     ledger_encrypted = Ledger(
@@ -120,7 +120,7 @@ async def test_decrypt_seed():
     )
     assert (
         private_key_1
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
+        == "0f125db12a53112679d8beb37cacb85680a9bdbbed245c1210fae0761d84604c"
     )
     pubkeys_encrypted = ledger_encrypted.keysets[
         list(ledger_encrypted.keysets.keys())[0]
@@ -128,7 +128,7 @@ async def test_decrypt_seed():
     assert pubkeys_encrypted
     assert (
         pubkeys_encrypted[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+        == "830ed4ff501ddfd496adeca0a7e60c6ffb2dcb2463ca695190e16279cb078da318025fe89b719b9e7a10aac3de9c6d771686b337fa97ebc931a122626ba1cdd9a78c154f5864e8f68f7b3a82bc3ca847bf6ef8874a9a66172a086f960147fad6"
     )
 
 

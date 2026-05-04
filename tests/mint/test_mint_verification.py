@@ -1,3 +1,5 @@
+from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey, PublicKey as SecpPublicKey
+from cashu.core.p2pk import schnorr_sign
 """Tests for `cashu.mint.verification.LedgerVerification`."""
 
 import secrets
@@ -15,7 +17,7 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.crypto.b_dhke import step1_alice
-from cashu.core.crypto.secp import PrivateKey
+from cashu.core.crypto.bls import PrivateKey
 from cashu.core.errors import (
     InvalidProofsError,
     NoSecretInProofsError,
@@ -973,7 +975,7 @@ def test_together_fails_sig_all_secrets_not_equal(ledger: Ledger):
 
 def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
     kid = ledger.keyset.id
-    signer = PrivateKey()
+    signer = SecpPrivateKey()
     pub = signer.public_key.format().hex()
     secret_str = _p2pk_sig_all_secret(pub)
     p = Proof(
@@ -992,7 +994,7 @@ def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
 
 def test_together_sig_all_succeeds_when_signed(ledger: Ledger):
     kid = ledger.keyset.id
-    signer = PrivateKey()
+    signer = SecpPrivateKey()
     pub = signer.public_key.format().hex()
     secret_str = _p2pk_sig_all_secret(pub)
     p = Proof(

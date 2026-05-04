@@ -1,3 +1,4 @@
+from cashu.core.crypto.secp import PublicKey, PrivateKey
 import time
 from hashlib import sha256
 from unittest.mock import AsyncMock, patch
@@ -5,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from cashu.core.base import BlindedMessage, HTLCWitness, P2PKWitness, Proof
-from cashu.core.crypto.secp import PrivateKey
+
 from cashu.core.errors import InvalidProofsError, TransactionError
 from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind, Tags

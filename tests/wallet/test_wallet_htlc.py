@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import HTLCWitness, Proof
-from cashu.core.crypto.secp import PrivateKey
+from cashu.core.crypto.bls import PrivateKey
 from cashu.core.htlc import HTLCSecret
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
