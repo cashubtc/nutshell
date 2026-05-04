@@ -283,7 +283,7 @@ class LedgerAPI(SupportsAuth):
         keys = KeysResponse.model_validate(keys_dict)
         this_keyset = keys.keysets[0]
         keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val))
+            int(amt): PublicKey(bytes.fromhex(val), group="G2")
             for amt, val in this_keyset.keys.items()
         }
         keyset = WalletKeyset(
