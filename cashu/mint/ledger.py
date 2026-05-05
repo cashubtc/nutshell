@@ -1382,6 +1382,7 @@ class Ledger(
         """
         from ..core.crypto import bls_dhke
         from ..core.crypto.bls import PublicKey as BlsPublicKey
+        from ..core.crypto.keys import is_bls_keyset
         from ..core.crypto.secp import PublicKey as SecpPublicKey
         
         promises: List[
@@ -1391,7 +1392,7 @@ class Ledger(
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
-            is_v3 = keyset.id.startswith("02")
+            is_v3 = is_bls_keyset(keyset.id)
             
             if is_v3:
                 B_ = BlsPublicKey(bytes.fromhex(output.B_))
