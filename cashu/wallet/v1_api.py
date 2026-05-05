@@ -19,6 +19,9 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import is_bls_keyset
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,
