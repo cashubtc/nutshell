@@ -1038,6 +1038,9 @@ class Wallet(
         Returns:
             List[Proof]: list of proofs that can be used as ecash
         """
+        from ..core.crypto import bls_dhke
+        from ..core.crypto.bls import PublicKey as BlsPublicKey
+
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
@@ -1046,12 +1049,25 @@ class Wallet(
                 # we don't have the keyset for this promise, so we load all keysets from the mint
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
-            C_ = PublicKey(bytes.fromhex(promise.C_))
-            C = b_dhke.step3_alice(
-                C_, r, self.keysets[promise.id].public_keys[promise.amount]
-            )
+                
+            is_v3 = promise.id.startswith("02")
+            if is_v3:
+                C_ = BlsPublicKey(bytes.fromhex(promise.C_))
+                C = bls_dhke.step3_alice( # type: ignore
 
-            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount]
+                )
+            else:
+                C_ = PublicKey(bytes.fromhex(promise.C_))
+                C = b_dhke.step3_alice( # type: ignore
+
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount]
+                )
+
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(secret, r)
+            else:
+                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
 
             proof = Proof(
                 id=promise.id,
@@ -1114,8 +1130,14 @@ class Wallet(
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
+        from ..core.crypto import bls_dhke
+        
         for secret, amount, r in zip(secrets, amounts, rs_):
-            B_, r = b_dhke.step1_alice(secret, r or None)
+            is_v3 = keyset_id.startswith("02")
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(secret, r or None)
+            else:
+                B_, r = b_dhke.step1_alice(secret, r or None)
 
             assert r
             rs_return.append(r)
