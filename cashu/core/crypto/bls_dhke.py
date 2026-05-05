@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 
 import pyblst
 
-from .bls import PrivateKey, PublicKey, curve_order
+from .bls import PrivateKey, PublicKey, curve_order, _G2_HEX
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
@@ -72,7 +72,6 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     """
     Y = hash_to_curve(secret_msg.encode("utf-8"))
     
-    _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
 
     p1 = pyblst.miller_loop(C.point, g2_point)
@@ -97,7 +96,6 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
     for i in range(1, n):
         sum_C = sum_C + Cs[i].point.scalar_mul(rs[i])
         
-    _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
     left_miller = pyblst.miller_loop(sum_C, g2_point)
     
