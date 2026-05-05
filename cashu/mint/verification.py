@@ -11,6 +11,9 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.bls_dhke import keyed_verification
+from ..core.crypto.keys import is_bls_keyset
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection
 from ..core.errors import (
@@ -230,11 +233,8 @@ class LedgerVerification(
         keyset = self.keysets[proof.id]
         private_key_amount = keyset.private_keys[proof.amount]
 
-        from ..core.crypto.keys import is_bls_keyset
         is_v3 = is_bls_keyset(proof.id)
         if is_v3:
-            from ..core.crypto.bls import PublicKey as BlsPublicKey
-            from ..core.crypto.bls_dhke import keyed_verification
             C = BlsPublicKey(bytes.fromhex(proof.C))
             valid = keyed_verification(private_key_amount, C, proof.secret) # type: ignore
         else:

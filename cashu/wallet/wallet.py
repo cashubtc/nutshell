@@ -21,7 +21,9 @@ from ..core.base import (
     WalletKeyset,
     WalletMint,
 )
-from ..core.crypto import b_dhke
+from ..core.crypto import b_dhke, bls_dhke
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import is_bls_keyset
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
@@ -977,9 +979,6 @@ class Wallet(
         Returns:
             List[Proof]: list of proofs that can be used as ecash
         """
-        from ..core.crypto import bls_dhke
-        from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import is_bls_keyset
 
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
@@ -1077,8 +1076,6 @@ class Wallet(
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         
-        from ..core.crypto import bls_dhke
-        from ..core.crypto.keys import is_bls_keyset
         
         for secret, amount, r in zip(secrets, amounts, rs_):
             is_v3 = is_bls_keyset(keyset_id)

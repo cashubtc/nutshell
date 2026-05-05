@@ -19,13 +19,16 @@ from ..core.base import (
     Proof,
     Unit,
 )
-from ..core.crypto import b_dhke
+from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.keys import (
     derive_pubkey,
+    is_bls_keyset,
     random_hash,
 )
 from ..core.crypto.secp import PublicKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
@@ -1162,10 +1165,6 @@ class Ledger(
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
-        from ..core.crypto import bls_dhke
-        from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import is_bls_keyset
-        from ..core.crypto.secp import PublicKey as SecpPublicKey
         
         promises: List[
             Tuple[str, Any, int, Any, Any, Any]
