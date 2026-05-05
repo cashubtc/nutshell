@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 
 import pyblst
 
-from .bls import PrivateKey, PublicKey
+from .bls import PrivateKey, PublicKey, curve_order
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
@@ -40,20 +40,19 @@ def step1_alice(
     B_: PublicKey = Y * r
     return B_, r
 
-def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
+def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, None, None]:
     """
     Bob signs the blinded message: C' = B' * a
     Returns C' and dummy DLEQ values since BLS12-381 pairings make DLEQ proofs redundant.
     """
     C_: PublicKey = B_ * a
     # Return dummy private keys for backwards compatibility with DLEQ logic elsewhere
-    return C_, PrivateKey(scalar=1), PrivateKey(scalar=1)
+    return C_, None, None
 
 def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
     """
     Alice unblinds the signature: C = C' * (1/r)
     """
-    from .bls import curve_order
     r_inv = mod_inverse(r.scalar, curve_order)
     C: PublicKey = C_ * r_inv
     return C

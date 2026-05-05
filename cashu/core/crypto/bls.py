@@ -46,7 +46,8 @@ class PublicKey:
                     self.point = pyblst.BlstP2Element().uncompress(compressed)
             else:
                 raise ValueError("Must provide point or compressed bytes")
-        except Exception:
+        except Exception as e:
+            print(f"Exception parsing BLS public key (group={self.group}, compressed={compressed.hex() if compressed else ''}):", repr(e))
             raise ValueError("The public key could not be parsed or is invalid.")
 
     def format(self, compressed: bool = True) -> bytes:

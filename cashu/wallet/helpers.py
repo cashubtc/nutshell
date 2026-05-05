@@ -45,7 +45,7 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
         # load unit from wallet keyset db
         proof_keyset_id = token.token[0].proofs[0].id
         keysets = await get_keysets(id=proof_keyset_id, db=wallet.db)
-        if not keysets and proof_keyset_id.startswith("01") and len(proof_keyset_id) == 16:
+        if not keysets and proof_keyset_id.startswith(("01", "02")) and len(proof_keyset_id) == 16:
             # This might be a v2 short ID, try to find a matching full ID
             all_keysets = await get_keysets(db=wallet.db)
             keysets = [k for k in all_keysets if k.id.startswith(proof_keyset_id)]

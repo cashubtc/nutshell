@@ -256,7 +256,7 @@ async def test_keyset_id_v2_error_cases():
         get_keyset_id_version("x")  # Too short
     
     with pytest.raises(ValueError):
-        derive_keyset_short_id("02invalid")  # Invalid version
+        derive_keyset_short_id("abinvalid")  # Invalid version
     
     # Test with None keys should work (just empty dict)
     empty_id = derive_keyset_id_v2({}, Unit.sat)

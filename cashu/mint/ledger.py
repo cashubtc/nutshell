@@ -1202,12 +1202,14 @@ class Ledger(
             for promise in promises:
                 keyset_id, B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
+                e_hex = e.to_hex() if e else None
+                s_hex = s.to_hex() if s else None
                 await self.crud.update_blinded_message_signature(
                     amount=amount,
                     b_=B_.format().hex(),
                     c_=C_.format().hex(),
-                    e=e.to_hex(),
-                    s=s.to_hex(),
+                    e=e_hex,
+                    s=s_hex,
                     db=self.db,
                     conn=conn,
                 )
@@ -1216,7 +1218,7 @@ class Ledger(
                     id=keyset_id,
                     amount=amount,
                     C_=C_.format().hex(),
-                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
+                    dleq=DLEQ(e=e_hex, s=s_hex) if e_hex and s_hex else None,
                 )
                 signatures.append(signature)
 

@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import random
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from bip32 import BIP32
 
@@ -57,7 +57,7 @@ def derive_pubkeys(keys: Dict[int, PrivateKey], amounts: List[int]):
     return {amt: keys[amt].public_key for amt in amounts}
 
 
-def derive_keyset_id(keys: Dict[int, PublicKey]):
+def derive_keyset_id(keys: Dict[int, Union[PublicKey, BlsPublicKey]]):
     """Deterministic derivation keyset_id from set of public keys (version 00)."""
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
@@ -66,7 +66,7 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
 
 
 def derive_keyset_id_v2(
-    keys: Dict[int, PublicKey], 
+    keys: Dict[int, Union[PublicKey, BlsPublicKey]], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,
@@ -148,7 +148,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
         True if the keyset ID is base64 format, False otherwise
     """
     # If it starts with a known version prefix, it's not base64
-    if keyset_id.startswith("00") or keyset_id.startswith("01"):
+    if keyset_id.startswith(("00", "01", "02")):
         return False
     
     # Try to decode as base64 to confirm
@@ -193,7 +193,7 @@ def is_keyset_id_v2(keyset_id: str) -> bool:
     return get_keyset_id_version(keyset_id) == '01'
 
 
-def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
+def derive_keyset_id_deprecated(keys: Dict[int, Union[PublicKey, BlsPublicKey]]):
     """DEPRECATED 0.15.0: Deterministic derivation keyset_id from set of public keys.
     DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.
     """
@@ -227,7 +227,7 @@ def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> D
     }
 
 def derive_keyset_id_v3(
-    keys: Dict[int, BlsPublicKey], 
+    keys: Dict[int, Union[PublicKey, BlsPublicKey]], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,

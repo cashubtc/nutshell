@@ -646,6 +646,7 @@ class Wallet(
         """
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
+        self.verify_proofs_bls(proofs)
         return await self.split(proofs=proofs, amount=0)
 
     async def split(
@@ -936,10 +937,14 @@ class Wallet(
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
+        verified_count = 0
         for proof in proofs:
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
-                return
+                continue
+            if is_bls_keyset(proof.id):
+                logger.trace("BLS keyset, skipping DLEQ proof verification.")
+                continue
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
             assert (
@@ -956,7 +961,35 @@ class Wallet(
                 raise Exception("DLEQ proof invalid.")
             else:
                 logger.trace("DLEQ proof valid.")
-        logger.debug("Verified incoming DLEQ proofs.")
+                verified_count += 1
+        if verified_count > 0:
+            logger.debug(f"Verified {verified_count} incoming DLEQ proofs.")
+
+    def verify_proofs_bls(self, proofs: List[Proof]):
+        """Verifies BLS signatures using pairings."""
+        
+        bls_proofs = [p for p in proofs if is_bls_keyset(p.id)]
+        if not bls_proofs:
+            return
+
+        logger.trace(f"Verifying {len(bls_proofs)} BLS signatures using pairings.")
+        
+        K2s: List[BlsPublicKey] = []
+        Cs: List[BlsPublicKey] = []
+        secret_msgs: List[str] = []
+
+        for proof in bls_proofs:
+            assert proof.id
+            assert proof.id in self.keysets, f"Keyset {proof.id} not known."
+            K2s.append(self.keysets[proof.id].public_keys[proof.amount]) # type: ignore
+            Cs.append(BlsPublicKey(bytes.fromhex(proof.C)))
+            secret_msgs.append(proof.secret)
+
+        valid = bls_dhke.batch_pairing_verification(K2s, Cs, secret_msgs) # type: ignore
+        if not valid:
+            raise Exception("BLS signature verification failed.")
+        
+        logger.debug(f"Verified {len(bls_proofs)} incoming BLS signatures using pairings.")
 
     async def _construct_proofs(
         self,
@@ -1036,6 +1069,7 @@ class Wallet(
 
         # DLEQ verify
         self.verify_proofs_dleq(proofs)
+        self.verify_proofs_bls(proofs)
 
         logger.trace(f"Constructed {len(proofs)} proofs.")
 

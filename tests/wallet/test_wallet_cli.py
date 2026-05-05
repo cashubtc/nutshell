@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import TokenV4
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -477,7 +478,8 @@ def test_send_with_dleq(mint, cli_prefix):
     token_str = result.output.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert token.token[0].proofs[0].dleq is not None, "no dleq included"
+    if not is_bls_keyset(token.token[0].proofs[0].id):
+        assert token.token[0].proofs[0].dleq is not None, "no dleq included"
 
 
 def test_send_legacy(mint, cli_prefix):

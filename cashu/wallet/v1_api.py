@@ -253,7 +253,7 @@ class LedgerAPI(SupportsAuth):
             pub_keys = {}
             for amt, val in keyset.keys.items():
                 if is_v3:
-                    pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val))
+                    pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
                 else:
                     pub_keys[int(amt)] = SecpPublicKey(bytes.fromhex(val))
             
@@ -295,7 +295,7 @@ class LedgerAPI(SupportsAuth):
         keyset_keys = {}
         for amt, val in this_keyset.keys.items():
             if is_v3:
-                keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val))
+                keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
             else:
                 keyset_keys[int(amt)] = SecpPublicKey(bytes.fromhex(val))
                 
