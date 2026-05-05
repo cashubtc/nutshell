@@ -768,9 +768,10 @@ class WalletKeyset:
     def from_row(cls, row: RowMapping):
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
             from .crypto.bls import PublicKey as BlsPublicKey
+            from .crypto.keys import is_bls_keyset
             from .crypto.secp import PublicKey as SecpPublicKey
             
-            is_v3 = row["id"].startswith("02")
+            is_v3 = is_bls_keyset(row["id"])
             pub_keys = {}
             for amount, hex_key in dict(json.loads(serialized)).items():
                 if is_v3:

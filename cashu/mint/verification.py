@@ -230,7 +230,8 @@ class LedgerVerification(
         keyset = self.keysets[proof.id]
         private_key_amount = keyset.private_keys[proof.amount]
 
-        is_v3 = proof.id.startswith("02")
+        from ..core.crypto.keys import is_bls_keyset
+        is_v3 = is_bls_keyset(proof.id)
         if is_v3:
             from ..core.crypto.bls import PublicKey as BlsPublicKey
             from ..core.crypto.bls_dhke import keyed_verification

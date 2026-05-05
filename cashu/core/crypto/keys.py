@@ -120,9 +120,14 @@ def derive_keyset_short_id(keyset_id: str) -> str:
     if is_base64_keyset_id(keyset_id) or keyset_id.startswith("00"):
         return keyset_id
     
-    # For version 01 or 02, return first 16 chars (8 bytes in hex)
-    if keyset_id.startswith("01") or keyset_id.startswith("02"):
-        return keyset_id[:16]
+    # For version 01 and onwards, return first 16 chars (8 bytes in hex)
+    version = get_keyset_id_version(keyset_id)
+    if version != "base64":
+        try:
+            if int(version) >= 1:
+                return keyset_id[:16]
+        except ValueError:
+            pass
     
     raise ValueError(f"Unsupported keyset version in ID: {keyset_id}")
 
@@ -172,6 +177,16 @@ def get_keyset_id_version(keyset_id: str) -> str:
     
     return keyset_id[:2]
 
+
+def is_bls_keyset(keyset_id: str) -> bool:
+    """Check if a keyset ID uses BLS12-381 cryptography (version >= 02)."""
+    version = get_keyset_id_version(keyset_id)
+    if version == "base64":
+        return False
+    try:
+        return int(version) >= 2
+    except ValueError:
+        return False
 
 def is_keyset_id_v2(keyset_id: str) -> bool:
     """Check if a keyset ID is version 2 (starts with '01')."""

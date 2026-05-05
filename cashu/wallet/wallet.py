@@ -979,6 +979,7 @@ class Wallet(
         """
         from ..core.crypto import bls_dhke
         from ..core.crypto.bls import PublicKey as BlsPublicKey
+        from ..core.crypto.keys import is_bls_keyset
 
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
@@ -989,7 +990,7 @@ class Wallet(
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
                 
-            is_v3 = promise.id.startswith("02")
+            is_v3 = is_bls_keyset(promise.id)
             if is_v3:
                 C_ = BlsPublicKey(bytes.fromhex(promise.C_))
                 C = bls_dhke.step3_alice( # type: ignore
@@ -1059,7 +1060,7 @@ class Wallet(
         Args:
             amounts (List[int]): list of amounts
             secrets (List[str]): list of secrets
-            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+            rs (list[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
 
         Returns:
             List[BlindedMessage]: list of blinded messages that can be sent to the mint
@@ -1075,10 +1076,12 @@ class Wallet(
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
+        
         from ..core.crypto import bls_dhke
+        from ..core.crypto.keys import is_bls_keyset
         
         for secret, amount, r in zip(secrets, amounts, rs_):
-            is_v3 = keyset_id.startswith("02")
+            is_v3 = is_bls_keyset(keyset_id)
             if is_v3:
                 B_, r = bls_dhke.step1_alice(secret, r or None)
             elif not settings.wallet_use_deprecated_h2c:
