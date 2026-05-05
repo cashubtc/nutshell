@@ -5,7 +5,14 @@ from typing import Dict, List, Optional
 
 from bip32 import BIP32
 
-from .secp import PrivateKey, PublicKey
+from .bls import PrivateKey as BlsPrivateKey
+from .bls import PublicKey as BlsPublicKey
+from .secp import PrivateKey as SecpPrivateKey
+from .secp import PublicKey as SecpPublicKey
+
+# Typing aliases to remain backwards compatible for type hints in the rest of the codebase
+PrivateKey = SecpPrivateKey
+PublicKey = SecpPublicKey
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
@@ -113,8 +120,8 @@ def derive_keyset_short_id(keyset_id: str) -> str:
     if is_base64_keyset_id(keyset_id) or keyset_id.startswith("00"):
         return keyset_id
     
-    # For version 01, return first 16 chars (8 bytes in hex)
-    if keyset_id.startswith("01"):
+    # For version 01 or 02, return first 16 chars (8 bytes in hex)
+    if keyset_id.startswith("01") or keyset_id.startswith("02"):
         return keyset_id[:16]
     
     raise ValueError(f"Unsupported keyset version in ID: {keyset_id}")
@@ -188,3 +195,37 @@ def random_hash() -> str:
     return base64.urlsafe_b64encode(
         bytes([random.getrandbits(8) for i in range(30)])
     ).decode()
+
+def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
+    """
+    Deterministic derivation of BLS12-381 keys for 2^n values.
+    Since BIP32 doesn't technically cover BLS12-381, we use HKDF or simple hashing on the BIP32 seed.
+    For simplicity and backwards compatibility of mnemonic/path logic, we hash the BIP32 path output to generate the scalar.
+    """
+    bip32 = BIP32.from_seed(mnemonic.encode())
+    orders_str = [f"/{a}'" for a in range(len(amounts))]
+    return {
+        a: BlsPrivateKey(
+            hashlib.sha256(bip32.get_privkey_from_path(derivation_path + orders_str[i])).digest()
+        )
+        for i, a in enumerate(amounts)
+    }
+
+def derive_keyset_id_v3(
+    keys: Dict[int, BlsPublicKey], 
+    unit: str, 
+    final_expiry: Optional[int] = None,
+    input_fee_ppk: int = 0,
+) -> str:
+    """
+    Deterministic derivation keyset_id v3 from set of BLS public keys (version 02).
+    """
+    sorted_keys = dict(sorted(keys.items()))
+    keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
+    keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
+    if input_fee_ppk > 0:
+        keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
+    if final_expiry is not None:
+        keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
+    hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()
+    return f"02{hash_digest}"

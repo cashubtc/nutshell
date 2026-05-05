@@ -19,6 +19,8 @@ from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
+from .crypto.bls import PrivateKey as BlsPrivateKey
+from .crypto.bls import PublicKey as BlsPublicKey
 from .crypto.keys import (
     derive_keys,
     derive_keys_deprecated_pre_0_15,
@@ -27,9 +29,13 @@ from .crypto.keys import (
     derive_keyset_id_v2,
     derive_pubkeys,
 )
-from .crypto.secp import PrivateKey, PublicKey
+from .crypto.secp import PrivateKey as SecpPrivateKey
+from .crypto.secp import PublicKey as SecpPublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
+
+PrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
+PublicKey = Union[SecpPublicKey, BlsPublicKey]
 
 
 class DLEQ(BaseModel):
@@ -759,12 +765,19 @@ class WalletKeyset:
         )
 
     @classmethod
-    def from_row(cls, row: Row):
+    def from_row(cls, row: RowMapping):
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
-            return {
-                int(amount): PublicKey(bytes.fromhex(hex_key))
-                for amount, hex_key in dict(json.loads(serialized)).items()
-            }
+            from .crypto.bls import PublicKey as BlsPublicKey
+            from .crypto.secp import PublicKey as SecpPublicKey
+            
+            is_v3 = row["id"].startswith("02")
+            pub_keys = {}
+            for amount, hex_key in dict(json.loads(serialized)).items():
+                if is_v3:
+                    pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key))
+                else:
+                    pub_keys[int(amount)] = SecpPublicKey(bytes.fromhex(hex_key))
+            return pub_keys
 
         return cls(
             id=row["id"],
@@ -974,7 +987,7 @@ class MintKeyset:
                 assert self.public_keys is not None
                 self.id = derive_keyset_id(self.public_keys)
                 logger.info(f"Generated keyset v1 ID: {self.id}")
-        else:
+        elif self.version_tuple < (0, 21):
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )
@@ -988,6 +1001,20 @@ class MintKeyset:
                 assert self.public_keys is not None
                 self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
                 logger.info(f"Generated keyset v2 ID: {self.id}")
+        else:
+            from .crypto.keys import derive_keys_v3, derive_keyset_id_v3
+            self.private_keys = derive_keys_v3(
+                self.seed, self.derivation_path, self.amounts
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
+            
+            # KEYSETS V3: BLS12-381 cryptography
+            if id_in_db:
+                self.id = id_in_db
+            else:
+                assert self.public_keys is not None
+                self.id = derive_keyset_id_v3(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
+                logger.info(f"Generated keyset v3 (BLS) ID: {self.id}")
 
 
 # ------- TOKEN -------

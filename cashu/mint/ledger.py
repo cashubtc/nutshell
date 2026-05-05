@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import bolt11
 from loguru import logger
@@ -25,7 +25,7 @@ from ..core.crypto.keys import (
     derive_pubkey,
     random_hash,
 )
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
@@ -1162,14 +1162,24 @@ class Ledger(
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
+        from ..core.crypto import bls_dhke
+        from ..core.crypto.bls import PublicKey as BlsPublicKey
+        from ..core.crypto.secp import PublicKey as SecpPublicKey
+        
         promises: List[
-            Tuple[str, PublicKey, int, PublicKey, PrivateKey, PrivateKey]
+            Tuple[str, Any, int, Any, Any, Any]
         ] = []
         for output in outputs:
-            B_ = PublicKey(bytes.fromhex(output.B_))
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
+            is_v3 = keyset.id.startswith("02")
+            
+            if is_v3:
+                B_ = BlsPublicKey(bytes.fromhex(output.B_))
+            else:
+                B_ = SecpPublicKey(bytes.fromhex(output.B_))
+                
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
             if not keyset.active:
@@ -1177,7 +1187,12 @@ class Ledger(
             keyset_id = output.id
             logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
-            C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+            
+            if is_v3:
+                C_, e, s = bls_dhke.step2_bob(B_, private_key_amount) # type: ignore
+            else:
+                C_, e, s = b_dhke.step2_bob(B_, private_key_amount) # type: ignore
+                
             promises.append((keyset_id, B_, output.amount, C_, e, s))
 
         keyset = keyset or self.keyset
