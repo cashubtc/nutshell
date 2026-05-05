@@ -11,10 +11,26 @@ from cashu.core.crypto.bls_dhke import (
 
 
 def test_hash_to_curve():
-    msg = b"test_message"
-    pt = hash_to_curve(msg)
-    assert isinstance(pt, PublicKey)
-    assert pt.group == "G1"
+    result = hash_to_curve(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        )
+    )
+    assert isinstance(result, PublicKey)
+    assert result.group == "G1"
+    assert (
+        result.format().hex()
+        == "a0687086dadc17db3c73fc63d58d61569ca32752a9b92c4e543692bc6b87b293fdcb4e9c870ab6e6d08127deb9382fb9"
+    )
+    result = hash_to_curve(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )
+    )
+    assert (
+        result.format().hex()
+        == "8dbdd24f1bc6f485fda14721cb1f15ba72ba34c05f89b5ca38c2a222c07158f471011d50a371cdb365da6bc7ef4139f4"
+    )
 
 
 def test_bls_steps():
