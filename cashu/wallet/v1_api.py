@@ -19,7 +19,6 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.crypto.secp import PublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,
@@ -244,18 +243,25 @@ class LedgerAPI(SupportsAuth):
         keys = KeysResponse.model_validate(keys_dict)
         keysets_str = " ".join([f"{k.id} ({k.unit})" for k in keys.keysets])
         logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
-        ret = [
-            WalletKeyset(
+        from ..core.crypto.bls import PublicKey as BlsPublicKey
+        from ..core.crypto.secp import PublicKey as SecpPublicKey
+        
+        ret = []
+        for keyset in keys.keysets:
+            is_v3 = keyset.id.startswith("02")
+            pub_keys = {}
+            for amt, val in keyset.keys.items():
+                if is_v3:
+                    pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val))
+                else:
+                    pub_keys[int(amt)] = SecpPublicKey(bytes.fromhex(val))
+            
+            ret.append(WalletKeyset(
                 id=keyset.id,
                 unit=keyset.unit,
-                public_keys={
-                    int(amt): PublicKey(bytes.fromhex(val))
-                    for amt, val in keyset.keys.items()
-                },
+                public_keys=pub_keys,
                 mint_url=self.url,
-            )
-            for keyset in keys.keysets
-        ]
+            ))
         return ret
 
     @async_set_httpx_client
@@ -280,12 +286,20 @@ class LedgerAPI(SupportsAuth):
 
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
+        from ..core.crypto.bls import PublicKey as BlsPublicKey
+        from ..core.crypto.secp import PublicKey as SecpPublicKey
+
         keys = KeysResponse.model_validate(keys_dict)
         this_keyset = keys.keysets[0]
-        keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val))
-            for amt, val in this_keyset.keys.items()
-        }
+        is_v3 = this_keyset.id.startswith("02")
+        
+        keyset_keys = {}
+        for amt, val in this_keyset.keys.items():
+            if is_v3:
+                keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val))
+            else:
+                keyset_keys[int(amt)] = SecpPublicKey(bytes.fromhex(val))
+                
         keyset = WalletKeyset(
             id=keyset_id,
             unit=this_keyset.unit,
