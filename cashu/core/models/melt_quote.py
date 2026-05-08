@@ -3,7 +3,7 @@ from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 from cashu.core.base import BlindedSignature, MeltQuote
-from cashu.core.settings import settings
+from cashu.core.constants import MAX_PAYMENT_REQUEST_LEN, MAX_UNIT_LEN
 
 
 class PostMeltRequestOptionMpp(BaseModel):
@@ -15,9 +15,9 @@ class PostMeltRequestOptions(BaseModel):
 
 
 class PostMeltQuoteRequest(BaseModel):
-    unit: str = Field(..., max_length=settings.mint_max_request_length)  # input unit
+    unit: str = Field(..., max_length=MAX_UNIT_LEN)  # input unit
     request: str = Field(
-        ..., max_length=settings.mint_max_request_length
+        ..., max_length=MAX_PAYMENT_REQUEST_LEN
     )  # output payment request
     options: Optional[PostMeltRequestOptions] = None
 

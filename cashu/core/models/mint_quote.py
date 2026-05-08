@@ -3,17 +3,17 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from cashu.core.base import MintQuote
-from cashu.core.settings import settings
+from cashu.core.constants import MAX_INVOICE_DESC_LEN, MAX_PUBKEY_LEN, MAX_UNIT_LEN
 
 
 class PostMintQuoteRequest(BaseModel):
-    unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
+    unit: str = Field(..., max_length=MAX_UNIT_LEN)  # output unit
     amount: int = Field(..., gt=0)  # output amount
     description: Optional[str] = Field(
-        default=None, max_length=settings.mint_max_request_length
+        default=None, max_length=MAX_INVOICE_DESC_LEN
     )  # invoice description
     pubkey: Optional[str] = Field(
-        default=None, max_length=settings.mint_max_request_length
+        default=None, max_length=MAX_PUBKEY_LEN
     )  # NUT-20 quote lock pubkey
 
 
