@@ -160,10 +160,16 @@ async def test_init_subscription_sends_initial_snapshots():
     )
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
 
+    from contextlib import asynccontextmanager
+    
+    @asynccontextmanager
+    async def mock_connect():
+        yield object()
+
     manager.db_read = cast(
         Any,
         SimpleNamespace(
-            db=object(),
+            db=SimpleNamespace(connect=mock_connect),
             crud=SimpleNamespace(
                 get_mint_quote=None,
                 get_melt_quote=None,
@@ -172,13 +178,13 @@ async def test_init_subscription_sends_initial_snapshots():
         ),
     )
 
-    async def get_mint_quote(quote_id, db):
+    async def get_mint_quote(quote_id, db, conn=None):
         return mint_quote if quote_id == "quote-1" else None
 
-    async def get_melt_quote(quote_id, db):
+    async def get_melt_quote(quote_id, db, conn=None):
         return melt_quote if quote_id == "melt-1" else None
 
-    async def get_proofs_states(Ys):
+    async def get_proofs_states(Ys, conn=None):
         return [proof_state]
 
     cast(Any, manager.db_read).crud.get_mint_quote = get_mint_quote
