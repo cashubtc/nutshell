@@ -192,14 +192,14 @@ async def test_init_subscription_sends_initial_snapshots():
 
     cast(Any, manager)._send_obj = send_obj
 
-    await manager._init_subscription(
-        "sub-mint", "quote-1", JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+    await manager._init_subscriptions(
+        "sub-mint", ["quote-1"], JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
     )
-    await manager._init_subscription(
-        "sub-melt", "melt-1", JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+    await manager._init_subscriptions(
+        "sub-melt", ["melt-1"], JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
     )
-    await manager._init_subscription(
-        "sub-proof", "Y1", JSONRPCSubscriptionKinds.PROOF_STATE
+    await manager._init_subscriptions(
+        "sub-proof", ["Y1"], JSONRPCSubscriptionKinds.PROOF_STATE
     )
 
     payloads = [json.loads(msg) for msg in websocket.sent]
