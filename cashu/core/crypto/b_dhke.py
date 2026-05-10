@@ -54,7 +54,10 @@ import hashlib
 from typing import Optional, Tuple
 
 from .secp import PrivateKey, PublicKey
+from .types import AnyPrivateKey, AnyPublicKey
 
+# Remove the import from bls_dhke as it's causing redefinition
+# from .bls_dhke import hash_to_curve 
 DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_Cashu_"
 
 
@@ -85,13 +88,11 @@ def hash_to_curve(message: bytes) -> PublicKey:
     raise ValueError("No valid point found")
 
 
-def step1_alice(
-    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
-) -> tuple[PublicKey, PrivateKey]:
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+def step1_alice(secret_msg: str, blinding_factor: Optional[AnyPrivateKey] = None) -> Tuple[PublicKey, AnyPrivateKey]:
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8")) # type: ignore
     r = blinding_factor or PrivateKey()
-    B_: PublicKey = Y + r.public_key # type: ignore
-    return B_, r
+    B_: PublicKey = Y + r.public_key  # type: ignore
+    return B_, r # type: ignore
 
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
@@ -101,17 +102,17 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
     return C_, e, s
 
 
-def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
+def step3_alice(C_: PublicKey, r: AnyPrivateKey, A: AnyPublicKey) -> PublicKey:
     C: PublicKey = C_ - A * r  # type: ignore
     return C
 
 
-def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
+def verify(a: AnyPrivateKey, C: AnyPublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     valid = C == Y * a  # type: ignore
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
-        valid = verify_deprecated(a, C, secret_msg)
+        valid = verify_deprecated(a, C, secret_msg) # type: ignore
     # END: BACKWARDS COMPATIBILITY < 0.15.1
     return valid
 

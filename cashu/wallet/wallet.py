@@ -2,13 +2,14 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union, cast
 
 from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
     Amount,
+    AnyPrivateKey,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -605,9 +606,9 @@ class Wallet(
             len(amounts), skip_bump=True
         )
         await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+        outputs, rs = self._construct_outputs(amounts, secrets, cast(List[AnyPrivateKey], rs)) # type: ignore # Invariant list
 
-        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id) # type: ignore
         if not quote:
             raise Exception("Quote not found.")
         signature: str | None = None
@@ -1043,7 +1044,7 @@ class Wallet(
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
                 B_, r = b_dhke.step1_alice_deprecated(
-                    secret, r
+                    secret, cast(PrivateKey, r)
                 )  # recompute B_ for dleq proofs
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
@@ -1116,10 +1117,10 @@ class Wallet(
             if is_v3:
                 B_, r = bls_dhke.step1_alice(secret, r or None)
             elif not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r or None)
+                B_, r = b_dhke.step1_alice(secret, cast(PrivateKey, r))  # type: ignore
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+                B_, r = b_dhke.step1_alice_deprecated(secret, cast(PrivateKey, r)) # type: ignore
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             assert r

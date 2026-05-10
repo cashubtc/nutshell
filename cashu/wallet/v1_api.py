@@ -1,6 +1,6 @@
 import json
 from posixpath import join
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import bolt11
 import httpx
@@ -9,6 +9,7 @@ from loguru import logger
 from pydantic import ValidationError
 
 from ..core.base import (
+    AnyPublicKey,
     AuthProof,
     BlindedMessage,
     BlindedSignature,
@@ -250,7 +251,7 @@ class LedgerAPI(SupportsAuth):
         ret = []
         for keyset in keys.keysets:
             is_v3 = is_bls_keyset(keyset.id)
-            pub_keys = {}
+            pub_keys: Dict[int, AnyPublicKey] = {}
             for amt, val in keyset.keys.items():
                 if is_v3:
                     pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
@@ -292,7 +293,7 @@ class LedgerAPI(SupportsAuth):
         this_keyset = keys.keysets[0]
         is_v3 = is_bls_keyset(this_keyset.id)
         
-        keyset_keys = {}
+        keyset_keys: Dict[int, AnyPublicKey] = {}
         for amt, val in this_keyset.keys.items():
             if is_v3:
                 keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")

@@ -7,8 +7,8 @@ from loguru import logger
 from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
-from ...core.base import Proof
-from ...core.crypto.secp import PrivateKey
+from ...core.base import AnyPrivateKey, Proof
+from ...core.crypto.secp import PrivateKey as SecpPrivateKey
 from ...core.db import Database
 from ..crud import get_mint_by_url, update_mint
 from ..wallet import Wallet
@@ -227,12 +227,12 @@ class WalletAuth(Wallet):
 
         amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-        rs = [PrivateKey(os.urandom(32)) for _ in amounts]
+        rs: List[AnyPrivateKey] = [SecpPrivateKey(os.urandom(32)) for _ in amounts]
         derivation_paths = ["" for _ in amounts]
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs) # type: ignore
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
         new_proofs = await self._construct_proofs(
-            promises, secrets, rs, derivation_paths
+            promises, secrets, rs, derivation_paths # type: ignore
         )
         logger.debug(
             f"Minted {self.unit.str(sum_proofs(new_proofs))} blind auth proofs."

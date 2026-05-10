@@ -19,7 +19,6 @@ from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
-from .crypto.bls import PrivateKey as BlsPrivateKey
 from .crypto.bls import PublicKey as BlsPublicKey
 from .crypto.keys import (
     derive_keys,
@@ -32,13 +31,13 @@ from .crypto.keys import (
     derive_pubkeys,
     is_bls_keyset,
 )
-from .crypto.secp import PrivateKey as SecpPrivateKey
 from .crypto.secp import PublicKey as SecpPublicKey
+from .crypto.types import AnyPrivateKey, AnyPublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
 
-PrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
-PublicKey = Union[SecpPublicKey, BlsPublicKey]
+PublicKey = AnyPublicKey
+PrivateKey = AnyPrivateKey
 
 
 class DLEQ(BaseModel):
@@ -772,12 +771,12 @@ class WalletKeyset:
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
             
             is_v3 = is_bls_keyset(row["id"])
-            pub_keys = {}
+            pub_keys: Dict[int, AnyPublicKey] = {}
             for amount, hex_key in dict(json.loads(serialized)).items():
                 if is_v3:
-                    pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key), group="G2")
+                    pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key), group="G2") # type: ignore
                 else:
-                    pub_keys[int(amount)] = SecpPublicKey(bytes.fromhex(hex_key))
+                    pub_keys[int(amount)] = SecpPublicKey(bytes.fromhex(hex_key)) # type: ignore
             return pub_keys
 
         return cls(
@@ -1005,7 +1004,7 @@ class MintKeyset:
         else:
             self.private_keys = derive_keys_v3(
                 self.seed, self.derivation_path, self.amounts
-            )
+            ) # type: ignore
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             
             # KEYSETS V3: BLS12-381 cryptography

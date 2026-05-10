@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 import pyblst
 
 from .bls import _G2_HEX, PrivateKey, PublicKey, curve_order
+from .types import AnyPrivateKey, AnyPublicKey
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
@@ -49,11 +50,13 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, None, None]:
     # Return dummy private keys for backwards compatibility with DLEQ logic elsewhere
     return C_, None, None
 
-def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
+
+
+def step3_alice(C_: PublicKey, r: AnyPrivateKey, A: AnyPublicKey) -> PublicKey:
     """
     Alice unblinds the signature: C = C' * (1/r)
     """
-    r_inv = mod_inverse(r.scalar, curve_order)
+    r_inv = mod_inverse(r.scalar, curve_order) # type: ignore
     C: PublicKey = C_ * r_inv
     return C
 

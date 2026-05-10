@@ -3,6 +3,7 @@ from typing import List, Literal, Optional, Tuple, Union
 from loguru import logger
 
 from ..core.base import (
+    AnyPublicKey,
     BlindedMessage,
     BlindedSignature,
     Method,
@@ -14,7 +15,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.bls_dhke import keyed_verification
 from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
@@ -234,13 +235,14 @@ class LedgerVerification(
         private_key_amount = keyset.private_keys[proof.amount]
 
         is_v3 = is_bls_keyset(proof.id)
+        C: AnyPublicKey
         if is_v3:
             C = BlsPublicKey(bytes.fromhex(proof.C))
             valid = keyed_verification(private_key_amount, C, proof.secret) # type: ignore
         else:
-            C = PublicKey(bytes.fromhex(proof.C))
+            C = SecpPublicKey(bytes.fromhex(proof.C))
             valid = b_dhke.verify(private_key_amount, C, proof.secret) # type: ignore
-            
+        
         if valid:
             logger.trace("Proof verified.")
         else:
