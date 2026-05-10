@@ -25,7 +25,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         if backend.supports_incoming_payment_stream:
             retry_delay = settings.mint_retry_exponential_backoff_base_delay
             max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-            
+
             while True:
                 try:
                     # Reset retry delay on successful connection to backend stream
@@ -36,7 +36,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                     logger.error(f"Error in invoice listener: {e}")
                     logger.info(f"Restarting invoice listener in {retry_delay} seconds...")
                     await asyncio.sleep(retry_delay)
-                    
+
                     # Exponential backoff
                     retry_delay = min(retry_delay * 2, max_retry_delay)
 

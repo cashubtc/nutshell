@@ -19,10 +19,10 @@ def derive_nostr_keypair(seed_bytes: bytes) -> Tuple[str, str]:
     # m/44'/1237'/0'/0/0
     child_key = bip32.get_privkey_from_path([44 + 0x80000000, 1237 + 0x80000000, 0 + 0x80000000, 0, 0])
     privkey_hex = child_key.hex()
-    
+
     pk = PrivateKey(bytes.fromhex(privkey_hex))
     pubkey_hex = pk.public_key.format(compressed=True)[1:].hex()
-    
+
     return privkey_hex, pubkey_hex
 
 def get_npub(pubkey_hex: str) -> str:
@@ -35,7 +35,7 @@ def get_npub(pubkey_hex: str) -> str:
 def sign_event(event: dict, privkey_hex: str) -> dict:
     """Signs a Nostr event."""
     pk = PrivateKey(bytes.fromhex(privkey_hex))
-    
+
     serialized_event = json.dumps([
         0,
         event['pubkey'],
@@ -44,12 +44,12 @@ def sign_event(event: dict, privkey_hex: str) -> dict:
         event['tags'],
         event['content']
     ], separators=(',', ':'), ensure_ascii=False)
-    
+
     event_id = hashlib.sha256(serialized_event.encode('utf-8')).hexdigest()
     # Mypy expects bytes for aux_random_data, pass 32 random bytes
     import os
     sig = pk.sign_schnorr(bytes.fromhex(event_id), os.urandom(32)).hex()
-    
+
     event['id'] = event_id
     event['sig'] = sig
     return event
@@ -71,7 +71,7 @@ def create_nip98_header(url: str, method: str, privkey_hex: str, body: Optional[
         "content": "",
         "pubkey": pubkey_hex,
     }
-    
+
     if body:
         body_str = json.dumps(body, separators=(',', ':'), ensure_ascii=False)
         body_hash = hashlib.sha256(body_str.encode('utf-8')).hexdigest()

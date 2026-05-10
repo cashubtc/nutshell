@@ -277,13 +277,13 @@ message Nut05Quote {
     // Optional: The Unix timestamp when the quote was created.
     optional int64 created_time = 9;
     // Optional: The Unix timestamp when the quote was paid.
-    optional int64 paid_time = 10;  
+    optional int64 paid_time = 10;
     // The actual fee paid for the melting operation.
-    int32 fee_paid = 11;   
+    int32 fee_paid = 11;
     // Optional: The payment preimage if the payment was successful.
     optional string payment_preimage = 12;
     // Optional: The Unix timestamp when the quote expires.
-    optional int64 expiry = 13;  
+    optional int64 expiry = 13;
     // A list of blinded messages representing the outputs (e.g., change).
     repeated BlindedMessage outputs = 14;
     // A list of blinded signatures representing the change.

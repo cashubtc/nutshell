@@ -77,7 +77,7 @@ def test_fuzz_deprecated_mint_post(client, outputs, hash):
     params = {}
     if hash:
         params["hash"] = hash
-    
+
     response = client.post("/mint", json=payload, params=params)
     assert response.status_code in [400, 404, 422, 503]
 
@@ -91,7 +91,7 @@ def test_fuzz_deprecated_mint_post(client, outputs, hash):
 def test_fuzz_deprecated_melt(client, pr, proofs, outputs):
     inputs_json = [p.model_dump(exclude={'dleq', 'witness'}) for p in proofs]
     outputs_json = [o.model_dump() for o in outputs] if outputs else None
-    
+
     payload = {
         "pr": pr,
         "proofs": inputs_json,
@@ -108,7 +108,7 @@ def test_fuzz_deprecated_melt(client, pr, proofs, outputs):
 def test_fuzz_deprecated_check(client, proofs):
     inputs_json = [p.model_dump(exclude={'dleq', 'witness'}) for p in proofs]
     payload = {"proofs": inputs_json}
-    
+
     response = client.post("/check", json=payload)
     if response.status_code == 200:
         data = response.json()
@@ -131,7 +131,7 @@ def test_fuzz_deprecated_check(client, proofs):
 def test_fuzz_deprecated_split(client, proofs, outputs, amount):
     inputs_json = [p.model_dump(exclude={'dleq', 'witness'}) for p in proofs]
     outputs_json = [o.model_dump() for o in outputs]
-    
+
     payload = {
         "proofs": inputs_json,
         "outputs": outputs_json
@@ -150,7 +150,7 @@ def test_fuzz_deprecated_split(client, proofs, outputs, amount):
 def test_fuzz_deprecated_restore(client, outputs):
     outputs_json = [o.model_dump() for o in outputs]
     payload = {"outputs": outputs_json}
-    
+
     response = client.post("/restore", json=payload)
     if response.status_code == 200:
         data = response.json()

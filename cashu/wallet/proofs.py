@@ -76,18 +76,18 @@ class WalletProofs(SupportsDb, SupportsKeysets):
     async def _expand_short_keyset_ids(self, proofs: List[Proof]) -> None:
         """
         Expands v2 short keyset IDs (16 chars) to full keyset IDs (66 chars) in-place.
-        
+
         This is necessary when receiving TokenV3 tokens that may contain v2 short IDs.
         The wallet must expand these to full IDs before sending them to the mint.
-        
+
         Args:
             proofs (List[Proof]): List of proofs whose keyset IDs may need expansion
-        """        
+        """
         manager = KeysetManager()
-        
+
         # Build a dictionary of all available keysets for this mint
         keysets_dict = {k.id: k for k in self.keysets.values()}
-        
+
         for proof in proofs:
             # Check if this is a v2 short ID (16 chars starting with '01')
             if proof.id.startswith("01") and len(proof.id) == 16:
@@ -259,10 +259,10 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             tokenv4_proofs = []
             for proof in proofs_keyset:
                 tokenv4_proofs.append(TokenV4Proof.from_proof(proof, include_dleq))
-            
+
             # convert to short id for token serialization
             short_id = manager.get_short_keyset_id(keyset_id)
-                
+
             tokenv4_token = TokenV4Token(i=bytes.fromhex(short_id), p=tokenv4_proofs)
             tokens.append(tokenv4_token)
 

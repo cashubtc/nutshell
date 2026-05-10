@@ -64,11 +64,11 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
         keyset_ids = mint_wallet._get_proofs_keyset_ids(t.proofs)
         logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
         await mint_wallet.load_mint()
-        
+
         # Expand short keyset IDs to full IDs
         # This is a no-op in the case of base64 keysets and v1 keysets
         await mint_wallet._expand_short_keyset_ids(t.proofs)
-        
+
         proofs_to_keep, _ = await mint_wallet.redeem(t.proofs)
         print(f"Received {mint_wallet.unit.str(sum_proofs(proofs_to_keep))}")
 
@@ -81,13 +81,13 @@ async def redeem_TokenV4(wallet: Wallet, token: TokenV4) -> Wallet:
     Redeem a token with a single mint.
     """
     await wallet.load_mint()
-    
+
     # Get proofs from token (these will have short keyset IDs)
     proofs = token.proofs
-    
+
     # Expand v2 short keyset IDs to full IDs in-place
     await wallet._expand_short_keyset_ids(proofs)
-    
+
     # Use the expanded proofs for redemption
     proofs_to_keep, _ = await wallet.redeem(proofs)
     print(f"Received {wallet.unit.str(sum_proofs(proofs_to_keep))}")
