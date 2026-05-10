@@ -19,6 +19,7 @@ from cashu.core.migrations import migrate_databases
 from cashu.wallet import migrations as wallet_migrations
 from cashu.wallet.crud import (
     bump_secret_derivation,
+    delete_keyset,
     get_bolt11_melt_quote,
     get_bolt11_melt_quotes,
     get_bolt11_mint_quote,
@@ -198,6 +199,22 @@ async def test_keyset_and_derivation_counter_flow(wallet_db: Database):
         db=wallet_db, keyset_id="keyset-derivation", skip=True
     )
     assert set_counter == 9
+
+
+@pytest.mark.asyncio
+async def test_delete_keyset_excludes_keyset(wallet_db: Database):
+    keyset = _keyset("keyset-delete")
+    await store_keyset(keyset, db=wallet_db)
+
+    await delete_keyset(keyset_id="keyset-delete", db=wallet_db)
+
+    assert await get_keysets(id="keyset-delete", db=wallet_db) == []
+    row = await wallet_db.fetchone(
+        "SELECT deleted_at FROM keysets WHERE id = :id",
+        {"id": "keyset-delete"},
+    )
+    assert row is not None
+    assert row["deleted_at"] is not None
 
 
 @pytest.mark.asyncio

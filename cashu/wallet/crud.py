@@ -210,7 +210,6 @@ async def get_keysets(
     unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-    exclude_deleted: bool = True, #returns only live keysets by default, set to False to include deleted keysets as well
 ) -> List[WalletKeyset]:
     clauses = []
     values: Dict[str, Any] = {}
@@ -223,11 +222,8 @@ async def get_keysets(
     if unit:
         clauses.append("unit = :unit")
         values["unit"] = unit
-    if exclude_deleted:
-        clauses.append("deleted_at IS NULL")
-    where = ""
-    if clauses:
-        where = f"WHERE {' AND '.join(clauses)}"
+    clauses.append("deleted_at IS NULL")
+    where = f"WHERE {' AND '.join(clauses)}"
 
     rows = await (conn or db).fetchall(  # type: ignore
         f"""
@@ -239,6 +235,24 @@ async def get_keysets(
     return [WalletKeyset.from_row(r) for r in rows]  # type: ignore
 
 
+async def delete_keyset(
+    keyset_id: str,
+    db: Database,
+    conn: Optional[Connection] = None,
+) -> None:
+    await (conn or db).execute(
+        """
+        UPDATE keysets
+        SET deleted_at = :deleted_at
+        WHERE id = :id AND deleted_at IS NULL
+        """,
+        {
+            "deleted_at": int(time.time()),
+            "id": keyset_id,
+        },
+    )
+
+
 async def update_keyset(
     keyset: WalletKeyset,
     db: Database,
@@ -247,12 +261,11 @@ async def update_keyset(
     await (conn or db).execute(
         """
         UPDATE keysets
-        SET active = :active, deleted_at = :deleted_at, input_fee_ppk = :input_fee_ppk
+        SET active = :active, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
         """,
         {
             "active": keyset.active,
-            "deleted_at": keyset.deleted_at,
             "id": keyset.id,
             "input_fee_ppk": keyset.input_fee_ppk,
         },
@@ -395,7 +408,9 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
+                json.dumps([c.model_dump() for c in quote.change])
+                if quote.change
+                else ""
             ),
         },
     )

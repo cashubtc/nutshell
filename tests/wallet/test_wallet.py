@@ -608,6 +608,7 @@ async def test_raise_on_unsupported_version_non_404(wallet1: Wallet):
     # should not raise
     wallet1.raise_on_unsupported_version(resp, "GET /v1/keys")
 
+
 @pytest.mark.asyncio
 async def test_keyset_disappears_from_mint(wallet1: Wallet):
     """
@@ -653,10 +654,15 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
 
     # Assert the disappeared keyset is marked as deleted in the DB
     disappeared_keysets_db = await get_keysets(
-        db=wallet1.db, id="fake_keyset_to_disappear", exclude_deleted=False
+        db=wallet1.db, id="fake_keyset_to_disappear"
     )
-    assert len(disappeared_keysets_db) == 1
-    assert disappeared_keysets_db[0].deleted_at is not None
+    assert len(disappeared_keysets_db) == 0
+    disappeared_keyset_row = await wallet1.db.fetchone(
+        "SELECT deleted_at FROM keysets WHERE id = :id",
+        {"id": "fake_keyset_to_disappear"},
+    )
+    assert disappeared_keyset_row is not None
+    assert disappeared_keyset_row["deleted_at"] is not None
 
     # Assert the retained keyset is NOT marked as deleted
     retained_keysets_db = await get_keysets(db=wallet1.db, id=real_keyset_id)
