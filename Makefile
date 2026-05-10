@@ -3,6 +3,23 @@ VERSION := $(shell poetry version -s)
 ruff:
 	poetry run ruff check . --fix
 
+# Staged files only for ruff + whitespace hooks (focused PRs). Whole-tree lint fix: `make ruff`.
+# CI parity: `make pre-commit` (full tree, same hooks as CI). Optional one-shot lint+hooks: `make format-full`.
+format:
+	@py=$$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep '\.py$$' || true); \
+	[ -z "$$py" ] || poetry run ruff check --fix $$py
+	@files=$$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true); \
+	[ -z "$$files" ] || poetry run pre-commit run mixed-line-ending --files $$files
+	@files=$$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true); \
+	[ -z "$$files" ] || poetry run pre-commit run trailing-whitespace --files $$files
+	@files=$$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true); \
+	[ -z "$$files" ] || poetry run pre-commit run end-of-file-fixer --files $$files
+
+# Optional: run Ruff lint --fix on the whole tree, then every pre-commit hook (no Ruff formatter).
+format-full:
+	poetry run ruff check . --fix
+	poetry run pre-commit run --all-files
+
 ruff-check:
 	poetry run ruff check .
 
@@ -11,8 +28,6 @@ fuzz:
 
 mypy:
 	poetry run mypy cashu --check-untyped-defs
-
-format: ruff
 
 check: ruff-check mypy
 
@@ -70,7 +85,7 @@ install-pre-commit-hook:
 pre-commit:
 	poetry run pre-commit run --all-files
 
-.PHONY: docker-build
+.PHONY: docker-build format format-full ruff ruff-check pre-commit check
 docker-build:
 	rm -rf docker-build || true
 	mkdir -p docker-build
