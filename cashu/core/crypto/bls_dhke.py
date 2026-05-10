@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 
 import pyblst
 
-from .bls import PrivateKey, PublicKey, curve_order, _G2_HEX
+from .bls import _G2_HEX, PrivateKey, PublicKey, curve_order
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
