@@ -43,7 +43,7 @@ class KeysetManager:
         - Then, if mapping not present, try to resolve from the known keysets of the currently selected mint
         - If ambiguous (multiple matches), raise
         - If not found, raise
-        
+
         Args:
             short_id: The short keyset ID to resolve
             keysets: Optional dict of keysets (values must have .id attribute)

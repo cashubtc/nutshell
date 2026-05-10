@@ -232,7 +232,7 @@ class LNbitsWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 # --- LNBITS RETRO-COMPATIBILITY ---
@@ -277,7 +277,7 @@ class LNbitsWallet(LightningBackend):
 
                     except (OSError, httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout):
                         pass
-                
+
                 if self.old_api:
                     await asyncio.sleep(retry_delay)
                     # Exponential backoff
@@ -307,6 +307,6 @@ class LNbitsWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
                 retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))

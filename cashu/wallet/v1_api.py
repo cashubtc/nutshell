@@ -153,7 +153,7 @@ class LedgerAPI(SupportsAuth):
 
         if resp.status_code == 404:
             raise Exception(f"The mint at {self.url} does not support endpoint {endpoint}.")
-        
+
         #For other non-200 statuses, raise using existing logic
         self.raise_on_error_request(resp)
 
@@ -202,9 +202,9 @@ class LedgerAPI(SupportsAuth):
             if "json" in kwargs:
                 request_info += f"\nPayload: {json.dumps(kwargs['json'], indent=2)}"
             print(f"Request: {request_info}")
-            
+
         resp = await self.httpx.request(method, path, **kwargs)
-        
+
         # Verbose logging of responses when enabled
         if settings.wallet_verbose_requests:
             response_info = f"Response: {resp.status_code}"
@@ -214,7 +214,7 @@ class LedgerAPI(SupportsAuth):
             except json.JSONDecodeError:
                 response_info += f"\n{resp.text}"
             print(response_info)
-            
+
         return resp
 
     """
@@ -424,7 +424,7 @@ class LedgerAPI(SupportsAuth):
             "mint/bolt11",
             json=payload,  # type: ignore
         )
-        
+
         # fail explicitly if mint doesn't support v1 mint endpoint
         self.raise_on_unsupported_version(resp, f"POST /v1/mint/{quote}")
         response_dict = resp.json()
@@ -457,7 +457,7 @@ class LedgerAPI(SupportsAuth):
             "melt/quote/bolt11",
             json=payload.model_dump(),
         )
-        
+
         #if mint doesn't support v1 melt-quote endpoint, fail explicitly
         self.raise_on_unsupported_version(resp, "POST /v1/melt/quote")
         return_dict = resp.json()
@@ -573,7 +573,7 @@ class LedgerAPI(SupportsAuth):
             "swap",
             json=split_payload.model_dump(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
-       
+
        #if mint doesn't support v1 swap endpoint, fail explicitly
         self.raise_on_unsupported_version(resp, "POST /v1/swap")
         promises_dict = resp.json()
@@ -597,7 +597,7 @@ class LedgerAPI(SupportsAuth):
             "checkstate",
             json=payload.model_dump(),
         )
-        
+
         #fail if endpoint missing
         self.raise_on_unsupported_version(resp, "POST /v1/checkstate")
 

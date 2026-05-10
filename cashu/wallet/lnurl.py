@@ -39,25 +39,25 @@ async def handle_lnurl(lnurl: str, amount: Optional[int]) -> Optional[str]:
         url = decode_lnurl(lnurl)
     elif "@" in lnurl:
         url = resolve_lightning_address(lnurl)
-    
+
     if not url:
         return None
-        
+
     try:
         data = await get_lnurl_response(url)
     except Exception as e:
         print(f"Error fetching LNURL: {e}")
         return None
-        
+
     if data.get("tag") != "payRequest":
         print("Error: Invalid LNURL tag. Only payRequest is supported.")
         return None
-        
+
     min_sendable = data.get("minSendable")
     max_sendable = data.get("maxSendable")
     callback = data.get("callback")
     metadata = data.get("metadata")
-    
+
     if not min_sendable or not max_sendable or not callback:
         print("Error: Invalid LNURL response.")
         return None
@@ -76,7 +76,7 @@ async def handle_lnurl(lnurl: str, amount: Optional[int]) -> Optional[str]:
                     print(f"Description: {description}")
         except Exception:
             pass
-            
+
         print(f"Amount range: {int(min_sendable/1000)} - {int(max_sendable/1000)} sats")
         amount_input = input("Enter amount (sats): ")
         try:
@@ -85,20 +85,20 @@ async def handle_lnurl(lnurl: str, amount: Optional[int]) -> Optional[str]:
         except ValueError:
             print("Invalid amount.")
             return None
-            
+
         if amount_msat < min_sendable or amount_msat > max_sendable:
              print(f"Error: Amount {amount} sats is out of range.")
              return None
 
     separator = "&" if "?" in callback else "?"
     callback_url = f"{callback}{separator}amount={amount_msat}"
-    
+
     try:
         invoice_data = await get_lnurl_response(callback_url)
     except Exception as e:
         print(f"Error fetching invoice: {e}")
         return None
-        
+
     if invoice_data.get("status") == "ERROR":
          print(f"Error from LNURL service: {invoice_data.get('reason')}")
          return None
@@ -107,5 +107,5 @@ async def handle_lnurl(lnurl: str, amount: Optional[int]) -> Optional[str]:
     if not pr:
         print("Error: No payment request in response.")
         return None
-        
+
     return pr

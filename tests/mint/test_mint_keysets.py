@@ -127,20 +127,20 @@ async def test_keyset_id_v2_derivation():
     # Create a base keyset to get public keys
     keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
     assert keyset.public_keys, "Public keys must be available"
-    
+
     # Test v2 derivation without final expiry
     v2_id_no_expiry = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
-    
+
     # Verify format
     assert v2_id_no_expiry.startswith("01"), "V2 keyset ID should start with '01'"
     assert len(v2_id_no_expiry) == 66, "V2 keyset ID should be 66 characters (33 bytes)"
     assert is_keyset_id_v2(v2_id_no_expiry), "Should be detected as v2"
     assert get_keyset_id_version(v2_id_no_expiry) == "01", "Version should be '01'"
-    
+
     # Test v2 derivation with final expiry
     final_expiry = 1896187313
     v2_id_with_expiry = derive_keyset_id_v2(keyset.public_keys, Unit.sat, final_expiry)
-    
+
     # Should be different from version without expiry
     assert v2_id_with_expiry != v2_id_no_expiry, "IDs with/without expiry should differ"
     assert v2_id_with_expiry.startswith("01"), "Should start with version '01'"
@@ -152,17 +152,17 @@ async def test_keyset_id_v2_units():
     """Test that different units produce different keyset IDs."""
     keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
     assert keyset.public_keys, "Public keys must be available"
-    
+
     # Generate IDs for different units
     id_sat = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
     id_usd = derive_keyset_id_v2(keyset.public_keys, Unit.usd)
     id_eur = derive_keyset_id_v2(keyset.public_keys, Unit.eur)
     id_btc = derive_keyset_id_v2(keyset.public_keys, Unit.btc)
-    
+
     # All should be different
     all_ids = {id_sat, id_usd, id_eur, id_btc}
     assert len(all_ids) == 4, "All unit-based IDs should be unique"
-    
+
     # All should be v2 format
     for keyset_id in all_ids:
         assert keyset_id.startswith("01"), f"ID {keyset_id} should start with '01'"
@@ -173,15 +173,15 @@ async def test_keyset_id_v2_units():
 async def test_keyset_short_id():
     """Test short ID derivation for tokens."""
     keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
-    
+
     # Test with legacy (v1) keyset
     legacy_short = derive_keyset_short_id(keyset.id)
     assert legacy_short == V1_KEYSET_ID, "Legacy short ID should be same as full ID"
-    
+
     # Test with v2 keyset
     v2_id = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
     v2_short = derive_keyset_short_id(v2_id)
-    
+
     assert len(v2_short) == 16, "V2 short ID should be 16 characters (8 bytes)"
     assert v2_short.startswith("01"), "V2 short ID should start with version"
     assert v2_id.startswith(v2_short), "Short ID should be prefix of full ID"
@@ -192,13 +192,13 @@ async def test_keyset_version_detection():
     """Test keyset version detection utilities."""
     # V1 keyset (version 0.15 produces v1 IDs)
     v1_keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
-    
+
     assert get_keyset_id_version(v1_keyset.id) == "00", "V1 keyset should be version '00'"
     assert not is_keyset_id_v2(v1_keyset.id), "V1 should NOT be detected as v2"
-    
+
     # V2 keyset ID derived manually
     v2_id = derive_keyset_id_v2(v1_keyset.public_keys, Unit.sat)
-    
+
     assert get_keyset_id_version(v2_id) == "01", "V2 ID should be version '01'"
     assert is_keyset_id_v2(v2_id), "V2 should be detected as v2"
 
@@ -207,7 +207,7 @@ async def test_keyset_version_detection():
 async def test_keyset_final_expiry_field():
     """Test MintKeyset with final_expiry field."""
     final_expiry = 1896187313
-    
+
     # Create keyset with final expiry
     keyset_with_expiry = MintKeyset(
         seed=SEED,
@@ -215,17 +215,17 @@ async def test_keyset_final_expiry_field():
         version="0.15.0",
         final_expiry=final_expiry
     )
-    
+
     assert keyset_with_expiry.final_expiry == final_expiry, "Final expiry should be set"
     assert keyset_with_expiry.unit == Unit.sat, "Unit should be inferred correctly"
-    
+
     # Create keyset without final expiry
     keyset_no_expiry = MintKeyset(
         seed=SEED,
         derivation_path=DERIVATION_PATH,
         version="0.15.0"
     )
-    
+
     assert keyset_no_expiry.final_expiry is None, "Final expiry should be None by default"
 
 
@@ -234,18 +234,18 @@ async def test_keyset_v2_deterministic():
     """Test that v2 keyset IDs are deterministic."""
     keyset1 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.0")
     keyset2 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.0")
-    
+
     # Same inputs should produce same v2 IDs
     id1 = keyset1.id
     id2 = keyset2.id
-    
+
     assert id1 == id2, "Same inputs should produce same v2 keyset ID"
-    
+
     # With expiry
     final_expiry = 1896187313
     id1_exp = derive_keyset_id_v2(keyset1.public_keys, keyset1.unit, final_expiry)
     id2_exp = derive_keyset_id_v2(keyset2.public_keys, keyset2.unit, final_expiry)
-    
+
     assert id1_exp == id2_exp, "Same inputs with expiry should produce same v2 keyset ID"
 
 @pytest.mark.asyncio
@@ -254,32 +254,32 @@ async def test_keyset_id_v2_error_cases():
     # Test invalid keyset ID
     with pytest.raises(ValueError):
         get_keyset_id_version("x")  # Too short
-    
+
     with pytest.raises(ValueError):
         derive_keyset_short_id("02invalid")  # Invalid version
-    
+
     # Test with None keys should work (just empty dict)
     empty_id = derive_keyset_id_v2({}, Unit.sat)
     assert empty_id.startswith("01"), "Empty keys should still produce valid v2 ID"
 
 
-@pytest.mark.asyncio 
+@pytest.mark.asyncio
 async def test_keyset_backward_compatibility():
     """Test that existing functionality still works with our changes."""
     # This should work exactly as before
     legacy_keyset = MintKeyset(
-        seed=SEED, 
-        derivation_path=DERIVATION_PATH, 
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
         version="0.15.0"
     )
-    
+
     # Known expected values from existing tests
     assert legacy_keyset.id == V1_KEYSET_ID
     assert (
         legacy_keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    
+
     # Legacy derive_keyset_id should still work
     legacy_derived = derive_keyset_id(legacy_keyset.public_keys)
     assert legacy_derived == V1_KEYSET_ID, "Legacy derivation should be unchanged"
@@ -298,18 +298,18 @@ async def test_keyset_versions_produce_correct_id_format():
     keyset_0_11 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.11.0")
     assert len(keyset_0_11.id) == 12, "Version < 0.12 should produce 12-char base64 ID"
     assert not keyset_0_11.id.startswith("00") and not keyset_0_11.id.startswith("01"), "Should not be versioned hex ID"
-    
-    # Test version < 0.15: base64 ID  
+
+    # Test version < 0.15: base64 ID
     keyset_0_14 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.14.0")
     assert len(keyset_0_14.id) == 12, "Version < 0.15 should produce 12-char base64 ID"
     assert not keyset_0_14.id.startswith("00") and not keyset_0_14.id.startswith("01"), "Should not be versioned hex ID"
-    
+
     # Test version 0.15-0.17: v1 ID (00...)
     keyset_0_15 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
     assert keyset_0_15.id.startswith("00"), "Version 0.15 should produce v1 ID starting with '00'"
     assert len(keyset_0_15.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
     assert keyset_0_15.id == V1_KEYSET_ID, "Should match expected v1 ID"
-    
+
     keyset_0_17 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.17.0")
     assert keyset_0_17.id.startswith("00"), "Version 0.17 should produce v1 ID starting with '00'"
     assert len(keyset_0_17.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
@@ -317,7 +317,7 @@ async def test_keyset_versions_produce_correct_id_format():
     keyset_0_18 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.0")
     assert keyset_0_18.id.startswith("00"), "Version 0.18 should produce v1 ID starting with '00'"
     assert len(keyset_0_18.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
-    
+
     # Test version 0.20+: v2 ID (01...)
     keyset_0_20 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.20.0")
     assert keyset_0_20.id.startswith("01"), "Version 0.20 should produce v2 ID starting with '01'"
@@ -342,7 +342,7 @@ async def test_keyset_id_v1_test_vectors():
     }
     keyset_id_v1_vec1 = derive_keyset_id(keys_v1_vec1)
     assert keyset_id_v1_vec1 == "00456a94ab4e1c46", "V1 vector 1 keyset ID mismatch"
-    
+
     # Vector 2: Large keyset (all max_order amounts)
     keys_v1_vec2 = {
         1: PublicKey(bytes.fromhex("03ba786a2c0745f8c30e490288acd7a72dd53d65afd292ddefa326a4a3fa14c566")),
@@ -419,7 +419,7 @@ async def test_keyset_id_v2_test_vectors():
     """
     Test vectors for v2 keyset ID derivation from NUT-02.
     Source: https://github.com/cashubtc/nuts/blob/master/tests/02-tests.md
-    
+
     V2 uses the v2 derivation which includes unit and optional final_expiry.
     """
     # V2 Vector 1: Small keyset (4 keys)
@@ -432,7 +432,7 @@ async def test_keyset_id_v2_test_vectors():
     keyset_id_v2_vec1 = derive_keyset_id_v2(keys_v2_vec1, Unit.sat, 2059210353, 100)
     assert keyset_id_v2_vec1 == "015ba18a8adcd02e715a58358eb618da4a4b3791151a4bee5e968bb88406ccf76a", \
         "V2 vector 1 keyset ID mismatch"
-    
+
     # V2 Vectors 2 and 3: Large keyset (all max_order amounts)
     keys_v2_vec23 = {
         1: PublicKey(bytes.fromhex("03ba786a2c0745f8c30e490288acd7a72dd53d65afd292ddefa326a4a3fa14c566")),
@@ -500,22 +500,22 @@ async def test_keyset_id_v2_test_vectors():
         4611686018427387904: PublicKey(bytes.fromhex("024a4b806cf413d14b294719090a9da36ba75209c7657135ad09bc65328fba9e6f")),
         9223372036854775808: PublicKey(bytes.fromhex("0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad")),
     }
-    
+
     # V2 Vector 2: Unit=sat, final_expiry=2059210353 (with large keyset)
     keyset_id_v2_vec2 = derive_keyset_id_v2(keys_v2_vec23, Unit.sat, 2059210353)
     assert keyset_id_v2_vec2 == "01ab6aa4ff30390da34986d84be5274b48ad7a74265d791095bfc39f4098d9764f", \
         "V2 vector 2 keyset ID mismatch"
-    
+
     # V2 Vector 3: Unit=sat, no final_expiry (with large keyset)
     keyset_id_v2_vec3 = derive_keyset_id_v2(keys_v2_vec23, Unit.sat)
     assert keyset_id_v2_vec3 == "012fbb01a4e200c76df911eeba3b8fe1831202914b24664f4bccbd25852a6708f8", \
         "V2 vector 3 keyset ID mismatch"
-    
+
     # Verify all are v2 format
     assert is_keyset_id_v2(keyset_id_v2_vec1), "Vector 1 should be v2"
     assert is_keyset_id_v2(keyset_id_v2_vec2), "Vector 2 should be v2"
     assert is_keyset_id_v2(keyset_id_v2_vec3), "Vector 3 should be v2"
-    
+
     # Verify version byte
     assert get_keyset_id_version(keyset_id_v2_vec1) == "01", "Vector 1 should be version 01"
     assert get_keyset_id_version(keyset_id_v2_vec2) == "01", "Vector 2 should be version 01"

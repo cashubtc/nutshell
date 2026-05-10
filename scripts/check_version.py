@@ -13,7 +13,7 @@ def get_nutshell_version():
     except FileNotFoundError:
         print(f"File not found: {settings_path}")
         sys.exit(1)
-        
+
     match = re.search(r'VERSION = "(.*?)"', content)
     if match:
         return match.group(1)
@@ -82,7 +82,7 @@ def main():
         for error in errors:
             print(f"ERROR: {error}")
         sys.exit(1)
-    
+
     print("All versions match!")
 
 if __name__ == "__main__":
