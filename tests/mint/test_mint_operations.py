@@ -503,6 +503,7 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
     from cashu.lightning.base import PaymentResult
     settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    settings.fakewallet_payment_state_exception = False
     
     # Call melt with outputs
     melt_response = await ledger.melt(proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
