@@ -13,6 +13,7 @@ from bip32 import BIP32
 from mnemonic import Mnemonic
 
 from cashu.core.base import Proof, TokenV4, TokenV4Proof, TokenV4Token, WalletKeyset
+from cashu.core.crypto.bls import PrivateKey
 from cashu.core.crypto.keys import (
     derive_keyset_short_id,
     get_keyset_id_version,

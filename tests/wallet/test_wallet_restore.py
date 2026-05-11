@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import Proof
+from cashu.core.crypto.bls import PrivateKey
 from cashu.core.errors import CashuError
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1

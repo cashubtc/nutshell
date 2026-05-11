@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core import db
+from cashu.core.crypto.bls import PublicKey
 from cashu.core.db import Connection
 from cashu.core.migrations import backup_database
 from cashu.core.models import PostMeltQuoteRequest
