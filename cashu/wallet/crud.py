@@ -210,6 +210,7 @@ async def get_keysets(
     unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
+    exclude_deleted: bool = True,
 ) -> List[WalletKeyset]:
     clauses = []
     values: Dict[str, Any] = {}
@@ -222,8 +223,11 @@ async def get_keysets(
     if unit:
         clauses.append("unit = :unit")
         values["unit"] = unit
-    clauses.append("deleted_at IS NULL")
-    where = f"WHERE {' AND '.join(clauses)}"
+    if exclude_deleted:
+        clauses.append("deleted_at IS NULL")
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
 
     rows = await (conn or db).fetchall(  # type: ignore
         f"""
@@ -261,11 +265,12 @@ async def update_keyset(
     await (conn or db).execute(
         """
         UPDATE keysets
-        SET active = :active, input_fee_ppk = :input_fee_ppk
+        SET active = :active, deleted_at = :deleted_at, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
         """,
         {
             "active": keyset.active,
+            "deleted_at": keyset.deleted_at,
             "id": keyset.id,
             "input_fee_ppk": keyset.input_fee_ppk,
         },

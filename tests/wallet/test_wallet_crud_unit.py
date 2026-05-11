@@ -209,12 +209,21 @@ async def test_delete_keyset_excludes_keyset(wallet_db: Database):
     await delete_keyset(keyset_id="keyset-delete", db=wallet_db)
 
     assert await get_keysets(id="keyset-delete", db=wallet_db) == []
+    deleted_keysets = await get_keysets(
+        id="keyset-delete", db=wallet_db, exclude_deleted=False
+    )
+    assert len(deleted_keysets) == 1
     row = await wallet_db.fetchone(
         "SELECT deleted_at FROM keysets WHERE id = :id",
         {"id": "keyset-delete"},
     )
     assert row is not None
     assert row["deleted_at"] is not None
+
+    deleted_keysets[0].deleted_at = None
+    await update_keyset(deleted_keysets[0], db=wallet_db)
+    restored_keysets = await get_keysets(id="keyset-delete", db=wallet_db)
+    assert len(restored_keysets) == 1
 
 
 @pytest.mark.asyncio
