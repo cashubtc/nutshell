@@ -215,6 +215,7 @@ class LedgerEventClientManager:
     async def _init_subscriptions(
         self, subId: str, filters: List[str], kind: JSONRPCSubscriptionKinds
     ):
+        results = []
         async with self.db_read.db.connect() as conn:
             if kind == JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE:
                 for filter in filters:
@@ -222,15 +223,18 @@ class LedgerEventClientManager:
                         quote_id=filter, db=self.db_read.db, conn=conn
                     )
                     if mint_quote:
-                        await self._send_obj(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump(), subId)
+                        results.append(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump())
             elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
                 for filter in filters:
                     melt_quote = await self.db_read.crud.get_melt_quote(
                         quote_id=filter, db=self.db_read.db, conn=conn
                     )
                     if melt_quote:
-                        await self._send_obj(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump(), subId)
+                        results.append(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump())
             elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
                 proofs = await self.db_read.get_proofs_states(Ys=filters, conn=conn)
                 for proof in proofs:
-                    await self._send_obj(proof.model_dump(), subId)
+                    results.append(proof.model_dump())
+        
+        for result in results:
+            await self._send_obj(result, subId)
