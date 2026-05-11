@@ -52,10 +52,10 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 
 import hashlib
 from typing import Optional, Tuple, Union
-
 from .bls import PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey
-from .interfaces import PrivateKey, PublicKey
+from .interfaces import ICashuPrivateKey, ICashuPublicKey, PrivateKey, PublicKey
 from .secp import SecpPrivateKey, SecpPublicKey
+
 
 # Remove the import from bls_dhke as it's causing redefinition
 # from .bls_dhke import hash_to_curve 
@@ -100,7 +100,7 @@ def step2_bob(B_: SecpPublicKey, a: SecpPrivateKey) -> Tuple[SecpPublicKey, Secp
     C_: SecpPublicKey = B_ * a  # type: ignore
     # produce dleq proof
     e, s = step2_bob_dleq(B_, a)
-    return C_, e, s
+    return C_, SecpPrivateKey(bytes.fromhex(e.to_hex())), SecpPrivateKey(bytes.fromhex(s.to_hex()))
 
 
 def step3_alice(

@@ -11,7 +11,8 @@ from ..core.base import (
     P2PKWitness,
     Proof,
 )
-from ..core.crypto.interfaces import PrivateKey
+from ..core.crypto.interfaces import ICashuPrivateKey
+from ..core.crypto.secp import SecpPrivateKey
 from ..core.db import Database
 from ..core.p2pk import (
     P2PKSecret,
@@ -24,7 +25,7 @@ from .protocols import SupportsDb, SupportsPrivateKey
 
 class WalletP2PK(SupportsPrivateKey, SupportsDb):
     db: Database
-    private_key: PrivateKey
+    private_key: SecpPrivateKey
     # ---------- P2PK ----------
 
     async def create_p2pk_pubkey(self):

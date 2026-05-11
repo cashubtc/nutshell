@@ -16,13 +16,13 @@ from ..core.base import (
     Proof,
     ProofSpentState,
     ProofState,
-    PublicKey,
     Unit,
     WalletKeyset,
 )
 from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.interfaces import PublicKey
+from ..core.crypto.secp import SecpPublicKey
 from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.interfaces import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,

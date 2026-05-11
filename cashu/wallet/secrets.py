@@ -10,8 +10,8 @@ from mnemonic import Mnemonic
 
 from ..core.crypto.bls import PrivateKey as BlsPrivateKey
 from ..core.crypto.interfaces import ICashuPrivateKey
+from ..core.crypto.secp import SecpPrivateKey
 from ..core.crypto.keys import get_keyset_id_version, is_bls_keyset
-from ..core.crypto.interfaces import PrivateKey as SecpPrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
 from ..core.settings import settings
