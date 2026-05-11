@@ -5,14 +5,9 @@ from typing import Dict, List, Optional, Union
 
 from bip32 import BIP32
 
-from .bls import PrivateKey as BlsPrivateKey
-from .bls import PublicKey as BlsPublicKey
-from .secp import PrivateKey as SecpPrivateKey
-from .secp import PublicKey as SecpPublicKey
-
-# Typing aliases to remain backwards compatible for type hints in the rest of the codebase
-PrivateKey = SecpPrivateKey
-PublicKey = SecpPublicKey
+from .bls import PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey
+from .interfaces import ICashuPrivateKey, ICashuPublicKey, PrivateKey, PublicKey
+from .secp import SecpPrivateKey, SecpPublicKey
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
@@ -22,7 +17,7 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     bip32 = BIP32.from_seed(mnemonic.encode())
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             bip32.get_privkey_from_path(derivation_path + orders_str[i]),
         )
         for i, a in enumerate(amounts)
@@ -36,7 +31,7 @@ def derive_keys_deprecated_pre_0_15(
     Deterministic derivation of keys for 2^n values.
     """
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             hashlib.sha256((seed + derivation_path + str(i)).encode("utf-8")).digest()[
                 :32
             ],
@@ -46,18 +41,20 @@ def derive_keys_deprecated_pre_0_15(
 
 
 def derive_pubkey(seed: str) -> PublicKey:
-    pubkey = PrivateKey(
+    pubkey = SecpPrivateKey(
         hashlib.sha256((seed).encode("utf-8")).digest()[:32],
     ).public_key
     assert pubkey
     return pubkey
 
 
-def derive_pubkeys(keys: Dict[int, PrivateKey], amounts: List[int]):
+def derive_pubkeys(
+    keys: Dict[int, Union[SecpPrivateKey, BlsPrivateKey]], amounts: List[int]
+):
     return {amt: keys[amt].public_key for amt in amounts}
 
 
-def derive_keyset_id(keys: Dict[int, Union[PublicKey, BlsPublicKey]]):
+def derive_keyset_id(keys: Dict[int, PublicKey]):
     """Deterministic derivation keyset_id from set of public keys (version 00)."""
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
@@ -66,7 +63,7 @@ def derive_keyset_id(keys: Dict[int, Union[PublicKey, BlsPublicKey]]):
 
 
 def derive_keyset_id_v2(
-    keys: Dict[int, Union[PublicKey, BlsPublicKey]], 
+    keys: Dict[int, PublicKey], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,
@@ -193,7 +190,7 @@ def is_keyset_id_v2(keyset_id: str) -> bool:
     return get_keyset_id_version(keyset_id) == '01'
 
 
-def derive_keyset_id_deprecated(keys: Dict[int, Union[PublicKey, BlsPublicKey]]):
+def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
     """DEPRECATED 0.15.0: Deterministic derivation keyset_id from set of public keys.
     DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.
     """
@@ -227,7 +224,7 @@ def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> D
     }
 
 def derive_keyset_id_v3(
-    keys: Dict[int, Union[PublicKey, BlsPublicKey]], 
+    keys: Dict[int, PublicKey], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,

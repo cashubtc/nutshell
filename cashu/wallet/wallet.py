@@ -2,14 +2,13 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
     Amount,
-    AnyPrivateKey,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -24,6 +23,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.interfaces import ICashuPrivateKey
 from ..core.crypto.keys import is_bls_keyset
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -606,7 +606,7 @@ class Wallet(
             len(amounts), skip_bump=True
         )
         await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets, cast(List[AnyPrivateKey], rs)) # type: ignore # Invariant list
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
         quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id) # type: ignore
         if not quote:
@@ -994,10 +994,10 @@ class Wallet(
 
     async def _construct_proofs(
         self,
-        promises: List[BlindedSignature],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        derivation_paths: List[str],
+        promises: Sequence[BlindedSignature],
+        secrets: Sequence[str],
+        rs: Sequence[ICashuPrivateKey],
+        derivation_paths: Sequence[str],
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
@@ -1083,11 +1083,11 @@ class Wallet(
 
     def _construct_outputs(
         self,
-        amounts: List[int],
-        secrets: List[str],
-        rs: List[PrivateKey] = [],
+        amounts: Sequence[int],
+        secrets: Sequence[str],
+        rs: Sequence[ICashuPrivateKey] = (),
         keyset_id: Optional[str] = None,
-    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
+    ) -> Tuple[List[BlindedMessage], List[ICashuPrivateKey]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
 
@@ -1109,7 +1109,7 @@ class Wallet(
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
-        rs_return: List[PrivateKey] = []
+        rs_return: List[ICashuPrivateKey] = []
         
         
         for secret, amount, r in zip(secrets, amounts, rs_):
@@ -1514,10 +1514,10 @@ class Wallet(
 
     async def restore_promises(
         self,
-        outputs: List[BlindedMessage],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        derivation_paths: List[str],
+        outputs: Sequence[BlindedMessage],
+        secrets: Sequence[str],
+        rs: Sequence[ICashuPrivateKey],
+        derivation_paths: Sequence[str],
     ) -> Tuple[int, List[Proof]]:
         """Restores proofs from a list of outputs, secrets, rs and derivation paths.
 

@@ -20,6 +20,7 @@ from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.bls import PublicKey as BlsPublicKey
+from .crypto.interfaces import PrivateKey, PublicKey
 from .crypto.keys import (
     derive_keys,
     derive_keys_deprecated_pre_0_15,
@@ -31,13 +32,9 @@ from .crypto.keys import (
     derive_pubkeys,
     is_bls_keyset,
 )
-from .crypto.secp import PublicKey as SecpPublicKey
-from .crypto.types import AnyPrivateKey, AnyPublicKey
+from .crypto.secp import SecpPublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
-
-PublicKey = AnyPublicKey
-PrivateKey = AnyPrivateKey
 
 
 class DLEQ(BaseModel):
@@ -771,7 +768,7 @@ class WalletKeyset:
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
             
             is_v3 = is_bls_keyset(row["id"])
-            pub_keys: Dict[int, AnyPublicKey] = {}
+            pub_keys: Dict[int, PublicKey] = {}
             for amount, hex_key in dict(json.loads(serialized)).items():
                 if is_v3:
                     pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key), group="G2") # type: ignore

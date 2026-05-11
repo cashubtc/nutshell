@@ -8,10 +8,10 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
-from ..core.base import AnyPrivateKey
 from ..core.crypto.bls import PrivateKey as BlsPrivateKey
+from ..core.crypto.interfaces import ICashuPrivateKey
 from ..core.crypto.keys import get_keyset_id_version, is_bls_keyset
-from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.interfaces import PrivateKey as SecpPrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
 from ..core.settings import settings
@@ -191,7 +191,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
     async def generate_n_secrets(
         self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[AnyPrivateKey], List[str]]:
+    ) -> Tuple[List[str], List[ICashuPrivateKey], List[str]]:
         """Generates n secrets and blinding factors and returns a tuple of secrets,
         blinding factors, and derivation paths.
 
@@ -202,7 +202,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             will succeed or not (like a POST /mint request). Defaults to False.
 
         Returns:
-            Tuple[List[str], List[AnyPrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+            Tuple[List[str], List[ICashuPrivateKey], List[str]]: Secrets, blinding factors, derivation paths
 
         """
         if n < 1:
@@ -225,7 +225,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
             if is_bls_keyset(self.keyset_id):
-                rs: List[AnyPrivateKey] = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+                rs: List[ICashuPrivateKey] = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
             else:
                 rs = [SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
 
@@ -235,7 +235,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
     async def generate_secrets_from_to(
         self, from_counter: int, to_counter: int, keyset_id: Optional[str] = None
-    ) -> Tuple[List[str], List[AnyPrivateKey], List[str]]:
+    ) -> Tuple[List[str], List[ICashuPrivateKey], List[str]]:
         """Generates secrets and blinding factors from `from_counter` to `to_counter`
 
         Args:
@@ -244,7 +244,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             keyset_id (Optional[str], optional): Keyset id. Defaults to None.
 
         Returns:
-            Tuple[List[str], List[AnyPrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+            Tuple[List[str], List[ICashuPrivateKey], List[str]]: Secrets, blinding factors, derivation paths
 
         Raises:
             ValueError: If `from_counter` is larger than `to_counter`
@@ -262,7 +262,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # rs are supplied as PrivateKey
         keyset_id = keyset_id or self.keyset_id
         if is_bls_keyset(keyset_id):
-            rs: List[AnyPrivateKey] = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+            rs: List[ICashuPrivateKey] = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
         else:
             rs = [SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
@@ -270,7 +270,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
     async def generate_locked_secrets(
         self, send_outputs: List[int], keep_outputs: List[int], secret_lock: Secret
-    ) -> Tuple[List[str], List[AnyPrivateKey], List[str]]:
+    ) -> Tuple[List[str], List[ICashuPrivateKey], List[str]]:
         """Generates secrets and blinding factors for a transaction with `send_outputs` and `keep_outputs`.
 
         Args:
@@ -278,9 +278,9 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             keep_outputs (List[int]): List of amounts to keep
 
         Returns:
-            Tuple[List[str], List[AnyPrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+            Tuple[List[str], List[ICashuPrivateKey], List[str]]: Secrets, blinding factors, derivation paths
         """
-        rs: List[AnyPrivateKey] = []
+        rs: List[ICashuPrivateKey] = []
         # generate secrets for receiver
         secret_locks = [secret_lock.serialize() for i in range(len(send_outputs))]
         logger.debug(f"Creating proofs with custom secrets: {secret_locks}")

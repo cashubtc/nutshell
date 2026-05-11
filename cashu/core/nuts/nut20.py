@@ -4,11 +4,11 @@ from typing import List
 from coincurve import PublicKeyXOnly
 
 from ..base import BlindedMessage
-from ..crypto.secp import PrivateKey
+from ..crypto.secp import SecpPrivateKey
 
 
 def generate_keypair() -> tuple[str, str]:
-    privkey = PrivateKey()
+    privkey = SecpPrivateKey()
     assert privkey.public_key
     pubkey = privkey.public_key
     return privkey.to_hex(), pubkey.format().hex()
@@ -26,7 +26,7 @@ def sign_mint_quote(
     private_key: str,
 ) -> str:
 
-    privkey = PrivateKey(bytes.fromhex(private_key))
+    privkey = SecpPrivateKey(bytes.fromhex(private_key))
     msgbytes = construct_message(quote_id, outputs)
     sig = privkey.sign_schnorr(msgbytes)
     return sig.hex()

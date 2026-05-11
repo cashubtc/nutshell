@@ -4,7 +4,8 @@ from typing import List, Optional, Union
 from loguru import logger
 
 from ..core.base import BlindedMessage, P2PKWitness, Proof
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.interfaces import PublicKey
+from ..core.crypto.secp import SecpPublicKey
 from ..core.errors import (
     TransactionError,
 )
@@ -161,7 +162,7 @@ class LedgerSpendingConditions:
                 logger.trace(f"Message: {message_to_sign}")
                 if verify_schnorr_signature(
                     message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(pubkey)),
+                    pubkey=SecpPublicKey(bytes.fromhex(pubkey)),
                     signature=bytes.fromhex(input_sig),
                 ):
                     n_pubkeys_with_valid_sigs += 1
@@ -385,7 +386,7 @@ class LedgerSpendingConditions:
             for i, s in enumerate(signatures):
                 if verify_schnorr_signature(
                     message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(p)),
+                    pubkey=SecpPublicKey(bytes.fromhex(p)),
                     signature=bytes.fromhex(s),
                 ):
                     n_valid_sigs += 1

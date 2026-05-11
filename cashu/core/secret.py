@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, RootModel
 
-from .crypto.secp import PrivateKey
+from .crypto.secp import SecpPrivateKey
 
 
 class SecretKind(Enum):
@@ -67,7 +67,7 @@ class Secret(BaseModel):
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
             "data": self.data,
-            "nonce": self.nonce or PrivateKey().to_hex()[:32],
+            "nonce": self.nonce or SecpPrivateKey().to_hex()[:32],
         }
         if self.tags.root:
             logger.debug(f"Serializing tags: {self.tags.root}")

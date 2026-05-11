@@ -8,7 +8,6 @@ from loguru import logger
 from ..core.base import (
     DLEQ,
     Amount,
-    AnyPublicKey,
     BlindedMessage,
     BlindedSignature,
     MeltQuote,
@@ -18,6 +17,7 @@ from ..core.base import (
     MintQuote,
     MintQuoteState,
     Proof,
+    PublicKey,
     Unit,
 )
 from ..core.crypto import b_dhke, bls_dhke
@@ -28,7 +28,7 @@ from ..core.crypto.keys import (
     is_bls_keyset,
     random_hash,
 )
-from ..core.crypto.secp import PublicKey as SecpPublicKey
+from ..core.crypto.interfaces import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
@@ -86,7 +86,7 @@ class Ledger(
     invoice_listener_tasks: List[asyncio.Task] = []
     watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
-    pubkey: AnyPublicKey # type: ignore
+    pubkey: PublicKey # type: ignore
 
     def __init__(
         self,
@@ -1174,7 +1174,7 @@ class Ledger(
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
             is_v3 = is_bls_keyset(keyset.id)
-            B_: AnyPublicKey
+            B_: PublicKey
             if is_v3:
                 B_ = BlsPublicKey(bytes.fromhex(output.B_))
             else:

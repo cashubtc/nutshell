@@ -9,7 +9,6 @@ from loguru import logger
 from pydantic import ValidationError
 
 from ..core.base import (
-    AnyPublicKey,
     AuthProof,
     BlindedMessage,
     BlindedSignature,
@@ -17,12 +16,13 @@ from ..core.base import (
     Proof,
     ProofSpentState,
     ProofState,
+    PublicKey,
     Unit,
     WalletKeyset,
 )
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.secp import PublicKey as SecpPublicKey
+from ..core.crypto.interfaces import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,
@@ -251,7 +251,7 @@ class LedgerAPI(SupportsAuth):
         ret = []
         for keyset in keys.keysets:
             is_v3 = is_bls_keyset(keyset.id)
-            pub_keys: Dict[int, AnyPublicKey] = {}
+            pub_keys: Dict[int, PublicKey] = {}
             for amt, val in keyset.keys.items():
                 if is_v3:
                     pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
@@ -293,7 +293,7 @@ class LedgerAPI(SupportsAuth):
         this_keyset = keys.keysets[0]
         is_v3 = is_bls_keyset(this_keyset.id)
         
-        keyset_keys: Dict[int, AnyPublicKey] = {}
+        keyset_keys: Dict[int, PublicKey] = {}
         for amt, val in this_keyset.keys.items():
             if is_v3:
                 keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")

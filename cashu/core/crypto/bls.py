@@ -3,12 +3,14 @@ from typing import Optional
 
 import pyblst
 
+from .interfaces import ICashuPrivateKey, ICashuPublicKey
+
 curve_order = 52435875175126190479447740508185965837690552500527637822603658699938581184513
 _G2_HEX = '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8'
 
 
 
-class PrivateKey:
+class PrivateKey(ICashuPrivateKey):
     def __init__(self, privkey: bytes = b"", scalar: Optional[int] = None):
         if scalar is not None:
             self.scalar = scalar % curve_order
@@ -33,7 +35,7 @@ class PrivateKey:
         return self.get_g2_public_key()
 
 
-class PublicKey:
+class PublicKey(ICashuPublicKey):
     def __init__(self, compressed: bytes = b"", point=None, group="G1"):
         self.group = group
         try:

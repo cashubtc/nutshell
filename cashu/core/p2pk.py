@@ -4,7 +4,8 @@ from typing import Union
 
 from coincurve import PublicKeyXOnly
 
-from .crypto.secp import PrivateKey, PublicKey
+from .crypto.interfaces import PublicKey
+from .crypto.secp import SecpPrivateKey
 from .errors import InvalidProofsError
 from .secret import Secret, SecretKind
 
@@ -51,7 +52,7 @@ class P2PKSecret(Secret):
         return n_sigs_refund
 
 
-def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
+def schnorr_sign(message: bytes, private_key: SecpPrivateKey) -> bytes:
     signature = private_key.sign_schnorr(
         hashlib.sha256(message).digest(),
         None,  # type: ignore
