@@ -23,9 +23,9 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
-from ..core.crypto.interfaces import ICashuPrivateKey
+from ..core.crypto.interfaces import ICashuPrivateKey, ICashuPublicKey, PrivateKey, PublicKey
 from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto.secp import SecpPrivateKey, SecpPublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -953,10 +953,10 @@ class Wallet(
             ), f"Keyset {proof.id} not known, can not verify DLEQ."
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C)),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
+                C=SecpPublicKey(bytes.fromhex(proof.C)),
+                r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
+                e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
+                s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
                 A=self.keysets[proof.id].public_keys[proof.amount],
             ):
                 raise Exception("DLEQ proof invalid.")
@@ -1027,13 +1027,11 @@ class Wallet(
             if is_v3:
                 C_ = BlsPublicKey(bytes.fromhex(promise.C_))
                 C = bls_dhke.step3_alice( # type: ignore
-
                     C_, r, self.keysets[promise.id].public_keys[promise.amount]
                 )
             else:
-                C_ = PublicKey(bytes.fromhex(promise.C_))
+                C_ = SecpPublicKey(bytes.fromhex(promise.C_))
                 C = b_dhke.step3_alice( # type: ignore
-
                     C_, r, self.keysets[promise.id].public_keys[promise.amount]
                 )
 
