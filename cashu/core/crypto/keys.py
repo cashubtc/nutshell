@@ -54,7 +54,7 @@ def derive_pubkeys(
     return {amt: keys[amt].public_key for amt in amounts}
 
 
-def derive_keyset_id(keys: Dict[int, Union[SecpPublicKey, BlsPublicKey]]):
+def derive_keyset_id(keys: Dict[int, ICashuPublicKey]):
     """Deterministic derivation keyset_id from set of public keys (version 00)."""
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
@@ -63,7 +63,7 @@ def derive_keyset_id(keys: Dict[int, Union[SecpPublicKey, BlsPublicKey]]):
 
 
 def derive_keyset_id_v2(
-    keys: Dict[int, Union[SecpPublicKey, BlsPublicKey]], 
+    keys: Dict[int, ICashuPublicKey], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,
@@ -191,7 +191,7 @@ def is_keyset_id_v2(keyset_id: str) -> bool:
     return get_keyset_id_version(keyset_id) == '01'
 
 
-def derive_keyset_id_deprecated(keys: Dict[int, Union[SecpPublicKey, BlsPublicKey]]):
+def derive_keyset_id_deprecated(keys: Dict[int, ICashuPublicKey]):
     """DEPRECATED 0.15.0: Deterministic derivation keyset_id from set of public keys.
     DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.
     """
@@ -203,8 +203,24 @@ def derive_keyset_id_deprecated(keys: Dict[int, Union[SecpPublicKey, BlsPublicKe
     ).decode()[:12]
 
 
+def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
+    """
+    Deterministic derivation of BLS12-381 keys for 2^n values.
+    Since BIP32 doesn't technically cover BLS12-381, we use HKDF or simple hashing on the BIP32 seed.
+    For simplicity and backwards compatibility of mnemonic/path logic, we hash the BIP32 path output to generate the scalar.
+    """
+    bip32 = BIP32.from_seed(mnemonic.encode())
+    orders_str = [f"/{a}'" for a in range(len(amounts))]
+    return {
+        a: BlsPrivateKey(
+            hashlib.sha256(bip32.get_privkey_from_path(derivation_path + orders_str[i])).digest()
+        )
+        for i, a in enumerate(amounts)
+    }
+
+
 def derive_keyset_id_v3(
-    keys: Dict[int, Union[SecpPublicKey, BlsPublicKey]], 
+    keys: Dict[int, ICashuPublicKey], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,

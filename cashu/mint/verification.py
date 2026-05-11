@@ -15,7 +15,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.bls_dhke import keyed_verification
 from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.interfaces import PublicKey as SecpPublicKey
+from ..core.crypto.secp import SecpPublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,

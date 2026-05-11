@@ -22,6 +22,7 @@ from ..core.base import (
     WalletMint,
 )
 from ..core.crypto import b_dhke, bls_dhke
+from ..core.crypto.bls import PrivateKey as BlsPrivateKey
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.interfaces import ICashuPrivateKey, ICashuPublicKey, PrivateKey, PublicKey
 from ..core.crypto.keys import is_bls_keyset
@@ -996,7 +997,7 @@ class Wallet(
         self,
         promises: Sequence[BlindedSignature],
         secrets: Sequence[str],
-        rs: Sequence[ICashuPrivateKey],
+        rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]],
         derivation_paths: Sequence[str],
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
@@ -1083,9 +1084,9 @@ class Wallet(
         self,
         amounts: Sequence[int],
         secrets: Sequence[str],
-        rs: Sequence[ICashuPrivateKey] = (),
+        rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]] = (),
         keyset_id: Optional[str] = None,
-    ) -> Tuple[List[BlindedMessage], List[ICashuPrivateKey]]:
+    ) -> Tuple[List[BlindedMessage], List[Union[SecpPrivateKey, BlsPrivateKey]]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
 
@@ -1107,7 +1108,7 @@ class Wallet(
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
-        rs_return: List[ICashuPrivateKey] = []
+        rs_return: List[Union[SecpPrivateKey, BlsPrivateKey]] = []
         
         
         for secret, amount, r in zip(secrets, amounts, rs_):

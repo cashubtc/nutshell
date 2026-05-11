@@ -51,10 +51,12 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 """
 
 import hashlib
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, cast
 from .bls import PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey
-from .interfaces import ICashuPrivateKey, ICashuPublicKey, PrivateKey, PublicKey
 from .secp import SecpPrivateKey, SecpPublicKey
+
+PublicKey = Union[SecpPublicKey, BlsPublicKey]
+PrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
 
 
 # Remove the import from bls_dhke as it's causing redefinition
@@ -136,8 +138,8 @@ def hash_e(*publickeys: Union[SecpPublicKey, BlsPublicKey]) -> bytes:
 
 
 def step2_bob_dleq(
-    B_: Union[SecpPublicKey, BlsPublicKey],
-    a: Union[SecpPrivateKey, BlsPrivateKey],
+    B_: SecpPublicKey,
+    a: SecpPrivateKey,
     p_bytes: bytes = b"",
 ) -> Tuple[Union[SecpPrivateKey, BlsPrivateKey], Union[SecpPrivateKey, BlsPrivateKey]]:
 
@@ -148,11 +150,11 @@ def step2_bob_dleq(
         p = SecpPrivateKey()
 
 
-    R1 = p.public_key  # R1 = pG
+    R1 = SecpPublicKey(p.public_key.format())  # R1 = pG
     assert R1
-    R2: PublicKey = B_ * p  # type: ignore
-    C_: PublicKey = B_ * a  # type: ignore
-    A = a.public_key
+    R2: PublicKey = cast(PublicKey, B_ * p)  # type: ignore
+    C_: PublicKey = cast(PublicKey, B_ * a)  # type: ignore
+    A = cast(PublicKey, a.public_key)
     assert A
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
     s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
@@ -192,7 +194,7 @@ def carol_verify_dleq(
 # -------- Deprecated hash_to_curve before 0.15.0 --------
 
 
-def hash_to_curve_deprecated(message: bytes) -> PublicKey:
+def hash_to_curve_deprecated(message: bytes) -> SecpPublicKey:
     """Generates a point from the message hash and checks if the point lies on the curve.
     If it does not, iteratively tries to compute a new point from the hash."""
     point = None
@@ -216,7 +218,7 @@ def step1_alice_deprecated(
     return B_, r
 
 
-def verify_deprecated(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
+def verify_deprecated(a: SecpPrivateKey, C: SecpPublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
     valid = C == Y * a  # type: ignore
     return valid

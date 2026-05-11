@@ -28,7 +28,7 @@ from ..core.crypto.keys import (
     is_bls_keyset,
     random_hash,
 )
-from ..core.crypto.interfaces import PublicKey as SecpPublicKey
+from ..core.crypto.secp import SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
