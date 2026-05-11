@@ -14,15 +14,13 @@ class NaturalOrderGroup(click.Group):
     def list_commands(self, ctx):
         return self.commands.keys()
 
-'''
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
-def coro(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        return asyncio.run(f(*args, **kwargs))
-
-    return wrapper
-'''
+# def coro(f):
+#     @wraps(f)
+#     def wrapper(*args, **kwargs):
+#         return asyncio.run(f(*args, **kwargs))
+#
+#     return wrapper
 
 @click.group(cls=NaturalOrderGroup)
 @click.option(
@@ -83,7 +81,7 @@ def cli(
         with open(client_key_path, "rb") as key_file, open(client_cert_path, "rb") as cert_file, open(ca_cert_path, "rb") as ca_file:
             credentials = grpc.ssl_channel_credentials(
                 root_certificates=ca_file.read(),
-                private_key=key_file.read(),       
+                private_key=key_file.read(),
                 certificate_chain=cert_file.read()
             )
 

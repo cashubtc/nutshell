@@ -1,0 +1,27 @@
+# Normalize line endings to LF for text files (see .editorconfig and pre-commit mixed-line-ending).
+* text=auto eol=lf
+
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.sh text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.proto text eol=lf
+Dockerfile text eol=lf
+
+# Windows scripts keep CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary
+*.pyc binary
+*.pyo binary
+*.pkl binary
+*.so binary
+*.dylib binary
+*.whl binary

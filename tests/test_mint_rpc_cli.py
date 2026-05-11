@@ -192,14 +192,12 @@ def test_get_quote_ttl_invalid_id(cli_prefix):
     assert result.exception is None
     assert "Error:" in result.output
 
-'''
-@pytest.mark.asyncio
-async def test_rotate_next_keyset(cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "next-keyset", "sat", "2"]) # Rotate keyset and add a 2 sat ppk fee
-    assert result.exception is None
-    print(result.output)
-    assert "New keyset successfully created:" in result.output
-    assert "keyset.unit = 'sat'" in result.output
-    assert "keyset.input_fee_ppk = 2" in result.output
-'''
+# @pytest.mark.asyncio
+# async def test_rotate_next_keyset(cli_prefix):
+#     runner = CliRunner()
+#     result = runner.invoke(cli, [*cli_prefix, "next-keyset", "sat", "2"]) # Rotate keyset and add a 2 sat ppk fee
+#     assert result.exception is None
+#     print(result.output)
+#     assert "New keyset successfully created:" in result.output
+#     assert "keyset.unit = 'sat'" in result.output
+#     assert "keyset.input_fee_ppk = 2" in result.output

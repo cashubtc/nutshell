@@ -29,17 +29,17 @@ async def test_get_lnurl(npc):
 async def test_create_lnurl_success(npc):
     with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         # Mock GET /user/info (return user without mintUrl)
         mock_info_resp = MagicMock()
         mock_info_resp.status_code = 200
         mock_info_resp.json.return_value = {"error": False, "data": {"user": {"mintUrl": None}}}
-        
+
         # Mock PATCH /user/mint
         mock_patch_resp = MagicMock()
         mock_patch_resp.status_code = 200
         mock_patch_resp.json.return_value = {"error": False, "data": {"user": {"mintUrl": "https://mint.example.com"}}}
-        
+
         mock_instance.get.return_value = mock_info_resp
         mock_instance.patch.return_value = mock_patch_resp
 
@@ -54,12 +54,12 @@ async def test_create_lnurl_success(npc):
 async def test_create_lnurl_already_exists(npc):
     with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         # Mock GET /user/info (return user WITH mintUrl)
         mock_info_resp = MagicMock()
         mock_info_resp.status_code = 200
         mock_info_resp.json.return_value = {"error": False, "data": {"user": {"mintUrl": "https://existing.mint"}}}
-        
+
         mock_instance.get.return_value = mock_info_resp
 
         with pytest.raises(Exception, match="LNURL already created"):
@@ -69,7 +69,7 @@ async def test_create_lnurl_already_exists(npc):
 async def test_check_quotes(npc):
     with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -93,9 +93,9 @@ async def test_check_quotes(npc):
 async def test_mint_quotes(npc, mock_wallet):
     with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client, \
          patch("cashu.wallet.npc.get_bolt11_mint_quote", new_callable=AsyncMock) as mock_get_quote:
-        
+
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         # Mock quotes response
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -109,7 +109,7 @@ async def test_mint_quotes(npc, mock_wallet):
             }
         }
         mock_instance.get.return_value = mock_resp
-        
+
         # Mock local DB quote (not found)
         mock_get_quote.return_value = None
 
@@ -117,11 +117,11 @@ async def test_mint_quotes(npc, mock_wallet):
         mock_mint_quote = MagicMock()
         mock_mint_quote.state = "PAID"  # Not MintQuoteState.issued
         mock_wallet.get_mint_quote = AsyncMock(return_value=mock_mint_quote)
-        
+
         # Mock wallet mint
         mock_wallet.mint = AsyncMock(return_value=[Proof(id="1", amount=100, C="C", secret="s")])
 
         proofs = await npc.mint_quotes()
-        
+
         assert len(proofs) == 1
         mock_wallet.mint.assert_called_once_with(100, quote_id="q1")

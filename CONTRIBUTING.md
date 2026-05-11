@@ -4,23 +4,56 @@ Please contribute to Nutshell! You can open issues if you find bugs and pull req
 
 ## Contributing
 
-Pick an issue you would like to work on. Those with the tag `good first issue` are great for getting started. When you open a pull request, make sure that you've run tests and formatting locally before you push code.
+Pick an issue you would like to work on. Those with the tag `good first issue` are great for getting started. When you open a pull request, make sure that you've run tests and lint checks locally before you push code.
 
-## Formatting
+## Development setup
 
-We use [Ruff](https://docs.astral.sh/ruff/formatter/) for formatting. To make sure that your tests succeed, please run `make format` before you push code. You can find the Ruff parameters in `pyproject.toml`.
+Nutshell uses [Poetry](https://python-poetry.org/) and Python **3.10** (see README.md for `pyenv` and environment notes).
 
-## Setting up your environment
-
-We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, activate the environment with `poetry env activate` (or install the optional poetry-plugin-shell if you prefer `poetry shell`). Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
-
-### Precommit hook
-
-To run the formatter and mypy (linter) before you push code, you can install the very useful pre-commit hook which will check your code every time you push with git.
+### Quick start
 
 ```bash
-poetry run pre-commit install
+poetry install
+make install-pre-commit-hook
 ```
+
+**Windows users:** Run once after cloning:
+
+```bash
+git config core.autocrlf input
+```
+
+### Before committing
+
+Stage your changes, then:
+
+```bash
+make format
+```
+
+Pre-commit hooks run automatically on `git commit`. To match CI before you push:
+
+```bash
+make pre-commit
+```
+
+## Line endings
+
+This project uses **LF (Unix-style)** line endings. The repository handles this via `.gitattributes`, `.editorconfig`, and pre-commit hooks.
+
+If you see unexpected whitespace or line-ending diffs:
+
+```bash
+poetry run pre-commit run mixed-line-ending --all-files
+```
+
+## Lint and style
+
+We use [Ruff](https://docs.astral.sh/ruff/) **as a linter only** (`ruff check`); there is no enforced Ruff formatter in pre-commit or CI.
+
+- `make format` — staged files: `ruff check --fix` + line-ending / whitespace hooks
+- `make pre-commit` — full tree, matches CI (pre-commit hooks + mypy, etc.)
+- `make ruff-check` — lint only, no fixes
 
 ## Debugging
 

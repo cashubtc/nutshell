@@ -317,4 +317,3 @@ async def test_api_check_state(ledger: Ledger):
     assert len(states.spendable) == 2
     assert states.pending
     assert len(states.pending) == 2
-

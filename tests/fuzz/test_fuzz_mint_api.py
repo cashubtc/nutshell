@@ -118,7 +118,7 @@ def test_fuzz_melt_quote(client, unit, request, options):
 def test_fuzz_melt(client, quote, inputs, outputs):
     inputs_json = [i.model_dump(exclude={'dleq', 'witness'}) for i in inputs]
     outputs_json = [o.model_dump() for o in outputs] if outputs else None
-    
+
     payload = {
         "quote": quote,
         "inputs": inputs_json,

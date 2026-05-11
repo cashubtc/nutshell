@@ -30,7 +30,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         del mint_info_dict["description_long"]
         response = management_pb2.GetInfoResponse(**mint_info_dict)
         return response
-    
+
     async def UpdateMotd(self, request, _):
         logger.debug("gRPC UpdateMotd has been called")
         settings.mint_info_motd = request.motd
@@ -111,7 +111,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No quote ttl was specified")
         return management_pb2.UpdateResponse()
-    
+
     async def GetQuoteTtl(self, request, context):
         logger.debug(
             f"gRPC GetQuoteTtl has been called for quote_id: {request.quote_id}"
@@ -200,7 +200,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No fee specified")
         return management_pb2.UpdateResponse()
-    
+
     async def UpdateAuthLimits(self, request, _):
         logger.debug("gRPC UpdateAuthLimits has been called")
         if request.auth_rate_limit_per_minute:
@@ -244,7 +244,7 @@ async def serve(ledger: Ledger):
     else:
         logger.info(f"Starting INSECURE Management RPC service on {host}:{port}")
         server.add_insecure_port(f"{host}:{port}")
-    
+
     await server.start()
     return server
 

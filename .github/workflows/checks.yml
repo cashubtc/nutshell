@@ -36,8 +36,13 @@ jobs:
         run: yes | poetry run mypy cashu --install-types || true
       - name: Run mypy
         run: poetry run mypy cashu --ignore-missing --check-untyped-defs
-  ruff:
+  pre-commit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/ruff-action@v3
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+      - name: Run pre-commit
+        run: poetry run pre-commit run --all-files

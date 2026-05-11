@@ -505,4 +505,3 @@ class DbWriteHelper:
         await self.events.submit(quote_copy)
 
         return quote_copy
-
