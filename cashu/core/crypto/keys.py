@@ -45,7 +45,7 @@ def derive_pubkey(seed: str) -> SecpPublicKey:
         hashlib.sha256((seed).encode("utf-8")).digest()[:32],
     ).public_key
     assert pubkey
-    return pubkey
+    return pubkey  # type: ignore
 
 
 def derive_pubkeys(

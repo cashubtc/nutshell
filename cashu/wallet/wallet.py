@@ -1000,6 +1000,7 @@ class Wallet(
         rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]],
         derivation_paths: Sequence[str],
     ) -> List[Proof]:
+
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
         This method is called after the user has received blind signatures from
