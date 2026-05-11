@@ -119,7 +119,7 @@ class Wallet(
     seed: bytes  # holds private key of the wallet generated from the mnemonic
     db: Database
     bip32: BIP32
-    # private_key: Optional[PrivateKey] = None
+    private_key: SecpPrivateKey
     auth_db: Optional[Database] = None
     auth_keyset_id: Optional[str] = None
 
@@ -997,7 +997,7 @@ class Wallet(
         self,
         promises: Sequence[BlindedSignature],
         secrets: Sequence[str],
-        rs: Sequence[Union[SecpPrivateKey, PrivateKey]],
+        rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]],
         derivation_paths: Sequence[str],
     ) -> List[Proof]:
 
@@ -1027,12 +1027,12 @@ class Wallet(
                 
             is_v3 = is_bls_keyset(promise.id)
             if is_v3:
-                C_ = BlsPublicKey(bytes.fromhex(promise.C_))
+                C_ = cast(PublicKey, BlsPublicKey(bytes.fromhex(promise.C_)))
                 C = bls_dhke.step3_alice( # type: ignore
                     C_, r, self.keysets[promise.id].public_keys[promise.amount]
                 )
             else:
-                C_ = SecpPublicKey(bytes.fromhex(promise.C_))
+                C_ = cast(PublicKey, SecpPublicKey(bytes.fromhex(promise.C_)))
                 C = b_dhke.step3_alice( # type: ignore
                     C_, r, self.keysets[promise.id].public_keys[promise.amount]
                 )
