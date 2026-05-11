@@ -21,8 +21,8 @@ from ..core.base import (
 )
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.interfaces import PublicKey
-from ..core.crypto.secp import SecpPublicKey
 from ..core.crypto.keys import is_bls_keyset
+from ..core.crypto.secp import SecpPublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,

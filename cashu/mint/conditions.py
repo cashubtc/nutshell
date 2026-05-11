@@ -4,7 +4,6 @@ from typing import List, Optional, Union
 from loguru import logger
 
 from ..core.base import BlindedMessage, P2PKWitness, Proof
-from ..core.crypto.interfaces import PublicKey
 from ..core.crypto.secp import SecpPublicKey
 from ..core.errors import (
     TransactionError,

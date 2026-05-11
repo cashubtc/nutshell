@@ -24,7 +24,11 @@ from ..core.base import (
 from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.bls import PrivateKey as BlsPrivateKey
 from ..core.crypto.bls import PublicKey as BlsPublicKey
-from ..core.crypto.interfaces import ICashuPrivateKey, ICashuPublicKey, PrivateKey, PublicKey
+from ..core.crypto.interfaces import (
+    ICashuPrivateKey,
+    PrivateKey,
+    PublicKey,
+)
 from ..core.crypto.keys import is_bls_keyset
 from ..core.crypto.secp import SecpPrivateKey, SecpPublicKey
 from ..core.db import Database
@@ -1028,24 +1032,28 @@ class Wallet(
             is_v3 = is_bls_keyset(promise.id)
             if is_v3:
                 C_ = cast(PublicKey, BlsPublicKey(bytes.fromhex(promise.C_)))
-                C = bls_dhke.step3_alice( # type: ignore
-                    C_, r, self.keysets[promise.id].public_keys[promise.amount]
+                C = bls_dhke.step3_alice(  # type: ignore
+                    cast(Any, C_),
+                    cast(Any, r),
+                    cast(Any, self.keysets[promise.id].public_keys[promise.amount]),
                 )
             else:
                 C_ = cast(PublicKey, SecpPublicKey(bytes.fromhex(promise.C_)))
-                C = b_dhke.step3_alice( # type: ignore
-                    C_, r, self.keysets[promise.id].public_keys[promise.amount]
+                C = b_dhke.step3_alice(  # type: ignore
+                    cast(Any, C_),
+                    cast(Any, r),
+                    cast(Any, self.keysets[promise.id].public_keys[promise.amount]),
                 )
 
             if is_v3:
-                B_, r = bls_dhke.step1_alice(secret, r)
+                B_, r = bls_dhke.step1_alice(cast(Any, secret), cast(Any, r))
             elif not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+                B_, r = cast(Any, b_dhke.step1_alice(cast(Any, secret), cast(Any, r)))  # recompute B_ for dleq proofs
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_deprecated(
-                    secret, cast(PrivateKey, r)
-                )  # recompute B_ for dleq proofs
+                B_, r = cast(Any, b_dhke.step1_alice_deprecated(
+                    cast(Any, secret), cast(Any, r)
+                ))  # recompute B_ for dleq proofs
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
@@ -1115,7 +1123,7 @@ class Wallet(
         for secret, amount, r in zip(secrets, amounts, rs_):
             is_v3 = is_bls_keyset(keyset_id)
             if is_v3:
-                B_, r = bls_dhke.step1_alice(secret, r or None)
+                B_, r = bls_dhke.step1_alice(cast(Any, secret), cast(Any, r or None))
             elif not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, cast(PrivateKey, r))  # type: ignore
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
@@ -1562,7 +1570,10 @@ class Wallet(
         )
         # now we can construct the proofs with the secrets and rs
         proofs = await self._construct_proofs(
-            restored_promises, secrets, rs, derivation_paths
+            restored_promises,
+            secrets,
+            cast(Sequence[Union[SecpPrivateKey, BlsPrivateKey]], rs),
+            derivation_paths,
         )
         logger.debug(f"Restored {len(restored_promises)} promises")
         return next_restored_output_index, proofs

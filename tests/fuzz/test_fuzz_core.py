@@ -19,7 +19,6 @@ from cashu.core.base import (
     Unit,
     WalletKeyset,
 )
-from cashu.core.crypto.secp import SecpPrivateKey
 from cashu.core.secret import Secret, Tags
 
 

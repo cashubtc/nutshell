@@ -8,7 +8,6 @@ import pytest_asyncio
 
 from cashu.core.base import Unit
 from cashu.core.crypto.keys import random_hash
-from cashu.core.crypto.secp import SecpPrivateKey
 from cashu.core.errors import (
     BlindAuthFailedError,
     BlindAuthRateLimitExceededError,

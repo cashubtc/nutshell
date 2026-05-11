@@ -15,7 +15,6 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.crypto.b_dhke import step1_alice
-from cashu.core.crypto.secp import SecpPrivateKey
 from cashu.core.errors import (
     InvalidProofsError,
     NoSecretInProofsError,

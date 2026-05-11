@@ -52,7 +52,9 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 
 import hashlib
 from typing import Optional, Tuple, Union, cast
-from .bls import PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey
+
+from .bls import PrivateKey as BlsPrivateKey
+from .bls import PublicKey as BlsPublicKey
 from .secp import SecpPrivateKey, SecpPublicKey
 
 PublicKey = Union[SecpPublicKey, BlsPublicKey]

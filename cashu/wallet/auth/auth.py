@@ -4,14 +4,13 @@ from typing import List, Optional, Union
 
 from loguru import logger
 
+from cashu.core.base import Proof
+from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
+from cashu.core.crypto.secp import SecpPrivateKey
+from cashu.core.db import Database
 from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
-from cashu.core.base import Proof
-from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
-from cashu.core.crypto.interfaces import PrivateKey, PublicKey
-from cashu.core.crypto.secp import SecpPrivateKey, SecpPublicKey
-from cashu.core.db import Database
 from ..crud import get_mint_by_url, update_mint
 from ..wallet import Wallet
 from .openid_connect.openid_client import AuthorizationFlow, OpenIDClient

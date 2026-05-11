@@ -11,7 +11,6 @@ from ..core.base import (
     P2PKWitness,
     Proof,
 )
-from ..core.crypto.interfaces import ICashuPrivateKey
 from ..core.crypto.secp import SecpPrivateKey
 from ..core.db import Database
 from ..core.p2pk import (

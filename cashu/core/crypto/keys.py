@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Union
 
 from bip32 import BIP32
 
-from .bls import PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey
-from .interfaces import ICashuPrivateKey, ICashuPublicKey
+from .bls import PrivateKey as BlsPrivateKey
+from .interfaces import ICashuPublicKey
 from .secp import SecpPrivateKey, SecpPublicKey
 
 

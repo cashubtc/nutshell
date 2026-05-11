@@ -8,7 +8,6 @@ from cashu.core.crypto.keys import (
     get_keyset_id_version,
     is_keyset_id_v2,
 )
-from cashu.core.crypto.secp import SecpSecpPublicKey
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.mint.test_mint_init import (

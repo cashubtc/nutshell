@@ -13,7 +13,6 @@ from cashu.core.base import (
     WalletKeyset,
     WalletMint,
 )
-from cashu.core.crypto.secp import SecpPrivateKey
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.wallet import migrations as wallet_migrations

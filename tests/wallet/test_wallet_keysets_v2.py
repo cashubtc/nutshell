@@ -19,7 +19,6 @@ from cashu.core.crypto.keys import (
     is_base64_keyset_id,
     is_keyset_id_v2,
 )
-from cashu.core.crypto.secp import SecpPrivateKey
 from cashu.wallet.keyset_manager import KeysetManager
 from cashu.wallet.proofs import WalletProofs
 from cashu.wallet.secrets import WalletSecrets

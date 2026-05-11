@@ -7,7 +7,6 @@ import pytest_asyncio
 from coincurve import PublicKeyXOnly
 
 from cashu.core.base import P2PKWitness
-from cashu.core.crypto.secp import SecpPrivateKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import P2PKSecret, SigFlags
 from cashu.core.secret import SecretKind, Tags

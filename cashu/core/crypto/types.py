@@ -1,6 +1,7 @@
 from typing import Union
 
-from .bls import PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey
+from .bls import PrivateKey as BlsPrivateKey
+from .bls import PublicKey as BlsPublicKey
 from .secp import SecpPrivateKey, SecpPublicKey
 
 AnyPrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
