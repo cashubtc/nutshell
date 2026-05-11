@@ -148,7 +148,7 @@ def step2_bob_dleq(
     if p_bytes:
         # deterministic p for testing
         p = SecpPrivateKey(p_bytes)
-        # p = PrivateKey()
+    else:
         p = SecpPrivateKey()
 
 
@@ -168,10 +168,14 @@ def step2_bob_dleq(
 def alice_verify_dleq(
     B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
 ) -> bool:
-    R1 = s.public_key - A * e  # type: ignore
-    R2 = B_ * s - C_ * e  # type: ignore
+    s_pub = SecpPublicKey(s.public_key.format())
+    A_secp = SecpPublicKey(A.format())
+    B_secp = SecpPublicKey(B_.format())
+    C_secp = SecpPublicKey(C_.format())
+    R1 = s_pub - A_secp * e  # type: ignore
+    R2 = B_secp * s - C_secp * e  # type: ignore
     e_bytes = bytes.fromhex(e.to_hex())
-    return e_bytes == hash_e(R1, R2, A, C_)
+    return e_bytes == hash_e(R1, R2, A_secp, C_secp)
 
 
 def carol_verify_dleq(

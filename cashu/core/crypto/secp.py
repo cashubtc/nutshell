@@ -20,13 +20,16 @@ class SecpPublicKey(CoincurvePublicKey, ICashuPublicKey):
 
     def __sub__(self, pubkey2):
         if isinstance(pubkey2, CoincurvePublicKey):
+            # Convert to SecpPublicKey if it's just a CoincurvePublicKey
+            if not isinstance(pubkey2, SecpPublicKey):
+                pubkey2 = SecpPublicKey(pubkey2.format())
             return self + (-pubkey2)  # type: ignore
         else:
             raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
     def __mul__(self, privkey):
         if isinstance(privkey, SecpPrivateKey):
-            return self.multiply(bytes.fromhex(privkey.to_hex()))
+            return SecpPublicKey(self.multiply(bytes.fromhex(privkey.to_hex())).format())
         else:
             raise TypeError("Can't multiply with non privatekey")
 
