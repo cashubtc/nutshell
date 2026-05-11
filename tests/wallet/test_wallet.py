@@ -667,3 +667,74 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     # Assert the retained keyset is NOT marked as deleted
     retained_keysets_db = await get_keysets(db=wallet1.db, id=real_keyset_id)
     assert retained_keysets_db[0].deleted_at is None
+
+
+@pytest.mark.asyncio
+async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
+    """
+    Ensure that when a mint re-adds a previously deleted keyset, the wallet
+    restores the existing DB row instead of inserting a duplicate keyset.
+    """
+
+    real_keyset_id = list(wallet1.keysets.keys())[0]
+    fake_keyset_id = "fake_keyset_to_reappear"
+    fake_keyset = WalletKeyset(
+        id=fake_keyset_id,
+        unit=wallet1.unit.name,
+        mint_url=wallet1.url,
+        active=True,
+        public_keys=wallet1.keysets[real_keyset_id].public_keys,
+        input_fee_ppk=0,
+    )
+    await store_keyset(keyset=fake_keyset, db=wallet1.db)
+    await wallet1.load_keysets_from_db()
+    assert fake_keyset_id in wallet1.keysets
+
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+    await wallet1.load_mint_keysets()
+    assert fake_keyset_id not in wallet1.keysets
+
+    deleted_keysets = await get_keysets(
+        db=wallet1.db, id=fake_keyset_id, exclude_deleted=False
+    )
+    assert len(deleted_keysets) == 1
+    assert deleted_keysets[0].deleted_at is not None
+
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            ),
+            MintKeyset(
+                id=fake_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/1'",
+                seed="dummy2",
+                input_fee_ppk=7,
+            ),
+        ]
+    )
+    await wallet1.load_mint_keysets()
+
+    assert fake_keyset_id in wallet1.keysets
+    restored_keysets = await get_keysets(
+        db=wallet1.db, id=fake_keyset_id, exclude_deleted=False
+    )
+    assert len(restored_keysets) == 1
+    assert restored_keysets[0].deleted_at is None
+    assert restored_keysets[0].input_fee_ppk == 7
