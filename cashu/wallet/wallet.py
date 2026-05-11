@@ -2,7 +2,7 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from bip32 import BIP32
 from loguru import logger
@@ -958,7 +958,7 @@ class Wallet(
                 r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
                 e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
                 s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
-                A=self.keysets[proof.id].public_keys[proof.amount],
+                A=cast(Any, self.keysets[proof.id].public_keys[proof.amount]),
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
@@ -997,7 +997,7 @@ class Wallet(
         self,
         promises: Sequence[BlindedSignature],
         secrets: Sequence[str],
-        rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]],
+        rs: Sequence[Union[SecpPrivateKey, PrivateKey]],
         derivation_paths: Sequence[str],
     ) -> List[Proof]:
 
