@@ -145,3 +145,6 @@ tor-data
 *.pem
 
 junit.xml
+
+# Ralph
+.ralph

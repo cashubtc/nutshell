@@ -11,7 +11,8 @@ from cashu.core.crypto.b_dhke import (
     step2_bob_dleq,
     step3_alice,
 )
-from cashu.core.crypto.secp import PrivateKey, PublicKey
+from cashu.core.crypto.secp import SecpPrivateKey as PrivateKey
+from cashu.core.crypto.secp import SecpPublicKey as PublicKey
 
 
 def test_hash_to_curve():

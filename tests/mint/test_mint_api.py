@@ -22,6 +22,8 @@ from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
+settings.version = "0.20.0"
+
 BASE_URL = "http://localhost:3337"
 
 

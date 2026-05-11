@@ -8,10 +8,14 @@ from ..core.base import (
     Method,
     MintQuote,
     Proof,
+    PublicKey,
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.bls_dhke import keyed_verification
+from ..core.crypto.keys import is_bls_keyset
+from ..core.crypto.secp import SecpPublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
@@ -227,10 +231,18 @@ class LedgerVerification(
             f"Validating proof {proof.secret} with keyset {self.keysets[proof.id].id}."
         )
         # use the appropriate active keyset for this proof.id
-        private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
+        keyset = self.keysets[proof.id]
+        private_key_amount = keyset.private_keys[proof.amount]
 
-        C = PublicKey(bytes.fromhex(proof.C))
-        valid = b_dhke.verify(private_key_amount, C, proof.secret)
+        is_v3 = is_bls_keyset(proof.id)
+        C: PublicKey
+        if is_v3:
+            C = BlsPublicKey(bytes.fromhex(proof.C))
+            valid = keyed_verification(private_key_amount, C, proof.secret) # type: ignore
+        else:
+            C = SecpPublicKey(bytes.fromhex(proof.C))
+            valid = b_dhke.verify(private_key_amount, C, proof.secret) # type: ignore
+        
         if valid:
             logger.trace("Proof verified.")
         else:

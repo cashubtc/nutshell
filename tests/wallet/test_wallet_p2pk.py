@@ -11,7 +11,8 @@ from coincurve import PrivateKey as CoincurvePrivateKey
 from coincurve import PublicKeyXOnly
 
 from cashu.core.base import P2PKWitness, Proof
-from cashu.core.crypto.secp import PrivateKey, PublicKey
+from cashu.core.crypto.bls import PrivateKey
+from cashu.core.crypto.secp import SecpPublicKey as PublicKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import P2PKSecret, SigFlags
 from cashu.core.secret import Secret, SecretKind, Tags

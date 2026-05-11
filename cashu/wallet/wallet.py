@@ -2,7 +2,7 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from bip32 import BIP32
 from loguru import logger
@@ -21,8 +21,16 @@ from ..core.base import (
     WalletKeyset,
     WalletMint,
 )
-from ..core.crypto import b_dhke
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto import b_dhke, bls_dhke
+from ..core.crypto.bls import PrivateKey as BlsPrivateKey
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.interfaces import (
+    ICashuPrivateKey,
+    PrivateKey,
+    PublicKey,
+)
+from ..core.crypto.keys import is_bls_keyset
+from ..core.crypto.secp import SecpPrivateKey, SecpPublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -115,7 +123,7 @@ class Wallet(
     seed: bytes  # holds private key of the wallet generated from the mnemonic
     db: Database
     bip32: BIP32
-    # private_key: Optional[PrivateKey] = None
+    private_key: SecpPrivateKey
     auth_db: Optional[Database] = None
     auth_keyset_id: Optional[str] = None
 
@@ -605,7 +613,7 @@ class Wallet(
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
-        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id) # type: ignore
         if not quote:
             raise Exception("Quote not found.")
         signature: str | None = None
@@ -644,6 +652,7 @@ class Wallet(
         """
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
+        self.verify_proofs_bls(proofs)
         return await self.split(proofs=proofs, amount=0)
 
     async def split(
@@ -934,10 +943,14 @@ class Wallet(
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
+        verified_count = 0
         for proof in proofs:
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
-                return
+                continue
+            if is_bls_keyset(proof.id):
+                logger.trace("BLS keyset, skipping DLEQ proof verification.")
+                continue
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
             assert (
@@ -945,24 +958,53 @@ class Wallet(
             ), f"Keyset {proof.id} not known, can not verify DLEQ."
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C)),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
-                A=self.keysets[proof.id].public_keys[proof.amount],
+                C=SecpPublicKey(bytes.fromhex(proof.C)),
+                r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
+                e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
+                s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
+                A=cast(Any, self.keysets[proof.id].public_keys[proof.amount]),
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
                 logger.trace("DLEQ proof valid.")
-        logger.debug("Verified incoming DLEQ proofs.")
+                verified_count += 1
+        if verified_count > 0:
+            logger.debug(f"Verified {verified_count} incoming DLEQ proofs.")
+
+    def verify_proofs_bls(self, proofs: List[Proof]):
+        """Verifies BLS signatures using pairings."""
+        
+        bls_proofs = [p for p in proofs if is_bls_keyset(p.id)]
+        if not bls_proofs:
+            return
+
+        logger.trace(f"Verifying {len(bls_proofs)} BLS signatures using pairings.")
+        
+        K2s: List[BlsPublicKey] = []
+        Cs: List[BlsPublicKey] = []
+        secret_msgs: List[str] = []
+
+        for proof in bls_proofs:
+            assert proof.id
+            assert proof.id in self.keysets, f"Keyset {proof.id} not known."
+            K2s.append(self.keysets[proof.id].public_keys[proof.amount]) # type: ignore
+            Cs.append(BlsPublicKey(bytes.fromhex(proof.C)))
+            secret_msgs.append(proof.secret)
+
+        valid = bls_dhke.batch_pairing_verification(K2s, Cs, secret_msgs) # type: ignore
+        if not valid:
+            raise Exception("BLS signature verification failed.")
+        
+        logger.debug(f"Verified {len(bls_proofs)} incoming BLS signatures using pairings.")
 
     async def _construct_proofs(
         self,
-        promises: List[BlindedSignature],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        derivation_paths: List[str],
+        promises: Sequence[BlindedSignature],
+        secrets: Sequence[str],
+        rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]],
+        derivation_paths: Sequence[str],
     ) -> List[Proof]:
+
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
         This method is called after the user has received blind signatures from
@@ -977,6 +1019,7 @@ class Wallet(
         Returns:
             List[Proof]: list of proofs that can be used as ecash
         """
+
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
@@ -985,18 +1028,32 @@ class Wallet(
                 # we don't have the keyset for this promise, so we load all keysets from the mint
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
-            C_ = PublicKey(bytes.fromhex(promise.C_))
-            C = b_dhke.step3_alice(
-                C_, r, self.keysets[promise.id].public_keys[promise.amount]
-            )
+                
+            is_v3 = is_bls_keyset(promise.id)
+            if is_v3:
+                C_ = cast(PublicKey, BlsPublicKey(bytes.fromhex(promise.C_)))
+                C = bls_dhke.step3_alice(  # type: ignore
+                    cast(Any, C_),
+                    cast(Any, r),
+                    cast(Any, self.keysets[promise.id].public_keys[promise.amount]),
+                )
+            else:
+                C_ = cast(PublicKey, SecpPublicKey(bytes.fromhex(promise.C_)))
+                C = b_dhke.step3_alice(  # type: ignore
+                    cast(Any, C_),
+                    cast(Any, r),
+                    cast(Any, self.keysets[promise.id].public_keys[promise.amount]),
+                )
 
-            if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(cast(Any, secret), cast(Any, r))
+            elif not settings.wallet_use_deprecated_h2c:
+                B_, r = cast(Any, b_dhke.step1_alice(cast(Any, secret), cast(Any, r)))  # recompute B_ for dleq proofs
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_deprecated(
-                    secret, r
-                )  # recompute B_ for dleq proofs
+                B_, r = cast(Any, b_dhke.step1_alice_deprecated(
+                    cast(Any, secret), cast(Any, r)
+                ))  # recompute B_ for dleq proofs
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
@@ -1021,6 +1078,7 @@ class Wallet(
 
         # DLEQ verify
         self.verify_proofs_dleq(proofs)
+        self.verify_proofs_bls(proofs)
 
         logger.trace(f"Constructed {len(proofs)} proofs.")
 
@@ -1033,18 +1091,18 @@ class Wallet(
 
     def _construct_outputs(
         self,
-        amounts: List[int],
-        secrets: List[str],
-        rs: List[PrivateKey] = [],
+        amounts: Sequence[int],
+        secrets: Sequence[str],
+        rs: Sequence[Union[SecpPrivateKey, BlsPrivateKey]] = (),
         keyset_id: Optional[str] = None,
-    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
+    ) -> Tuple[List[BlindedMessage], List[Union[SecpPrivateKey, BlsPrivateKey]]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
 
         Args:
             amounts (List[int]): list of amounts
             secrets (List[str]): list of secrets
-            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+            rs (list[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
 
         Returns:
             List[BlindedMessage]: list of blinded messages that can be sent to the mint
@@ -1059,13 +1117,18 @@ class Wallet(
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
-        rs_return: List[PrivateKey] = []
+        rs_return: List[Union[SecpPrivateKey, BlsPrivateKey]] = []
+        
+        
         for secret, amount, r in zip(secrets, amounts, rs_):
-            if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r or None)
+            is_v3 = is_bls_keyset(keyset_id)
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(cast(Any, secret), cast(Any, r or None))
+            elif not settings.wallet_use_deprecated_h2c:
+                B_, r = b_dhke.step1_alice(secret, cast(PrivateKey, r))  # type: ignore
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+                B_, r = b_dhke.step1_alice_deprecated(secret, cast(PrivateKey, r)) # type: ignore
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             assert r
@@ -1459,10 +1522,10 @@ class Wallet(
 
     async def restore_promises(
         self,
-        outputs: List[BlindedMessage],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        derivation_paths: List[str],
+        outputs: Sequence[BlindedMessage],
+        secrets: Sequence[str],
+        rs: Sequence[ICashuPrivateKey],
+        derivation_paths: Sequence[str],
     ) -> Tuple[int, List[Proof]]:
         """Restores proofs from a list of outputs, secrets, rs and derivation paths.
 
@@ -1507,7 +1570,10 @@ class Wallet(
         )
         # now we can construct the proofs with the secrets and rs
         proofs = await self._construct_proofs(
-            restored_promises, secrets, rs, derivation_paths
+            restored_promises,
+            secrets,
+            cast(Sequence[Union[SecpPrivateKey, BlsPrivateKey]], rs),
+            derivation_paths,
         )
         logger.debug(f"Restored {len(restored_promises)} promises")
         return next_restored_output_index, proofs

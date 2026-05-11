@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Protocol
 import httpx
 
 from ..core.base import Proof, Unit, WalletKeyset
-from ..core.crypto.secp import PrivateKey
+from ..core.crypto.interfaces import PrivateKey
 from ..core.db import Database
 from ..core.mint_info import MintInfo
 

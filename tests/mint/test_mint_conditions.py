@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from cashu.core.base import BlindedMessage, HTLCWitness, P2PKWitness, Proof
-from cashu.core.crypto.secp import PrivateKey
+from cashu.core.crypto.secp import SecpPrivateKey as PrivateKey
 from cashu.core.errors import InvalidProofsError, TransactionError
 from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind, Tags

@@ -1,11 +1,13 @@
 import base64
 import hashlib
 import random
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from bip32 import BIP32
 
-from .secp import PrivateKey, PublicKey
+from .bls import PrivateKey as BlsPrivateKey
+from .interfaces import ICashuPublicKey
+from .secp import SecpPrivateKey, SecpPublicKey
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
@@ -15,7 +17,7 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     bip32 = BIP32.from_seed(mnemonic.encode())
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             bip32.get_privkey_from_path(derivation_path + orders_str[i]),
         )
         for i, a in enumerate(amounts)
@@ -29,7 +31,7 @@ def derive_keys_deprecated_pre_0_15(
     Deterministic derivation of keys for 2^n values.
     """
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             hashlib.sha256((seed + derivation_path + str(i)).encode("utf-8")).digest()[
                 :32
             ],
@@ -38,19 +40,21 @@ def derive_keys_deprecated_pre_0_15(
     }
 
 
-def derive_pubkey(seed: str) -> PublicKey:
-    pubkey = PrivateKey(
+def derive_pubkey(seed: str) -> SecpPublicKey:
+    pubkey = SecpPrivateKey(
         hashlib.sha256((seed).encode("utf-8")).digest()[:32],
     ).public_key
     assert pubkey
-    return pubkey
+    return pubkey  # type: ignore
 
 
-def derive_pubkeys(keys: Dict[int, PrivateKey], amounts: List[int]):
+def derive_pubkeys(
+    keys: Dict[int, Union[SecpPrivateKey, BlsPrivateKey]], amounts: List[int]
+):
     return {amt: keys[amt].public_key for amt in amounts}
 
 
-def derive_keyset_id(keys: Dict[int, PublicKey]):
+def derive_keyset_id(keys: Dict[int, ICashuPublicKey]):
     """Deterministic derivation keyset_id from set of public keys (version 00)."""
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
@@ -59,7 +63,7 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
 
 
 def derive_keyset_id_v2(
-    keys: Dict[int, PublicKey], 
+    keys: Dict[int, ICashuPublicKey], 
     unit: str, 
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,
@@ -99,6 +103,7 @@ def derive_keyset_id_v2(
     return f"01{hash_digest}"
 
 
+
 def derive_keyset_short_id(keyset_id: str) -> str:
     """
     Derive the short keyset ID (8 bytes) from a full keyset ID.
@@ -113,9 +118,14 @@ def derive_keyset_short_id(keyset_id: str) -> str:
     if is_base64_keyset_id(keyset_id) or keyset_id.startswith("00"):
         return keyset_id
     
-    # For version 01, return first 16 chars (8 bytes in hex)
-    if keyset_id.startswith("01"):
-        return keyset_id[:16]
+    # For version 01 and onwards, return first 16 chars (8 bytes in hex)
+    version = get_keyset_id_version(keyset_id)
+    if version != "base64":
+        try:
+            if int(version) >= 1:
+                return keyset_id[:16]
+        except ValueError:
+            pass
     
     raise ValueError(f"Unsupported keyset version in ID: {keyset_id}")
 
@@ -136,7 +146,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
         True if the keyset ID is base64 format, False otherwise
     """
     # If it starts with a known version prefix, it's not base64
-    if keyset_id.startswith("00") or keyset_id.startswith("01"):
+    if keyset_id.startswith(("00", "01", "02")):
         return False
     
     # Try to decode as base64 to confirm
@@ -166,12 +176,22 @@ def get_keyset_id_version(keyset_id: str) -> str:
     return keyset_id[:2]
 
 
+def is_bls_keyset(keyset_id: str) -> bool:
+    """Check if a keyset ID uses BLS12-381 cryptography (version >= 02)."""
+    version = get_keyset_id_version(keyset_id)
+    if version == "base64":
+        return False
+    try:
+        return int(version) >= 2
+    except ValueError:
+        return False
+
 def is_keyset_id_v2(keyset_id: str) -> bool:
     """Check if a keyset ID is version 2 (starts with '01')."""
     return get_keyset_id_version(keyset_id) == '01'
 
 
-def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
+def derive_keyset_id_deprecated(keys: Dict[int, ICashuPublicKey]):
     """DEPRECATED 0.15.0: Deterministic derivation keyset_id from set of public keys.
     DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.
     """
@@ -183,8 +203,45 @@ def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
     ).decode()[:12]
 
 
+def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
+    """
+    Deterministic derivation of BLS12-381 keys for 2^n values.
+    Since BIP32 doesn't technically cover BLS12-381, we use HKDF or simple hashing on the BIP32 seed.
+    For simplicity and backwards compatibility of mnemonic/path logic, we hash the BIP32 path output to generate the scalar.
+    """
+    bip32 = BIP32.from_seed(mnemonic.encode())
+    orders_str = [f"/{a}'" for a in range(len(amounts))]
+    return {
+        a: BlsPrivateKey(
+            hashlib.sha256(bip32.get_privkey_from_path(derivation_path + orders_str[i])).digest()
+        )
+        for i, a in enumerate(amounts)
+    }
+
+
+def derive_keyset_id_v3(
+    keys: Dict[int, ICashuPublicKey], 
+    unit: str, 
+    final_expiry: Optional[int] = None,
+    input_fee_ppk: int = 0,
+) -> str:
+    """
+    Deterministic derivation keyset_id v3 from set of BLS public keys (version 02).
+    """
+    sorted_keys = dict(sorted(keys.items()))
+    keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
+    keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
+    if input_fee_ppk > 0:
+        keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
+    if final_expiry is not None:
+        keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
+    hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()
+    return f"02{hash_digest}"
+
+
 def random_hash() -> str:
     """Returns a base64-urlsafe encoded random hash."""
     return base64.urlsafe_b64encode(
         bytes([random.getrandbits(8) for i in range(30)])
     ).decode()
+

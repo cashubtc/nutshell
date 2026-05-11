@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import bolt11
 from loguru import logger
@@ -17,15 +17,18 @@ from ..core.base import (
     MintQuote,
     MintQuoteState,
     Proof,
+    PublicKey,
     Unit,
 )
-from ..core.crypto import b_dhke
+from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.keys import (
     derive_pubkey,
+    is_bls_keyset,
     random_hash,
 )
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto.secp import SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
@@ -83,7 +86,7 @@ class Ledger(
     invoice_listener_tasks: List[asyncio.Task] = []
     watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
-    pubkey: PublicKey
+    pubkey: PublicKey # type: ignore
 
     def __init__(
         self,
@@ -1162,14 +1165,21 @@ class Ledger(
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
+        
         promises: List[
-            Tuple[str, PublicKey, int, PublicKey, PrivateKey, PrivateKey]
+            Tuple[str, Any, int, Any, Any, Any]
         ] = []
         for output in outputs:
-            B_ = PublicKey(bytes.fromhex(output.B_))
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
+            is_v3 = is_bls_keyset(keyset.id)
+            B_: PublicKey
+            if is_v3:
+                B_ = BlsPublicKey(bytes.fromhex(output.B_))
+            else:
+                B_ = SecpPublicKey(bytes.fromhex(output.B_))
+                
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
             if not keyset.active:
@@ -1177,7 +1187,12 @@ class Ledger(
             keyset_id = output.id
             logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
-            C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+            
+            if is_v3:
+                C_, e, s = bls_dhke.step2_bob(B_, private_key_amount) # type: ignore
+            else:
+                C_, e, s = b_dhke.step2_bob(B_, private_key_amount) # type: ignore
+                
             promises.append((keyset_id, B_, output.amount, C_, e, s))
 
         keyset = keyset or self.keyset
@@ -1187,12 +1202,14 @@ class Ledger(
             for promise in promises:
                 keyset_id, B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
+                e_hex = e.to_hex() if e else None
+                s_hex = s.to_hex() if s else None
                 await self.crud.update_blinded_message_signature(
                     amount=amount,
                     b_=B_.format().hex(),
                     c_=C_.format().hex(),
-                    e=e.to_hex(),
-                    s=s.to_hex(),
+                    e=e_hex,
+                    s=s_hex,
                     db=self.db,
                     conn=conn,
                 )
@@ -1201,7 +1218,7 @@ class Ledger(
                     id=keyset_id,
                     amount=amount,
                     C_=C_.format().hex(),
-                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
+                    dleq=DLEQ(e=e_hex, s=s_hex) if e_hex and s_hex else None,
                 )
                 signatures.append(signature)
 

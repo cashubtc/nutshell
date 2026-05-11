@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core import db
+from cashu.core.crypto.bls import PublicKey
 from cashu.core.db import Connection
 from cashu.core.migrations import backup_database
 from cashu.core.models import PostMeltQuoteRequest
@@ -360,7 +361,6 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
 async def test_store_and_sign_blinded_message(ledger: Ledger):
     # Localized imports to avoid polluting module scope
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
 
     # Arrange: prepare a blinded message tied to current active keyset
     amount = 8
@@ -482,7 +482,6 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
     wallet: Wallet, ledger: Ledger
 ):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
 
     amount = 2
     keyset_id = ledger.keyset.id
@@ -560,7 +559,6 @@ async def test_update_blinded_message_signature_before_store_blinded_message_err
     ledger: Ledger,
 ):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
 
     amount = 8
     # Generate a blinded message that we will NOT store
@@ -605,7 +603,6 @@ async def test_get_blind_signatures_by_melt_id_returns_signed(
     wallet: Wallet, ledger: Ledger
 ):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
 
     amount = 4
     keyset_id = ledger.keyset.id
@@ -657,7 +654,6 @@ async def test_get_melt_quote_includes_change_signatures(
     wallet: Wallet, ledger: Ledger
 ):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
 
     amount = 8
     keyset_id = ledger.keyset.id

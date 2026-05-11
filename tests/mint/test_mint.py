@@ -10,6 +10,8 @@ from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
 
+settings.version = "0.20.0"
+
 
 async def assert_err(f, msg):
     """Compute f() and expect an error message 'msg'."""
