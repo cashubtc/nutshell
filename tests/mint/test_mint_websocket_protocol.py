@@ -160,10 +160,16 @@ async def test_init_subscription_sends_initial_snapshots():
     )
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
 
+    from contextlib import asynccontextmanager
+    
+    @asynccontextmanager
+    async def mock_connect():
+        yield object()
+
     manager.db_read = cast(
         Any,
         SimpleNamespace(
-            db=object(),
+            db=SimpleNamespace(connect=mock_connect),
             crud=SimpleNamespace(
                 get_mint_quote=None,
                 get_melt_quote=None,
@@ -172,13 +178,13 @@ async def test_init_subscription_sends_initial_snapshots():
         ),
     )
 
-    async def get_mint_quote(quote_id, db):
+    async def get_mint_quote(quote_id, db, conn=None):
         return mint_quote if quote_id == "quote-1" else None
 
-    async def get_melt_quote(quote_id, db):
+    async def get_melt_quote(quote_id, db, conn=None):
         return melt_quote if quote_id == "melt-1" else None
 
-    async def get_proofs_states(Ys):
+    async def get_proofs_states(Ys, conn=None):
         return [proof_state]
 
     cast(Any, manager.db_read).crud.get_mint_quote = get_mint_quote
@@ -192,14 +198,14 @@ async def test_init_subscription_sends_initial_snapshots():
 
     cast(Any, manager)._send_obj = send_obj
 
-    await manager._init_subscription(
-        "sub-mint", "quote-1", JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+    await manager._init_subscriptions(
+        "sub-mint", ["quote-1"], JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
     )
-    await manager._init_subscription(
-        "sub-melt", "melt-1", JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+    await manager._init_subscriptions(
+        "sub-melt", ["melt-1"], JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
     )
-    await manager._init_subscription(
-        "sub-proof", "Y1", JSONRPCSubscriptionKinds.PROOF_STATE
+    await manager._init_subscriptions(
+        "sub-proof", ["Y1"], JSONRPCSubscriptionKinds.PROOF_STATE
     )
 
     payloads = [json.loads(msg) for msg in websocket.sent]
