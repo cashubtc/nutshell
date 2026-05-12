@@ -426,6 +426,7 @@ class MintQuote(LedgerEvent):
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     issued_time: Union[int, None] = None
+    last_checked: Union[int, None] = None
     expiry: Optional[int] = None
     mint: Optional[str] = None
     privkey: Optional[str] = None
@@ -438,6 +439,7 @@ class MintQuote(LedgerEvent):
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
             issued_time = int(row["issued_time"]) if "issued_time" in row.keys() and row["issued_time"] else None
+            last_checked = int(row["last_checked"]) if "last_checked" in row.keys() and row["last_checked"] else None
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -446,6 +448,9 @@ class MintQuote(LedgerEvent):
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             issued_time = (
                 int(row["issued_time"].timestamp()) if "issued_time" in row.keys() and row["issued_time"] else None
+            )
+            last_checked = (
+                int(row["last_checked"].timestamp()) if "last_checked" in row.keys() and row["last_checked"] else None
             )
         return cls(
             quote=row["quote"],
@@ -458,6 +463,7 @@ class MintQuote(LedgerEvent):
             created_time=created_time,
             paid_time=paid_time,
             issued_time=issued_time,
+            last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
         )
