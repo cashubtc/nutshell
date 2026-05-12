@@ -180,6 +180,15 @@ class PostMintQuoteResponse(BaseModel):
 # ------- API: MINT -------
 
 
+class PostMintQuotesByPubkeyRequest(BaseModel):
+    pubkeys: List[str] = Field(..., max_length=settings.mint_max_request_length)
+    pubkey_signatures: List[str] = Field(..., max_length=settings.mint_max_request_length)
+
+
+class PostMintQuotesByPubkeyResponse(BaseModel):
+    quotes: List[PostMintQuoteResponse]
+
+
 class PostMintRequest(BaseModel):
     quote: str = Field(..., max_length=MAX_QUOTE_ID_LEN)  # quote id
     outputs: List[BlindedMessage] = Field(

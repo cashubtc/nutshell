@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -16,6 +17,7 @@ from cashu.core.models import (
 )
 from cashu.core.nuts import nut20
 from cashu.core.nuts.nuts import MINT_NUT
+from cashu.core.p2pk import schnorr_sign
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
@@ -247,6 +249,45 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.request == result["request"]
 
     assert resp_quote.pubkey == "02" + "00" * 32
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+async def test_mint_quotes_by_pubkey(ledger: Ledger):
+    privkey = PrivateKey()
+    pubkey = privkey.public_key.format(compressed=True).hex()
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11",
+        json={"unit": "sat", "amount": 100, "pubkey": pubkey},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    quote_id = result["quote"]
+
+    signature = schnorr_sign(bytes.fromhex(pubkey), privkey).hex()
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/pubkey",
+        json={"pubkeys": [pubkey], "pubkey_signatures": [signature]},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result2 = response.json()
+    assert "quotes" in result2
+    assert len(result2["quotes"]) == 1
+    assert result2["quotes"][0]["quote"] == quote_id
+    assert result2["quotes"][0]["pubkey"] == pubkey
+
+    # Test invalid signature
+    bad_signature = signature[:-2] + "00"
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/pubkey",
+        json={"pubkeys": [pubkey], "pubkey_signatures": [bad_signature]},
+    )
+    assert response.status_code == 400 or response.status_code == 500
 
 
 @pytest.mark.asyncio
