@@ -1121,7 +1121,7 @@ class Ledger(
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
         async with self.db.get_connection(conn) as conn:
-            for output in outputs:
+            for i, output in enumerate(outputs):
                 keyset = keyset or self.keysets[output.id]
                 if output.id not in self.keysets:
                     raise TransactionError(f"keyset {output.id} not found")
@@ -1137,6 +1137,7 @@ class Ledger(
                     mint_id=mint_id,
                     melt_id=melt_id,
                     swap_id=swap_id,
+                    order_index=i,
                     db=self.db,
                     conn=conn,
                 )
