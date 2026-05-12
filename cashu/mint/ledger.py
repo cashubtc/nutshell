@@ -846,6 +846,8 @@ class Ledger(
         """
         # get melt quote
         melt_quote = await self.get_melt_quote(quote_id=quote)
+        if not melt_quote:
+            raise TransactionError("melt quote not found")
         if not melt_quote.unpaid:
             raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
 
