@@ -827,6 +827,34 @@ class Ledger(
 
         return melt_quote
 
+    async def async_melt(
+        self,
+        *,
+        proofs: List[Proof],
+        quote: str,
+        outputs: Optional[List[BlindedMessage]] = None,
+    ) -> PostMeltQuoteResponse:
+        """Invalidates proofs and pays a Lightning invoice asynchronously.
+
+        Args:
+            proofs (List[Proof]): Proofs provided for paying the Lightning invoice
+            quote (str): ID of the melt quote.
+            outputs (Optional[List[BlindedMessage]]): Blank outputs for returning overpaid fees to the wallet.
+
+        Returns:
+            PostMeltQuoteResponse: Melt quote response with pending state.
+        """
+        # get melt quote
+        melt_quote = await self.get_melt_quote(quote_id=quote)
+        if not melt_quote.unpaid:
+            raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
+
+        # Launch actual melt task
+        asyncio.create_task(self.melt(proofs=proofs, quote=quote, outputs=outputs))
+
+        melt_quote.state = MeltQuoteState.pending
+        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+
     async def melt(
         self,
         *,
