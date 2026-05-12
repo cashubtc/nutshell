@@ -1,10 +1,11 @@
-import pytest
 import asyncio
+
 import httpx
+import pytest
+
 from cashu.core.base import MeltQuoteState
-from cashu.core.settings import settings
-from tests.helpers import pay_if_regtest, is_fake
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import is_fake, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 
