@@ -105,3 +105,19 @@ async def test_async_melt_functional(ledger, wallet):
     
     # Reset setting
     settings.fakewallet_delay_outgoing_payment = 0
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
+async def test_async_melt_nonexistent_quote(ledger, wallet):
+    # Melt with prefer_async=True and a fake quote
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": "nonexistent_quote_id",
+            "inputs": [],
+            "prefer_async": True,
+        },
+        timeout=None,
+    )
+    # Expect failure (404 or 400 is fine)
+    assert response.status_code != 200
