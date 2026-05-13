@@ -11,6 +11,13 @@ from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
+    # Per-instance override for the `input_fee_ppk` baked into newly-generated
+    # keysets. Defaults to `None` which means "use settings.mint_input_fee_ppk".
+    # Subclasses where fees don't apply (e.g. AuthLedger — auth proofs are
+    # bearer tokens, not swappable) set this to `0` so the keyset id is derived
+    # consistently with that semantic.
+    keyset_input_fee_ppk: Optional[int] = None
+
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -158,7 +165,11 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 derivation_path=derivation_path,
                 amounts=self.amounts,
                 version=version,
-                input_fee_ppk=settings.mint_input_fee_ppk,
+                input_fee_ppk=(
+                    self.keyset_input_fee_ppk
+                    if self.keyset_input_fee_ppk is not None
+                    else settings.mint_input_fee_ppk
+                ),
                 final_expiry=None,
             )
             logger.debug(f"Generated new keyset with ID '{keyset.id}'.")

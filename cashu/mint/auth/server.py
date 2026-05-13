@@ -23,6 +23,13 @@ from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
 
 class AuthLedger(Ledger):
+    # Auth proofs are amount-1 bearer auth tokens (NUT-22) — never swapped or
+    # melted. `verify_blind_auth` explicitly skips fee calculation. Force
+    # input_fee_ppk=0 on auth keyset generation so the keyset id derivation
+    # matches that semantic (and matches CDK's behaviour — see
+    # crates/cdk/src/mint/builder.rs which forces fee=0 for the Auth unit).
+    keyset_input_fee_ppk: int = 0
+
     auth_crud: AuthLedgerCrud
     jwks_url: str
     jwks_client: jwt.PyJWKClient
@@ -128,6 +135,14 @@ class AuthLedger(Ledger):
 
         return decoded
 
+    # OIDC claims (in preference order) used as the per-user identifier when
+    # tracking rate limits / last-access. `sub` is the canonical OIDC subject,
+    # but some IdPs (notably Keycloak 25+ public clients with default mappers)
+    # omit it from access tokens. Falling back to `preferred_username` and
+    # then `azp` keeps single-user-per-realm tracking working in those setups
+    # without changing the happy-path semantics for IdPs that ship `sub`.
+    _USER_ID_CLAIMS = ("sub", "preferred_username", "azp")
+
     async def _get_user(self, decoded_token: Any) -> User:
         """Get the user from the decoded token. If the user does not exist, create a new one.
 
@@ -137,7 +152,19 @@ class AuthLedger(Ledger):
         Returns:
             User: User object
         """
-        user_id = decoded_token["sub"]
+        user_id = next(
+            (
+                decoded_token[claim]
+                for claim in self._USER_ID_CLAIMS
+                if decoded_token.get(claim)
+            ),
+            None,
+        )
+        if not user_id:
+            raise Exception(
+                "Token has no usable subject claim "
+                f"(tried {', '.join(self._USER_ID_CLAIMS)})"
+            )
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")

@@ -662,7 +662,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             values,
         )
-        return [MintKeyset(**row) for row in rows]
+        return [MintKeyset.from_row(row) for row in rows]
 
     async def get_proofs_used(
         self,
