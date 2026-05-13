@@ -171,6 +171,14 @@ def is_keyset_id_v2(keyset_id: str) -> bool:
     return get_keyset_id_version(keyset_id) == '01'
 
 
+def is_bls_keyset(keyset_id: str) -> bool:
+    """Check if a keyset is BLS12-381 (version >= 02)."""
+    version = get_keyset_id_version(keyset_id)
+    if version == "base64":
+        return False
+    return int(version) >= 2
+
+
 def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
     """DEPRECATED 0.15.0: Deterministic derivation keyset_id from set of public keys.
     DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.

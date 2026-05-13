@@ -8,7 +8,9 @@ from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
 from ...core.base import Proof
-from ...core.crypto.bls import PrivateKey
+from ...core.crypto.bls import PrivateKey as BlsPrivateKey
+from ...core.crypto.keys import is_bls_keyset
+from ...core.crypto.secp import PrivateKey as SecpPrivateKey
 from ...core.db import Database
 from ..crud import get_mint_by_url, update_mint
 from ..wallet import Wallet
@@ -227,7 +229,10 @@ class WalletAuth(Wallet):
 
         amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-        rs = [PrivateKey(os.urandom(32)) for _ in amounts]
+        if is_bls_keyset(self.keyset_id):
+            rs = [BlsPrivateKey(os.urandom(32)) for _ in amounts]
+        else:
+            rs = [SecpPrivateKey(os.urandom(32)) for _ in amounts]
         derivation_paths = ["" for _ in amounts]
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
