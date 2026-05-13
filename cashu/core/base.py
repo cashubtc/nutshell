@@ -155,7 +155,7 @@ class Proof(BaseModel):
         # v3 (BLS12-381) keysets compute Y on G1; v0/v1/v2 keep secp256k1 hash-to-curve.
         # Y is used purely as a lookup index for proofs_used / checkstate / subscriptions,
         # so the wallet must compute the same hex for the same (secret, keyset_version).
-        if self.id and self.id.startswith("02"):
+        if self.id and is_bls_keyset(self.id):
             self.Y = bls_hash_to_curve(self.secret.encode("utf-8")).format().hex()
         else:
             self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
