@@ -20,6 +20,7 @@ from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.bls import PublicKey as BlsPublicKey
+from .crypto.bls_dhke import hash_to_curve as bls_hash_to_curve
 from .crypto.interfaces import PrivateKey, PublicKey
 from .crypto.keys import (
     derive_keys,
@@ -151,7 +152,13 @@ class Proof(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
+        # v3 (BLS12-381) keysets compute Y on G1; v0/v1/v2 keep secp256k1 hash-to-curve.
+        # Y is used purely as a lookup index for proofs_used / checkstate / subscriptions,
+        # so the wallet must compute the same hex for the same (secret, keyset_version).
+        if self.id and is_bls_keyset(self.id):
+            self.Y = bls_hash_to_curve(self.secret.encode("utf-8")).format().hex()
+        else:
+            self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
@@ -271,11 +278,16 @@ class BlindedSignature(BaseModel):
 
     @classmethod
     def from_row(cls, row: Row):
+        # v3 (BLS) promises store dleq_e / dleq_s as NULL because pairings replace DLEQ.
+        # Match the model's `dleq: Optional[DLEQ] = None` declaration and skip construction.
+        dleq_e = row["dleq_e"]
+        dleq_s = row["dleq_s"]
+        dleq = DLEQ(e=dleq_e, s=dleq_s) if None not in (dleq_e, dleq_s) else None
         return cls(
             id=row["id"],
             amount=row["amount"],
             C_=row["c_"],
-            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
+            dleq=dleq,
         )
 
 
