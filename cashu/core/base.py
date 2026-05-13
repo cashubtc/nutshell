@@ -282,7 +282,7 @@ class BlindedSignature(BaseModel):
         # Match the model's `dleq: Optional[DLEQ] = None` declaration and skip construction.
         dleq_e = row["dleq_e"]
         dleq_s = row["dleq_s"]
-        dleq = DLEQ(e=dleq_e, s=dleq_s) if dleq_e is not None and dleq_s is not None else None
+        dleq = DLEQ(e=dleq_e, s=dleq_s) if None not in (dleq_e, dleq_s) else None
         return cls(
             id=row["id"],
             amount=row["amount"],
