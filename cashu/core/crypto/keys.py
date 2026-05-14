@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import os
-import random
 from typing import Dict, List, Optional
 
 from bip32 import BIP32
