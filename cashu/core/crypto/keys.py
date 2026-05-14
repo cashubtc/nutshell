@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import os
 import random
 from typing import Dict, List, Optional
 
@@ -185,6 +186,4 @@ def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
 
 def random_hash() -> str:
     """Returns a base64-urlsafe encoded random hash."""
-    return base64.urlsafe_b64encode(
-        bytes([random.getrandbits(8) for i in range(30)])
-    ).decode()
+    return base64.urlsafe_b64encode(os.urandom(30)).decode()
