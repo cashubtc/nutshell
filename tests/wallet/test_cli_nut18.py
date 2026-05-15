@@ -1,7 +1,8 @@
 import pytest
 from click.testing import CliRunner
 
-from cashu.core.nuts.nut18 import NUT10Option, PaymentRequest
+from cashu.core.base import NUT10Option, PaymentRequest
+from cashu.core.nuts.nut18 import serialize
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from tests.helpers import is_fake
@@ -23,7 +24,7 @@ def test_pay_nut18_low_balance(mint, cli_prefix):
 
     # Create a request for 1337 sats (specific amount to grep)
     pr = PaymentRequest(a=1337, u="sat", d="Test Descr")
-    creq = pr.serialize()
+    creq = serialize(pr)
 
     result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
 
@@ -55,7 +56,7 @@ def test_pay_nut18_unsupported_lock(mint, cli_prefix):
 
     # Request with "HTLC" kind (unsupported by this CLI flow for now)
     pr = PaymentRequest(a=10, u="sat", nut10=NUT10Option(k="HTLC", d="hash"))
-    creq = pr.serialize()
+    creq = serialize(pr)
 
     result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
 
@@ -73,7 +74,7 @@ def test_pay_nut18_wrong_mint(mint, cli_prefix):
 
     # Request specifying a DIFFERENT mint
     pr = PaymentRequest(a=10, u="sat", m=["https://other.mint/"])
-    creq = pr.serialize()
+    creq = serialize(pr)
 
     result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
 
