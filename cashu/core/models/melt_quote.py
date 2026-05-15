@@ -55,10 +55,10 @@ class PostMeltQuoteResponse(BaseModel):
     change: Union[List[BlindedSignature], None] = None  # NUT-08 change
 
     @classmethod
-    def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
+    def from_melt_quote(cls, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
         to_dict = melt_quote.model_dump()
         # turn state into string
         to_dict["state"] = melt_quote.state.value
         # add deprecated "paid" field
         to_dict["paid"] = melt_quote.paid
-        return PostMeltQuoteResponse.model_validate(to_dict)
+        return cls.model_validate(to_dict)
