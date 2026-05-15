@@ -63,6 +63,18 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Mint quote TTL",
+        description="Time-to-live in seconds for newly created mint quotes.",
+    )
+    melt_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Melt quote TTL",
+        description="Time-to-live in seconds for newly created melt quotes.",
+    )
 
     mint_regular_tasks_interval_seconds: int = Field(
         default=3600,
