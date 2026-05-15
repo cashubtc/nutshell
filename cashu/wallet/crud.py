@@ -29,8 +29,8 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id)
-        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id)
+          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id, p2pk_e)
+        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id, :p2pk_e)
         """,
         {
             "id": proof.id,
@@ -42,6 +42,7 @@ async def store_proof(
             "dleq": json.dumps(proof.dleq.model_dump()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "p2pk_e": proof.p2pk_e,
         },
     )
 
