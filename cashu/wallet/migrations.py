@@ -334,3 +334,13 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
+
+
+async def m017_add_p2pk_e_to_proofs(db: Database):
+    """
+    Column to store the NUT-28 P2BK ephemeral pubkey (p2pk_e / E) on proofs.
+    Without this, P2BK tokens become unspendable after a wallet restart.
+    """
+    async with db.connect() as conn:
+        await conn.execute("ALTER TABLE proofs ADD COLUMN p2pk_e TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN p2pk_e TEXT")

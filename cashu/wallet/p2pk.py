@@ -19,10 +19,11 @@ from ..core.p2pk import (
     schnorr_sign,
 )
 from ..core.secret import Secret, SecretKind, Tags
+from .p2bk import WalletP2BK
 from .protocols import SupportsDb, SupportsPrivateKey
 
 
-class WalletP2PK(SupportsPrivateKey, SupportsDb):
+class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
     db: Database
     private_key: PrivateKey
     # ---------- P2PK ----------
@@ -77,6 +78,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     def signatures_proofs_sig_inputs(self, proofs: List[Proof]) -> List[str]:
         """Signs proof secrets with the private key of the wallet.
         This method is used to sign P2PK SIG_INPUTS proofs.
+        For P2BK proofs (with p2pk_e), derives the blinded private key first.
 
         Args:
             proofs (List[Proof]): Proofs to sign
@@ -94,23 +96,25 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             logger.trace(f"Signing proof: {proof}")
             logger.trace(f"Signing message: {proof.secret}")
 
-        signatures = [
-            schnorr_sign(
-                message=proof.secret.encode("utf-8"),
-                private_key=private_key,
-            ).hex()
-            for proof in proofs
-        ]
+        signatures = []
+        for proof in proofs:
+            signing_key = self._derive_p2bk_signing_key(proof) or private_key
+            signatures.append(
+                schnorr_sign(
+                    message=proof.secret.encode("utf-8"),
+                    private_key=signing_key,
+                ).hex()
+            )
         logger.debug(f"Signatures: {signatures}")
         return signatures
 
-    def schnorr_sign_message(self, message: str) -> str:
-        """Sign a message with the private key of the wallet."""
-        private_key = self.private_key
-        assert private_key.public_key
+    def schnorr_sign_message(self, message: str, signing_key: Optional[PrivateKey] = None) -> str:
+        """Sign a message with the given key or the wallet's private key."""
+        key = signing_key or self.private_key
+        assert key.public_key
         return schnorr_sign(
             message=message.encode("utf-8"),
-            private_key=private_key,
+            private_key=key,
         ).hex()
 
     def _inputs_require_sigall(self, proofs: List[Proof]) -> bool:
@@ -157,7 +161,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             message_to_sign = message_to_sign or "".join(
                 [p.secret for p in proofs] + [o.B_ for o in outputs]
             )
-            signature = self.schnorr_sign_message(message_to_sign)
+            # For P2BK proofs, use the derived blinded signing key
+            signing_key = self._derive_p2bk_signing_key(proofs[0])
+            signature = self.schnorr_sign_message(message_to_sign, signing_key)
             # add witness to only the first proof
             signed_proofs = self.add_signatures_to_proofs([proofs[0]], [signature])
             proofs[0].witness = signed_proofs[0].witness
@@ -185,6 +191,11 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # sign first proof if swap is SIG_ALL
         proofs = self.add_witness_swap_sig_all(proofs, outputs)
 
+        # p2pk_e stripped AFTER signing: add_witnesses_sig_inputs derives the
+        # blinded key via _derive_p2bk_signing_key before we clear the field.
+        for p in proofs:
+            p.p2pk_e = None
+
         return proofs
 
     def sign_proofs_inplace_melt(
@@ -196,7 +207,14 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             "".join([p.secret for p in proofs] + [o.B_ for o in outputs]) + quote_id
         )
         # sign first proof if swap is SIG_ALL
-        return self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
+        proofs = self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
+
+        # p2pk_e stripped AFTER signing: add_witnesses_sig_inputs derives the
+        # blinded key via _derive_p2bk_signing_key before we clear the field.
+        for p in proofs:
+            p.p2pk_e = None
+
+        return proofs
 
     def add_signatures_to_proofs(
         self, proofs: List[Proof], signatures: List[str]
@@ -251,12 +269,17 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return proofs
 
     def filter_proofs_locked_to_our_pubkey(self, proofs: List[Proof]) -> List[Proof]:
-        """This method assumes that secrets are all P2PK!"""
-        # filter proofs that require our pubkey
+        """Filter proofs locked to our pubkey. Handles both plain P2PK and P2BK proofs."""
         assert self.private_key.public_key
         our_pubkey = self.private_key.public_key.format().hex().lower()
         our_pubkey_proofs = []
         for p in proofs:
+            # P2BK: if p2pk_e is present, try to unblind and check
+            if p.p2pk_e:
+                if self._derive_p2bk_signing_key(p) is not None:
+                    our_pubkey_proofs.append(p)
+                continue
+            # Plain P2PK: check if our pubkey is in the secret
             secret = P2PKSecret.deserialize(p.secret)
             pubkeys = (
                 [secret.data]
@@ -290,7 +313,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 if secret.kind == SecretKind.HTLC.value and (
                     secret.tags.get_tag("pubkeys") or secret.tags.get_tag("refund")
                 ):
-                    # HTLC secret with pubkeys tag is a P2PK secret
+                    # NUT-28: P2BK is inherited here — HTLC reuses the P2PK
+                    # signature path which calls _derive_p2bk_signing_key.
+                    # No HTLC-specific P2BK handling is needed.
                     p2pk_proofs.append(p)
             except Exception:
                 pass
