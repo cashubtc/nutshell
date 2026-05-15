@@ -1,11 +1,19 @@
 import copy
 from types import SimpleNamespace
 from typing import List, Union
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintKeyset,
+    MintQuoteState,
+    Proof,
+    WalletKeyset,
+)
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -14,9 +22,9 @@ from cashu.wallet.crud import (
     get_bolt11_mint_quote,
     get_keysets,
     get_proofs,
+    store_keyset,
 )
 from cashu.wallet.wallet import Wallet
-from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
@@ -73,7 +81,7 @@ async def reset_wallet_db(wallet: Wallet):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet1(mint):
-    wallet1 = await Wallet1.with_db(
+    wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",
         name="wallet1",
@@ -599,3 +607,134 @@ async def test_raise_on_unsupported_version_non_404(wallet1: Wallet):
 
     # should not raise
     wallet1.raise_on_unsupported_version(resp, "GET /v1/keys")
+
+
+@pytest.mark.asyncio
+async def test_keyset_disappears_from_mint(wallet1: Wallet):
+    """
+    Ensure that when a mint no longer returns a previously known keyset,
+    it gets removed from the wallet's keyset list and marked as deleted in the DB.
+    """
+
+    # Save the real keyset ID that the wallet loaded from the mint
+    real_keyset_id = list(wallet1.keysets.keys())[0]
+
+    # Seed a second fake keyset in the DB so we have 2 keysets
+    fake_keyset = WalletKeyset(
+        id="fake_keyset_to_disappear",
+        unit=wallet1.unit.name,
+        mint_url=wallet1.url,
+        active=True,
+        public_keys=wallet1.keysets[real_keyset_id].public_keys,
+    )
+    await store_keyset(keyset=fake_keyset, db=wallet1.db)
+    await wallet1.load_keysets_from_db()
+
+    assert len(wallet1.keysets) == 2, "Expected 2 keysets before test"
+
+    # Mock the mint API to only return the real keyset (fake one "disappeared")
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+
+    # Load keysets from mocked mint API
+    await wallet1.load_mint_keysets()
+
+    # Assert only the real keyset remains in memory
+    assert len(wallet1.keysets) == 1
+    assert real_keyset_id in wallet1.keysets
+
+    # Assert the disappeared keyset is marked as deleted in the DB
+    disappeared_keysets_db = await get_keysets(
+        db=wallet1.db, id="fake_keyset_to_disappear"
+    )
+    assert len(disappeared_keysets_db) == 0
+    disappeared_keyset_row = await wallet1.db.fetchone(
+        "SELECT deleted_at FROM keysets WHERE id = :id",
+        {"id": "fake_keyset_to_disappear"},
+    )
+    assert disappeared_keyset_row is not None
+    assert disappeared_keyset_row["deleted_at"] is not None
+
+    # Assert the retained keyset is NOT marked as deleted
+    retained_keysets_db = await get_keysets(db=wallet1.db, id=real_keyset_id)
+    assert retained_keysets_db[0].deleted_at is None
+
+
+@pytest.mark.asyncio
+async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
+    """
+    Ensure that when a mint re-adds a previously deleted keyset, the wallet
+    restores the existing DB row instead of inserting a duplicate keyset.
+    """
+
+    real_keyset_id = list(wallet1.keysets.keys())[0]
+    fake_keyset_id = "fake_keyset_to_reappear"
+    fake_keyset = WalletKeyset(
+        id=fake_keyset_id,
+        unit=wallet1.unit.name,
+        mint_url=wallet1.url,
+        active=True,
+        public_keys=wallet1.keysets[real_keyset_id].public_keys,
+        input_fee_ppk=0,
+    )
+    await store_keyset(keyset=fake_keyset, db=wallet1.db)
+    await wallet1.load_keysets_from_db()
+    assert fake_keyset_id in wallet1.keysets
+
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+    await wallet1.load_mint_keysets()
+    assert fake_keyset_id not in wallet1.keysets
+
+    deleted_keysets = await get_keysets(
+        db=wallet1.db, id=fake_keyset_id, exclude_deleted=False
+    )
+    assert len(deleted_keysets) == 1
+    assert deleted_keysets[0].deleted_at is not None
+
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            ),
+            MintKeyset(
+                id=fake_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/1'",
+                seed="dummy2",
+                input_fee_ppk=7,
+            ),
+        ]
+    )
+    await wallet1.load_mint_keysets()
+
+    assert fake_keyset_id in wallet1.keysets
+    restored_keysets = await get_keysets(
+        db=wallet1.db, id=fake_keyset_id, exclude_deleted=False
+    )
+    assert len(restored_keysets) == 1
+    assert restored_keysets[0].deleted_at is None
+    assert restored_keysets[0].input_fee_ppk == 7
