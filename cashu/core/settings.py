@@ -319,6 +319,13 @@ class CLNRestFundingSource(MintSettings):
     mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
+class CLNRPCFundingSource(MintSettings):
+    mint_cln_rpc_socket: Optional[str] = Field(
+        default="~/.lightning/bitcoin/lightning-rpc"
+    )
+    mint_cln_rpc_enable_mpp: bool = Field(default=True)
+
+
 class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_url: Optional[str] = Field(default=None)
     mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
@@ -358,6 +365,7 @@ class Settings(
     EnvSettings,
     LndRPCFundingSource,
     LndRestFundingSource,
+    CLNRPCFundingSource,
     CoreLightningRestFundingSource,
     CLNRestFundingSource,
     FakeWalletSettings,
