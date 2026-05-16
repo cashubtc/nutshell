@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import multiprocessing
 import os
@@ -79,6 +80,47 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
+async def clear_postgres_database(db: Database, max_retries: int = 5) -> None:
+    """Clear all public tables while keeping schema objects intact.
+
+    The ``dbversions`` table is skipped so migration bookkeeping matches the
+    existing schema after TRUNCATE (otherwise migrations would re-run and fail
+    on ADD COLUMN / duplicate objects).
+    """
+    for attempt in range(max_retries):
+        try:
+            async with db.connect() as conn:
+                await conn.execute(
+                    """
+                    DO $$
+                    DECLARE
+                        truncate_stmt TEXT;
+                    BEGIN
+                        SELECT
+                            'TRUNCATE TABLE ' ||
+                            string_agg(
+                                quote_ident(schemaname) || '.' || quote_ident(tablename),
+                                ', '
+                            ) ||
+                            ' RESTART IDENTITY CASCADE'
+                        INTO truncate_stmt
+                        FROM pg_tables
+                        WHERE schemaname = 'public'
+                          AND tablename <> 'dbversions';
+
+                        IF truncate_stmt IS NOT NULL THEN
+                            EXECUTE truncate_stmt;
+                        END IF;
+                    END $$;
+                    """
+                )
+            return
+        except Exception:
+            if attempt == max_retries - 1:
+                raise
+            await asyncio.sleep(0.5 * (attempt + 1))
+
+
 # This fixture is used for all other tests
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
@@ -95,10 +137,7 @@ async def ledger():
     else:
         # clear postgres database
         db = Database("mint", settings.mint_database)
-        async with db.connect() as conn:
-            # drop all tables
-            await conn.execute("DROP SCHEMA public CASCADE;")
-            await conn.execute("CREATE SCHEMA public;")
+        await clear_postgres_database(db)
         await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
@@ -124,7 +163,6 @@ async def ledger():
     )
     ledger = await start_mint_init(ledger)
     yield ledger
-    print("teardown")
     await ledger.shutdown_ledger()
 
 
