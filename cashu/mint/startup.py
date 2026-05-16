@@ -47,6 +47,14 @@ for key, value in settings.dict().items():
 
     logger.debug(f"{key}: {value}")
 
+if settings.mint_rate_limit_proxy_trust:
+    logger.warning(
+        "WARNING: mint_rate_limit_proxy_trust is enabled! "
+        "Ensure your mint is behind a reverse proxy (like Nginx, Caddy, or Cloudflare). "
+        "If it is exposed directly to the internet, clients can bypass rate limits "
+        "by spoofing the X-Forwarded-For or CF-Connecting-IP headers."
+    )
+
 wallets_module = importlib.import_module("cashu.lightning")
 
 backends: Dict[Method, Dict[Unit, LightningBackend]] = {}
