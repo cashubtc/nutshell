@@ -251,7 +251,7 @@ async def test_htlc_redeem_with_2_of_2_signatures_with_duplicate_pubkeys(
 
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: pubkeys must be unique.",
+        "Mint Error: not enough pubkeys (1) or signatures (2) present for n_sigs (2).",
     )
 
 
