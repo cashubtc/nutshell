@@ -580,3 +580,31 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
 
     # Should succeed with 2 of 3 signatures after locktime
     await wallet1.redeem(send_proofs_copy2)
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_with_automatic_signature(wallet1: Wallet, wallet2: Wallet):
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage, hashlock_pubkeys=[pubkey_wallet1]
+    )
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
+
+    # manually set the preimage on each proof's witness
+    for p in send_proofs:
+        p.witness = HTLCWitness(preimage=preimage).model_dump_json()
+
+    # let the wallet automatically add the signature
+    send_proofs = wallet1.sign_proofs_inplace_swap(send_proofs, [])
+
+    # ensure the signer appended HTLC signatures without clobbering the preimage
+    for p in send_proofs:
+        witness = HTLCWitness.from_witness(p.witness)
+        assert witness.preimage == preimage
+        assert witness.signatures
+
+    await wallet1.redeem(send_proofs)
