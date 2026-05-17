@@ -436,13 +436,12 @@ class BlinkWallet(LightningBackend):
         # if there are two payments with the same hash with "direction" == "SEND" and "RECEIVE"
         # it means that the payment previously failed and we can ignore the attempt and return
         # PaymentStatus(status=FAILED)
-        if len(all_payments_with_this_hash) == 2 and all(
-            p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]  # type: ignore
-            for p in all_payments_with_this_hash
-        ):
-            return PaymentStatus(
-                result=PaymentResult.FAILED, error_message="Payment failed"
-            )
+        if len(all_payments_with_this_hash) == 2:
+            directions = [p.get("direction") for p in all_payments_with_this_hash]
+            if DIRECTION_SEND in directions and DIRECTION_RECEIVE in directions:
+                return PaymentStatus(
+                    result=PaymentResult.FAILED, error_message="Payment failed"
+                )
 
         # if there is only one payment with the same hash, it means that the payment might have succeeded
         # we only care about the payment with "direction" == "SEND"
