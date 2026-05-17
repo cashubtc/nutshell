@@ -143,6 +143,35 @@ async def test_blink_pay_invoice_failure():
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_blink_pay_invoice_pending():
+    mock_response = {
+        "data": {
+            "lnInvoicePaymentSend": {
+                "status": "PENDING",
+            }
+        }
+    }
+    respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
+    quote = MeltQuote(
+        request=payment_request,
+        quote="asd",
+        method="bolt11",
+        checking_id=payment_request,
+        unit="sat",
+        amount=100,
+        fee_reserve=12,
+        state=MeltQuoteState.unpaid,
+    )
+    payment = await blink.pay_invoice(quote, 1000)
+    assert not payment.settled
+    assert payment.result.name == "PENDING"
+    assert payment.fee is None
+    assert payment.error_message is None
+    assert payment.checking_id == payment_request
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_blink_get_invoice_status():
     mock_response = {
         "data": {
