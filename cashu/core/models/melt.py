@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +18,7 @@ class PostMeltRequest(BaseModel):
     outputs: Union[List[BlindedMessage], None] = Field(
         None, max_length=settings.mint_max_request_length
     )
+    prefer_async: Optional[bool] = None
 
 
 class PostMeltResponse_deprecated(BaseModel):

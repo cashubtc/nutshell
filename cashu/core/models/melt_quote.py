@@ -20,6 +20,7 @@ class PostMeltQuoteRequest(BaseModel):
         ..., max_length=MAX_PAYMENT_REQUEST_LEN
     )  # output payment request
     options: Optional[PostMeltRequestOptions] = None
+    prefer_async: bool = False
 
     @property
     def is_mpp(self) -> bool:
