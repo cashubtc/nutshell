@@ -218,3 +218,19 @@ def test_nut26_spec_example_full_round_trip():
     assert decoded.s == pr.s
     assert decoded.m == pr.m
     assert decoded.d == pr.d
+
+
+def test_deserialize_malformed_tag4_empty():
+    """Crafted invoice where tag 4 has empty value."""
+    # This should trigger the new validation check for empty single-use tag length
+    token = "CREQB1QSQQQDTFLFU"
+    with pytest.raises(ValueError, match="Invalid single use length"):
+        deserialize(token)
+
+
+def test_deserialize_malformed_short_amount():
+    """Crafted invoice where amount tag has wrong length."""
+    # This should trigger the new validation check for amount length
+    token = "CREQB1QGQQYQGZSWP0M3"
+    with pytest.raises(ValueError, match="Invalid amount length"):
+        deserialize(token)
