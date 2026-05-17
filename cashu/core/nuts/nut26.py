@@ -282,9 +282,13 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
     transports: List[Transport] = []
 
     for tag, val in entries:
+        if len(val) == 0 and tag in (0x01,):
+            raise ValueError("Empty value for transport tag")
         if tag == 0x01:
             kwargs["i"] = val.decode()
         elif tag == 0x02:
+            if len(val) != 8:
+                raise ValueError("Invalid amount length")
             kwargs["a"] = struct.unpack(">Q", val)[0]
         elif tag == 0x03:
             if len(val) == 1 and val[0] == 0x00:
@@ -292,6 +296,8 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
             else:
                 kwargs["u"] = val.decode()
         elif tag == 0x04:
+            if len(val) == 0:
+                raise ValueError("Invalid single use length")
             kwargs["s"] = val[0] == 1
         elif tag == 0x05:
             mints.append(val.decode())

@@ -294,6 +294,14 @@ async def pay(
             print("Error: Amount not specified in payment request.")
             return
 
+        if not yes and not ctx.obj.get("YES"):
+            message = f"Pay {wallet.unit.str(amount_to_pay)}?"
+            click.confirm(
+                message,
+                abort=True,
+                default=True,
+            )
+
         lock = ""
         if pr.nut10:
             # Robust check for lock kind
