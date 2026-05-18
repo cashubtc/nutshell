@@ -33,7 +33,7 @@ from cashu.core.errors import (
     WitnessTooLongError,
 )
 from cashu.core.nuts import nut20
-from cashu.core.p2pk import SigFlags, schnorr_sign
+from cashu.core.p2pk import SigFlags, schnorr_sign, sig_all_swap_message
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -640,7 +640,7 @@ async def test_verify_inputs_and_outputs_happy_path_outputs_only_phase(ledger: L
 # ---------------------------------------------------------------------------
 
 
-def test_witness_without_spending_condition(ledger: Ledger):
+def test_witness_without_spending_condition_is_ignored(ledger: Ledger):
     proof = Proof.from_dict(
         {
             "amount": 8,
@@ -651,8 +651,7 @@ def test_witness_without_spending_condition(ledger: Ledger):
         }
     )
 
-    with pytest.raises(TransactionError, match="witness data not allowed"):
-        ledger._verify_input_spending_conditions(proof)
+    assert ledger._verify_input_spending_conditions(proof)
 
 
 # =============================================================================
@@ -725,7 +724,7 @@ async def test_verify_inputs_witness_too_long_raises(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_verify_inputs_witness_on_plain_secret_raises(ledger: Ledger):
+async def test_verify_inputs_witness_on_plain_secret_is_ignored(ledger: Ledger):
     p = _proof_plain(ledger, secret="not-a-cbor-secret")
     p.witness = "{}"
     with (
@@ -736,8 +735,7 @@ async def test_verify_inputs_witness_on_plain_secret_raises(ledger: Ledger):
             AsyncMock(return_value=True),
         ),
     ):
-        with pytest.raises(TransactionError, match="witness data not allowed"):
-            await ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
 
 
 @pytest.mark.asyncio
@@ -968,7 +966,7 @@ def test_together_fails_sig_all_secrets_not_equal(ledger: Ledger):
         _blinded_output(ledger, amount=p1.amount + p2.amount - fee, label="sigall-bad")
     ]
     with pytest.raises(TransactionError, match="not all secrets are equal"):
-        ledger._verify_inputs_and_outputs_together([p1, p2], outs)
+        ledger._verify_input_output_spending_conditions([p1, p2], outs)
 
 
 def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
@@ -987,7 +985,7 @@ def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
     outs = [_blinded_output(ledger, amount=p.amount - fee, label="sigall-bad-sig")]
     p.witness = P2PKWitness(signatures=["00" * 64]).model_dump_json()
     with pytest.raises(TransactionError, match="signature threshold not met"):
-        ledger._verify_inputs_and_outputs_together([p], outs)
+        ledger._verify_input_output_spending_conditions([p], outs)
 
 
 def test_together_sig_all_succeeds_when_signed(ledger: Ledger):
@@ -1004,10 +1002,10 @@ def test_together_sig_all_succeeds_when_signed(ledger: Ledger):
     )
     fee = ledger.get_fees_for_proofs([p])
     outs = [_blinded_output(ledger, amount=p.amount - fee, label="sigall-ok")]
-    msg = "".join([p.secret] + [o.B_ for o in outs])
+    msg = sig_all_swap_message([p], outs)
     sig = schnorr_sign(msg.encode("utf-8"), signer).hex()
     p.witness = P2PKWitness(signatures=[sig]).model_dump_json()
-    ledger._verify_inputs_and_outputs_together([p], outs)
+    ledger._verify_input_output_spending_conditions([p], outs)
 
 
 # --- verify_inputs_and_outputs: orchestration & error propagation ---

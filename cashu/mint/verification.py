@@ -45,6 +45,7 @@ class LedgerVerification(
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]] = None,
         conn: Optional[Connection] = None,
+        skip_input_spending_conditions: bool = False,
     ):
         """Checks all proofs and outputs for validity.
 
@@ -61,7 +62,10 @@ class LedgerVerification(
             Exception: BDHKE verification failed.
         """
         # 1. Verify inputs
-        await self._verify_inputs(proofs)
+        await self._verify_inputs(
+            proofs,
+            skip_input_spending_conditions=skip_input_spending_conditions,
+        )
 
         # If no outputs are provided, no further checks are needed
         if outputs is None:
@@ -76,6 +80,7 @@ class LedgerVerification(
     async def _verify_inputs(
         self,
         proofs: List[Proof],
+        skip_input_spending_conditions: bool = False,
     ):
         """Verify that the proofs are valid and can be spent."""
         logger.trace(f"Verifying {len(proofs)} proofs.")
@@ -96,8 +101,11 @@ class LedgerVerification(
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise InvalidProofsError()
-        # Verify SIG_INPUTS spending conditions
-        if not all([self._verify_input_spending_conditions(p) for p in proofs]):
+        # Verify spending conditions unless they were already checked at the
+        # transaction level by the caller.
+        if not skip_input_spending_conditions and not all(
+            [self._verify_input_spending_conditions(p) for p in proofs]
+        ):
             raise TransactionError("validation of input spending conditions failed.")
         # Verify proofs are not already spent (raises ProofsAlreadySpentError)
         await self.db_read._verify_proofs_spendable(proofs)
@@ -175,9 +183,6 @@ class LedgerVerification(
 
         # Verify that input keyset units are the same as output keyset unit
         self._verify_units_match(proofs, outputs)
-
-        # Verify SIG_ALL spending conditions
-        self._verify_input_output_spending_conditions(proofs, outputs)
 
     async def _check_outputs_pending_or_issued_before(
         self,

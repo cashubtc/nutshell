@@ -6,7 +6,7 @@ from .secret import Secret, SecretKind
 # HTLCSecret inherits properties from P2PKSecret
 class HTLCSecret(P2PKSecret, Secret):
     @classmethod
-    def from_secret(cls, secret: Secret):
+    def from_secret(cls, secret: Secret) -> "HTLCSecret":
         if SecretKind(secret.kind) != SecretKind.HTLC:
             raise InvalidProofsError("Secret is not an HTLC secret")
 

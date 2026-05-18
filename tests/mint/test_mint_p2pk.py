@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import P2PKWitness
+from cashu.core.p2pk import sig_all_swap_message
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
@@ -60,15 +61,17 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
         wallet1.proofs, 16, secret_lock=secret_lock_all
     )
 
-    # Test that _inputs_require_sigall correctly detects SIG_ALL flag
-    assert not ledger._inputs_require_sigall(
+    # Test that the mint-side SIG_ALL detector correctly detects SIG_ALL.
+    assert not ledger._at_least_one_proof_has_sig_all(
         send_proofs_inputs
     ), "Should not detect SIG_ALL"
-    assert ledger._inputs_require_sigall(send_proofs_all), "Should detect SIG_ALL"
+    assert ledger._at_least_one_proof_has_sig_all(
+        send_proofs_all
+    ), "Should detect SIG_ALL"
 
     # Test with a mixed list of proofs (should detect SIG_ALL if any proof has it)
     mixed_proofs = send_proofs_inputs + send_proofs_all
-    assert ledger._inputs_require_sigall(
+    assert ledger._at_least_one_proof_has_sig_all(
         mixed_proofs
     ), "Should detect SIG_ALL in mixed list"
 
@@ -192,7 +195,7 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     # Create the message to sign (all inputs + all outputs)
-    message_to_sign = "".join([p.secret for p in send_proofs] + [o.B_ for o in outputs])
+    message_to_sign = sig_all_swap_message(send_proofs, outputs)
 
     # Sign the message with the wallet's private key
     signature = wallet1.schnorr_sign_message(message_to_sign)
@@ -274,7 +277,7 @@ async def test_ledger_swap_p2pk_without_signature(wallet1: Wallet1, ledger: Ledg
     # Attempt to swap WITHOUT adding signatures - this should fail
     await assert_err(
         ledger.swap(proofs=send_proofs, outputs=outputs),
-        "Witness is missing for p2pk signature",
+        "no signatures in proof",
     )
 
 

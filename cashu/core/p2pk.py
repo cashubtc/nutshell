@@ -1,9 +1,10 @@
 import hashlib
 from enum import Enum
-from typing import Union
+from typing import List, Union
 
 from coincurve import PublicKeyXOnly
 
+from .base import BlindedMessage, Proof
 from .crypto.secp import PrivateKey, PublicKey
 from .errors import InvalidProofsError
 from .secret import Secret, SecretKind
@@ -18,7 +19,7 @@ class SigFlags(Enum):
 
 class P2PKSecret(Secret):
     @classmethod
-    def from_secret(cls, secret: Secret):
+    def from_secret(cls, secret: Secret) -> "P2PKSecret":
         if SecretKind(secret.kind) != SecretKind.P2PK:
             raise InvalidProofsError("Secret is not a P2PK secret")
         if secret.tags.get_tag("sigflag") and secret.tags.get_tag("sigflag") not in [
@@ -67,3 +68,23 @@ def verify_schnorr_signature(
         signature,
         hashlib.sha256(message).digest(),
     )
+
+
+def sig_all_swap_message(proofs: List[Proof], outputs: List[BlindedMessage]) -> str:
+    message = ""
+
+    for proof in proofs:
+        message += proof.secret
+        message += proof.C
+
+    for output in outputs:
+        message += str(output.amount)
+        message += output.B_
+
+    return message
+
+
+def sig_all_melt_message(
+    proofs: List[Proof], outputs: List[BlindedMessage], quote: str
+) -> str:
+    return sig_all_swap_message(proofs, outputs) + quote
