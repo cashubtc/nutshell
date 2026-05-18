@@ -621,7 +621,7 @@ class Ledger(
                 quote_ids=payload.quotes, state=MintQuoteState.issued
             )
 
-        except Exception as e:
+        except BaseException as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
                 quote_ids=payload.quotes, state=MintQuoteState.paid
