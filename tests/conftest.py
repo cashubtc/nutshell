@@ -84,7 +84,8 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
-        await ledger.startup_ledger()
+        await ledger._startup_keysets()
+        await ledger._check_backends()
         return ledger
 
     if not settings.mint_database.startswith("postgres"):
