@@ -160,8 +160,7 @@ def derive_dleq_nonce(
         r = x - SECP256K1_N if x >= SECP256K1_N else x
         if r != 0:
             return PrivateKey(r.to_bytes(32, "big"))
-    # Practically unreachable
-    raise ValueError("DLEQ nonce derivation failed")
+    raise ValueError("DLEQ nonce derivation failed")  # pragma: no cover
 
 
 def step2_bob_dleq(
