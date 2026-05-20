@@ -148,7 +148,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
         True if the keyset ID is base64 format, False otherwise
     """
     # If it starts with a known version prefix, it's not base64
-    if keyset_id.startswith("00") or keyset_id.startswith("01"):
+    if keyset_id.startswith("00") or keyset_id.startswith("01") or keyset_id.startswith("02"):
         return False
     
     # Try to decode as base64 to confirm
