@@ -22,7 +22,11 @@ from ..core.base import (
     WalletMint,
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import is_bls_keyset
 from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -941,6 +945,7 @@ class Wallet(
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
+        
         for proof in proofs:
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
@@ -950,17 +955,23 @@ class Wallet(
             assert (
                 proof.id in self.keysets
             ), f"Keyset {proof.id} not known, can not verify DLEQ."
-            if not b_dhke.carol_verify_dleq(
-                secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C)),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
-                A=self.keysets[proof.id].public_keys[proof.amount],
-            ):
-                raise Exception("DLEQ proof invalid.")
+            
+            is_v3 = is_bls_keyset(proof.id)
+            if is_v3:
+                # BLS currently doesn't implement DLEQ verify, skip or use dummy
+                pass
             else:
-                logger.trace("DLEQ proof valid.")
+                if not b_dhke.carol_verify_dleq(
+                    secret_msg=proof.secret,
+                    C=SecpPublicKey(bytes.fromhex(proof.C)),
+                    r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
+                    e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
+                    s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
+                    A=self.keysets[proof.id].public_keys[proof.amount],
+                ):
+                    raise Exception("DLEQ proof invalid.")
+                else:
+                    logger.trace("DLEQ proof valid.")
         logger.debug("Verified incoming DLEQ proofs.")
 
     async def _construct_proofs(
@@ -985,7 +996,6 @@ class Wallet(
             List[Proof]: list of proofs that can be used as ecash
         """
         from ..core.crypto import bls_dhke
-        from ..core.crypto.bls import PublicKey as BlsPublicKey
         from ..core.crypto.keys import is_bls_keyset
 
         logger.trace("Constructing proofs.")

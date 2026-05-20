@@ -775,7 +775,7 @@ class WalletKeyset:
             pub_keys = {}
             for amount, hex_key in dict(json.loads(serialized)).items():
                 if is_v3:
-                    pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key))
+                    pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key), group="G2")
                 else:
                     pub_keys[int(amount)] = SecpPublicKey(bytes.fromhex(hex_key))
             return pub_keys
