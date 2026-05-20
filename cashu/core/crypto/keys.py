@@ -4,6 +4,7 @@ import os
 from typing import Dict, List, Optional
 
 from bip32 import BIP32
+from loguru import logger
 
 from .bls import PrivateKey as BlsPrivateKey
 from .bls import PublicKey as BlsPublicKey
@@ -241,4 +242,6 @@ def derive_keyset_id_v3(
     if final_expiry is not None:
         keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
     hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()
-    return f"02{hash_digest}"
+    keyset_id = f"02{hash_digest}"
+    logger.trace(f"Derived v3 keyset_id: {keyset_id} from {len(keys)} keys")
+    return keyset_id
