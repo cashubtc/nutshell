@@ -354,7 +354,9 @@ class Ledger(
         request = invoice_response.payment_request.lower()
 
         expiry = None
-        if invoice_obj.expiry is not None:
+        if settings.mint_quote_ttl is not None:
+            expiry = int(time.time()) + settings.mint_quote_ttl
+        elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MintQuote(
@@ -763,7 +765,9 @@ class Ledger(
             raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
-        if invoice_obj.expiry is not None:
+        if settings.melt_quote_ttl is not None:
+            expiry = int(time.time()) + settings.melt_quote_ttl
+        elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(
@@ -969,6 +973,36 @@ class Ledger(
         await self.events.submit(mint_quote)
 
         return melt_quote
+
+    async def async_melt(
+        self,
+        *,
+        proofs: List[Proof],
+        quote: str,
+        outputs: Optional[List[BlindedMessage]] = None,
+    ) -> PostMeltQuoteResponse:
+        """Invalidates proofs and pays a Lightning invoice asynchronously.
+
+        Args:
+            proofs (List[Proof]): Proofs provided for paying the Lightning invoice
+            quote (str): ID of the melt quote.
+            outputs (Optional[List[BlindedMessage]]): Blank outputs for returning overpaid fees to the wallet.
+
+        Returns:
+            PostMeltQuoteResponse: Melt quote response with pending state.
+        """
+        # get melt quote
+        melt_quote = await self.get_melt_quote(quote_id=quote)
+        if not melt_quote:
+            raise TransactionError("melt quote not found")
+        if not melt_quote.unpaid:
+            raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
+
+        # Launch actual melt task
+        asyncio.create_task(self.melt(proofs=proofs, quote=quote, outputs=outputs))
+
+        melt_quote.state = MeltQuoteState.pending
+        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
     async def melt(
         self,
