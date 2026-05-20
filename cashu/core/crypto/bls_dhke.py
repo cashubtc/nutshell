@@ -76,9 +76,9 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
 
-    p1 = pyblst.miller_loop(C.point, g2_point)
+    p1 = pyblst.miller_loop(-C.point, g2_point)
     p2 = pyblst.miller_loop(Y.point, K2.point)
-    return pyblst.final_verify(p1, p2)
+    return pyblst.final_verify(p1 * p2, pyblst.BlstFP12Element())
 
 def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
     """
@@ -100,7 +100,6 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
         
     _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
-    left_miller = pyblst.miller_loop(sum_C, g2_point)
     
     # Right side: prod(e(sum(r_i * Y_i), K2_j)) grouped by unique K2
     # Group the Y points by their corresponding K2 point
@@ -115,15 +114,11 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
             grouped_Ys[k2_hex]["sum_y"] = grouped_Ys[k2_hex]["sum_y"] + y_r
             
     # Now compute the pairings for each unique K2
-    right_miller = None
+    miller = pyblst.miller_loop(-sum_C, g2_point)
     for group in grouped_Ys.values():
-        miller = pyblst.miller_loop(group["sum_y"], group["k2"])
-        if right_miller is None:
-            right_miller = miller
-        else:
-            right_miller = right_miller * miller
+        miller = miller * pyblst.miller_loop(group["sum_y"], group["k2"])
         
-    return pyblst.final_verify(left_miller, right_miller)
+    return pyblst.final_verify(miller, pyblst.BlstFP12Element())
 
 def hash_e(*publickeys: PublicKey) -> bytes:
     """Dummy for backwards compatibility"""
