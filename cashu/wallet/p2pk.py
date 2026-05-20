@@ -336,6 +336,4 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                     signed_proofs_secrets.index(p.secret)
                 ]
 
-        # TODO: Sign HTLCs that require signatures as well
-
         return proofs
