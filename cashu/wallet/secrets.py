@@ -191,6 +191,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
         r = hmac.new(self.seed, base + b"\x01", hashlib.sha256).digest()
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
+        logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
     async def generate_n_secrets(

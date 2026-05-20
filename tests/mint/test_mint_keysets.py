@@ -1,9 +1,11 @@
 import pytest
 
 from cashu.core.base import MintKeyset, Unit
+from cashu.core.crypto.bls import PublicKey as BlsPublicKey
 from cashu.core.crypto.keys import (
     derive_keyset_id,
     derive_keyset_id_v2,
+    derive_keyset_id_v3,
     derive_keyset_short_id,
     get_keyset_id_version,
     is_keyset_id_v2,
@@ -527,9 +529,6 @@ async def test_keyset_id_v3_test_vectors():
     Test vectors for v3 keyset ID derivation from NUT-02.
     Source: https://github.com/cashubtc/nuts/blob/master/tests/02-tests.md
     """
-    from cashu.core.crypto.bls import PublicKey as BlsPublicKey
-    from cashu.core.crypto.keys import derive_keyset_id_v3
-
     # V3 Vector 1: Small keyset
     keys_v3_vec1 = {
         1: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),

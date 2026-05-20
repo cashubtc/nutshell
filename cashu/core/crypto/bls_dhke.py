@@ -3,8 +3,9 @@ import os
 from typing import Optional, Tuple
 
 import pyblst
+from loguru import logger
 
-from .bls import PrivateKey, PublicKey
+from .bls import PrivateKey, PublicKey, curve_order
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
@@ -38,6 +39,7 @@ def step1_alice(
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y * r
+    logger.trace(f"BLS step1: secret='{secret_msg}' -> Y={Y.format().hex()} B_={B_.format().hex()} r={r.to_hex()}")
     return B_, r
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
@@ -46,6 +48,7 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
     Returns C' and dummy DLEQ values since BLS12-381 pairings make DLEQ proofs redundant.
     """
     C_: PublicKey = B_ * a
+    logger.trace(f"BLS step2: B_={B_.format().hex()} a={a.to_hex()} C_={C_.format().hex()}")
     # Return dummy private keys for backwards compatibility with DLEQ logic elsewhere
     return C_, PrivateKey(scalar=1), PrivateKey(scalar=1)
 
@@ -53,9 +56,9 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
     """
     Alice unblinds the signature: C = C' * (1/r)
     """
-    from .bls import curve_order
     r_inv = mod_inverse(r.scalar, curve_order)
     C: PublicKey = C_ * r_inv
+    logger.trace(f"BLS step3: C_={C_.format().hex()} C={C.format().hex()} r={r.to_hex()}")
     return C
 
 def keyed_verification(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
