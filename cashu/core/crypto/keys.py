@@ -154,7 +154,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
         return False
 
     # If it starts with a known version prefix, it's not Base64.
-    if keyset_id.startswith(("00", "01")):
+    if keyset_id.startswith(("00", "01", "02")):
         return False
 
     # Use b64decode with URL-safe alternative characters instead of
