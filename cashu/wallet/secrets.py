@@ -8,7 +8,8 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
-from ..core.crypto.keys import get_keyset_id_version
+from ..core.crypto.bls import PrivateKey as BlsPrivateKey
+from ..core.crypto.keys import get_keyset_id_version, is_bls_keyset
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
@@ -127,10 +128,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         if version == "base64" or version == "00":
             # BIP32 derivation for base64 (ancient) and version 00 keysets
             return await self._derive_secret_bip32(counter, keyset_id)
-        elif version == "01":
-            # HMAC-SHA256 derivation for version 01 keysets (per NUT-13 test vectors)
+        elif version == "01" or version == "02":
+            # HMAC-SHA256 derivation for version 01 and 02 keysets (per NUT-13 test vectors)
             return await self._derive_secret_hmac_sha256(counter, keyset_id)
         else:
+            try:
+                if int(version) >= 2:
+                    return await self._derive_secret_hmac_sha256(counter, keyset_id)
+            except ValueError:
+                pass
             raise ValueError(f"Unsupported keyset version: {version}")
 
     async def _derive_secret_bip32(
@@ -222,9 +228,14 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             # secrets are supplied as str
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
-            rs = [
-                PrivateKey(s[1]) for s in secrets_rs_derivationpaths
-            ]
+            if is_bls_keyset(self.keyset_id):
+                rs = [
+                    BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ]
+            else:
+                rs = [
+                    PrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
 
@@ -257,7 +268,10 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
-        rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+        if is_bls_keyset(keyset_id or self.keyset_id):
+            rs = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+        else:
+            rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
         return secrets, rs, derivation_paths
 
