@@ -3,9 +3,8 @@ import os
 from typing import Optional, Tuple
 
 import pyblst
-from loguru import logger
 
-from .bls import PrivateKey, PublicKey, curve_order
+from .bls import PrivateKey, PublicKey
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
@@ -39,7 +38,6 @@ def step1_alice(
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y * r
-    logger.trace(f"BLS step1: secret='{secret_msg}' -> Y={Y.format().hex()} B_={B_.format().hex()} r={r.to_hex()}")
     return B_, r
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
@@ -48,7 +46,6 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
     Returns C' and dummy DLEQ values since BLS12-381 pairings make DLEQ proofs redundant.
     """
     C_: PublicKey = B_ * a
-    logger.trace(f"BLS step2: B_={B_.format().hex()} a={a.to_hex()} C_={C_.format().hex()}")
     # Return dummy private keys for backwards compatibility with DLEQ logic elsewhere
     return C_, PrivateKey(scalar=1), PrivateKey(scalar=1)
 
@@ -56,9 +53,9 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
     """
     Alice unblinds the signature: C = C' * (1/r)
     """
+    from .bls import curve_order
     r_inv = mod_inverse(r.scalar, curve_order)
     C: PublicKey = C_ * r_inv
-    logger.trace(f"BLS step3: C_={C_.format().hex()} C={C.format().hex()} r={r.to_hex()}")
     return C
 
 def keyed_verification(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
@@ -79,9 +76,9 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
 
-    p1 = pyblst.miller_loop(-C.point, g2_point)
+    p1 = pyblst.miller_loop(C.point, g2_point)
     p2 = pyblst.miller_loop(Y.point, K2.point)
-    return pyblst.final_verify(p1 * p2, pyblst.BlstFP12Element())
+    return pyblst.final_verify(p1, p2)
 
 def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
     """
@@ -103,6 +100,7 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
         
     _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
+    left_miller = pyblst.miller_loop(sum_C, g2_point)
     
     # Right side: prod(e(sum(r_i * Y_i), K2_j)) grouped by unique K2
     # Group the Y points by their corresponding K2 point
@@ -117,11 +115,15 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
             grouped_Ys[k2_hex]["sum_y"] = grouped_Ys[k2_hex]["sum_y"] + y_r
             
     # Now compute the pairings for each unique K2
-    miller = pyblst.miller_loop(-sum_C, g2_point)
+    right_miller = None
     for group in grouped_Ys.values():
-        miller = miller * pyblst.miller_loop(group["sum_y"], group["k2"])
+        miller = pyblst.miller_loop(group["sum_y"], group["k2"])
+        if right_miller is None:
+            right_miller = miller
+        else:
+            right_miller = right_miller * miller
         
-    return pyblst.final_verify(miller, pyblst.BlstFP12Element())
+    return pyblst.final_verify(left_miller, right_miller)
 
 def hash_e(*publickeys: PublicKey) -> bytes:
     """Dummy for backwards compatibility"""
