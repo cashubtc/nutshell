@@ -256,7 +256,7 @@ async def test_keyset_id_v2_error_cases():
         get_keyset_id_version("x")  # Too short
     
     with pytest.raises(ValueError):
-        derive_keyset_short_id("02invalid")  # Invalid version
+        derive_keyset_short_id("xxinvalid")  # Invalid version
     
     # Test with None keys should work (just empty dict)
     empty_id = derive_keyset_id_v2({}, Unit.sat)
@@ -520,3 +520,32 @@ async def test_keyset_id_v2_test_vectors():
     assert get_keyset_id_version(keyset_id_v2_vec1) == "01", "Vector 1 should be version 01"
     assert get_keyset_id_version(keyset_id_v2_vec2) == "01", "Vector 2 should be version 01"
     assert get_keyset_id_version(keyset_id_v2_vec3) == "01", "Vector 3 should be version 01"
+
+@pytest.mark.asyncio
+async def test_keyset_id_v3_test_vectors():
+    """
+    Test vectors for v3 keyset ID derivation from NUT-02.
+    Source: https://github.com/cashubtc/nuts/blob/master/tests/02-tests.md
+    """
+    from cashu.core.crypto.bls import PublicKey as BlsPublicKey
+    from cashu.core.crypto.keys import derive_keyset_id_v3
+
+    # V3 Vector 1: Small keyset
+    keys_v3_vec1 = {
+        1: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+        2: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+    }
+    keyset_id_v3_vec1 = derive_keyset_id_v3(keys_v3_vec1, Unit.sat)
+    assert keyset_id_v3_vec1 == "02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d", \
+        "V3 vector 1 keyset ID mismatch"
+
+    # V3 Vector 2
+    keys_v3_vec2 = {
+        1: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+        2: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+        4: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+        8: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+    }
+    keyset_id_v3_vec2 = derive_keyset_id_v3(keys_v3_vec2, Unit.sat, 2000000000, 100)
+    assert keyset_id_v3_vec2 == "02b532391cadf8c5d98bf0ff05b85e3cfb76a8175d71822140df3396c20cf40588", \
+        "V3 vector 2 keyset ID mismatch"
