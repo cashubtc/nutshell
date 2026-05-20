@@ -1,6 +1,6 @@
 # Maximum lengths for Pydantic string fields
 MAX_UNIT_LEN = 64
-MAX_PUBKEY_LEN = 66
+MAX_PUBKEY_LEN = 96
 MAX_SIG_LEN = 130
 MAX_QUOTE_ID_LEN = 256
 MAX_INVOICE_DESC_LEN = 1024
