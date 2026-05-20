@@ -828,7 +828,12 @@ class Wallet(
         return melt_quote
 
     async def melt(
-        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
+        self,
+        proofs: List[Proof],
+        invoice: str,
+        fee_reserve_sat: int,
+        quote_id: str,
+        prefer_async: Optional[bool] = None,
     ) -> PostMeltQuoteResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
@@ -836,7 +841,7 @@ class Wallet(
             proofs (List[Proof]): List of proofs to be spent.
             invoice (str): Lightning invoice to be paid.
             fee_reserve_sat (int): Amount of fees to be reserved for the payment.
-
+            prefer_async (Optional[bool]): Whether to pay asynchronously.
         """
 
         # Make sure we're operating on an independent copy of proofs
@@ -858,7 +863,9 @@ class Wallet(
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
         try:
-            melt_quote_resp = await super().melt(quote_id, proofs, change_outputs)
+            melt_quote_resp = await super().melt(
+                quote_id, proofs, change_outputs, prefer_async=prefer_async
+            )
         except Exception as e:
             logger.debug(f"Mint error: {e}")
             # remove the melt_id in proofs and set reserved to False

@@ -1,3 +1,4 @@
+import time
 from typing import List
 
 import pytest
@@ -363,3 +364,34 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
         )
     assert len(rows) == n_blank
     assert all(row["c_"] is None for row in rows)
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
+    ttl = 900  # 15 minutes
+    settings.mint_quote_ttl = ttl
+    try:
+        before = int(time.time())
+        quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+        after = int(time.time())
+        assert quote.expiry is not None
+        assert before + ttl <= quote.expiry <= after + ttl
+    finally:
+        settings.mint_quote_ttl = None
+
+
+@pytest.mark.asyncio
+async def test_melt_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
+    ttl = 600  # 10 minutes
+    settings.melt_quote_ttl = ttl
+    try:
+        mint_quote = await ledger.mint_quote(PostMintQuoteRequest(amount=64, unit="sat"))
+        before = int(time.time())
+        melt_quote = await ledger.melt_quote(
+            PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+        )
+        after = int(time.time())
+        assert melt_quote.expiry is not None
+        assert before + ttl <= melt_quote.expiry <= after + ttl
+    finally:
+        settings.melt_quote_ttl = None

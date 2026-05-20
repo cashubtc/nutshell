@@ -187,8 +187,9 @@ class LedgerEventClientManager:
         for f in filters:
             logger.debug(f"Adding subscription {subId} for filter {f}")
             self.subscriptions[kind].setdefault(f, []).append(subId)
-            # Initialize the subscription
-            asyncio.create_task(self._init_subscription(subId, f, kind))
+            
+        # Initialize the subscriptions in batch
+        asyncio.create_task(self._init_subscriptions(subId, filters, kind))
 
     def remove_subscription(self, subId: str) -> None:
         for kind, sub_filters in self.subscriptions.items():
@@ -211,22 +212,29 @@ class LedgerEventClientManager:
             return_dict = event.model_dump(exclude_unset=True, exclude_none=True)
         return return_dict
 
-    async def _init_subscription(
-        self, subId: str, filter: str, kind: JSONRPCSubscriptionKinds
+    async def _init_subscriptions(
+        self, subId: str, filters: List[str], kind: JSONRPCSubscriptionKinds
     ):
-        if kind == JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE:
-            mint_quote = await self.db_read.crud.get_mint_quote(
-                quote_id=filter, db=self.db_read.db
-            )
-            if mint_quote:
-                await self._send_obj(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump(), subId)
-        elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
-            melt_quote = await self.db_read.crud.get_melt_quote(
-                quote_id=filter, db=self.db_read.db
-            )
-            if melt_quote:
-                await self._send_obj(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump(), subId)
-        elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
-            proofs = await self.db_read.get_proofs_states(Ys=[filter])
-            if len(proofs):
-                await self._send_obj(proofs[0].model_dump(), subId)
+        results = []
+        async with self.db_read.db.connect() as conn:
+            if kind == JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE:
+                for filter in filters:
+                    mint_quote = await self.db_read.crud.get_mint_quote(
+                        quote_id=filter, db=self.db_read.db, conn=conn
+                    )
+                    if mint_quote:
+                        results.append(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump())
+            elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
+                for filter in filters:
+                    melt_quote = await self.db_read.crud.get_melt_quote(
+                        quote_id=filter, db=self.db_read.db, conn=conn
+                    )
+                    if melt_quote:
+                        results.append(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump())
+            elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
+                proofs = await self.db_read.get_proofs_states(Ys=filters, conn=conn)
+                for proof in proofs:
+                    results.append(proof.model_dump())
+        
+        for result in results:
+            await self._send_obj(result, subId)

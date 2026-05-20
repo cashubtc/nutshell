@@ -32,7 +32,7 @@ from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
-from ...core.nuts.nut18 import PaymentRequest
+from ...core.nuts.nut18 import deserialize as deserialize_payment_request
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -261,20 +261,33 @@ async def cli(
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--async",
+    "-a",
+    "prefer_async",
+    default=False,
+    is_flag=True,
+    help="Pay asynchronously.",
+    type=bool,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
 async def pay(
-    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int] = None,
+    yes: bool = False,
+    prefer_async: bool = False,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
 
-    # NUT-18 Payment Request support
-    if invoice.startswith("creqA"):
+    # NUT-18 / NUT-26 Payment Request support
+    if invoice.startswith("creqA") or invoice.lower().startswith("creqb1"):
         try:
-            pr = PaymentRequest.deserialize(invoice)
+            pr = deserialize_payment_request(invoice)
         except Exception as e:
             print(f"Error decoding payment request: {e}")
             return
@@ -293,6 +306,14 @@ async def pay(
             # TODO: Handle amounts not specified in request (ask user)
             print("Error: Amount not specified in payment request.")
             return
+
+        if not yes and not ctx.obj.get("YES"):
+            message = f"Pay {wallet.unit.str(amount_to_pay)}?"
+            click.confirm(
+                message,
+                abort=True,
+                default=True,
+            )
 
         lock = ""
         if pr.nut10:
@@ -422,7 +443,11 @@ async def pay(
 
     try:
         melt_response = await wallet.melt(
-            send_proofs, invoice, quote.fee_reserve, quote.quote
+            send_proofs,
+            invoice,
+            quote.fee_reserve,
+            quote.quote,
+            prefer_async=prefer_async,
         )
     except Exception as e:
         print(f" Error paying invoice: {e}")
@@ -877,8 +902,8 @@ async def receive_cli(
 def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
-        if token.startswith("creqA"):
-            pr = PaymentRequest.deserialize(token)
+        if token.startswith("creqA") or token.lower().startswith("creqb1"):
+            pr = deserialize_payment_request(token)
             print(
                 json.dumps(
                     pr.model_dump(exclude_none=True),

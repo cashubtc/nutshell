@@ -1234,3 +1234,13 @@ async def m033_add_issued_time_to_mint_quote(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN issued_time TIMESTAMP"
         )
+
+async def m034_promises_order_index(db: Database):
+    """
+    Add order_index to promises table to preserve the original order of outputs.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN order_index INTEGER DEFAULT 0"
+        )
+

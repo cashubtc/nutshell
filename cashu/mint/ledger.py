@@ -350,8 +350,11 @@ class Ledger(
         # This works with Lightning but might not work with other methods
         request = invoice_response.payment_request.lower()
 
+        now = int(time.time())
         expiry = None
-        if invoice_obj.expiry is not None:
+        if settings.mint_quote_ttl is not None:
+            expiry = now + settings.mint_quote_ttl
+        elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MintQuote(
@@ -362,7 +365,7 @@ class Ledger(
             unit=quote_request.unit,
             amount=quote_request.amount,
             state=MintQuoteState.unpaid,
-            created_time=int(time.time()),
+            created_time=now,
             expiry=expiry,
             pubkey=quote_request.pubkey,
         )
@@ -613,8 +616,11 @@ class Ledger(
         if not invoice_obj.amount_msat:
             raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
+        now = int(time.time())
         expiry = None
-        if invoice_obj.expiry is not None:
+        if settings.melt_quote_ttl is not None:
+            expiry = now + settings.melt_quote_ttl
+        elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(
@@ -626,7 +632,7 @@ class Ledger(
             amount=payment_quote.amount.to(unit).amount,
             state=MeltQuoteState.unpaid,
             fee_reserve=payment_quote.fee.to(unit).amount,
-            created_time=int(time.time()),
+            created_time=now,
             expiry=expiry,
         )
         await self.db_write._store_melt_quote(quote)
@@ -820,6 +826,36 @@ class Ledger(
         await self.events.submit(mint_quote)
 
         return melt_quote
+
+    async def async_melt(
+        self,
+        *,
+        proofs: List[Proof],
+        quote: str,
+        outputs: Optional[List[BlindedMessage]] = None,
+    ) -> PostMeltQuoteResponse:
+        """Invalidates proofs and pays a Lightning invoice asynchronously.
+
+        Args:
+            proofs (List[Proof]): Proofs provided for paying the Lightning invoice
+            quote (str): ID of the melt quote.
+            outputs (Optional[List[BlindedMessage]]): Blank outputs for returning overpaid fees to the wallet.
+
+        Returns:
+            PostMeltQuoteResponse: Melt quote response with pending state.
+        """
+        # get melt quote
+        melt_quote = await self.get_melt_quote(quote_id=quote)
+        if not melt_quote:
+            raise TransactionError("melt quote not found")
+        if not melt_quote.unpaid:
+            raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
+
+        # Launch actual melt task
+        asyncio.create_task(self.melt(proofs=proofs, quote=quote, outputs=outputs))
+
+        melt_quote.state = MeltQuoteState.pending
+        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
     async def melt(
         self,
@@ -1121,7 +1157,7 @@ class Ledger(
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
         async with self.db.get_connection(conn) as conn:
-            for output in outputs:
+            for i, output in enumerate(outputs):
                 keyset = keyset or self.keysets[output.id]
                 if output.id not in self.keysets:
                     raise TransactionError(f"keyset {output.id} not found")
@@ -1137,6 +1173,7 @@ class Ledger(
                     mint_id=mint_id,
                     melt_id=melt_id,
                     swap_id=swap_id,
+                    order_index=i,
                     db=self.db,
                     conn=conn,
                 )

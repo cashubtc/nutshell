@@ -63,6 +63,18 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Mint quote TTL",
+        description="Time-to-live in seconds for newly created mint quotes.",
+    )
+    melt_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Melt quote TTL",
+        description="Time-to-live in seconds for newly created melt quotes.",
+    )
 
     mint_regular_tasks_interval_seconds: int = Field(
         default=3600,
@@ -339,6 +351,7 @@ class MintRedisCache(MintSettings):
     mint_redis_cache_enabled: bool = Field(default=False)
     mint_redis_cache_url: Optional[str] = Field(default=None)
     mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week
+    mint_redis_cache_cluster: bool = Field(default=False)
 
 
 class Settings(

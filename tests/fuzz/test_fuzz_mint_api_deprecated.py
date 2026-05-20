@@ -4,7 +4,7 @@ from hypothesis import HealthCheck, given
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
 
-from cashu.core.models import (
+from cashu.core.base import (
     BlindedMessage,
     Proof,
 )
