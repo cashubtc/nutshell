@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import Annotated, List
+from typing import Annotated, List, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..constants import MAX_QUOTE_ID_LEN
 from ..settings import settings
@@ -58,9 +58,27 @@ class JSONRPCMethods(Enum):
 
 
 class JSONRPCSubscriptionKinds(Enum):
+    MINT_QUOTE = "mint_quote"
+    MELT_QUOTE = "melt_quote"
+    PROOF_STATE = "proof_state"
+
+    # TODO: Remove these deprecated bolt11-specific aliases once old websocket
+    # clients have been migrated to the method-independent NUT-17 kinds.
     BOLT11_MINT_QUOTE = "bolt11_mint_quote"
     BOLT11_MELT_QUOTE = "bolt11_melt_quote"
-    PROOF_STATE = "proof_state"
+
+    @classmethod
+    def normalize(
+        cls, kind: Union["JSONRPCSubscriptionKinds", str]
+    ) -> "JSONRPCSubscriptionKinds":
+        parsed_kind = kind if isinstance(kind, cls) else cls(kind)
+
+        if parsed_kind == cls.BOLT11_MINT_QUOTE:
+            return cls.MINT_QUOTE
+        if parsed_kind == cls.BOLT11_MELT_QUOTE:
+            return cls.MELT_QUOTE
+
+        return parsed_kind
 
 
 class JSONRPCStatus(Enum):
@@ -73,6 +91,11 @@ class JSONRPCSubscribeParams(BaseModel):
         ..., max_length=settings.mint_max_request_length
     )
     subId: str
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def normalize_kind(cls, kind):
+        return JSONRPCSubscriptionKinds.normalize(kind)
 
 
 class JSONRPCUnsubscribeParams(BaseModel):

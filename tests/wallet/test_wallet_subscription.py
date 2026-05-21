@@ -29,8 +29,8 @@ async def wallet(mint):
 @pytest.mark.asyncio
 async def test_wallet_subscription_mint(wallet: Wallet):
     """The state will go from UNPAID to PAID to ISSUED. After the state becomes 'PAID', the
-       wallet must take action (see the 'def callback' below) to convert the PAID invoice
-       to ISSUED
+    wallet must take action (see the 'def callback' below) to convert the PAID invoice
+    to ISSUED
     """
     if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
         pytest.skip("No websocket support")
@@ -38,7 +38,7 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     if not wallet.mint_info.supports_websocket_mint_quote(
         Method["bolt11"], wallet.unit
     ):
-        pytest.skip("No websocket support for bolt11_mint_quote")
+        pytest.skip("No websocket support for mint_quote")
 
     triggered = False
     msg_stack: list[JSONRPCNotficationParams] = []
@@ -47,7 +47,7 @@ async def test_wallet_subscription_mint(wallet: Wallet):
         nonlocal triggered, msg_stack
         triggered = True
         msg_stack.append(msg)
-        if msg.payload['state'] == 'PAID':
+        if msg.payload["state"] == "PAID":
             asyncio.run(wallet.mint(int(mint_quote.amount), quote_id=mint_quote.quote))
 
     mint_quote, sub = await wallet.request_mint_with_callback(128, callback=callback)
@@ -130,7 +130,7 @@ async def test_wallet_subscription_multiple_listeners_receive_updates(wallet: Wa
     if not wallet.mint_info.supports_websocket_mint_quote(
         Method["bolt11"], wallet.unit
     ):
-        pytest.skip("No websocket support for bolt11_mint_quote")
+        pytest.skip("No websocket support for mint_quote")
 
     # Request a quote without auto-subscribing
     mint_quote = await wallet.request_mint(123)
@@ -153,12 +153,12 @@ async def test_wallet_subscription_multiple_listeners_receive_updates(wallet: Wa
         stack2.append(msg)
 
     subs.subscribe(
-        kind=JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
+        kind=JSONRPCSubscriptionKinds.MINT_QUOTE,
         filters=[mint_quote.quote],
         callback=cb1,
     )
     subs.subscribe(
-        kind=JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
+        kind=JSONRPCSubscriptionKinds.MINT_QUOTE,
         filters=[mint_quote.quote],
         callback=cb2,
     )
