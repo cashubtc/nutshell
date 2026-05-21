@@ -212,7 +212,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
-    disconnected = False
+    client = None
     try:
         client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
     except Exception as e:
@@ -225,13 +225,12 @@ async def websocket_endpoint(websocket: WebSocket):
         await client.start()
     except WebSocketDisconnect as e:
         logger.debug(f"Websocket disconnected: {e}")
-        disconnected = True
-        return
     except Exception as e:
         logger.debug(f"Exception: {e}")
-        ledger.events.remove_client(client)
     finally:
-        if not disconnected:
+        if client and client in ledger.events.clients:
+            ledger.events.remove_client(client)
+        if websocket.client_state.name != "DISCONNECTED":
             await asyncio.wait_for(websocket.close(), timeout=1)
 
 

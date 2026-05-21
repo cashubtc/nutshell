@@ -93,6 +93,18 @@ async def test_websocket_start_returns_jsonrpc_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_websocket_start_exits_on_disconnect_message(monkeypatch):
+    websocket = FakeWebSocket([{"type": "websocket.disconnect", "code": 1012}])
+    manager = _client_manager(websocket)
+    monkeypatch.setattr("cashu.mint.events.client.limit_websocket", lambda ws: None)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        await manager.start()
+
+    assert exc_info.value.code == 1012
+
+
+@pytest.mark.asyncio
 async def test_handle_request_subscribe_and_unsubscribe_roundtrip(monkeypatch):
     manager = _client_manager(FakeWebSocket())
     monkeypatch.setattr(

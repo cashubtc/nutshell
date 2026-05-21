@@ -51,6 +51,8 @@ class LedgerEventClientManager:
                 self.websocket.receive(),
                 timeout=settings.mint_websocket_read_timeout,
             )
+            if message.get("type") == "websocket.disconnect":
+                raise WebSocketDisconnect(code=message.get("code", 1000))
             message_text = message.get("text")
 
             # Check the rate limit
