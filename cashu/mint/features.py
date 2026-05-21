@@ -36,8 +36,8 @@ _UNIT = "unit"
 _BOLT11 = "bolt11"
 _MPP = "mpp"
 _COMMANDS = "commands"
-_BOLT11_MINT_QUOTE = "bolt11_mint_quote"
-_BOLT11_MELT_QUOTE = "bolt11_melt_quote"
+_MINT_QUOTE = "mint_quote"
+_MELT_QUOTE = "melt_quote"
 _PROOF_STATE = "proof_state"
 _PROTECTED_ENDPOINTS = "protected_endpoints"
 _BAT_MAX_MINT = "bat_max_mint"
@@ -148,7 +148,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         websocket_features: Dict[str, List[Dict[str, Union[str, List[str]]]]] = {
             _SUPPORTED: []
         }
-        # we check the backend to see if "bolt11_mint_quote" is supported as well
+        # we check the backend to see if "mint_quote" is supported as well
         for method, unit_dict in self.backends.items():
             if method == Method[_BOLT11]:
                 for unit in unit_dict.keys():
@@ -156,7 +156,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                         {
                             _METHOD: method.name,
                             _UNIT: unit.name,
-                            _COMMANDS: [_BOLT11_MELT_QUOTE, _PROOF_STATE],
+                            _COMMANDS: [_MELT_QUOTE, _PROOF_STATE],
                         }
                     )
                     if unit_dict[unit].supports_incoming_payment_stream:
@@ -164,7 +164,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             websocket_features[_SUPPORTED][-1][_COMMANDS]
                         )
                         websocket_features[_SUPPORTED][-1][_COMMANDS] = (
-                            supported_features + [_BOLT11_MINT_QUOTE]
+                            supported_features + [_MINT_QUOTE]
                         )
 
         if websocket_features:

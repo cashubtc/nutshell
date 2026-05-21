@@ -103,16 +103,16 @@ async def test_handle_request_subscribe_and_unsubscribe_roundtrip(monkeypatch):
         id=1,
         method=JSONRPCMethods.SUBSCRIBE.value,
         params={
-            "kind": JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value,
+            "kind": JSONRPCSubscriptionKinds.MINT_QUOTE.value,
             "filters": ["quote-1"],
             "subId": "sub-1",
         },
     )
     resp = await manager._handle_request(req)
     assert resp.result["subId"] == "sub-1"
-    assert manager.subscriptions[JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE][
-        "quote-1"
-    ] == ["sub-1"]
+    assert manager.subscriptions[JSONRPCSubscriptionKinds.MINT_QUOTE]["quote-1"] == [
+        "sub-1"
+    ]
 
     req_unsub = JSONRPCRequest(
         id=2,
@@ -121,10 +121,34 @@ async def test_handle_request_subscribe_and_unsubscribe_roundtrip(monkeypatch):
     )
     resp_unsub = await manager._handle_request(req_unsub)
     assert resp_unsub.result["subId"] == "sub-1"
-    assert (
-        manager.subscriptions[JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE]["quote-1"]
-        == []
+    assert manager.subscriptions[JSONRPCSubscriptionKinds.MINT_QUOTE]["quote-1"] == []
+
+
+@pytest.mark.asyncio
+async def test_handle_request_subscribe_accepts_deprecated_bolt11_kind(monkeypatch):
+    manager = _client_manager(FakeWebSocket())
+    monkeypatch.setattr(
+        "cashu.mint.events.client.asyncio.create_task",
+        lambda coro: (coro.close(), None)[1],
     )
+    req = JSONRPCRequest(
+        id=1,
+        method=JSONRPCMethods.SUBSCRIBE.value,
+        params={
+            "kind": JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value,
+            "filters": ["quote-1"],
+            "subId": "sub-1",
+        },
+    )
+
+    resp = await manager._handle_request(req)
+
+    assert resp.result["subId"] == "sub-1"
+    # TODO: Drop this deprecated bolt11-specific compatibility assertion once the
+    # mint no longer accepts legacy websocket subscription kinds.
+    assert manager.subscriptions[JSONRPCSubscriptionKinds.MINT_QUOTE]["quote-1"] == [
+        "sub-1"
+    ]
 
 
 def test_add_subscription_rejects_when_max_reached():
@@ -161,7 +185,7 @@ async def test_init_subscription_sends_initial_snapshots():
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
 
     from contextlib import asynccontextmanager
-    
+
     @asynccontextmanager
     async def mock_connect():
         yield object()
@@ -199,10 +223,10 @@ async def test_init_subscription_sends_initial_snapshots():
     cast(Any, manager)._send_obj = send_obj
 
     await manager._init_subscriptions(
-        "sub-mint", ["quote-1"], JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+        "sub-mint", ["quote-1"], JSONRPCSubscriptionKinds.MINT_QUOTE
     )
     await manager._init_subscriptions(
-        "sub-melt", ["melt-1"], JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+        "sub-melt", ["melt-1"], JSONRPCSubscriptionKinds.MELT_QUOTE
     )
     await manager._init_subscriptions(
         "sub-proof", ["Y1"], JSONRPCSubscriptionKinds.PROOF_STATE
@@ -229,12 +253,8 @@ async def test_event_manager_submits_only_to_matching_subscribers(monkeypatch):
     manager.clients = cast(
         Any,
         [
-            FakeClient(
-                {JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE: {"quote-1": ["sub-1"]}}
-            ),
-            FakeClient(
-                {JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE: {"quote-2": ["sub-2"]}}
-            ),
+            FakeClient({JSONRPCSubscriptionKinds.MINT_QUOTE: {"quote-1": ["sub-1"]}}),
+            FakeClient({JSONRPCSubscriptionKinds.MINT_QUOTE: {"quote-2": ["sub-2"]}}),
         ],
     )
 

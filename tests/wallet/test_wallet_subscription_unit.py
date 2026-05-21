@@ -51,12 +51,13 @@ def test_subscription_manager_subscribe_and_close(monkeypatch):
     def callback(params):
         calls.append(params)
 
-    manager.subscribe(JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE, ["quote-1"], callback)
+    manager.subscribe(JSONRPCSubscriptionKinds.MINT_QUOTE, ["quote-1"], callback)
     assert manager.id_counter == 1
     assert "sub-1" in manager.callback_map
 
     sent = json.loads(cast(Any, manager).websocket.sent[0])
     assert sent["method"] == JSONRPCMethods.SUBSCRIBE.value
+    assert sent["params"]["kind"] == JSONRPCSubscriptionKinds.MINT_QUOTE.value
     assert sent["params"]["subId"] == "sub-1"
 
     manager.close()

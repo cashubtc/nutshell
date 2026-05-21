@@ -372,7 +372,7 @@ class MeltQuote(LedgerEvent):
 
     @property
     def kind(self) -> JSONRPCSubscriptionKinds:
-        return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+        return JSONRPCSubscriptionKinds.MELT_QUOTE
 
     @property
     def unpaid(self) -> bool:
@@ -437,7 +437,11 @@ class MintQuote(LedgerEvent):
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
-            issued_time = int(row["issued_time"]) if "issued_time" in row.keys() and row["issued_time"] else None
+            issued_time = (
+                int(row["issued_time"])
+                if "issued_time" in row.keys() and row["issued_time"]
+                else None
+            )
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -445,7 +449,9 @@ class MintQuote(LedgerEvent):
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             issued_time = (
-                int(row["issued_time"].timestamp()) if "issued_time" in row.keys() and row["issued_time"] else None
+                int(row["issued_time"].timestamp())
+                if "issued_time" in row.keys() and row["issued_time"]
+                else None
             )
         return cls(
             quote=row["quote"],
@@ -487,7 +493,7 @@ class MintQuote(LedgerEvent):
 
     @property
     def kind(self) -> JSONRPCSubscriptionKinds:
-        return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+        return JSONRPCSubscriptionKinds.MINT_QUOTE
 
     @property
     def unpaid(self) -> bool:
@@ -558,11 +564,11 @@ class Unit(Enum):
         elif self == Unit.msat:
             return f"{amount} msat"
         elif self == Unit.usd:
-            return f"${amount/100:.2f} USD"
+            return f"${amount / 100:.2f} USD"
         elif self == Unit.eur:
-            return f"{amount/100:.2f} EUR"
+            return f"{amount / 100:.2f} EUR"
         elif self == Unit.btc:
-            return f"{amount/1e8:.8f} BTC"
+            return f"{amount / 1e8:.8f} BTC"
         elif self == Unit.auth:
             return f"{amount} AUTH"
         else:
@@ -623,18 +629,18 @@ class Amount:
     def sat_to_btc(self) -> str:
         if self.unit != Unit.sat:
             raise Exception("Amount must be in satoshis")
-        return f"{self.amount/1e8:.8f}"
+        return f"{self.amount / 1e8:.8f}"
 
     def msat_to_btc(self) -> str:
         if self.unit != Unit.msat:
             raise Exception("Amount must be in msat")
         sat_amount = Amount(Unit.msat, self.amount).to(Unit.sat, round="up")
-        return f"{sat_amount.amount/1e8:.8f}"
+        return f"{sat_amount.amount / 1e8:.8f}"
 
     def cents_to_usd(self) -> str:
         if self.unit != Unit.usd and self.unit != Unit.eur:
             raise Exception("Amount must be in cents")
-        return f"{self.amount/100:.2f}"
+        return f"{self.amount / 100:.2f}"
 
     def str(self) -> str:
         return self.unit.str(self.amount)
@@ -924,8 +930,7 @@ class MintKeyset:
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
         return {
-            int(amount): key.format().hex()
-            for amount, key in self.public_keys.items()
+            int(amount): key.format().hex() for amount, key in self.public_keys.items()
         }
 
     def generate_keys(self):
@@ -966,7 +971,7 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
@@ -979,14 +984,19 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             # KEYSETS V2: Use new keyset ID derivation
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
+                self.id = derive_keyset_id_v2(
+                    self.public_keys,
+                    self.unit.name,
+                    self.final_expiry,
+                    self.input_fee_ppk,
+                )
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
@@ -1417,9 +1427,9 @@ class AuthProof(BaseModel):
     def to_base64(self):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
-        return (
-            self.prefix + base64.urlsafe_b64encode(json.dumps(serialize_dict).encode()).decode().rstrip("=")
-        )
+        return self.prefix + base64.urlsafe_b64encode(
+            json.dumps(serialize_dict).encode()
+        ).decode().rstrip("=")
 
     @classmethod
     def from_base64(cls, base64_str: str):

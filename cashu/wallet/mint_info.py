@@ -51,7 +51,7 @@ class MintInfo(BaseModel):
         websocket_supported = websocket_settings["supported"]
         for entry in websocket_supported:
             if entry["method"] == method.name and entry["unit"] == unit.name:
-                if "bolt11_mint_quote" in entry["commands"]:
+                if "mint_quote" in entry["commands"]:
                     return True
         return False
 
