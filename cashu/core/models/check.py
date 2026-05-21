@@ -18,7 +18,7 @@ class PostCheckStateResponse(BaseModel):
 
 
 class CheckSpendableRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    proofs: List[Proof]
 
 
 class CheckSpendableResponse_deprecated(BaseModel):

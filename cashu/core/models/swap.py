@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from cashu.core.base import (
     BlindedMessage,
@@ -8,14 +8,11 @@ from cashu.core.base import (
     BlindedSignature,
     Proof,
 )
-from cashu.core.settings import settings
 
 
 class PostSwapRequest(BaseModel):
-    inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
-    outputs: List[BlindedMessage] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
+    inputs: List[Proof]
+    outputs: List[BlindedMessage]
 
 
 class PostSwapResponse(BaseModel):
@@ -24,11 +21,9 @@ class PostSwapResponse(BaseModel):
 
 # deprecated since 0.13.0
 class PostSwapRequest_Deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
+    proofs: List[Proof]
     amount: Optional[int] = None
-    outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
+    outputs: List[BlindedMessage_Deprecated]
 
 
 class PostSwapResponse_Deprecated(BaseModel):
