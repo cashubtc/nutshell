@@ -6,6 +6,27 @@ import pyblst
 curve_order = 52435875175126190479447740508185965837690552500527637822603658699938581184513
 _G2_HEX = '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8'
 
+# Canonical compressed encodings of the BLS12-381 identity (point at infinity):
+# top bit = compression flag, second bit = infinity flag, remaining bytes zero.
+# blst's `uncompress` validates canonical encoding and on-curve, but accepts the
+# identity and does NOT check prime-order subgroup membership; both checks are
+# required by NUT-00 Point Validation and are enforced in PublicKey below.
+_G1_IDENTITY = bytes.fromhex('c0' + '00' * 47)
+_G2_IDENTITY = bytes.fromhex('c0' + '00' * 95)
+
+
+def _is_in_subgroup(point, group: str) -> bool:
+    """
+    NUT-00 Point Validation: a point P is in the prime-order subgroup iff P * q == 0.
+
+    pyblst does not expose blst's fast endomorphism-based `in_g1` / `in_g2` / `KeyValidate`
+    predicates, so we fall back to the textbook test by scalar-multiplying by the subgroup
+    order. This costs ~one full scalar multiplication per parsed point. When pyblst grows
+    a predicate, swap this for the fast check.
+    """
+    identity = _G1_IDENTITY if group == "G1" else _G2_IDENTITY
+    return point.scalar_mul(curve_order).compress() == identity
+
 
 
 class PrivateKey:
@@ -38,14 +59,29 @@ class PublicKey:
         self.group = group
         try:
             if point is not None:
+                # Internally-constructed point; trusted (already passed validation when parsed
+                # from bytes, or produced from scalar mul of a validated generator).
                 self.point = point
             elif compressed:
+                # External bytes: full NUT-00 Point Validation. blst's uncompress already
+                # rejects non-canonical encodings (BLST_BAD_ENCODING) and off-curve points;
+                # we add the identity and subgroup checks it does not perform.
                 if self.group == "G1":
                     self.point = pyblst.BlstP1Element().uncompress(compressed)
+                    if self.point.compress() == _G1_IDENTITY:
+                        raise ValueError("G1 point at infinity")
+                    if not _is_in_subgroup(self.point, "G1"):
+                        raise ValueError("G1 point not in prime-order subgroup")
                 else:
                     self.point = pyblst.BlstP2Element().uncompress(compressed)
+                    if self.point.compress() == _G2_IDENTITY:
+                        raise ValueError("G2 point at infinity")
+                    if not _is_in_subgroup(self.point, "G2"):
+                        raise ValueError("G2 point not in prime-order subgroup")
             else:
                 raise ValueError("Must provide point or compressed bytes")
+        except ValueError:
+            raise
         except Exception:
             raise ValueError("The public key could not be parsed or is invalid.")
 

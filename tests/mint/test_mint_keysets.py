@@ -529,22 +529,33 @@ async def test_keyset_id_v3_test_vectors():
     Test vectors for v3 keyset ID derivation from NUT-02.
     Source: https://github.com/cashubtc/nuts/blob/master/tests/02-tests.md
     """
-    # V3 Vector 1: Small keyset
+    # NUT-02 v3 vectors use arbitrary distinct G2 points (per spec MUST that distinct amounts
+    # have distinct keys). These mirror nuts/tests/02-tests.md "Version 3".
+    g2_scalar_7 = "8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c"
+    g2_scalar_13 = "8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"
+    g2_scalar_29 = "8c60dae92451206390e30b5daa7151d63624dee496753c87dd54eadc92dc9602081fae02a1a53bac97e984a571923a5d0a29e38da2d42fd4712052800c7c8dd6e94fd9f506e946068aaac799d60b94c2d7515769ffdd32ea95d3910330ec47de"
+    g2_scalar_71 = "a55dafcdf339360f74e3fd32296d062d5e36db3c2570e13a889b38502c0ff71864b19e324bc9c661c29b07c9cc378b5919c1656979648d7c3ef4bd6501fcc96490a34e47fe25afc8b14d60f1c3772138acaf8a0a5e4f940f57206eba74fdc973"
+
+    # V3 Vector 1
     keys_v3_vec1 = {
-        1: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
-        2: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+        1: BlsPublicKey(bytes.fromhex(g2_scalar_7), group="G2"),
+        2: BlsPublicKey(bytes.fromhex(g2_scalar_13), group="G2"),
     }
     keyset_id_v3_vec1 = derive_keyset_id_v3(keys_v3_vec1, Unit.sat)
-    assert keyset_id_v3_vec1 == "02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d", \
-        "V3 vector 1 keyset ID mismatch"
+    assert (
+        keyset_id_v3_vec1
+        == "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
+    ), "V3 vector 1 keyset ID mismatch"
 
-    # V3 Vector 2
+    # V3 Vector 2 (with input_fee_ppk=100, final_expiry=2000000000)
     keys_v3_vec2 = {
-        1: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
-        2: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
-        4: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
-        8: BlsPublicKey(bytes.fromhex("93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"), group="G2"),
+        1: BlsPublicKey(bytes.fromhex(g2_scalar_7), group="G2"),
+        2: BlsPublicKey(bytes.fromhex(g2_scalar_13), group="G2"),
+        4: BlsPublicKey(bytes.fromhex(g2_scalar_29), group="G2"),
+        8: BlsPublicKey(bytes.fromhex(g2_scalar_71), group="G2"),
     }
     keyset_id_v3_vec2 = derive_keyset_id_v3(keys_v3_vec2, Unit.sat, 2000000000, 100)
-    assert keyset_id_v3_vec2 == "02b532391cadf8c5d98bf0ff05b85e3cfb76a8175d71822140df3396c20cf40588", \
-        "V3 vector 2 keyset ID mismatch"
+    assert (
+        keyset_id_v3_vec2
+        == "020c5210bbb16757130c7e26061df3ea3f97a47046d2cebb54a21b3b4c370f42d8"
+    ), "V3 vector 2 keyset ID mismatch"

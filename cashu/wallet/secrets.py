@@ -128,15 +128,11 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         if version == "base64" or version == "00":
             # BIP32 derivation for base64 (ancient) and version 00 keysets
             return await self._derive_secret_bip32(counter, keyset_id)
-        elif version == "01" or version == "02":
-            # HMAC-SHA256 derivation for version 01 and 02 keysets (per NUT-13 test vectors)
-            return await self._derive_secret_hmac_sha256(counter, keyset_id)
+        elif version == "01":
+            return await self._derive_secret_hmac_sha256_v2(counter, keyset_id)
+        elif version == "02":
+            return await self._derive_secret_hmac_sha256_v3(counter, keyset_id)
         else:
-            try:
-                if int(version) >= 2:
-                    return await self._derive_secret_hmac_sha256(counter, keyset_id)
-            except ValueError:
-                pass
             raise ValueError(f"Unsupported keyset version: {version}")
 
     async def _derive_secret_bip32(
@@ -173,25 +169,75 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         r = self.bip32.get_privkey_from_path(r_derivation_path)
         return secret, r, token_derivation_path
 
-    async def _derive_secret_hmac_sha256(
+    def _kdf_base(self, counter: int, keyset_id: str) -> bytes:
+        """Shared NUT-13 KDF base used by both V2 and V3 derivations."""
+        keyset_id_bytes = bytes.fromhex(keyset_id)
+        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
+        return b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+
+    async def _derive_secret_hmac_sha256_v2(
         self, counter: int, keyset_id: str
     ) -> Tuple[bytes, bytes, str]:
         """
-        Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "01".
-        NUT-13 (updated):
-        - message = b"Cashu_KDF_HMAC_SHA256" || keyset_id_bytes || counter_bytes
-        - secret  = HMAC_SHA256(seed, message || 0x00)
-        - r       = HMAC_SHA256(seed, message || 0x01)
-        - counter_bytes is 8-byte unsigned big-endian
+        NUT-13 V2 derivation for secp256k1 keysets (version byte 01).
+
+        - secret = HMAC_SHA256(seed, base || 0x00)
+        - r      = HMAC_SHA256(seed, base || 0x01)  (32 raw bytes; mod-reduction happens
+                   when wrapped into the PrivateKey class; SECP256K1_N ~ 2^256 so bias
+                   is ~2^-128, negligible)
         """
         assert self.seed, "Seed not initialized yet."
-        keyset_id_bytes = bytes.fromhex(keyset_id)
-        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
-        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+        base = self._kdf_base(counter, keyset_id)
         secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
         r = hmac.new(self.seed, base + b"\x01", hashlib.sha256).digest()
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
-        logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
+        logger.trace(
+            f"HMAC-SHA256 v2 derivation: keyset_id={keyset_id} counter={counter}"
+            f" -> secret={secret.hex()} r={r.hex()}"
+        )
+        return secret, r, derivation_path
+
+    async def _derive_secret_hmac_sha256_v3(
+        self, counter: int, keyset_id: str
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        NUT-13 V3 derivation for BLS12-381 keysets (version byte 02).
+
+        Secret is unchanged from V2 (raw HMAC digest). Blinding factor uses *rejection
+        sampling* against BLS_FR_ORDER instead of mod-reduction, because BLS_FR_ORDER
+        ~ 0.45 * 2^256 and mod reduction would introduce ~7.5% statistical bias
+        compared to a uniform sample over Fr. Spec section: NUT-13 "V3 Blinding Factor".
+
+        For attempt = 0, 1, ...:
+            msg = base || 0x01 || u32_BE(attempt)
+            digest = HMAC_SHA256(seed, msg)
+            x = OS2IP(digest)
+            if x == 0 or x >= BLS_FR_ORDER: continue
+            return digest
+
+        Expected attempts ~2.2; the inner cap of 65536 is defensive.
+        """
+        assert self.seed, "Seed not initialized yet."
+        from cashu.core.crypto.bls import curve_order as BLS_FR_ORDER
+
+        base = self._kdf_base(counter, keyset_id)
+        secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
+        r: Optional[bytes] = None
+        for attempt in range(1 << 16):
+            msg = base + b"\x01" + attempt.to_bytes(4, "big")
+            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
+            x = int.from_bytes(digest, "big")
+            if x == 0 or x >= BLS_FR_ORDER:
+                continue
+            r = digest
+            break
+        if r is None:
+            raise RuntimeError("NUT-13 V3 blinding factor derivation failed")
+        derivation_path = f"HMAC-SHA256-v3:{keyset_id}:{counter}"
+        logger.trace(
+            f"HMAC-SHA256 v3 derivation: keyset_id={keyset_id} counter={counter}"
+            f" attempt={attempt} -> secret={secret.hex()} r={r.hex()}"
+        )
         return secret, r, derivation_path
 
     async def generate_n_secrets(

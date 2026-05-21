@@ -1,5 +1,4 @@
 import hashlib
-import os
 from typing import Optional, Tuple
 
 import pyblst
@@ -9,6 +8,11 @@ from .bls import PrivateKey, PublicKey, curve_order
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
+
+# NUT-00 Batch Verification: Fiat-Shamir transcript DST. Per-proof weights are derived
+# deterministically from this transcript so the verifier is reproducible and the security
+# argument does not depend on CSPRNG quality.
+BLS_BATCH_DST = b"Cashu_BLS_Batch_v1"
 
 def ext_euclid(a, b):
     if b == 0:
@@ -83,44 +87,90 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     p2 = pyblst.miller_loop(Y.point, K2.point)
     return pyblst.final_verify(p1 * p2, pyblst.BlstFP12Element())
 
-def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
+def _derive_batch_weights(
+    K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[bytes]
+) -> list[int]:
     """
-    Batch verifies BLS12-381 signatures using random linear combinations.
-    This significantly improves performance over checking each signature individually.
+    NUT-00 batch verification: deterministic per-proof weights via Fiat-Shamir.
+
+    Builds a length-prefixed transcript binding (C_i, K_i, secret_i) for every proof,
+    collapses it to a 32-byte challenge once, then derives each weight by rejection
+    sampling: r_i = OS2IP(SHA256(challenge || u32_BE(i) || u32_BE(ctr))) with
+    0 < r_i < BLS_FR_ORDER. Modular reduction would bias ~7.5% because
+    BLS_FR_ORDER ~ 0.45 * 2^256; rejection sampling yields a uniform sample over Fr*.
+
+    Why deterministic: the weights must commit to the input proofs *before* the
+    attacker sees them, otherwise an adversary holding one aggregated signature
+    `C' = a * (Y_1 + Y_2)` can split it into two forgeries that both verify under a
+    sum check. The transcript binds each r_i to (C_i, K_i, secret_i) for the whole
+    batch, so an attacker cannot choose proofs in adversarial relation to weights
+    without first fixing the proofs (which fix the weights).
+    """
+    n = len(Cs)
+    transcript = bytearray(BLS_BATCH_DST)
+    for C, K, secret in zip(Cs, K2s, secret_msgs):
+        transcript += C.format()                    # 48 bytes (G1 compressed)
+        transcript += K.format()                    # 96 bytes (G2 compressed)
+        transcript += len(secret).to_bytes(4, "big")
+        transcript += secret
+    challenge = hashlib.sha256(bytes(transcript)).digest()
+
+    weights: list[int] = []
+    for i in range(n):
+        i_bytes = i.to_bytes(4, "big")
+        # Acceptance probability ~45%, so an attempt cap of 65536 has failure prob
+        # ~2^-262 — defensive, never reached in practice.
+        for ctr in range(1 << 16):
+            h = hashlib.sha256(challenge + i_bytes + ctr.to_bytes(4, "big")).digest()
+            x = int.from_bytes(h, "big")
+            if x == 0 or x >= curve_order:
+                continue
+            weights.append(x)
+            break
+        else:
+            raise RuntimeError("NUT-00 batch weight derivation failed")
+    return weights
+
+
+def batch_pairing_verification(
+    K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]
+) -> bool:
+    """
+    NUT-00 batch verification: e(sum r_i * C_i, G2) == prod_k e(sum_{K_i=K_k} r_i * Y_i, K_k).
+
+    Weights are derived deterministically via Fiat-Shamir (see `_derive_batch_weights`); a single
+    multi-pairing performs one final exponentiation for the whole equation.
     """
     n = len(Cs)
     if n == 0:
         return True
-    
-    # Generate random 256-bit scalars
-    rs = [int.from_bytes(os.urandom(32), "big") for _ in range(n)]
-    Ys = [hash_to_curve(msg.encode("utf-8")) for msg in secret_msgs]
-    
+
+    secret_bytes_list = [msg.encode("utf-8") for msg in secret_msgs]
+    rs = _derive_batch_weights(K2s, Cs, secret_bytes_list)
+    Ys = [hash_to_curve(sb) for sb in secret_bytes_list]
+
     # Left side: sum(r_i * C_i)
     sum_C = Cs[0].point.scalar_mul(rs[0])
     for i in range(1, n):
         sum_C = sum_C + Cs[i].point.scalar_mul(rs[i])
-        
+
     _G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
     g2_point = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
-    
+
     # Right side: prod(e(sum(r_i * Y_i), K2_j)) grouped by unique K2
-    # Group the Y points by their corresponding K2 point
-    grouped_Ys = {}
+    grouped_Ys: dict = {}
     for i in range(n):
         k2_hex = K2s[i].format().hex()
         y_r = Ys[i].point.scalar_mul(rs[i])
-        
         if k2_hex not in grouped_Ys:
             grouped_Ys[k2_hex] = {"k2": K2s[i].point, "sum_y": y_r}
         else:
             grouped_Ys[k2_hex]["sum_y"] = grouped_Ys[k2_hex]["sum_y"] + y_r
-            
-    # Now compute the pairings for each unique K2
+
     miller = pyblst.miller_loop(-sum_C, g2_point)
     for group in grouped_Ys.values():
         miller = miller * pyblst.miller_loop(group["sum_y"], group["k2"])
-        
+
     return pyblst.final_verify(miller, pyblst.BlstFP12Element())
 
 def hash_e(*publickeys: PublicKey) -> bytes:

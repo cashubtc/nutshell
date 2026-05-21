@@ -219,7 +219,7 @@ def test_nut13_spec_compliance():
     secrets.keyset_id = keyset_id
 
     import asyncio
-    secret, r, path = asyncio.run(secrets._derive_secret_hmac_sha256(counter, keyset_id))
+    secret, r, path = asyncio.run(secrets._derive_secret_hmac_sha256_v2(counter, keyset_id))
 
     assert "HMAC-SHA256" in path
     assert secret == expected_secret
