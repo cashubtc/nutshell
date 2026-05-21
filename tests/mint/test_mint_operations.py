@@ -58,13 +58,12 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert melt_quote.amount == 64
     assert melt_quote.fee_reserve == 0
 
-    if not settings.debug_mint_only_deprecated:
-        melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
-        assert melt_quote_response_pre_payment
-        assert not melt_quote_response_pre_payment.state == MeltQuoteState.paid, (
-            "melt quote should not be paid"
-        )
-        assert melt_quote_response_pre_payment.amount == 64
+    melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
+    assert melt_quote_response_pre_payment
+    assert not melt_quote_response_pre_payment.state == MeltQuoteState.paid, (
+        "melt quote should not be paid"
+    )
+    assert melt_quote_response_pre_payment.amount == 64
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
@@ -104,13 +103,12 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
 
-    if not settings.debug_mint_only_deprecated:
-        melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
-        assert melt_quote_response_pre_payment
-        assert melt_quote_response_pre_payment.state == MeltQuoteState.unpaid, (
-            "melt quote should not be paid"
-        )
-        assert melt_quote_response_pre_payment.amount == melt_quote.amount
+    melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
+    assert melt_quote_response_pre_payment
+    assert melt_quote_response_pre_payment.state == MeltQuoteState.unpaid, (
+        "melt quote should not be paid"
+    )
+    assert melt_quote_response_pre_payment.amount == melt_quote.amount
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
@@ -137,9 +135,8 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
 
     assert mint_quote.state == MintQuoteState.paid, "mint quote should be paid"
 
-    if not settings.debug_mint_only_deprecated:
-        mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
-        assert mint_quote.state == MintQuoteState.paid, "mint quote should be paid"
+    mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
+    assert mint_quote.state == MintQuoteState.paid, "mint quote should be paid"
 
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -171,9 +168,8 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     assert mint_quote.state != MintQuoteState.paid, "mint quote already paid"
     assert mint_quote.state == MintQuoteState.unpaid
 
-    if not settings.debug_mint_only_deprecated:
-        mint_quote = await wallet1.get_mint_quote(quote.quote)
-        assert mint_quote.state != MintQuoteState.paid, "mint quote should not be paid"
+    mint_quote = await wallet1.get_mint_quote(quote.quote)
+    assert mint_quote.state != MintQuoteState.paid, "mint quote should not be paid"
 
     await assert_err(
         wallet1.mint(128, quote_id=quote.quote),
@@ -481,12 +477,12 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
 
     # wallet asks for quote
     _ = await wallet1.melt_quote(invoice_payment_request)
-    
+
     # Force the fee_reserve in the DB to be larger so we get multiple change outputs
     # Let's say overpaid_fee = 7 -> [4, 2, 1]
     total_amount = 64 + 7
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
-    
+
     melt_quote_internal = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
@@ -498,26 +494,26 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
     output_amounts = [1, 2, 4, 8] # Provide change outputs
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(len(output_amounts))
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
-    
+
     # We force pending state by tricking fakewallet
     from cashu.lightning.base import PaymentResult
     settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
     settings.fakewallet_payment_state_exception = False
-    
+
     # Call melt with outputs
     melt_response = await ledger.melt(proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
     assert melt_response.state == MeltQuoteState.pending.value
-    
+
     # Now fake that payment settled
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
-    
+
     # get_melt_quote will now settle the payment and generate the change
     quote_post = await ledger.get_melt_quote(melt_quote_internal.quote)
     assert quote_post.state == MeltQuoteState.paid
     assert quote_post.change is not None
     assert len(quote_post.change) == 3 # 7 splits into [4, 2, 1]
-    
+
     # Verify the order of change corresponds strictly to the B_ order of outputs
     # To do this, we can unblind them sequentially and see if the amounts match the expected amounts
     # If they were out of order, the wallet mapping would assign the wrong amount or fail unblinding
@@ -527,7 +523,7 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
         rs[: len(quote_post.change)],
         derivation_paths[: len(quote_post.change)],
     )
-    
+
     # The returned change proofs must have the exact same amounts as our outputs IN ORDER
     # The mint assigns amounts from largest to smallest, so [4, 2, 1]
     expected_amounts = [4, 2, 1]

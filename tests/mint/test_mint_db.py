@@ -19,7 +19,6 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     assert_err,
-    is_deprecated_api_only,
     is_github_actions,
     pay_if_regtest,
 )
@@ -325,7 +324,6 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_deprecated_api_only, reason=("Deprecated API"))
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
     melt_quote = await wallet.melt_quote(payment_request)
     await ledger.db_write._update_melt_quote_state(
