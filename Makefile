@@ -12,7 +12,15 @@ fuzz:
 mypy:
 	poetry run mypy cashu --check-untyped-defs
 
-format: ruff
+# `make format` only touches files staged in the current commit. This keeps
+# whitespace / line-ending fixes scoped to the contributor's change and never
+# rewrites unrelated files. Whole-tree lint fix: `make ruff`. CI parity (every
+# pre-commit hook on every file): `make pre-commit`.
+format:
+	@py=$$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$$' || true); \
+	[ -z "$$py" ] || poetry run ruff check --fix $$py
+	@files=$$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(py|pyi|md|toml|yaml|yml|json|txt|ini|cfg|sh|proto)$$' || true); \
+	[ -z "$$files" ] || poetry run python -c 'from pathlib import Path; import sys; [Path(p).write_bytes(Path(p).read_bytes().replace(b"\r\n", b"\n")) for p in sys.argv[1:]]' $$files
 
 check: ruff-check mypy
 
