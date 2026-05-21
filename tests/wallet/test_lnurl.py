@@ -29,7 +29,7 @@ async def test_handle_lnurl_success_with_amount():
 
     with patch("cashu.wallet.lnurl.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         # Mock initial LNURL request
         mock_response_1 = MagicMock()
         mock_response_1.json.return_value = {
@@ -61,7 +61,7 @@ async def test_handle_lnurl_interactive_amount():
 
     with patch("cashu.wallet.lnurl.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         mock_response_1 = MagicMock()
         mock_response_1.json.return_value = {
             "tag": "payRequest",
@@ -93,7 +93,7 @@ async def test_handle_lnurl_amount_out_of_range():
 
     with patch("cashu.wallet.lnurl.httpx.AsyncClient") as mock_client:
         mock_instance = mock_client.return_value.__aenter__.return_value
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "tag": "payRequest",

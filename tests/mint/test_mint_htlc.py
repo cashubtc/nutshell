@@ -4,7 +4,7 @@ from cashu.core.errors import TransactionError
 from cashu.core.nuts.nut14 import verify_htlc_spending_conditions
 
 
-def test_htlc():    
+def test_htlc():
     proof = Proof.from_dict({
         "amount": 0,
         "secret": "[\"HTLC\",{\"nonce\":\"66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925\",\"data\":\"4884fdaafea47c29fea7159d0daddd9c085d6200e1359e85bb81736af6b7c837\"}]",

@@ -298,10 +298,10 @@ class CLNRestWallet(LightningBackend):
             else 0
         )
         self.last_pay_index = last_pay_index
-        
+
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 url = "/v1/waitanyinvoice"
@@ -343,7 +343,7 @@ class CLNRestWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
                 retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
 

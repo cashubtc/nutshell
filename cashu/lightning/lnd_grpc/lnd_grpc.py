@@ -377,7 +377,7 @@ class LndRPCWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 async with grpc.aio.secure_channel(
@@ -396,7 +396,7 @@ class LndRPCWallet(LightningBackend):
             except AioRpcError as exc:
                 logger.error(f"SubscribeInvoices failed: {exc}. Retrying in {retry_delay} sec...")
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
                 retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
 

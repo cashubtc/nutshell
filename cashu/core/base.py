@@ -966,7 +966,7 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
@@ -979,7 +979,7 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             # KEYSETS V2: Use new keyset ID derivation
             if id_in_db:
                 # If loading from DB, preserve existing ID
