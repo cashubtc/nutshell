@@ -72,8 +72,9 @@ class CoreLightningRestWallet(LightningBackend):
         }
 
         self.cert = settings.mint_corelightning_rest_cert or False
+        verify = self.cert if settings.mint_corelightning_rest_cert_verify else False
         self.client = httpx.AsyncClient(
-            base_url=self.url, verify=self.cert, headers=self.auth
+            base_url=self.url, verify=verify, headers=self.auth
         )
         self.last_pay_index = 0
 
