@@ -9,6 +9,7 @@ from .bls import PrivateKey, PublicKey, curve_order
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
+BLS_BATCH_DST = b"Cashu_BLS_Batch_v1"
 
 def ext_euclid(a, b):
     if b == 0:
@@ -47,6 +48,13 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
     Bob signs the blinded message: C' = B' * a
     Returns C' and dummy DLEQ values since BLS12-381 pairings make DLEQ proofs redundant.
     """
+    if B_.format().hex().startswith("c000000000000000"):
+        raise ValueError("Invalid blinded message: point at infinity")
+
+    # The point was already checked to be in G1 during uncompression
+    # pyblst.BlstP1Element().uncompress() performs the subgroup check
+    # and throws BLST_POINT_NOT_IN_GROUP if the point is not in G1
+        
     C_: PublicKey = B_ * a
     logger.trace(f"BLS step2: B_={B_.format().hex()} a={a.to_hex()} C_={C_.format().hex()}")
     # Return dummy private keys for backwards compatibility with DLEQ logic elsewhere
@@ -83,6 +91,35 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     p2 = pyblst.miller_loop(Y.point, K2.point)
     return pyblst.final_verify(p1 * p2, pyblst.BlstFP12Element())
 
+def derive_batch_random_scalars(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> list[int]:
+    """
+    Derives deterministic random scalars for batch verification using the Fiat-Shamir heuristic
+    and rejection sampling to ensure scalars are uniformly distributed over Fr*.
+    """
+    n = len(Cs)
+    transcript = BLS_BATCH_DST
+    for i in range(n):
+        secret_bytes = secret_msgs[i].encode("utf-8")
+        transcript += Cs[i].format()
+        transcript += K2s[i].format()
+        transcript += len(secret_bytes).to_bytes(4, "big")
+        transcript += secret_bytes
+        
+    challenge = hashlib.sha256(transcript).digest()
+    
+    rs = []
+    for i in range(n):
+        ctr = 0
+        while True:
+            h = hashlib.sha256(challenge + i.to_bytes(4, "big") + ctr.to_bytes(4, "big")).digest()
+            x = int.from_bytes(h, "big")
+            if x != 0 and x < curve_order:
+                rs.append(x)
+                break
+            ctr += 1
+            
+    return rs
+
 def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
     """
     Batch verifies BLS12-381 signatures using random linear combinations.
@@ -92,8 +129,8 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
     if n == 0:
         return True
     
-    # Generate random 256-bit scalars
-    rs = [int.from_bytes(os.urandom(32), "big") for _ in range(n)]
+    rs = derive_batch_random_scalars(K2s, Cs, secret_msgs)
+        
     Ys = [hash_to_curve(msg.encode("utf-8")) for msg in secret_msgs]
     
     # Left side: sum(r_i * C_i)
