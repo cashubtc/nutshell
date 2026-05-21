@@ -128,9 +128,12 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         if version == "base64" or version == "00":
             # BIP32 derivation for base64 (ancient) and version 00 keysets
             return await self._derive_secret_bip32(counter, keyset_id)
-        elif version == "01" or version == "02":
-            # HMAC-SHA256 derivation for version 01 and 02 keysets (per NUT-13 test vectors)
+        elif version == "01":
+            # HMAC-SHA256 derivation for version 01 keysets (per NUT-13 test vectors)
             return await self._derive_secret_hmac_sha256(counter, keyset_id)
+        elif version == "02":
+            # HMAC-SHA256 derivation for version 02 keysets (with BLS rejection sampling)
+            return await self._derive_secret_hmac_sha256_v3(counter, keyset_id)
         else:
             try:
                 if int(version) >= 2:
@@ -192,6 +195,41 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         r = hmac.new(self.seed, base + b"\x01", hashlib.sha256).digest()
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
         logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
+        return secret, r, derivation_path
+
+    async def _derive_secret_hmac_sha256_v3(
+        self, counter: int, keyset_id: str
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "02".
+        NUT-13:
+        - message = b"Cashu_KDF_HMAC_SHA256" || keyset_id_bytes || counter_bytes || 0x01 || u32_BE(attempt)
+        """
+        assert self.seed, "Seed not initialized yet."
+        keyset_id_bytes = bytes.fromhex(keyset_id)
+        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
+        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+        secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
+        
+        # BLS12-381 G1 group order
+        BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+        
+        r = b""
+        for attempt in range(65536):
+            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
+            msg = base + b"\x01" + attempt_bytes
+            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
+            x = int.from_bytes(digest, "big")
+            if x != 0 and x < BLS_FR_ORDER:
+                r = digest
+                break
+                
+        if not r:
+            raise RuntimeError("V3 blinding factor derivation failed")
+            
+        derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
+        from loguru import logger
+        logger.trace(f"HMAC-SHA256 V3 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
     async def generate_n_secrets(
