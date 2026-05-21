@@ -142,6 +142,22 @@ class TransactionUnitMismatchError(TransactionError):
         super().__init__(detail, code=self.code)
 
 
+class TransactionMaxInputsExceededError(TransactionError):
+    detail = "Max inputs exceeded"
+    code = 11014
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class TransactionMaxOutputsExceededError(TransactionError):
+    detail = "Max outputs exceeded"
+    code = 11015
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
 class KeysetError(CashuError):
     detail = "keyset error"
     code = 12000

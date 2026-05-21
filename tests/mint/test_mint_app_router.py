@@ -13,7 +13,11 @@ from cashu.core.base import (
     ProofState,
     Unit,
 )
-from cashu.core.errors import NotAllowedError
+from cashu.core.errors import (
+    NotAllowedError,
+    TransactionMaxInputsExceededError,
+    TransactionMaxOutputsExceededError,
+)
 from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
@@ -308,6 +312,55 @@ def test_router_restore_requires_outputs(monkeypatch):
     response = client.post("/v1/restore", json={"outputs": []})
     assert response.status_code == 400
     assert response.json() == {"detail": "no outputs provided.", "code": 0}
+
+
+@pytest.mark.asyncio
+async def test_router_swap_returns_11014_when_max_inputs_exceeded(ledger, monkeypatch):
+    monkeypatch.setattr(settings, "mint_max_inputs", 1)
+    monkeypatch.setattr(router_module, "ledger", ledger)
+    app = _build_router_app()
+    client = TestClient(app)
+    kid = next(iter(ledger.keysets.keys()))
+    response = client.post(
+        "/v1/swap",
+        json={
+            "inputs": [
+                {"id": kid, "amount": 1, "secret": "s1", "C": "00"},
+                {"id": kid, "amount": 1, "secret": "s2", "C": "00"},
+            ],
+            "outputs": [{"id": kid, "amount": 1, "B_": "ab"}],
+        },
+    )
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": TransactionMaxInputsExceededError.detail,
+        "code": TransactionMaxInputsExceededError.code,
+    }
+
+
+@pytest.mark.asyncio
+async def test_router_restore_returns_11015_when_max_outputs_exceeded(
+    ledger, monkeypatch
+):
+    monkeypatch.setattr(settings, "mint_max_outputs", 1)
+    monkeypatch.setattr(router_module, "ledger", ledger)
+    app = _build_router_app()
+    client = TestClient(app)
+    kid = next(iter(ledger.keysets.keys()))
+    response = client.post(
+        "/v1/restore",
+        json={
+            "outputs": [
+                {"id": kid, "amount": 1, "B_": "aa"},
+                {"id": kid, "amount": 1, "B_": "bb"},
+            ]
+        },
+    )
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": TransactionMaxOutputsExceededError.detail,
+        "code": TransactionMaxOutputsExceededError.code,
+    }
 
 
 def test_router_quote_routes_and_swap(monkeypatch):
