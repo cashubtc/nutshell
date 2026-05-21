@@ -1,0 +1,51 @@
+# Normalize line endings to LF for text files.
+# See .editorconfig (for editors) and the pre-commit `mixed-line-ending --fix=lf` hook.
+
+# Default: treat as text, auto-detect binary by content, normalize to LF on checkout.
+* text=auto eol=lf
+
+# Explicit LF text types (don't rely on auto-detection).
+*.py     text eol=lf
+*.pyi    text eol=lf
+*.md     text eol=lf
+*.toml   text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.json   text eol=lf
+*.txt    text eol=lf
+*.sh     text eol=lf
+*.ini    text eol=lf
+*.cfg    text eol=lf
+*.proto  text eol=lf
+Dockerfile text eol=lf
+Makefile   text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+.editorconfig  text eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binaries — never normalize.
+*.pyc   binary
+*.pyo   binary
+*.pkl   binary
+*.so    binary
+*.so.*  binary
+*.dylib binary
+*.dll   binary
+*.whl   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.gz    binary
+*.zip   binary
+*.tar   binary
+*.sqlite3 binary
+
+# Extension-less binaries shipped in the Tor bundle.
+cashu/tor/bundle/**/tor binary
