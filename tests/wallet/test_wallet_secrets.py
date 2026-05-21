@@ -13,16 +13,16 @@ async def test_nut13_v3_secret_derivation():
         def __init__(self, seed: bytes):
             self.seed = seed
     
-    seed = b"test seed v3 reduction"
+    seed = b"nut13 v3 test seed"
     ms = MockWalletSecrets(seed)
     
-    keyset_id = "02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d"
-    counter = 2
+    keyset_id = "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
+    counter = 3
     
-    secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256(counter, keyset_id)
+    secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(counter, keyset_id)
     
-    assert secret_bytes.hex() == "4729fe85ab3886ce03259ac658735ff534c9cd41b2b364d202ff497e4ee48809"
+    assert secret_bytes.hex() == "7a45e04943504b25273e9569ab7019ab62f814dade23998c12f5f4cb1bb7978a"
     
     r = BlsPrivateKey(r_bytes)
-    assert r.to_hex() == "08bb237d625b73022cd50f6fedfb660c6125b676a4819474241c264903259d2f"
+    assert r.to_hex() == "236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9" 
 
