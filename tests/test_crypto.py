@@ -489,6 +489,8 @@ def test_bls_step1():
             )
         ),
     )
+    Y = bls_dhke.hash_to_curve(secret_msg.encode("utf-8"))
+    assert Y.format().hex() == "860d58e5aeda1376185436ed96412313424cc079e056d1dab595e6db4c2c9685fec7da052c8db68d88985b75a42388ad"
     assert (
         B_.format().hex()
         == "8e88c5f6a93f653784a66b033a00e52128499e18b095c2a56f080d1c2a937ffc9ef4600804a48d087bbd1f662f6b068f"
@@ -537,3 +539,20 @@ def test_bls_step3():
         C.format().hex()
         == "b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69"
     )
+
+def test_bls_batch_verification_vector():
+    K = bls.PublicKey(bytes.fromhex("aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"), group="G2")
+    secret_1 = "batch_proof_1"
+    C_1 = bls.PublicKey(bytes.fromhex("acebf797506a7031cef3189904715cb22792528f1ea0e6ab25341401d245539438ed97122f00e38ee6185cc20b09ba11"), group="G1")
+    secret_2 = "batch_proof_2"
+    C_2 = bls.PublicKey(bytes.fromhex("9776497ad47a00f8a56233fb88f939b0572cf174a4c6d2446c0b1060434e305fae6845fd1f68b70376ba53ffe67f0414"), group="G1")
+
+    # verify batch verification passes
+    assert bls_dhke.batch_pairing_verification(
+        [K, K], [C_1, C_2], [secret_1, secret_2]
+    )
+
+    # verify scalars match test vector
+    scalars = bls_dhke.derive_batch_random_scalars([K, K], [C_1, C_2], [secret_1, secret_2])
+    assert hex(scalars[0])[2:].zfill(64) == "0e7ff8be2ccb756d4ef390991bdd77eb65e8db624a2729fa1657c3cf8d7d4b55"
+    assert hex(scalars[1])[2:].zfill(64) == "6d026a181a6215b233e73b121d01908a1a1eb6911955bea5130bbf2f2966554d"
