@@ -1214,9 +1214,15 @@ class Ledger(
             is_v3 = is_bls_keyset(keyset.id)
             
             if is_v3:
-                B_ = BlsPublicKey(bytes.fromhex(output.B_))
+                try:
+                    B_ = BlsPublicKey(bytes.fromhex(output.B_))
+                except ValueError as e:
+                    raise TransactionError(f"Invalid blinded message: {e}")
             else:
-                B_ = SecpPublicKey(bytes.fromhex(output.B_))
+                try:
+                    B_ = SecpPublicKey(bytes.fromhex(output.B_))
+                except Exception as e:
+                    raise TransactionError(f"Invalid blinded message: {e}")
                 
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
