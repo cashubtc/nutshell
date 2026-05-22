@@ -38,12 +38,18 @@ from .melt_quote import (
 )
 from .mint import (
     GetMintResponse_deprecated,
+    PostMintBatchRequest,
+    PostMintBatchResponse,
     PostMintRequest,
     PostMintRequest_deprecated,
     PostMintResponse,
     PostMintResponse_deprecated,
 )
-from .mint_quote import PostMintQuoteRequest, PostMintQuoteResponse
+from .mint_quote import (
+    PostMintQuoteCheckRequest,
+    PostMintQuoteRequest,
+    PostMintQuoteResponse,
+)
 from .restore import (
     PostRestoreRequest,
     PostRestoreRequest_Deprecated,
@@ -88,10 +94,13 @@ __all__ = [
     "PostMeltRequestOptionMpp",
     "PostMeltRequestOptions",
     "GetMintResponse_deprecated",
+    "PostMintBatchRequest",
+    "PostMintBatchResponse",
     "PostMintRequest",
     "PostMintRequest_deprecated",
     "PostMintResponse",
     "PostMintResponse_deprecated",
+    "PostMintQuoteCheckRequest",
     "PostMintQuoteRequest",
     "PostMintQuoteResponse",
     "PostRestoreRequest",

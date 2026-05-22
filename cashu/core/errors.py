@@ -142,6 +142,22 @@ class TransactionUnitMismatchError(TransactionError):
         super().__init__(detail, code=self.code)
 
 
+class BatchDuplicateQuotesError(TransactionError):
+    detail = "Duplicate quote IDs provided"
+    code = 11016
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class BatchSizeExceededError(TransactionError):
+    detail = "Max batch size exceeded"
+    code = 11017
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
 class KeysetError(CashuError):
     detail = "keyset error"
     code = 12000
