@@ -220,7 +220,6 @@ class Ledger(
     # ------- ECASH -------
 
     async def _generate_change_promises(
-
         self,
         fee_provided: int,
         fee_paid: int,
@@ -397,10 +396,16 @@ class Ledger(
         if quote.unpaid:
             if not quote.checking_id:
                 raise CashuError("quote has no checking id")
-                
+
             now = int(time.time())
-            if quote.last_checked and now - quote.last_checked < settings.mint_quote_backend_check_rate_limit:
-                logger.trace(f"Lightning: checking invoice {quote.checking_id} skipped due to rate limit")
+            if (
+                quote.last_checked
+                and now - quote.last_checked
+                < settings.mint_quote_backend_check_rate_limit
+            ):
+                logger.trace(
+                    f"Lightning: checking invoice {quote.checking_id} skipped due to rate limit"
+                )
                 return quote
 
             quote.last_checked = now
@@ -441,10 +446,10 @@ class Ledger(
         self, payload: PostMintQuoteCheckRequest
     ) -> List[MintQuote]:
         """Batch check mint quotes.
-        
+
         Args:
             payload (PostMintQuoteCheckRequest): Request payload containing quote IDs.
-            
+
         Returns:
             List[MintQuote]: List of mint quotes matching the request.
         """
@@ -581,15 +586,24 @@ class Ledger(
             if len(payload.quote_amounts) != len(quotes):
                 raise TransactionError("quote_amounts length must match quotes length")
             for i, quote in enumerate(quotes):
-                if quote.method == "bolt11" and payload.quote_amounts[i] != quote.amount:
-                    raise TransactionError(f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}")
+                if (
+                    quote.method == "bolt11"
+                    and payload.quote_amounts[i] != quote.amount
+                ):
+                    raise TransactionError(
+                        f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
+                    )
                 if payload.quote_amounts[i] > quote.amount:
-                    raise TransactionError(f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}")
+                    raise TransactionError(
+                        f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}"
+                    )
 
         quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
         if "bolt11" in methods:
             if sum(quote_amounts) != sum_amount_outputs:
-                raise TransactionError("amount to mint does not match quote amounts sum")
+                raise TransactionError(
+                    "amount to mint does not match quote amounts sum"
+                )
         else:
             if sum_amount_outputs > sum(quote_amounts):
                 raise TransactionError("amount to mint exceeds quote amounts sum")
@@ -597,10 +611,10 @@ class Ledger(
         # Signature validation (NUT-20)
         for i, quote in enumerate(quotes):
             sig = payload.signatures[i] if payload.signatures else None
-            
+
             if not quote.pubkey and sig:
                 raise QuoteSignatureInvalidError()
-            
+
             # The spec says msg_to_sign = quote_id[i] || B_0 || B_1 || ... || B_(n-1)
             # This logic is inside self._verify_mint_quote_witness, let's reuse it.
             if not self._verify_mint_quote_witness(quote, payload.outputs, sig):
@@ -615,7 +629,9 @@ class Ledger(
                     raise TransactionError("quote expired")
 
             # Store all blinded messages
-            await self._store_blinded_messages(payload.outputs, mint_id=payload.quotes[0])
+            await self._store_blinded_messages(
+                payload.outputs, mint_id=payload.quotes[0]
+            )
             promises = await self._sign_blinded_messages(payload.outputs)
 
             # Set all quotes to issued
@@ -876,11 +892,13 @@ class Ledger(
                 for keyset_id, keyset_proofs in proofs_by_keyset.items():
                     keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
 
-                melt_quote = await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
-                    quote=melt_quote,
-                    proofs=pending_proofs,
-                    keysets=self.keysets,
-                    keyset_fees=keyset_fees,
+                melt_quote = (
+                    await self.db_write.set_melt_quote_paid_and_invalidate_proofs(
+                        quote=melt_quote,
+                        proofs=pending_proofs,
+                        keysets=self.keysets,
+                        keyset_fees=keyset_fees,
+                    )
                 )
 
             if status.failed or (rollback_unknown and status.unknown):
@@ -894,7 +912,6 @@ class Ledger(
                     keysets=self.keysets,
                     state=MeltQuoteState.unpaid,
                 )
-
 
         return melt_quote
 
@@ -1204,7 +1221,6 @@ class Ledger(
 
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
-
     async def swap(
         self,
         *,
@@ -1304,7 +1320,7 @@ class Ledger(
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
         async with self.db.get_connection(conn) as conn:
-            for output in outputs:
+            for i, output in enumerate(outputs):
                 keyset = keyset or self.keysets[output.id]
                 if output.id not in self.keysets:
                     raise TransactionError(f"keyset {output.id} not found")
@@ -1320,6 +1336,7 @@ class Ledger(
                     mint_id=mint_id,
                     melt_id=melt_id,
                     swap_id=swap_id,
+                    order_index=i,
                     db=self.db,
                     conn=conn,
                 )
