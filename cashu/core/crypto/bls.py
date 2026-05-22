@@ -5,7 +5,7 @@ import pyblst
 
 curve_order = 52435875175126190479447740508185965837690552500527637822603658699938581184513
 _G2_HEX = '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8'
-
+G2 = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
 
 
 class PrivateKey:
@@ -25,7 +25,7 @@ class PrivateKey:
         return self.private_key.hex()
 
     def get_g2_public_key(self) -> "PublicKey":
-        pt = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX)).scalar_mul(self.scalar)
+        pt = G2.scalar_mul(self.scalar)
         return PublicKey(point=pt, group="G2")
 
     @property
