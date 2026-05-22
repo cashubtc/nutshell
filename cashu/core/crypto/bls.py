@@ -55,6 +55,13 @@ class PublicKey:
     def serialize(self) -> bytes:
         return self.format()
 
+    def is_infinity(self) -> bool:
+        """Check if the point is the point at infinity (additive identity)."""
+        if self.group == "G1":
+            return self.point == pyblst.BlstP1Element()
+        else:
+            return self.point == pyblst.BlstP2Element()
+
     def __eq__(self, other):
         if isinstance(other, PublicKey):
             return self.point == other.point
