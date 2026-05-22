@@ -47,7 +47,7 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
     Bob signs the blinded message: C' = B' * a
     Returns C' and dummy DLEQ values since BLS12-381 pairings make DLEQ proofs redundant.
     """
-    if B_.format().hex().startswith("c000000000000000"):
+    if B_.is_infinity():
         raise ValueError("Invalid blinded message: point at infinity")
 
     # The point was already checked to be in G1 during uncompression
