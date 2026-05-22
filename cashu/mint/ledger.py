@@ -352,9 +352,10 @@ class Ledger(
         # This works with Lightning but might not work with other methods
         request = invoice_response.payment_request.lower()
 
+        now = int(time.time())
         expiry = None
         if settings.mint_quote_ttl is not None:
-            expiry = int(time.time()) + settings.mint_quote_ttl
+            expiry = now + settings.mint_quote_ttl
         elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
@@ -366,7 +367,7 @@ class Ledger(
             unit=quote_request.unit,
             amount=quote_request.amount,
             state=MintQuoteState.unpaid,
-            created_time=int(time.time()),
+            created_time=now,
             expiry=expiry,
             pubkey=quote_request.pubkey,
         )
@@ -398,20 +399,18 @@ class Ledger(
                 raise CashuError("quote has no checking id")
 
             now = int(time.time())
-            if (
-                quote.last_checked
-                and now - quote.last_checked
-                < settings.mint_quote_backend_check_rate_limit
-            ):
+            updated = await self.crud.try_update_mint_quote_last_checked(
+                quote_id=quote_id,
+                last_checked=now,
+                rate_limit=settings.mint_quote_backend_check_rate_limit,
+                db=self.db,
+            )
+            if not updated:
                 logger.trace(
                     f"Lightning: checking invoice {quote.checking_id} skipped due to rate limit"
                 )
                 return quote
-
             quote.last_checked = now
-            await self.crud.update_mint_quote_last_checked(
-                quote_id=quote_id, last_checked=now, db=self.db
-            )
 
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
             status: PaymentStatus = await self.backends[method][
@@ -457,7 +456,7 @@ class Ledger(
         for quote_id in payload.quotes:
             quote = await self.get_mint_quote(quote_id)
             if not quote:
-                raise Exception(f"quote {quote_id} not found")
+                raise TransactionError(f"quote {quote_id} not found")
             quotes.append(quote)
         return quotes
 
@@ -639,7 +638,7 @@ class Ledger(
                 quote_ids=payload.quotes, state=MintQuoteState.issued
             )
 
-        except BaseException as e:
+        except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
                 quote_ids=payload.quotes, state=MintQuoteState.paid
@@ -780,9 +779,10 @@ class Ledger(
         if not invoice_obj.amount_msat:
             raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
+        now = int(time.time())
         expiry = None
         if settings.melt_quote_ttl is not None:
-            expiry = int(time.time()) + settings.melt_quote_ttl
+            expiry = now + settings.melt_quote_ttl
         elif invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
@@ -795,7 +795,7 @@ class Ledger(
             amount=payment_quote.amount.to(unit).amount,
             state=MeltQuoteState.unpaid,
             fee_reserve=payment_quote.fee.to(unit).amount,
-            created_time=int(time.time()),
+            created_time=now,
             expiry=expiry,
         )
         await self.db_write._store_melt_quote(quote)
