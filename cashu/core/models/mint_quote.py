@@ -17,6 +17,10 @@ class PostMintQuoteRequest(BaseModel):
     )  # NUT-20 quote lock pubkey
 
 
+class PostMintQuoteCheckRequest(BaseModel):
+    quotes: list[str]
+
+
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
