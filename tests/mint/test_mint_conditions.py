@@ -8,7 +8,6 @@ from cashu.core.errors import InvalidProofsError
 from cashu.core.p2pk import schnorr_sign
 from cashu.core.secret import SecretKind
 from cashu.mint.ledger import Ledger
-from tests.helpers import assert_err
 from tests.mint.spending_conditions_test_helpers import proof, secret_str
 
 
@@ -32,10 +31,8 @@ async def test_verify_inputs_and_outputs_p2pk_custom_sigflag_fails_without_outpu
             ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
         ),
     ):
-        await assert_err(
-            ledger.verify_inputs_and_outputs(proofs=[p], outputs=None),
-            InvalidProofsError(),
-        )
+        with pytest.raises(InvalidProofsError):
+            ledger._verify_input_spending_conditions(p)
 
 
 @pytest.mark.asyncio
@@ -57,7 +54,5 @@ async def test_verify_inputs_and_outputs_htlc_custom_sigflag_fails_without_outpu
             ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
         ),
     ):
-        await assert_err(
-            ledger.verify_inputs_and_outputs(proofs=[p], outputs=None),
-            InvalidProofsError(),
-        )
+        with pytest.raises(InvalidProofsError):
+            ledger._verify_input_spending_conditions(p)

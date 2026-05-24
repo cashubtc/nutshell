@@ -739,25 +739,15 @@ async def test_verify_inputs_witness_on_plain_secret_is_ignored(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_verify_inputs_spending_false_raises_validation_failed(ledger: Ledger):
+async def test_verify_input_spending_conditions_false_path_is_tested_elsewhere(
+    ledger: Ledger,
+):
     p = _proof_plain(ledger)
-    with (
-        patch.object(ledger, "_verify_proof_bdhke", return_value=True),
-        patch.object(
-            ledger.db_read,
-            "_verify_proofs_spendable",
-            AsyncMock(return_value=True),
-        ),
-        patch.object(ledger, "_verify_input_spending_conditions", return_value=False),
-    ):
-        with pytest.raises(
-            TransactionError, match="validation of input spending conditions failed"
-        ):
-            await ledger._verify_inputs([p])
+    assert ledger._verify_input_spending_conditions(p)
 
 
 @pytest.mark.asyncio
-async def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
+async def test_verify_inputs_no_longer_checks_spending_conditions(ledger: Ledger):
     p = _proof_plain(ledger)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
@@ -766,14 +756,16 @@ async def test_verify_inputs_spending_raises_propagates(ledger: Ledger):
             "_verify_proofs_spendable",
             AsyncMock(return_value=True),
         ),
-        patch.object(
-            ledger,
-            "_verify_input_spending_conditions",
-            side_effect=TransactionError("p2pk failed"),
-        ),
     ):
-        with pytest.raises(TransactionError, match="p2pk failed"):
-            await ledger._verify_inputs([p])
+        await ledger._verify_inputs([p])
+
+
+@pytest.mark.asyncio
+async def test_verify_inputs_spending_raises_propagates_is_tested_elsewhere(
+    ledger: Ledger,
+):
+    p = _proof_plain(ledger)
+    assert ledger._verify_input_spending_conditions(p)
 
 
 @pytest.mark.asyncio
@@ -1143,3 +1135,102 @@ async def test_vio_full_pipeline_order_outputs_then_together(ledger: Ledger):
             proofs=[MagicMock(spec=Proof)], outputs=outs
         )
     assert calls == ["outputs", "together"]
+
+
+@pytest.mark.asyncio
+async def test_verify_transaction_swap_orders_nut10_inputs_outputs_together(
+    ledger: Ledger,
+):
+    outs = [_blinded_output(ledger, label="tx-swap")]
+    calls: list[str] = []
+
+    def nut10(proofs, outputs, quote=None):
+        calls.append("nut10")
+
+    async def verify_inputs(proofs):
+        calls.append("inputs")
+
+    async def verify_outputs(outputs, skip_amount_check=False, expected_unit=None, conn=None):
+        calls.append("outputs")
+
+    def together(proofs, outputs):
+        calls.append("together")
+
+    with (
+        patch.object(ledger, "_verify_input_output_spending_conditions", side_effect=nut10),
+        patch.object(ledger, "_verify_inputs", side_effect=verify_inputs),
+        patch.object(ledger, "_verify_outputs", side_effect=verify_outputs),
+        patch.object(ledger, "_verify_inputs_and_outputs_together", side_effect=together),
+    ):
+        await ledger._verify_transaction(proofs=[MagicMock(spec=Proof)], outputs=outs)
+
+    assert calls == ["nut10", "inputs", "outputs", "together"]
+
+
+@pytest.mark.asyncio
+async def test_verify_transaction_melt_passes_quote_and_skips_balance_check(
+    ledger: Ledger,
+):
+    outs = [_blinded_output(ledger, label="tx-melt")]
+    captured: dict = {}
+
+    def nut10(proofs, outputs, quote=None):
+        captured["quote"] = quote
+        captured["outputs"] = outputs
+
+    async def verify_inputs(proofs):
+        captured["inputs"] = proofs
+
+    async def verify_outputs(outputs, skip_amount_check=False, expected_unit=None, conn=None):
+        captured["skip_amount_check"] = skip_amount_check
+        captured["expected_unit"] = expected_unit
+
+    with (
+        patch.object(ledger, "_verify_input_output_spending_conditions", side_effect=nut10),
+        patch.object(ledger, "_verify_inputs", side_effect=verify_inputs),
+        patch.object(ledger, "_verify_outputs", side_effect=verify_outputs),
+        patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
+    ):
+        await ledger._verify_transaction(
+            proofs=[MagicMock(spec=Proof)],
+            outputs=outs,
+            quote="quote-1",
+            skip_output_amount_check=True,
+            expected_output_unit=Unit.sat,
+            verify_input_output_balance=False,
+        )
+
+    assert captured["quote"] == "quote-1"
+    assert captured["outputs"] == outs
+    assert captured["skip_amount_check"] is True
+    assert captured["expected_unit"] == Unit.sat
+    together.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_verify_transaction_without_outputs_only_runs_nut10_and_inputs(
+    ledger: Ledger,
+):
+    calls: list[str] = []
+
+    def nut10(proofs, outputs, quote=None):
+        calls.append("nut10")
+        assert outputs == []
+        assert quote == "quote-2"
+
+    async def verify_inputs(proofs):
+        calls.append("inputs")
+
+    with (
+        patch.object(ledger, "_verify_input_output_spending_conditions", side_effect=nut10),
+        patch.object(ledger, "_verify_inputs", side_effect=verify_inputs),
+        patch.object(ledger, "_verify_outputs", new_callable=AsyncMock) as verify_outputs,
+        patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
+    ):
+        await ledger._verify_transaction(
+            proofs=[MagicMock(spec=Proof)], outputs=None, quote="quote-2"
+        )
+
+    assert calls == ["nut10", "inputs"]
+    verify_outputs.assert_not_called()
+    together.assert_not_called()

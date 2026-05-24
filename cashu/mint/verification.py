@@ -45,7 +45,6 @@ class LedgerVerification(
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]] = None,
         conn: Optional[Connection] = None,
-        skip_input_spending_conditions: bool = False,
     ):
         """Checks all proofs and outputs for validity.
 
@@ -62,10 +61,7 @@ class LedgerVerification(
             Exception: BDHKE verification failed.
         """
         # 1. Verify inputs
-        await self._verify_inputs(
-            proofs,
-            skip_input_spending_conditions=skip_input_spending_conditions,
-        )
+        await self._verify_inputs(proofs)
 
         # If no outputs are provided, no further checks are needed
         if outputs is None:
@@ -77,10 +73,36 @@ class LedgerVerification(
         # 3. Verify inputs and outputs together
         self._verify_inputs_and_outputs_together(proofs, outputs)
 
+    async def _verify_transaction(
+        self,
+        *,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]] = None,
+        quote: Optional[str] = None,
+        conn: Optional[Connection] = None,
+        skip_output_amount_check: bool = False,
+        expected_output_unit: Optional[Unit] = None,
+        verify_input_output_balance: bool = True,
+    ) -> None:
+        self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
+        await self._verify_inputs(proofs)
+
+        if outputs is None:
+            return
+
+        await self._verify_outputs(
+            outputs,
+            skip_amount_check=skip_output_amount_check,
+            expected_unit=expected_output_unit,
+            conn=conn,
+        )
+
+        if verify_input_output_balance:
+            self._verify_inputs_and_outputs_together(proofs, outputs)
+
     async def _verify_inputs(
         self,
         proofs: List[Proof],
-        skip_input_spending_conditions: bool = False,
     ):
         """Verify that the proofs are valid and can be spent."""
         logger.trace(f"Verifying {len(proofs)} proofs.")
@@ -101,12 +123,11 @@ class LedgerVerification(
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise InvalidProofsError()
-        # Verify spending conditions unless they were already checked at the
-        # transaction level by the caller.
-        if not skip_input_spending_conditions and not all(
-            [self._verify_input_spending_conditions(p) for p in proofs]
-        ):
-            raise TransactionError("validation of input spending conditions failed.")
+        # NUT-10 spending conditions are intentionally not checked here.
+        # For swap and melt, those are verified at the transaction level by
+        # `_verify_input_output_spending_conditions(...)` before `_verify_inputs(...)`
+        # is called. Blind-auth uses this generic proof-validation path and does
+        # not rely on NUT-10 spending-condition enforcement here.
         # Verify proofs are not already spent (raises ProofsAlreadySpentError)
         await self.db_read._verify_proofs_spendable(proofs)
 
