@@ -84,12 +84,25 @@ class LedgerVerification(
         expected_output_unit: Optional[Unit] = None,
         verify_input_output_balance: bool = True,
     ) -> None:
+        # 1. Verify NUT-10 spending conditions (P2PK, HTLC, and grouped
+        # SIG_ALL rules) at the transaction level. This binds together the
+        # relevant inputs, outputs, and optional melt quote before any generic
+        # cryptographic or bookkeeping checks run.
         self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
+
+        # 2. Verify the inputs generically: amounts, secret and witness
+        # criteria, duplicate-input prevention, ECASH signature validity, and
+        # whether the proofs are still spendable.
         await self._verify_inputs(proofs)
 
+        # If there are no outputs, no output-level or cross-input/output checks
+        # are needed.
         if outputs is None:
             return
 
+        # 3. Verify the outputs generically: keyset consistency, amount rules,
+        # duplicate-output prevention, and that the blinded messages have not
+        # already been stored or signed by the mint.
         await self._verify_outputs(
             outputs,
             skip_amount_check=skip_output_amount_check,
@@ -97,7 +110,11 @@ class LedgerVerification(
             conn=conn,
         )
 
+        # 4. For transaction types that require normal input/output balance and
+        # unit checks (such as swaps), verify those combined invariants now.
         if verify_input_output_balance:
+            # This checks the amount equation and unit compatibility between the
+            # spent inputs and the created outputs.
             self._verify_inputs_and_outputs_together(proofs, outputs)
 
     async def _verify_inputs(
