@@ -782,7 +782,7 @@ class WalletKeyset:
             from .crypto.secp import PublicKey as SecpPublicKey
             
             is_v3 = is_bls_keyset(row["id"])
-            pub_keys = {}
+            pub_keys: Dict[int, PublicKey] = {}
             for amount, hex_key in dict(json.loads(serialized)).items():
                 if is_v3:
                     pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key), group="G2")
@@ -1016,7 +1016,7 @@ class MintKeyset:
             from .crypto.keys import derive_keys_v3, derive_keyset_id_v3
             self.private_keys = derive_keys_v3(
                 self.seed, self.derivation_path, self.amounts
-            )
+            )  # type: ignore[assignment]
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             
             # KEYSETS V3: BLS12-381 cryptography
@@ -1024,7 +1024,7 @@ class MintKeyset:
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v3(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
+                self.id = derive_keyset_id_v3(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)  # type: ignore[arg-type]
                 logger.info(f"Generated keyset v3 (BLS) ID: {self.id}")
 
 

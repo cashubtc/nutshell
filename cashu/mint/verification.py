@@ -11,7 +11,8 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.keys import PublicKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
@@ -232,14 +233,16 @@ class LedgerVerification(
 
         from ..core.crypto.keys import is_bls_keyset
         is_v3 = is_bls_keyset(proof.id)
+
+        C_generic: PublicKey
         if is_v3:
             from ..core.crypto.bls import PublicKey as BlsPublicKey
             from ..core.crypto.bls_dhke import keyed_verification
-            C = BlsPublicKey(bytes.fromhex(proof.C))
-            valid = keyed_verification(private_key_amount, C, proof.secret) # type: ignore
+            C_generic = BlsPublicKey(bytes.fromhex(proof.C)) # type: ignore[assignment]
+            valid = keyed_verification(private_key_amount, C_generic, proof.secret) # type: ignore
         else:
-            C = PublicKey(bytes.fromhex(proof.C))
-            valid = b_dhke.verify(private_key_amount, C, proof.secret) # type: ignore
+            C_generic = SecpPublicKey(bytes.fromhex(proof.C)) # type: ignore[assignment]
+            valid = b_dhke.verify(private_key_amount, C_generic, proof.secret) # type: ignore
             
         if valid:
             logger.trace("Proof verified.")
