@@ -22,10 +22,11 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
+    PublicKey,
     derive_pubkey,
     generate_uuid_v7,
 )
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     BatchDuplicateQuotesError,
@@ -1403,7 +1404,6 @@ class Ledger(
         from ..core.crypto import bls_dhke
         from ..core.crypto.bls import PublicKey as BlsPublicKey
         from ..core.crypto.keys import is_bls_keyset
-        from ..core.crypto.secp import PublicKey as SecpPublicKey
         
         promises: List[
             Tuple[str, Any, int, Any, Any, Any]
@@ -1413,17 +1413,17 @@ class Ledger(
                 raise TransactionError(f"keyset {output.id} not found")
             keyset = self.keysets[output.id]
             is_v3 = is_bls_keyset(keyset.id)
-            
+            B_: PublicKey
             if is_v3:
                 try:
                     B_ = BlsPublicKey(bytes.fromhex(output.B_))
-                except ValueError as e:
-                    raise TransactionError(f"Invalid blinded message: {e}")
+                except ValueError as exc:
+                    raise TransactionError(f"Invalid blinded message: {exc}")
             else:
                 try:
                     B_ = SecpPublicKey(bytes.fromhex(output.B_))
-                except Exception as e:
-                    raise TransactionError(f"Invalid blinded message: {e}")
+                except Exception as exc:
+                    raise TransactionError(f"Invalid blinded message: {exc}")
                 
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")

@@ -248,7 +248,7 @@ class LedgerAPI(SupportsAuth):
         keysets_str = " ".join([f"{k.id} ({k.unit})" for k in keys.keysets])
         logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
         from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import is_bls_keyset
+        from ..core.crypto.keys import PublicKey, is_bls_keyset
         from ..core.crypto.secp import PublicKey as SecpPublicKey
         
         ret = []
@@ -260,7 +260,7 @@ class LedgerAPI(SupportsAuth):
                 continue
             try:
                 is_v3 = is_bls_keyset(keyset.id)
-                pub_keys = {}
+                pub_keys: dict[int, PublicKey] = {}
                 for amt, val in keyset.keys.items():
                     if is_v3:
                         pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
@@ -306,14 +306,14 @@ class LedgerAPI(SupportsAuth):
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import is_bls_keyset
+        from ..core.crypto.keys import PublicKey, is_bls_keyset
         from ..core.crypto.secp import PublicKey as SecpPublicKey
 
         keys = KeysResponse.model_validate(keys_dict)
         this_keyset = keys.keysets[0]
         is_v3 = is_bls_keyset(this_keyset.id)
         
-        keyset_keys = {}
+        keyset_keys: dict[int, PublicKey] = {}
         for amt, val in this_keyset.keys.items():
             if is_v3:
                 keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
