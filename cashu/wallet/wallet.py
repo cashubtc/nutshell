@@ -23,8 +23,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
-from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto.keys import PrivateKey, PublicKey, is_bls_keyset
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
@@ -967,7 +966,7 @@ class Wallet(
                     r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
                     e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
                     s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
-                    A=self.keysets[proof.id].public_keys[proof.amount],
+                    A=self.keysets[proof.id].public_keys[proof.amount], # type: ignore[arg-type]
                 ):
                     raise Exception("DLEQ proof invalid.")
                 else:
@@ -1008,28 +1007,29 @@ class Wallet(
                 assert promise.id in self.keysets, "Could not load keyset."
                 
             is_v3 = is_bls_keyset(promise.id)
+            C_: PublicKey
+            C: PublicKey
+            B_: PublicKey
             if is_v3:
                 C_ = BlsPublicKey(bytes.fromhex(promise.C_))
-                C = bls_dhke.step3_alice( # type: ignore
-
-                    C_, r, self.keysets[promise.id].public_keys[promise.amount]
+                C = bls_dhke.step3_alice( # type: ignore[assignment]
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount] # type: ignore[arg-type]
                 )
             else:
-                C_ = PublicKey(bytes.fromhex(promise.C_))
-                C = b_dhke.step3_alice( # type: ignore
-
-                    C_, r, self.keysets[promise.id].public_keys[promise.amount]
+                C_ = SecpPublicKey(bytes.fromhex(promise.C_))
+                C = b_dhke.step3_alice( # type: ignore[assignment]
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount] # type: ignore[arg-type]
                 )
 
             if is_v3:
-                B_, r = bls_dhke.step1_alice(secret, r)
+                B_, r = bls_dhke.step1_alice(secret, r) # type: ignore[arg-type, assignment]
             elif not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+                B_, r = b_dhke.step1_alice(secret, r)  # type: ignore[arg-type, assignment] # recompute B_ for dleq proofs
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
                 B_, r = b_dhke.step1_alice_deprecated(
-                    secret, r
-                )  # recompute B_ for dleq proofs
+                    secret, r  # type: ignore[arg-type]
+                )  # type: ignore[assignment] # recompute B_ for dleq proofs
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
@@ -1100,12 +1100,12 @@ class Wallet(
         for secret, amount, r in zip(secrets, amounts, rs_):
             is_v3 = is_bls_keyset(keyset_id)
             if is_v3:
-                B_, r = bls_dhke.step1_alice(secret, r or None)
+                B_, r = bls_dhke.step1_alice(secret, r or None) # type: ignore[arg-type, assignment]
             elif not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r or None)
+                B_, r = b_dhke.step1_alice(secret, r or None) # type: ignore[arg-type, assignment]
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+                B_, r = b_dhke.step1_alice_deprecated(secret, r or None) # type: ignore[arg-type, assignment]
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             assert r

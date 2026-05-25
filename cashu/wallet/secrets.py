@@ -9,8 +9,8 @@ from loguru import logger
 from mnemonic import Mnemonic
 
 from ..core.crypto.bls import PrivateKey as BlsPrivateKey
-from ..core.crypto.keys import get_keyset_id_version, is_bls_keyset
-from ..core.crypto.secp import PrivateKey
+from ..core.crypto.keys import PrivateKey, get_keyset_id_version, is_bls_keyset
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
 from ..core.settings import settings
@@ -89,7 +89,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         try:
             self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(
+            self.private_key = SecpPrivateKey(
                 self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
             )
         except ValueError:
@@ -267,14 +267,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             # secrets are supplied as str
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
+            rs: List[PrivateKey] = []
             if is_bls_keyset(self.keyset_id):
                 rs = [
                     BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths
-                ]
+                ] # type: ignore[assignment]
             else:
                 rs = [
-                    PrivateKey(s[1]) for s in secrets_rs_derivationpaths
-                ]
+                    SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ] # type: ignore[assignment]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
 
@@ -307,10 +308,11 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
+        rs: List[PrivateKey] = []
         if is_bls_keyset(keyset_id or self.keyset_id):
-            rs = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+            rs = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths] # type: ignore[assignment]
         else:
-            rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+            rs = [SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths] # type: ignore[assignment]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
         return secrets, rs, derivation_paths
 
