@@ -1,9 +1,10 @@
 import base64
 import hashlib
+import os
 import secrets
 import time
 import uuid
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from bip32 import BIP32
 from loguru import logger
@@ -14,8 +15,8 @@ from .secp import PrivateKey as SecpPrivateKey
 from .secp import PublicKey as SecpPublicKey
 
 # Typing aliases to remain backwards compatible for type hints in the rest of the codebase
-PrivateKey = SecpPrivateKey
-PublicKey = SecpPublicKey
+PrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
+PublicKey = Union[SecpPublicKey, BlsPublicKey]
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
@@ -25,7 +26,7 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     bip32 = BIP32.from_seed(mnemonic.encode())
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             bip32.get_privkey_from_path(derivation_path + orders_str[i]),
         )
         for i, a in enumerate(amounts)
@@ -39,7 +40,7 @@ def derive_keys_deprecated_pre_0_15(
     Deterministic derivation of keys for 2^n values.
     """
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             hashlib.sha256((seed + derivation_path + str(i)).encode("utf-8")).digest()[
                 :32
             ],
@@ -49,7 +50,7 @@ def derive_keys_deprecated_pre_0_15(
 
 
 def derive_pubkey(seed: str) -> PublicKey:
-    pubkey = PrivateKey(
+    pubkey = SecpPrivateKey(
         hashlib.sha256((seed).encode("utf-8")).digest()[:32],
     ).public_key
     assert pubkey
