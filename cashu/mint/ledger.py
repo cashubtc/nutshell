@@ -253,8 +253,16 @@ class Ledger(
 
         if overpaid_fee <= 0 or outputs is None:
             if overpaid_fee < 0:
-                logger.error(
-                    f"Overpaid fee is negative ({overpaid_fee}). This should not happen."
+                logger.debug(
+                    f"No change to return: backend fee {fee_paid} exceeds wallet's "
+                    f"fee reserve {fee_provided} by {-overpaid_fee}."
+                )
+            # Clean up the blank outputs the wallet sent for fee return; otherwise
+            # they remain in `promises` with c_ IS NULL and collide with later
+            # operations that re-derive the same B_ (e.g. NUT-13 seed restore).
+            if melt_id:
+                await self.crud.delete_blinded_messages_melt_id(
+                    melt_id=melt_id, db=self.db
                 )
             return []
 
