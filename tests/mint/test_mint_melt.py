@@ -868,31 +868,44 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
     )
 
 
-INVOICE_64_SAT = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-
-
-async def _run_melt_with_patched_fee(
-    wallet: Wallet,
-    ledger: Ledger,
-    monkeypatch,
-    fee_paid_sat_offset: int,
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake or is_deprecated_api_only,
+    reason="only fakewallet and non-deprecated api",
+)
+@pytest.mark.parametrize(
+    "fee_paid_sat_offset",
+    [
+        pytest.param(0, id="overpaid_fee_zero"),
+        pytest.param(1, id="overpaid_fee_negative"),
+    ],
+)
+async def test_melt_early_return_leaves_no_orphan_blank_outputs(
+    wallet, ledger: Ledger, monkeypatch, fee_paid_sat_offset: int
 ):
-    """Drives a successful melt where the backend reports a controlled fee.
+    """When `_generate_change_promises` takes its early-return branch
+    (overpaid_fee <= 0), the wallet's blank NUT-08 outputs — already
+    inserted into `promises` with c_ IS NULL before the LN payment —
+    must not be left behind as orphans. Later operations that re-derive
+    the same B_ (e.g. NUT-13 seed restore) collide with them and surface
+    as `OutputsArePendingError`.
 
-    `fee_paid_sat_offset` is added to `fee_reserve_provided`:
-      - 0  → overpaid_fee == 0
-      - >0 → overpaid_fee < 0
-    Both hit the early-return branch in `_generate_change_promises`.
-    Returns (melt_quote_id, response).
+    Both parametrize cases hit the same early-return branch:
+      - offset == 0  → overpaid_fee == 0  (fee exactly matched reserve)
+      - offset > 0   → overpaid_fee < 0   (backend took more than the
+        reserve, e.g. an LNbits backend skimming a service fee on top
+        of the routing fee)
     """
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
     # Clear the FakeWallet pay_invoice override so our monkeypatch is what runs.
     settings.fakewallet_pay_invoice_state = ""
 
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+
     mint_quote = await wallet.request_mint(100)
     proofs = await wallet.mint(amount=100, quote_id=mint_quote.quote)
 
-    melt_quote = await wallet.melt_quote(INVOICE_64_SAT)
+    melt_quote = await wallet.melt_quote(invoice_64_sat)
 
     total_provided = sum(p.amount for p in proofs)
     input_fees = ledger.get_fees_for_proofs(proofs)
@@ -922,66 +935,15 @@ async def _run_melt_with_patched_fee(
     response = await ledger.melt(
         proofs=proofs, quote=melt_quote.quote, outputs=change_outputs
     )
-    return melt_quote.quote, response
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    not is_fake or is_deprecated_api_only,
-    reason="only fakewallet and non-deprecated api",
-)
-async def test_melt_overpaid_fee_zero_leaves_no_orphan_blank_outputs(
-    wallet, ledger: Ledger, monkeypatch
-):
-    """A successful melt where fee_paid == fee_reserve_provided takes the
-    early-return branch in `_generate_change_promises`. The wallet's blank
-    NUT-08 outputs (already inserted into `promises` with c_ IS NULL before
-    the LN payment) must not be left behind as orphans — they collide with
-    later mint/swap operations that re-derive the same B_ (e.g. after a
-    NUT-13 seed restore) and surface as `OutputsArePendingError`.
-    """
-    melt_id, response = await _run_melt_with_patched_fee(
-        wallet, ledger, monkeypatch, fee_paid_sat_offset=0
-    )
 
     assert response.state == MeltQuoteState.paid.value
     assert not response.change
 
     orphans = await ledger.crud.get_blinded_messages_melt_id(
-        db=ledger.db, melt_id=melt_id
+        db=ledger.db, melt_id=melt_quote.quote
     )
     assert orphans == [], (
-        f"Expected no orphan blank outputs for melt {melt_id}, "
-        f"got {len(orphans)} with B_s {[o.B_ for o in orphans]}"
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    not is_fake or is_deprecated_api_only,
-    reason="only fakewallet and non-deprecated api",
-)
-async def test_melt_overpaid_fee_negative_leaves_no_orphan_blank_outputs(
-    wallet, ledger: Ledger, monkeypatch
-):
-    """Same orphan-row regression as the zero case, but for the
-    `overpaid_fee < 0` branch — when the backend reports a fee greater than
-    the reserve the wallet provided. Realistic when the backend doesn't
-    strictly enforce the `max_fee` we pass it (e.g. an LNbits backend
-    skimming a service fee on top of the routing fee).
-    """
-    melt_id, response = await _run_melt_with_patched_fee(
-        wallet, ledger, monkeypatch, fee_paid_sat_offset=1
-    )
-
-    assert response.state == MeltQuoteState.paid.value
-    assert not response.change
-
-    orphans = await ledger.crud.get_blinded_messages_melt_id(
-        db=ledger.db, melt_id=melt_id
-    )
-    assert orphans == [], (
-        f"Expected no orphan blank outputs for melt {melt_id}, "
+        f"Expected no orphan blank outputs for melt {melt_quote.quote}, "
         f"got {len(orphans)} with B_s {[o.B_ for o in orphans]}"
     )
 
