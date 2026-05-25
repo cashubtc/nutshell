@@ -173,7 +173,7 @@ class LNbitsWallet(LightningBackend):
         return PaymentStatus(
             result=result,
             fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
-            preimage=data["preimage"],
+            preimage=data.get("preimage"),
         )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
