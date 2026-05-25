@@ -275,7 +275,7 @@ async def test_clnrest_pay_invoice_mpp_not_supported(monkeypatch):
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
     )
     assert result.result == PaymentResult.FAILED
-    assert result.error_message == "mint does not support MPP"
+    assert result.error_message == "mint does not support MPP (NUT-15)"
 
 
 @pytest.mark.asyncio

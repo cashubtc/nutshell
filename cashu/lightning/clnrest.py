@@ -42,6 +42,7 @@ INVOICE_RESULT_MAP = {
 
 
 class CLNRestWallet(LightningBackend):
+
     supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_mpp = settings.mint_clnrest_enable_mpp
@@ -80,9 +81,14 @@ class CLNRestWallet(LightningBackend):
 
         self.cert = settings.mint_clnrest_cert or False
         self.client = httpx.AsyncClient(
-            base_url=self.url, verify=self.cert, headers=self.auth, timeout=None,
+            base_url=self.url,
+            verify=self.cert,
+            headers=self.auth,
+            timeout=None,
         )
         self.last_pay_index = 0
+        if self.supports_mpp:
+            logger.info("CLNRestWallet MPP (NUT-15) support enabled")
 
     async def cleanup(self):
         try:
@@ -195,18 +201,20 @@ class CLNRestWallet(LightningBackend):
             # with fee < 5000 millisatoshi (which is default value of exemptfee)
         }
 
-        # Handle Multi-Mint payout where we must only pay part of the invoice amount
-        logger.trace(f"{quote_amount_msat = }, {invoice.amount_msat = }")
-        if quote_amount_msat != invoice.amount_msat:
-            logger.trace("Detected Multi-Nut payment")
+        if quote_amount_msat != int(invoice.amount_msat):
             if self.supports_mpp:
-                post_data["partial_msat"] = quote_amount_msat
-            else:
-                error_message = "mint does not support MPP"
-                logger.error(error_message)
-                return PaymentResponse(
-                    result=PaymentResult.FAILED, error_message=error_message
+                logger.info(
+                    f"NUT-15 MPP detected: {quote_amount_msat} msat of {invoice.amount_msat} msat"
                 )
+                return await self.pay_partial_invoice(
+                    quote, Amount(Unit.msat, quote_amount_msat), fee_limit_msat
+                )
+            error_message = "mint does not support MPP (NUT-15)"
+            logger.error(f"MPP required but not supported: {error_message}")
+            return PaymentResponse(
+                result=PaymentResult.FAILED, error_message=error_message
+            )
+
         r = await self.client.post("/v1/pay", data=post_data, timeout=None)
 
         if r.is_error or "message" in r.json():
@@ -215,6 +223,7 @@ class CLNRestWallet(LightningBackend):
                 error_message = str(data["message"])
             except Exception:
                 error_message = r.text
+            logger.error(f"Payment failed: {error_message}")
             return PaymentResponse(
                 result=PaymentResult.FAILED, error_message=error_message
             )
@@ -224,6 +233,63 @@ class CLNRestWallet(LightningBackend):
         checking_id = data["payment_hash"]
         preimage = data["payment_preimage"]
         fee_msat = data["amount_sent_msat"] - data["amount_msat"]
+
+        logger.info(
+            f"Payment successful - hash: {checking_id}, amount: {data['amount_msat']} msat, fee: {fee_msat} msat"
+        )
+
+        return PaymentResponse(
+            result=PAYMENT_RESULT_MAP[data["status"]],
+            checking_id=checking_id,
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
+            preimage=preimage,
+        )
+
+    async def pay_partial_invoice(
+        self, quote: MeltQuote, amount: Amount, fee_limit_msat: int
+    ) -> PaymentResponse:
+        try:
+            decode(quote.request)
+        except Bolt11Exception as exc:
+            return PaymentResponse(
+                result=PaymentResult.FAILED,
+                error_message=str(exc),
+            )
+
+        amount_msat = amount.to(Unit.msat).amount
+        fee_limit_percent = fee_limit_msat / amount_msat * 100
+        post_data = {
+            "bolt11": quote.request,
+            "partial_msat": amount_msat,
+            "maxfeepercent": f"{fee_limit_percent:.11}",
+            "exemptfee": 0,
+        }
+        logger.debug(
+            f"Partial payment: {amount_msat} msat, fee_limit: {fee_limit_msat} msat"
+        )
+
+        r = await self.client.post("/v1/pay", data=post_data, timeout=None)
+
+        if r.is_error or "message" in r.json():
+            try:
+                data = r.json()
+                error_message = str(data["message"])
+            except Exception:
+                error_message = r.text
+            logger.error(f"Partial payment failed: {error_message}")
+            return PaymentResponse(
+                result=PaymentResult.FAILED, error_message=error_message
+            )
+
+        data = r.json()
+        checking_id = data["payment_hash"]
+        preimage = data["payment_preimage"]
+        fee_msat = data["amount_sent_msat"] - data["amount_msat"]
+
+        logger.info(
+            f"Partial payment succeeded - hash: {checking_id}, "
+            f"amount: {amount_msat} msat, fee: {fee_msat} msat"
+        )
 
         return PaymentResponse(
             result=PAYMENT_RESULT_MAP[data["status"]],
@@ -298,10 +364,10 @@ class CLNRestWallet(LightningBackend):
             else 0
         )
         self.last_pay_index = last_pay_index
-        
+
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 url = "/v1/waitanyinvoice"
@@ -343,19 +409,29 @@ class CLNRestWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
-                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
+                retry_delay = max(
+                    settings.mint_retry_exponential_backoff_base_delay,
+                    min(retry_delay * 2, max_retry_delay),
+                )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
+        """Get payment quote with NUT-15 MPP support."""
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
+        assert (
+            invoice_obj.amount_msat and invoice_obj.amount_msat > 0
+        ), "invalid invoice amount"
         amount_msat = (
-            melt_quote.mpp_amount if melt_quote.is_mpp else (invoice_obj.amount_msat)
+            melt_quote.mpp_amount if melt_quote.is_mpp else int(invoice_obj.amount_msat)
         )
+        if melt_quote.is_mpp:
+            logger.debug(
+                f"NUT-15 MPP quote: {amount_msat} msat of {invoice_obj.amount_msat} msat"
+            )
+
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
