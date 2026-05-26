@@ -1,12 +1,11 @@
 import asyncio
-import json
-import math
+import inspect
 import os
-import subprocess
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Optional
 
 import bolt11
-import httpx
+import breez_sdk_spark
+from loguru import logger
 
 from cashu.core.base import Amount, MeltQuote, Unit
 from cashu.core.models import PostMeltQuoteRequest
@@ -22,10 +21,34 @@ from cashu.lightning.base import (
 )
 
 
+class _SdkEventListener(breez_sdk_spark.EventListener):
+    def __init__(self, wallet: "SparkL2Wallet"):
+        self.wallet = wallet
+
+    def on_event(self, event: breez_sdk_spark.SdkEvent):
+        # We only care about incoming payments
+        if event.is_payment_succeeded():
+            payment = event.payment_succeeded.payment
+            # Only track incoming payments
+            if payment.payment_type == breez_sdk_spark.PaymentType.RECEIVE:
+                # The payment.details will contain the invoice if it's a lightning payment
+                # We extract the checking_id (payment hash)
+                details = payment.details
+                if details and details.is_lightning():
+                    htlc = details.lightning.htlc_details
+                    if htlc and htlc.payment_hash:
+                        asyncio.run_coroutine_threadsafe(
+                            self.wallet.payment_queue.put(htlc.payment_hash),
+                            asyncio.get_event_loop()
+                        )
+                # If it's a spark payment (on-chain/deposit/etc), we might not have a simple payment hash
+                # but for bolt11 invoices created via this backend, it will be lightning.
+
+
 class SparkL2Wallet(LightningBackend):
     """
     Spark L2 Wallet backend.
-    Communicates with the local Node.js bridge which wraps the Spark TypeScript SDK.
+    Uses the official Breez Spark SDK for Python (`breez-sdk-spark`).
     """
 
     supported_units = {Unit.sat, Unit.msat}
@@ -36,59 +59,92 @@ class SparkL2Wallet(LightningBackend):
     def __init__(self, unit: Unit, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
-        
-        # Read from config or defaults
-        host = getattr(settings, "mint_spark_bridge_host", "127.0.0.1")
-        port = getattr(settings, "mint_spark_bridge_port", 8426)
-        self.base_url = f"http://{host}:{port}"
-        
-        self.client = httpx.AsyncClient(base_url=self.base_url)
+        self.sdk: Optional[breez_sdk_spark.BreezSdk] = None
+        self.payment_queue: asyncio.Queue[str] = asyncio.Queue()
+        self.listener: Optional[_SdkEventListener] = None
 
-        self.bridge_process: Optional[subprocess.Popen] = None
-        # Start the bridge process
-        bridge_dir = os.path.join(os.path.dirname(__file__), "sparkl2_bridge")
+    async def _ensure_sdk(self):
+        if self.sdk is not None:
+            return
+            
+        if not settings.mint_private_key:
+            raise Exception("MINT_PRIVATE_KEY is required to initialize SparkL2Wallet")
+
+        # Initialize the Breez SDK
+        seed = breez_sdk_spark.Seed.MNEMONIC(
+            mnemonic=settings.mint_private_key, 
+            passphrase=None
+        )
+        
+        network_str = getattr(settings, "mint_spark_network", "TESTNET").upper()
+        if network_str == "MAINNET":
+            network = breez_sdk_spark.Network.MAINNET
+        elif network_str == "REGTEST":
+            network = breez_sdk_spark.Network.REGTEST
+        elif network_str == "SIGNET":
+            network = breez_sdk_spark.Network.SIGNET
+        else:
+            network = breez_sdk_spark.Network.TESTNET
+            
+        config = breez_sdk_spark.default_config(network)
+        if settings.mint_spark_api_key:
+            config.api_key = settings.mint_spark_api_key
+
+        # Use a safe storage directory specific to this mint
+        storage_dir = os.path.join(settings.cashu_dir, "sparkl2_data")
+        os.makedirs(storage_dir, exist_ok=True)
+
         try:
-            self.bridge_process = subprocess.Popen(
-                ["npm", "start"], 
-                cwd=bridge_dir, 
-                stdout=subprocess.DEVNULL, 
-                stderr=subprocess.DEVNULL
-            )
+            # We run this in a thread because breez SDK connect is blocking in python (currently)
+            # Actually, `connect` is async in Python. Let's await it.
+            # wait, breez_sdk_spark python binding functions are actually async? No they are sync.
+            import inspect
+            if inspect.iscoroutinefunction(breez_sdk_spark.connect):
+                self.sdk = await breez_sdk_spark.connect(
+                    request=breez_sdk_spark.ConnectRequest(
+                        config=config, 
+                        seed=seed, 
+                        storage_dir=storage_dir
+                    )
+                )
+            else:
+                self.sdk = await asyncio.to_thread(
+                    breez_sdk_spark.connect,
+                    request=breez_sdk_spark.ConnectRequest(
+                        config=config, 
+                        seed=seed, 
+                        storage_dir=storage_dir
+                    )
+                )
+                
+            self.listener = _SdkEventListener(self)
+            self.sdk.add_event_listener(self.listener)
+            
+            logger.info("Breez Spark SDK initialized successfully.")
+            
         except Exception as e:
-            print(f"Warning: Failed to start Spark L2 bridge: {e}")
+            logger.error(f"Failed to initialize Breez Spark SDK: {e}")
+            raise Exception(f"Failed to initialize Breez Spark SDK: {e}")
 
     async def status(self) -> StatusResponse:
-        # Check if the bridge process has terminated
-        if self.bridge_process and self.bridge_process.poll() is not None:
-            return StatusResponse(
-                error_message="Spark L2 bridge process has terminated unexpectedly.",
-                balance=Amount(self.unit, 0),
-            )
-
         try:
-            # We may need to retry initialization if the bridge is still booting up
-            for _ in range(5):
-                try:
-                    if settings.mint_private_key:
-                        await self.client.post("/init", json={
-                            "seed": settings.mint_private_key,
-                            "network": getattr(settings, "mint_spark_network", "TESTNET")
-                        }, timeout=15)
-                    break
-                except httpx.RequestError:
-                    await asyncio.sleep(1)
+            await self._ensure_sdk()
             
-            r = await self.client.get("/status", timeout=5)
-            r.raise_for_status()
-            data = r.json()
-            balance_sats = data.get("balanceSats", 0)
+            if not self.sdk:
+                return StatusResponse(
+                    error_message="Spark SDK not initialized",
+                    balance=Amount(self.unit, 0),
+                )
+                
+            info = self.sdk.get_info()
+            balance_sats = info.balance_sats
             balance = Amount(Unit.sat, balance_sats)
             if self.unit == Unit.msat:
                 balance = Amount(Unit.msat, balance_sats * 1000)
             return StatusResponse(balance=balance)
         except Exception as e:
             return StatusResponse(
-                error_message=f"Failed to connect to Spark bridge: {str(e)}",
+                error_message=f"Failed to get status from Spark SDK: {str(e)}",
                 balance=Amount(self.unit, 0),
             )
 
@@ -100,25 +156,41 @@ class SparkL2Wallet(LightningBackend):
         **kwargs,
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
+        await self._ensure_sdk()
+        
         amount_sats = amount.to(Unit.sat, round="up").amount
         
-        payload: Dict[str, Any] = {
-            "amountSats": amount_sats,
-            "memo": memo,
-        }
-        if description_hash:
-            payload["descriptionHash"] = description_hash.hex()
-            # Spark SDK doesn't allow both memo and descriptionHash
-            payload.pop("memo", None)
-
+        if not self.sdk:
+            raise Exception("SDK not initialized")
+        
         try:
-            r = await self.client.post("/invoice", json=payload, timeout=10)
-            r.raise_for_status()
-            data = r.json()
+            # We want to create a bolt11 invoice
+            req = breez_sdk_spark.ReceivePaymentRequest(
+                payment_method=breez_sdk_spark.ReceivePaymentMethod.BOLT11_INVOICE(
+                    amount_sats=amount_sats,
+                    description=memo if not description_hash else "",
+                    payment_hash=description_hash.hex() if description_hash else None
+                )
+            )
+            
+            if inspect.iscoroutinefunction(self.sdk.receive_payment):
+                res = await self.sdk.receive_payment(req)
+            else:
+                res = await asyncio.to_thread(self.sdk.receive_payment, req)
+                
+            # The response contains the invoice
+            if not res.destination.is_bolt11_invoice():
+                raise Exception("Failed to get bolt11 invoice destination")
+                
+            invoice = res.destination.bolt11_invoice.invoice
+            
+            # The payment hash is our checking ID
+            invoice_obj = bolt11.decode(invoice)
+            
             return InvoiceResponse(
                 ok=True,
-                checking_id=data["id"],
-                payment_request=data["invoice"],
+                checking_id=invoice_obj.payment_hash,
+                payment_request=invoice,
             )
         except Exception as e:
             return InvoiceResponse(
@@ -129,18 +201,43 @@ class SparkL2Wallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        try:
-            payload = {
-                "invoice": quote.request,
-                "maxFeeSats": fee_limit_msat // 1000
-            }
-            r = await self.client.post("/pay", json=payload, timeout=30)
-            r.raise_for_status()
-            data = r.json()
+        await self._ensure_sdk()
+        if not self.sdk:
+            raise Exception("SDK not initialized")
             
+        try:
+            # The Spark SDK has prepare_send_payment -> send_payment flow
+            prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
+                payment_request=quote.request,
+                amount=None, # Already in invoice
+                fee_policy=None # Can pass fee limits here if supported
+            )
+            
+            if inspect.iscoroutinefunction(self.sdk.prepare_send_payment):
+                prepare_res = await self.sdk.prepare_send_payment(prepare_req)
+            else:
+                prepare_res = await asyncio.to_thread(self.sdk.prepare_send_payment, prepare_req)
+                
+            # Ensure fee is within limits
+            fee_sats = prepare_res.fees.original_value
+            if fee_sats * 1000 > fee_limit_msat:
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message=f"Fee estimate ({fee_sats} sats) exceeds limit ({fee_limit_msat // 1000} sats)"
+                )
+                
+            send_req = breez_sdk_spark.SendPaymentRequest(
+                prepare_response=prepare_res
+            )
+            
+            if inspect.iscoroutinefunction(self.sdk.send_payment):
+                send_res = await self.sdk.send_payment(send_req)
+            else:
+                send_res = await asyncio.to_thread(self.sdk.send_payment, send_req)
+                
             return PaymentResponse(
                 result=PaymentResult.PENDING,
-                checking_id=data["id"],
+                checking_id=send_res.payment.id,
             )
         except Exception as e:
             return PaymentResponse(
@@ -149,46 +246,76 @@ class SparkL2Wallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        try:
-            r = await self.client.get(f"/invoice/status/{checking_id}", timeout=5)
-            r.raise_for_status()
-            data = r.json()
+        # checking_id is the payment hash
+        await self._ensure_sdk()
+        if not self.sdk:
+            raise Exception("SDK not initialized")
             
-            status_str = data.get("status", "")
-            if status_str in ("LIGHTNING_PAYMENT_RECEIVED", "PAYMENT_PREIMAGE_RECOVERED", "TRANSFER_COMPLETED", "CLAIMED", "PAID"):
-                return PaymentStatus(result=PaymentResult.SETTLED)
-            elif status_str in ("EXPIRED", "FAILED", "TRANSFER_FAILED", "LIGHTNING_PAYMENT_FAILED", "REFUND_SIGNING_FAILED", "TRANSFER_CREATION_FAILED", "REFUND_SIGNING_COMMITMENTS_QUERYING_FAILED", "PAYMENT_PREIMAGE_RECOVERING_FAILED"):
-                return PaymentStatus(result=PaymentResult.FAILED)
+        try:
+            # We must list payments and find the receive payment by hash
+            # Breez SDK provides list_payments but it might be inefficient.
+            # However, for Spark L2 it's local.
+            req = breez_sdk_spark.ListPaymentsRequest(
+                filters=None,
+                offset=0,
+                limit=100 # Fetch recent payments
+            )
+            
+            if inspect.iscoroutinefunction(self.sdk.list_payments):
+                payments = await self.sdk.list_payments(req)
             else:
-                return PaymentStatus(result=PaymentResult.PENDING)
+                payments = await asyncio.to_thread(self.sdk.list_payments, req)
+                
+            for p in payments:
+                if p.payment_type == breez_sdk_spark.PaymentType.RECEIVE:
+                    if p.details and p.details.is_lightning():
+                        htlc = p.details.lightning.htlc_details
+                        if htlc and htlc.payment_hash == checking_id:
+                            if p.status == breez_sdk_spark.PaymentStatus.COMPLETED:
+                                return PaymentStatus(result=PaymentResult.SETTLED)
+                            elif p.status == breez_sdk_spark.PaymentStatus.FAILED:
+                                return PaymentStatus(result=PaymentResult.FAILED)
+                                
+            # If not found in recent, assume pending
+            return PaymentStatus(result=PaymentResult.PENDING)
                 
         except Exception as e:
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
+        await self._ensure_sdk()
+        if not self.sdk:
+            raise Exception("SDK not initialized")
+            
         try:
-            r = await self.client.get(f"/pay/status/{checking_id}", timeout=5)
-            r.raise_for_status()
-            data = r.json()
-            
-            status_str = data.get("status", "")
-            preimage = data.get("preimage")
-            fee_msats = data.get("feeMsats")
-            
+            if inspect.iscoroutinefunction(self.sdk.get_payment):
+                payment = await self.sdk.get_payment(checking_id)
+            else:
+                payment = await asyncio.to_thread(self.sdk.get_payment, checking_id)
+                
+            if not payment:
+                return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="Payment not found")
+                
+            fee_sats = payment.fee
             fee_amount = None
-            if fee_msats is not None:
+            if fee_sats is not None:
+                fee_amount = Amount(Unit.sat, fee_sats)
                 if self.unit == Unit.msat:
-                    fee_amount = Amount(Unit.msat, int(fee_msats))
-                else:
-                    fee_amount = Amount(Unit.sat, math.ceil(fee_msats / 1000.0))
+                    fee_amount = Amount(Unit.msat, fee_sats * 1000)
 
-            if status_str in ("LIGHTNING_PAYMENT_SUCCEEDED", "PREIMAGE_PROVIDED", "TRANSFER_COMPLETED"):
+            preimage = None
+            if payment.details and payment.details.is_lightning():
+                htlc = payment.details.lightning.htlc_details
+                if htlc:
+                    preimage = htlc.payment_preimage
+
+            if payment.status == breez_sdk_spark.PaymentStatus.COMPLETED:
                 return PaymentStatus(
                     result=PaymentResult.SETTLED,
                     preimage=preimage,
                     fee=fee_amount
                 )
-            elif status_str in ("LIGHTNING_PAYMENT_FAILED", "TRANSFER_FAILED", "USER_SWAP_RETURN_FAILED", "PREIMAGE_PROVIDING_FAILED", "USER_TRANSFER_VALIDATION_FAILED"):
+            elif payment.status == breez_sdk_spark.PaymentStatus.FAILED:
                 return PaymentStatus(result=PaymentResult.FAILED)
             else:
                 return PaymentStatus(result=PaymentResult.PENDING)
@@ -199,26 +326,27 @@ class SparkL2Wallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
+        await self._ensure_sdk()
+        if not self.sdk:
+            raise Exception("SDK not initialized")
+            
         try:
-            payload = {"invoice": melt_quote.request}
-            r = await self.client.post("/pay/quote", json=payload, timeout=5)
-            r.raise_for_status()
-            data = r.json()
+            prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
+                payment_request=melt_quote.request,
+                amount=None, 
+                fee_policy=None
+            )
             
-            fee_msats = data.get("feeMsats", 0)
-            
-            if fee_msats is not None:
-                if self.unit == Unit.msat:
-                    fee_amount = Amount(Unit.msat, int(fee_msats))
-                else:
-                    fee_amount = Amount(Unit.sat, math.ceil(fee_msats / 1000.0))
+            if inspect.iscoroutinefunction(self.sdk.prepare_send_payment):
+                prepare_res = await self.sdk.prepare_send_payment(prepare_req)
             else:
-                fee_amount = Amount(self.unit, 0)
-                
-            # Normally parsed from invoice, but we need amount.
-            # Usually the Mint handles invoice parsing via decode_invoice. 
-            # So amount is handled outside, but get_payment_quote requires checking_id and amount
+                prepare_res = await asyncio.to_thread(self.sdk.prepare_send_payment, prepare_req)
             
+            fee_sats = prepare_res.fees.original_value
+            fee_amount = Amount(Unit.sat, fee_sats)
+            if self.unit == Unit.msat:
+                fee_amount = Amount(Unit.msat, fee_sats * 1000)
+                
             invoice_obj = bolt11.decode(melt_quote.request)
             amount_msat = int(invoice_obj.amount_msat) if invoice_obj.amount_msat else 0
             amount_unit = Amount(Unit.msat, amount_msat)
@@ -236,19 +364,7 @@ class SparkL2Wallet(LightningBackend):
             raise Exception(f"Failed to get payment quote: {str(e)}")
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        await self._ensure_sdk()
         while True:
-            try:
-                async with self.client.stream("GET", "/stream", timeout=None) as r:
-                    async for line in r.aiter_lines():
-                        if line.startswith("data:"):
-                            try:
-                                data = json.loads(line[5:].strip())
-                                # Assuming the bridge emits the full event object
-                                # The event structure might have 'id' or 'transferId'
-                                checking_id = data.get("id") or data.get("transferId") or data.get("paymentHash")
-                                if checking_id:
-                                    yield checking_id
-                            except Exception:
-                                pass
-            except Exception:
-                await asyncio.sleep(5)
+            checking_id = await self.payment_queue.get()
+            yield checking_id
