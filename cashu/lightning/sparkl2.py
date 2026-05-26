@@ -25,7 +25,7 @@ class _SdkEventListener(breez_sdk_spark.EventListener):
     def __init__(self, wallet: "SparkL2Wallet"):
         self.wallet = wallet
 
-    def on_event(self, event: breez_sdk_spark.SdkEvent):
+    async def on_event(self, event: breez_sdk_spark.SdkEvent):
         # We only care about incoming payments
         if event.is_payment_succeeded():
             payment = event.payment_succeeded.payment
@@ -37,10 +37,7 @@ class _SdkEventListener(breez_sdk_spark.EventListener):
                 if details and details.is_lightning():
                     htlc = details.lightning.htlc_details
                     if htlc and htlc.payment_hash:
-                        asyncio.run_coroutine_threadsafe(
-                            self.wallet.payment_queue.put(htlc.payment_hash),
-                            asyncio.get_event_loop()
-                        )
+                        await self.wallet.payment_queue.put(htlc.payment_hash)
                 # If it's a spark payment (on-chain/deposit/etc), we might not have a simple payment hash
                 # but for bolt11 invoices created via this backend, it will be lightning.
 
@@ -173,8 +170,9 @@ class SparkL2Wallet(LightningBackend):
             # We want to create a bolt11 invoice
             req = breez_sdk_spark.ReceivePaymentRequest(
                 payment_method=breez_sdk_spark.ReceivePaymentMethod.BOLT11_INVOICE(
-                    amount_sats=amount_sats,
                     description=memo if not description_hash else "",
+                    amount_sats=amount_sats,
+                    expiry_secs=None,
                     payment_hash=description_hash.hex() if description_hash else None
                 )
             )
@@ -184,11 +182,8 @@ class SparkL2Wallet(LightningBackend):
             else:
                 res = await asyncio.to_thread(self.sdk.receive_payment, req)
                 
-            # The response contains the invoice
-            if not res.destination.is_bolt11_invoice():
-                raise Exception("Failed to get bolt11 invoice destination")
-                
-            invoice = res.destination.bolt11_invoice.invoice
+            # The response contains the invoice string
+            invoice = res.payment_request
             
             # The payment hash is our checking ID
             invoice_obj = bolt11.decode(invoice)
@@ -199,6 +194,7 @@ class SparkL2Wallet(LightningBackend):
                 payment_request=invoice,
             )
         except Exception as e:
+            logger.error(f"Failed to create invoice: {str(e)}")
             return InvoiceResponse(
                 ok=False,
                 error_message=f"Failed to create invoice: {str(e)}"
@@ -262,9 +258,9 @@ class SparkL2Wallet(LightningBackend):
             # Breez SDK provides list_payments but it might be inefficient.
             # However, for Spark L2 it's local.
             req = breez_sdk_spark.ListPaymentsRequest(
-                filters=None,
-                offset=0,
-                limit=100 # Fetch recent payments
+                type_filter=None,
+                status_filter=None,
+                asset_filter=None,
             )
             
             if inspect.iscoroutinefunction(self.sdk.list_payments):
