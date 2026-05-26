@@ -1,5 +1,7 @@
 import asyncio
+import json
 import os
+import subprocess
 from typing import Any, AsyncGenerator, Dict, Optional
 
 import bolt11
@@ -46,7 +48,6 @@ class SparkL2Wallet(LightningBackend):
             await self.client.get("/status", timeout=1)
             # If we get a response (even 400 not initialized), it's running.
         except httpx.RequestError:
-            import subprocess
             bridge_dir = os.path.join(os.path.dirname(__file__), "sparkl2_bridge")
             # Try to start it
             try:
@@ -223,7 +224,6 @@ class SparkL2Wallet(LightningBackend):
                     async for line in r.aiter_lines():
                         if line.startswith("data:"):
                             try:
-                                import json
                                 data = json.loads(line[5:].strip())
                                 # Assuming the bridge emits the full event object
                                 # The event structure might have 'id' or 'transferId'
