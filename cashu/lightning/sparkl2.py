@@ -67,12 +67,12 @@ class SparkL2Wallet(LightningBackend):
         if self.sdk is not None:
             return
             
-        if not settings.mint_private_key:
-            raise Exception("MINT_PRIVATE_KEY is required to initialize SparkL2Wallet")
+        if not settings.mint_spark_mnemonic:
+            raise Exception("MINT_SPARK_MNEMONIC is required to initialize SparkL2Wallet. Please set a 12, 15, 18, 21, or 24-word seed phrase in your environment.")
 
         # Initialize the Breez SDK
         seed = breez_sdk_spark.Seed.MNEMONIC(
-            mnemonic=settings.mint_private_key, 
+            mnemonic=settings.mint_spark_mnemonic, 
             passphrase=None
         )
         
