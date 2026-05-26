@@ -33,7 +33,8 @@ async def test_swap_outputs_are_sorted(wallet1: Wallet):
     assert wallet1.balance == 16
 
     test_url = f"{wallet1.url}/v1/swap"
-    key = hash_to_curve("test".encode("utf-8"))
+    from cashu.core.crypto.bls_dhke import hash_to_curve
+    key = hash_to_curve(b"test")
     mock_blind_signature = BlindedSignature(
         id=wallet1.keyset_id,
         amount=8,
