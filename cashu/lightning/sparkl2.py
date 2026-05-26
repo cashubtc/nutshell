@@ -154,9 +154,9 @@ class SparkL2Wallet(LightningBackend):
             data = r.json()
             
             status_str = data.get("status", "")
-            if status_str in ("LIGHTNING_RECEIVE_SUCCEEDED", "CLAIMED", "PAID"):
+            if status_str in ("LIGHTNING_PAYMENT_RECEIVED", "PAYMENT_PREIMAGE_RECOVERED", "TRANSFER_COMPLETED", "CLAIMED", "PAID"):
                 return PaymentStatus(result=PaymentResult.SETTLED)
-            elif status_str in ("EXPIRED", "FAILED"):
+            elif status_str in ("EXPIRED", "FAILED", "TRANSFER_FAILED", "LIGHTNING_PAYMENT_FAILED", "REFUND_SIGNING_FAILED"):
                 return PaymentStatus(result=PaymentResult.FAILED)
             else:
                 return PaymentStatus(result=PaymentResult.PENDING)
@@ -180,7 +180,7 @@ class SparkL2Wallet(LightningBackend):
                 if self.unit == Unit.msat:
                     fee_amount = Amount(Unit.msat, fee_sats * 1000)
 
-            if status_str in ("LIGHTNING_PAYMENT_SUCCEEDED", "TRANSFER_COMPLETED"):
+            if status_str in ("LIGHTNING_PAYMENT_SUCCEEDED", "PREIMAGE_PROVIDED", "TRANSFER_COMPLETED"):
                 return PaymentStatus(
                     result=PaymentResult.SETTLED,
                     preimage=preimage,
