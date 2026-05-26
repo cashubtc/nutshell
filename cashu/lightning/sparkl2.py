@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import subprocess
 from typing import Any, AsyncGenerator, Dict, Optional
@@ -172,13 +173,14 @@ class SparkL2Wallet(LightningBackend):
             
             status_str = data.get("status", "")
             preimage = data.get("preimage")
-            fee_sats = data.get("feeSats")
+            fee_msats = data.get("feeMsats")
             
             fee_amount = None
-            if fee_sats is not None:
-                fee_amount = Amount(Unit.sat, fee_sats)
+            if fee_msats is not None:
                 if self.unit == Unit.msat:
-                    fee_amount = Amount(Unit.msat, fee_sats * 1000)
+                    fee_amount = Amount(Unit.msat, int(fee_msats))
+                else:
+                    fee_amount = Amount(Unit.sat, math.ceil(fee_msats / 1000.0))
 
             if status_str in ("LIGHTNING_PAYMENT_SUCCEEDED", "PREIMAGE_PROVIDED", "TRANSFER_COMPLETED"):
                 return PaymentStatus(
@@ -203,10 +205,15 @@ class SparkL2Wallet(LightningBackend):
             r.raise_for_status()
             data = r.json()
             
-            fee_sats = data.get("feeSats", 0)
-            fee_amount = Amount(Unit.sat, fee_sats)
-            if self.unit == Unit.msat:
-                fee_amount = Amount(Unit.msat, fee_sats * 1000)
+            fee_msats = data.get("feeMsats", 0)
+            
+            if fee_msats is not None:
+                if self.unit == Unit.msat:
+                    fee_amount = Amount(Unit.msat, int(fee_msats))
+                else:
+                    fee_amount = Amount(Unit.sat, math.ceil(fee_msats / 1000.0))
+            else:
+                fee_amount = Amount(self.unit, 0)
                 
             # Normally parsed from invoice, but we need amount.
             # Usually the Mint handles invoice parsing via decode_invoice. 

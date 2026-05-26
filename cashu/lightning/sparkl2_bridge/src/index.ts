@@ -7,6 +7,22 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 8426;
+const parseFeeToMsats = (feeObj: any, feeSatsPrimitive?: number): number | undefined => {
+    if (feeObj && typeof feeObj.originalValue === 'number') {
+        const val = feeObj.originalValue;
+        switch (feeObj.originalUnit) {
+            case 'MILLISATOSHI': return val;
+            case 'SATOSHI': return val * 1000;
+            case 'BITCOIN': return val * 100000000000;
+            default: return val * 1000; // Assume SATOSHI fallback
+        }
+    } else if (typeof feeObj === 'number') {
+        return feeObj * 1000;
+    } else if (typeof feeSatsPrimitive === 'number') {
+        return feeSatsPrimitive * 1000;
+    }
+    return undefined;
+};
 
 let sparkWallet: SparkWallet | null = null;
 
@@ -145,18 +161,12 @@ app.get('/pay/status/:id', requireInit, async (req, res) => {
         const reqState = await sparkWallet!.getLightningSendRequest(id);
         if (reqState) {
             const anyReq = reqState as any;
-            let feeSats = anyReq.feeSats;
-            if (anyReq.fee && anyReq.fee.originalValue) {
-                // If it's a CurrencyAmount object, Spark fee is usually in msats, so divide by 1000
-                feeSats = anyReq.fee.originalValue / 1000;
-            } else if (typeof anyReq.fee === 'number') {
-                feeSats = anyReq.fee;
-            }
+            const feeMsats = parseFeeToMsats(anyReq.fee, anyReq.feeSats);
 
             res.json({
                 status: reqState.status,
                 preimage: anyReq.preimage || anyReq.paymentPreimage,
-                feeSats: feeSats
+                feeMsats: feeMsats
             });
             return;
         }
@@ -170,7 +180,7 @@ app.post('/pay/quote', requireInit, async (req, res) => {
     try {
         const { invoice } = req.body;
         const estimate = await sparkWallet!.getLightningSendFeeEstimate({ encodedInvoice: invoice });
-        res.json({ feeSats: estimate });
+        res.json({ feeMsats: typeof estimate === 'number' ? estimate * 1000 : parseFeeToMsats(estimate) });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
