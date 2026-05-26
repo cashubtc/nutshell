@@ -145,10 +145,18 @@ app.get('/pay/status/:id', requireInit, async (req, res) => {
         const reqState = await sparkWallet!.getLightningSendRequest(id);
         if (reqState) {
             const anyReq = reqState as any;
+            let feeSats = anyReq.feeSats;
+            if (anyReq.fee && anyReq.fee.originalValue) {
+                // If it's a CurrencyAmount object, Spark fee is usually in msats, so divide by 1000
+                feeSats = anyReq.fee.originalValue / 1000;
+            } else if (typeof anyReq.fee === 'number') {
+                feeSats = anyReq.fee;
+            }
+
             res.json({
                 status: reqState.status,
                 preimage: anyReq.preimage || anyReq.paymentPreimage,
-                feeSats: anyReq.feeSats || anyReq.fee
+                feeSats: feeSats
             });
             return;
         }
