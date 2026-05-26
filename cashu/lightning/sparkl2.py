@@ -38,7 +38,7 @@ class _SdkEventListener(breez_sdk_spark.EventListener):
                 # We extract the checking_id (payment hash)
                 details = payment.details
                 if details and details.is_lightning():
-                    htlc = details.lightning.htlc_details
+                    htlc = getattr(details, "htlc_details", None)
                     if htlc and htlc.payment_hash:
                         await self.wallet.payment_queue.put(htlc.payment_hash)
                 # If it's a spark payment (on-chain/deposit/etc), we might not have a simple payment hash
@@ -224,11 +224,14 @@ class SparkL2Wallet(LightningBackend):
                 prepare_res = await asyncio.to_thread(self.sdk.prepare_send_payment, prepare_req)
                 
             # Ensure fee is within limits
-            fee_sats = prepare_res.fees.original_value
-            if fee_sats * 1000 > fee_limit_msat:
+            fee_sats = getattr(prepare_res.payment_method, "lightning_fee_sats", 0)
+            spark_fee = getattr(prepare_res.payment_method, "spark_transfer_fee_sats", 0) or 0
+            total_fee_sats = fee_sats + spark_fee
+            
+            if total_fee_sats * 1000 > fee_limit_msat:
                 return PaymentResponse(
                     result=PaymentResult.FAILED,
-                    error_message=f"Fee estimate ({fee_sats} sats) exceeds limit ({fee_limit_msat // 1000} sats)"
+                    error_message=f"Fee estimate ({total_fee_sats} sats) exceeds limit ({fee_limit_msat // 1000} sats)"
                 )
                 
             send_req = breez_sdk_spark.SendPaymentRequest(
@@ -267,14 +270,14 @@ class SparkL2Wallet(LightningBackend):
             )
             
             if inspect.iscoroutinefunction(self.sdk.list_payments):
-                payments = await self.sdk.list_payments(req)
+                res = await self.sdk.list_payments(req)
             else:
-                payments = await asyncio.to_thread(self.sdk.list_payments, req)
+                res = await asyncio.to_thread(self.sdk.list_payments, req)
                 
-            for p in payments:
+            for p in res.payments:
                 if p.payment_type == breez_sdk_spark.PaymentType.RECEIVE:
                     if p.details and p.details.is_lightning():
-                        htlc = p.details.lightning.htlc_details
+                        htlc = getattr(p.details, "htlc_details", None)
                         if htlc and htlc.payment_hash == checking_id:
                             if p.status == breez_sdk_spark.PaymentStatus.COMPLETED:
                                 return PaymentStatus(result=PaymentResult.SETTLED)
@@ -293,15 +296,17 @@ class SparkL2Wallet(LightningBackend):
             raise Exception("SDK not initialized")
             
         try:
+            req = breez_sdk_spark.GetPaymentRequest(payment_id=checking_id)
             if inspect.iscoroutinefunction(self.sdk.get_payment):
-                payment = await self.sdk.get_payment(checking_id)
+                res = await self.sdk.get_payment(req)
             else:
-                payment = await asyncio.to_thread(self.sdk.get_payment, checking_id)
+                res = await asyncio.to_thread(self.sdk.get_payment, req)
                 
-            if not payment:
+            if not res or not res.payment:
                 return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="Payment not found")
                 
-            fee_sats = payment.fee
+            payment = res.payment
+            fee_sats = payment.fees
             fee_amount = None
             if fee_sats is not None:
                 fee_amount = Amount(Unit.sat, fee_sats)
@@ -310,9 +315,9 @@ class SparkL2Wallet(LightningBackend):
 
             preimage = None
             if payment.details and payment.details.is_lightning():
-                htlc = payment.details.lightning.htlc_details
+                htlc = getattr(payment.details, "htlc_details", None)
                 if htlc:
-                    preimage = htlc.payment_preimage
+                    preimage = htlc.preimage
 
             if payment.status == breez_sdk_spark.PaymentStatus.COMPLETED:
                 return PaymentStatus(
@@ -347,10 +352,13 @@ class SparkL2Wallet(LightningBackend):
             else:
                 prepare_res = await asyncio.to_thread(self.sdk.prepare_send_payment, prepare_req)
             
-            fee_sats = prepare_res.fees.original_value
-            fee_amount = Amount(Unit.sat, fee_sats)
+            fee_sats = getattr(prepare_res.payment_method, "lightning_fee_sats", 0)
+            spark_fee = getattr(prepare_res.payment_method, "spark_transfer_fee_sats", 0) or 0
+            total_fee_sats = fee_sats + spark_fee
+            
+            fee_amount = Amount(Unit.sat, total_fee_sats)
             if self.unit == Unit.msat:
-                fee_amount = Amount(Unit.msat, fee_sats * 1000)
+                fee_amount = Amount(Unit.msat, total_fee_sats * 1000)
                 
             invoice_obj = bolt11.decode(melt_quote.request)
             amount_msat = int(invoice_obj.amount_msat) if invoice_obj.amount_msat else 0
