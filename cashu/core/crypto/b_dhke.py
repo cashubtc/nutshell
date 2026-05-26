@@ -54,6 +54,7 @@ import hashlib
 import hmac
 from typing import Optional, Tuple
 
+from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
 from .secp import PrivateKey, PublicKey
 
 DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_Cashu_"
@@ -179,12 +180,13 @@ def step2_bob_dleq(
     assert R1
     R2: PublicKey = B_ * p  # type: ignore
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
-    if hasattr(a, "multiply"):
+    if isinstance(a, PrivateKey):
         s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
-    else:
+    elif isinstance(a, BlsPrivateKey):
         # For BlsPrivateKey, create a secp PrivateKey internally to use for this addition
-        from .secp import PrivateKey as SecpPrivateKey
-        s = p.add(bytes.fromhex(SecpPrivateKey(bytes.fromhex(a.to_hex())).multiply(e).to_hex()))
+        s = p.add(bytes.fromhex(PrivateKey(bytes.fromhex(a.to_hex())).multiply(e).to_hex()))
+    else:
+        raise TypeError(f"Expected SecpPrivateKey or BlsPrivateKey, got {type(a)}")
     spk = PrivateKey(bytes.fromhex(s.to_hex()))
     epk = PrivateKey(e)
     return epk, spk
