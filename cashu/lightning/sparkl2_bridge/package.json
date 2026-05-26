@@ -4,7 +4,7 @@
   "description": "Spark L2 Bridge for Nutshell",
   "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "start": "node dist/index.js",
     "build": "tsc"
   },
   "dependencies": {
