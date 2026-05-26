@@ -24,10 +24,14 @@ class PublicKeyExt(PublicKey):
             raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
     def __mul__(self, privkey):
-        if isinstance(privkey, PrivateKey):
+        if hasattr(privkey, "multiply"):
             return self.multiply(bytes.fromhex(privkey.to_hex()))
+        elif hasattr(privkey, "scalar"):
+            # If it's a BLS PrivateKey or similar scalar, we can multiply
+            from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey
+            return self.multiply(bytes.fromhex(SecpPrivateKey(bytes.fromhex(privkey.to_hex())).to_hex()))
         else:
-            raise TypeError("Can't multiply with non privatekey")
+            raise TypeError(f"Can't multiply with non privatekey: {type(privkey)}")
 
     def __eq__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
