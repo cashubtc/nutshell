@@ -98,7 +98,6 @@ class SparkL2Wallet(LightningBackend):
             # We run this in a thread because breez SDK connect is blocking in python (currently)
             # Actually, `connect` is async in Python. Let's await it.
             # wait, breez_sdk_spark python binding functions are actually async? No they are sync.
-            import inspect
             if inspect.iscoroutinefunction(breez_sdk_spark.connect):
                 self.sdk = await breez_sdk_spark.connect(
                     request=breez_sdk_spark.ConnectRequest(
@@ -118,7 +117,10 @@ class SparkL2Wallet(LightningBackend):
                 )
                 
             self.listener = _SdkEventListener(self)
-            self.sdk.add_event_listener(self.listener)
+            if inspect.iscoroutinefunction(self.sdk.add_event_listener):
+                await self.sdk.add_event_listener(self.listener)
+            else:
+                self.sdk.add_event_listener(self.listener)
             
             logger.info("Breez Spark SDK initialized successfully.")
             
@@ -136,7 +138,11 @@ class SparkL2Wallet(LightningBackend):
                     balance=Amount(self.unit, 0),
                 )
                 
-            info = self.sdk.get_info()
+            req = breez_sdk_spark.GetInfoRequest(ensure_synced=False)
+            if inspect.iscoroutinefunction(self.sdk.get_info):
+                info = await self.sdk.get_info(req)
+            else:
+                info = await asyncio.to_thread(self.sdk.get_info, req)
             balance_sats = info.balance_sats
             balance = Amount(Unit.sat, balance_sats)
             if self.unit == Unit.msat:
