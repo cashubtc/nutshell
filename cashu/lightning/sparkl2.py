@@ -173,7 +173,7 @@ class SparkL2Wallet(LightningBackend):
             # We want to create a bolt11 invoice
             req = breez_sdk_spark.ReceivePaymentRequest(
                 payment_method=breez_sdk_spark.ReceivePaymentMethod.BOLT11_INVOICE(
-                    description=memo if not description_hash else "",
+                    description=(memo or "") if not description_hash else "",
                     amount_sats=amount_sats,
                     expiry_secs=None,
                     payment_hash=description_hash.hex() if description_hash else None
