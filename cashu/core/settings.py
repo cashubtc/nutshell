@@ -115,6 +115,10 @@ class MintBackends(MintSettings):
     mint_strike_key: Optional[str] = Field(default=None)
     mint_blink_key: Optional[str] = Field(default=None)
 
+    mint_spark_bridge_host: str = Field(default="127.0.0.1")
+    mint_spark_bridge_port: int = Field(default=8426)
+    mint_spark_network: str = Field(default="TESTNET")
+
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
