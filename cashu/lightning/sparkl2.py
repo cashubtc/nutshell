@@ -28,7 +28,25 @@ class _SdkEventListener(breez_sdk_spark.EventListener):
     async def on_event(self, event: breez_sdk_spark.SdkEvent):
         # We only care about incoming payments
         if event.is_payment_succeeded():
-            payment = event.payment_succeeded.payment
+            payment = getattr(event, "payment", None)
+            if payment is None:
+                # Some rust binding generators use the variant name lowercased, but the error said it didn't exist.
+                # Let's try to extract it from the event attributes. 
+                try:
+                    payment = event.payment_succeeded.payment
+                except AttributeError:
+                    pass
+            
+            # Uniffi-rs bindings for enums usually have the properties directly on the variant object
+            if payment is None:
+                # If we're here, `event` IS the `PAYMENT_SUCCEEDED` instance.
+                # We can access `event.payment`.
+                if hasattr(event, "payment"):
+                    payment = event.payment
+            
+            if not payment:
+                return
+
             # Only track incoming payments
             if payment.payment_type == breez_sdk_spark.PaymentType.RECEIVE:
                 # The payment.details will contain the invoice if it's a lightning payment
