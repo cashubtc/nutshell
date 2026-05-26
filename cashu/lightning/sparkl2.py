@@ -43,28 +43,39 @@ class SparkL2Wallet(LightningBackend):
         
         self.client = httpx.AsyncClient(base_url=self.base_url)
 
-    async def _ensure_bridge_running(self):
+        self.bridge_process: Optional[subprocess.Popen] = None
+        # Start the bridge process
+        bridge_dir = os.path.join(os.path.dirname(__file__), "sparkl2_bridge")
         try:
-            await self.client.get("/status", timeout=1)
-            # If we get a response (even 400 not initialized), it's running.
-        except httpx.RequestError:
-            bridge_dir = os.path.join(os.path.dirname(__file__), "sparkl2_bridge")
-            # Try to start it
-            try:
-                subprocess.Popen(["npm", "start"], cwd=bridge_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                await asyncio.sleep(3) # Wait for it to start
-            except Exception as e:
-                print(f"Warning: Failed to start Spark L2 bridge automatically: {e}")
+            self.bridge_process = subprocess.Popen(
+                ["npm", "start"], 
+                cwd=bridge_dir, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
+        except Exception as e:
+            print(f"Warning: Failed to start Spark L2 bridge: {e}")
 
     async def status(self) -> StatusResponse:
-        await self._ensure_bridge_running()
+        # Check if the bridge process has terminated
+        if self.bridge_process and self.bridge_process.poll() is not None:
+            return StatusResponse(
+                error_message="Spark L2 bridge process has terminated unexpectedly.",
+                balance=Amount(self.unit, 0),
+            )
+
         try:
-            # Initialize the bridge if necessary
-            if settings.mint_private_key:
-                await self.client.post("/init", json={
-                    "seed": settings.mint_private_key,
-                    "network": getattr(settings, "mint_spark_network", "TESTNET")
-                }, timeout=15)
+            # We may need to retry initialization if the bridge is still booting up
+            for _ in range(5):
+                try:
+                    if settings.mint_private_key:
+                        await self.client.post("/init", json={
+                            "seed": settings.mint_private_key,
+                            "network": getattr(settings, "mint_spark_network", "TESTNET")
+                        }, timeout=15)
+                    break
+                except httpx.RequestError:
+                    await asyncio.sleep(1)
             
             r = await self.client.get("/status", timeout=5)
             r.raise_for_status()
