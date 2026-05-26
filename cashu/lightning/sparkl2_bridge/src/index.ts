@@ -105,13 +105,11 @@ app.get('/stream', requireInit, (req, res) => {
     }, 25000);
 
     const handleEvent = (event: any) => {
-        // According to SDK docs, we can subscribe to wallet events.
-        // Wait, the SDK events might be different. I'll just push any event.
+        // Forward incoming transfer/deposit events as 'inv-paid' so the mint can process them
         res.write(`event: inv-paid\ndata: ${JSON.stringify(event)}\n\n`);
     };
 
-    // Assuming sparkWallet.eventEmitter exists based on docs: "Subscribe to wallet events"
-    // The exact event name might be 'lightningPaymentReceived' or something. We'll listen to 'transfer' or similar.
+    // Subscribe to the correct Spark SDK events for incoming funds
     sparkWallet!.on('transfer:claimed', handleEvent);
     sparkWallet!.on('deposit:confirmed', handleEvent);
 
