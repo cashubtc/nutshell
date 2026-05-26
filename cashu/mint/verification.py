@@ -238,10 +238,16 @@ class LedgerVerification(
         if is_v3:
             from ..core.crypto.bls import PublicKey as BlsPublicKey
             from ..core.crypto.bls_dhke import keyed_verification
-            C_generic = BlsPublicKey(bytes.fromhex(proof.C)) # type: ignore[assignment]
+            try:
+                C_generic = BlsPublicKey(bytes.fromhex(proof.C)) # type: ignore[assignment]
+            except Exception:
+                return False
             valid = keyed_verification(private_key_amount, C_generic, proof.secret) # type: ignore
         else:
-            C_generic = SecpPublicKey(bytes.fromhex(proof.C)) # type: ignore[assignment]
+            try:
+                C_generic = SecpPublicKey(bytes.fromhex(proof.C)) # type: ignore[assignment]
+            except Exception:
+                return False
             valid = b_dhke.verify(private_key_amount, C_generic, proof.secret) # type: ignore
             
         if valid:

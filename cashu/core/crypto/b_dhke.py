@@ -179,7 +179,12 @@ def step2_bob_dleq(
     assert R1
     R2: PublicKey = B_ * p  # type: ignore
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
-    s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
+    if hasattr(a, "multiply"):
+        s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
+    else:
+        # For BlsPrivateKey, create a secp PrivateKey internally to use for this addition
+        from .secp import PrivateKey as SecpPrivateKey
+        s = p.add(bytes.fromhex(SecpPrivateKey(bytes.fromhex(a.to_hex())).multiply(e).to_hex()))
     spk = PrivateKey(bytes.fromhex(s.to_hex()))
     epk = PrivateKey(e)
     return epk, spk
