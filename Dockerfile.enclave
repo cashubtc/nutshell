@@ -1,0 +1,40 @@
+FROM python:3.10-slim
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y curl python3-dev autoconf g++ libpq-dev \
+    build-essential automake pkg-config libtool libffi-dev \
+    openssl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.3.2
+ENV PATH="/root/.local/bin:$PATH"
+
+# Set up app directory
+WORKDIR /app
+COPY . .
+
+# Install Python dependencies
+RUN poetry config virtualenvs.create false && \
+    poetry install --without dev --no-root
+
+# Set default enclave configuration
+ENV MINT_LISTEN_HOST="0.0.0.0"
+ENV MINT_LISTEN_PORT="3338"
+ENV MINT_DATABASE="data/mint"
+ENV CASHU_DIR="/app/data"
+
+# Pre-configure for Spark L2 / Breez
+ENV MINT_BACKEND_BOLT11_SAT="SparkL2Wallet"
+ENV MINT_SPARK_NETWORK="MAINNET"
+
+# Expose the mint port
+EXPOSE 3338
+
+# Copy and setup entrypoint script
+COPY docker/enclave/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# Start using the entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]
