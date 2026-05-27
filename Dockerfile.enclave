@@ -23,7 +23,7 @@ RUN poetry config virtualenvs.create false && \
 ENV MINT_LISTEN_HOST="0.0.0.0"
 ENV MINT_LISTEN_PORT="3338"
 ENV MINT_DATABASE="data/mint"
-ENV CASHU_DIR="/app/data"
+ENV CASHU_DIR="/data"
 
 # Pre-configure for Spark L2 / Breez
 ENV MINT_BACKEND_BOLT11_SAT="SparkL2Wallet"

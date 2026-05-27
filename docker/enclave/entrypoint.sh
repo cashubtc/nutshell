@@ -15,7 +15,7 @@ fi
 
 echo "=========================================================="
 echo "Enclave Mint Started"
-echo "Data Directory: ${CASHU_DIR:-/app/data}"
+echo "Data Directory: ${CASHU_DIR:-/data}"
 echo "Database: ${MINT_DATABASE:-sqlite}"
 echo "=========================================================="
 
