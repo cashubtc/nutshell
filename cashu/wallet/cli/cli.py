@@ -600,7 +600,8 @@ async def invoice(
                 flush=True,
             )
         if mint_supports_websockets:
-            while not paid:
+            ws_deadline = mint_quote.expiry or (time.time() + 5 * 60)  # wait for five minutes
+            while not paid and time.time() < ws_deadline:
                 await asyncio.sleep(0.1)
 
         # we still check manually every 10 seconds
@@ -648,10 +649,13 @@ async def invoice(
         subscription.close()
     except Exception:
         pass
-    print(" Invoice paid.")
 
-    print("")
-    await print_balance(ctx)
+    if paid:
+        print(" Invoice paid.")
+
+        print("")
+        await print_balance(ctx)
+
     return
 
 
