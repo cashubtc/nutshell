@@ -22,6 +22,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
+    MINT_KEY_DERIVATION_LEGACY,
     derive_pubkey,
     random_hash,
 )
@@ -97,6 +98,7 @@ class Ledger(
         amounts: Optional[List[int]] = None,
         backends: Optional[Mapping[Method, Mapping[Unit, LightningBackend]]] = None,
         seed_decryption_key: Optional[str] = None,
+        seed_derivation_method: str = MINT_KEY_DERIVATION_LEGACY,
         crud=LedgerCrudSqlite(),
     ) -> None:
         self.keysets: Dict[str, MintKeyset] = {}
@@ -123,6 +125,7 @@ class Ledger(
                 f"Could not decrypt seed. Make sure that the seed is correct and the decryption key is set. {e}"
             )
         self.derivation_path = derivation_path
+        self.seed_derivation_method = seed_derivation_method
 
         self.db = db
         self.crud = crud

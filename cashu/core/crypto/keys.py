@@ -4,15 +4,26 @@ import os
 from typing import Dict, List, Optional
 
 from bip32 import BIP32
+from mnemonic import Mnemonic
 
 from .secp import PrivateKey, PublicKey
+
+MINT_KEY_DERIVATION_LEGACY = "legacy"
+MINT_KEY_DERIVATION_BIP39 = "bip39"
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     """
     Deterministic derivation of keys for 2^n values.
     """
-    bip32 = BIP32.from_seed(mnemonic.encode())
+    return derive_keys_from_seed(mnemonic.encode(), derivation_path, amounts)
+
+
+def derive_keys_from_seed(seed: bytes, derivation_path: str, amounts: List[int]):
+    """
+    Deterministic BIP32 derivation of keys for 2^n values.
+    """
+    bip32 = BIP32.from_seed(seed)
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
         a: PrivateKey(
@@ -20,6 +31,39 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
         )
         for i, a in enumerate(amounts)
     }
+
+
+def normalize_bip39_mnemonic(mnemonic: str) -> str:
+    return " ".join(mnemonic.lower().strip().split())
+
+
+def validate_bip39_mnemonic(mnemonic: str) -> str:
+    normalized_mnemonic = normalize_bip39_mnemonic(mnemonic)
+    if not Mnemonic("english").check(normalized_mnemonic):
+        raise ValueError("MINT_MNEMONIC must be a valid BIP39 seed phrase.")
+    return normalized_mnemonic
+
+
+def derive_keys_from_bip39_mnemonic(
+    mnemonic: str, derivation_path: str, amounts: List[int]
+):
+    """
+    Key derivation from a BIP39 mnemonic.
+    """
+    normalized_mnemonic = validate_bip39_mnemonic(mnemonic)
+    seed = Mnemonic("english").to_seed(normalized_mnemonic, passphrase="")
+    return derive_keys_from_seed(seed, derivation_path, amounts)
+
+
+def cashu_unit_derivation_index(unit: str) -> int:
+    """Derive hardened unit index from a Cashu unit string."""
+    unit_hash = hashlib.sha256(unit.upper().encode("utf-8")).digest()
+    return int.from_bytes(unit_hash[:4], "big") & ~(1 << 31)
+
+
+def cashu_derivation_path_from_unit(unit: str, index: int) -> str:
+    """Return the mint derivation path for a unit and keyset index."""
+    return f"m/129372'/{cashu_unit_derivation_index(unit)}'/{index}'"
 
 
 def derive_keys_deprecated_pre_0_15(
@@ -59,42 +103,44 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
 
 
 def derive_keyset_id_v2(
-    keys: Dict[int, PublicKey], 
-    unit: str, 
+    keys: Dict[int, PublicKey],
+    unit: object,
     final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,
 ) -> str:
     """
     Deterministic derivation keyset_id v2 from set of public keys (version 01).
-    
+
     Args:
         keys: Dictionary mapping amounts to public keys
         unit: The unit of the keyset
         final_expiry: Optional unix epoch timestamp for keyset expiration
-        
+
     Returns:
         Full 33-byte keyset ID (version byte + 32-byte hash) as hex string
     """
     # sort public keys by amount in ascending order
     sorted_keys = dict(sorted(keys.items()))
-    
+
     # concatenate all public keys to one byte array with fixed separator between keys
-    keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
-    
+    keyset_id_bytes = b",".join(
+        [f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()]
+    )
+
     # add the lowercase unit string to the byte array (no separator necessary since we hash)
     keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
 
     # add the input_fee_ppk if > 0
     if input_fee_ppk > 0:
         keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
-    
+
     # only include final_expiry if provided (per spec discussion)
     if final_expiry is not None:
         keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
-    
+
     # SHA256 hash the concatenated byte array
     hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()
-    
+
     # prefix with version byte 01
     return f"01{hash_digest}"
 
@@ -102,43 +148,43 @@ def derive_keyset_id_v2(
 def derive_keyset_short_id(keyset_id: str) -> str:
     """
     Derive the short keyset ID (8 bytes) from a full keyset ID.
-    
+
     Args:
         keyset_id: Full keyset ID (either version 00 or 01)
-        
+
     Returns:
         Short keyset ID (version byte + first 7 bytes of hash)
     """
     # For version 00, keep existing behavior (already short)
     if is_base64_keyset_id(keyset_id) or keyset_id.startswith("00"):
         return keyset_id
-    
+
     # For version 01, return first 16 chars (8 bytes in hex)
     if keyset_id.startswith("01"):
         return keyset_id[:16]
-    
+
     raise ValueError(f"Unsupported keyset version in ID: {keyset_id}")
 
 
 def is_base64_keyset_id(keyset_id: str) -> bool:
     """
     Check if a keyset ID is a legacy base64 format (pre-0.15.0).
-    
+
     Base64 keyset IDs:
     - Don't start with "00" or "01" version prefix
     - Are typically 12 characters long
     - Are valid base64 strings
-    
+
     Args:
         keyset_id: The keyset ID to check
-        
+
     Returns:
         True if the keyset ID is base64 format, False otherwise
     """
     # If it starts with a known version prefix, it's not base64
     if keyset_id.startswith("00") or keyset_id.startswith("01"):
         return False
-    
+
     # Try to decode as base64 to confirm
     try:
         base64.b64decode(keyset_id, validate=True)
@@ -150,7 +196,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
 def get_keyset_id_version(keyset_id: str) -> str:
     """
     Extract the version from a keyset ID.
-    
+
     Returns:
         - "00" for version 0 (hex keyset IDs with 00 prefix)
         - "01" for version 1 (v2 keyset IDs with 01 prefix)
@@ -158,17 +204,17 @@ def get_keyset_id_version(keyset_id: str) -> str:
     """
     if len(keyset_id) < 2:
         raise ValueError("Invalid keyset ID: too short")
-    
+
     # Check if it's a legacy base64 keyset ID
     if is_base64_keyset_id(keyset_id):
         return "base64"
-    
+
     return keyset_id[:2]
 
 
 def is_keyset_id_v2(keyset_id: str) -> bool:
     """Check if a keyset ID is version 2 (starts with '01')."""
-    return get_keyset_id_version(keyset_id) == '01'
+    return get_keyset_id_version(keyset_id) == "01"
 
 
 def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):

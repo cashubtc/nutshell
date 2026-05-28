@@ -11,6 +11,12 @@ from loguru import logger
 import cashu.mint.management_rpc.management_rpc as management_rpc
 
 from ..core.base import Method, Unit
+from ..core.crypto.keys import (
+    MINT_KEY_DERIVATION_BIP39,
+    MINT_KEY_DERIVATION_LEGACY,
+    cashu_derivation_path_from_unit,
+    validate_bip39_mnemonic,
+)
 from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
@@ -30,6 +36,7 @@ logger.debug("Enviroment Settings:")
 for key, value in settings.dict().items():
     if key in [
         "mint_private_key",
+        "mint_mnemonic",
         "mint_seed_decryption_key",
         "mint_lnbits_key",
         "mint_blink_key",
@@ -73,14 +80,28 @@ if settings.mint_backend_bolt11_eur:
 if not backends:
     raise Exception("No backends are set.")
 
-if not settings.mint_private_key:
-    raise Exception("No mint private key is set.")
+if settings.mint_private_key and settings.mint_mnemonic:
+    raise Exception("Set either MINT_PRIVATE_KEY or MINT_MNEMONIC, not both.")
+
+if settings.mint_mnemonic:
+    mint_seed = validate_bip39_mnemonic(settings.mint_mnemonic)
+    mint_seed_derivation_method = MINT_KEY_DERIVATION_BIP39
+    mint_derivation_path = cashu_derivation_path_from_unit(Unit.sat.name, 1)
+    mint_seed_decryption_key = None
+elif settings.mint_private_key:
+    mint_seed = settings.mint_private_key
+    mint_seed_derivation_method = MINT_KEY_DERIVATION_LEGACY
+    mint_derivation_path = settings.mint_derivation_path
+    mint_seed_decryption_key = settings.mint_seed_decryption_key
+else:
+    raise Exception("No mint private key or mnemonic is set.")
 
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
-    seed=settings.mint_private_key,
-    seed_decryption_key=settings.mint_seed_decryption_key,
-    derivation_path=settings.mint_derivation_path,
+    seed=mint_seed,
+    seed_decryption_key=mint_seed_decryption_key,
+    seed_derivation_method=mint_seed_derivation_method,
+    derivation_path=mint_derivation_path,
     backends=backends,
     crud=LedgerCrudSqlite(),
 )

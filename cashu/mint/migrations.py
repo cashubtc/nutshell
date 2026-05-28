@@ -274,9 +274,10 @@ async def m011_add_quote_tables(db: Database):
         )
 
         # fill columns "seed" and "unit" in table keysets
+        mint_seed = settings.mint_mnemonic or settings.mint_private_key
         await conn.execute(
             f"UPDATE {db.table_with_schema('keysets')} SET seed ="
-            f" '{settings.mint_private_key}', unit = 'sat'"
+            f" '{mint_seed}', unit = 'sat'"
         )
 
         await conn.execute(

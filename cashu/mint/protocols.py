@@ -12,6 +12,8 @@ from .events.events import LedgerEventManager
 
 class SupportsSeed(Protocol):
     seed: str
+    seed_derivation_method: str
+
 
 class SupportsKeysets(Protocol):
     amounts: List[int]

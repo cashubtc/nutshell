@@ -20,8 +20,11 @@ from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
+    MINT_KEY_DERIVATION_BIP39,
+    MINT_KEY_DERIVATION_LEGACY,
     derive_keys,
     derive_keys_deprecated_pre_0_15,
+    derive_keys_from_bip39_mnemonic,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
@@ -438,8 +441,16 @@ class MintQuote(LedgerEvent):
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
-            issued_time = int(row["issued_time"]) if "issued_time" in row.keys() and row["issued_time"] else None
-            last_checked = int(row["last_checked"]) if "last_checked" in row.keys() and row["last_checked"] else None
+            issued_time = (
+                int(row["issued_time"])
+                if "issued_time" in row.keys() and row["issued_time"]
+                else None
+            )
+            last_checked = (
+                int(row["last_checked"])
+                if "last_checked" in row.keys() and row["last_checked"]
+                else None
+            )
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -447,10 +458,14 @@ class MintQuote(LedgerEvent):
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             issued_time = (
-                int(row["issued_time"].timestamp()) if "issued_time" in row.keys() and row["issued_time"] else None
+                int(row["issued_time"].timestamp())
+                if "issued_time" in row.keys() and row["issued_time"]
+                else None
             )
             last_checked = (
-                int(row["last_checked"].timestamp()) if "last_checked" in row.keys() and row["last_checked"] else None
+                int(row["last_checked"].timestamp())
+                if "last_checked" in row.keys() and row["last_checked"]
+                else None
             )
         return cls(
             quote=row["quote"],
@@ -564,11 +579,11 @@ class Unit(Enum):
         elif self == Unit.msat:
             return f"{amount} msat"
         elif self == Unit.usd:
-            return f"${amount/100:.2f} USD"
+            return f"${amount / 100:.2f} USD"
         elif self == Unit.eur:
-            return f"{amount/100:.2f} EUR"
+            return f"{amount / 100:.2f} EUR"
         elif self == Unit.btc:
-            return f"{amount/1e8:.8f} BTC"
+            return f"{amount / 1e8:.8f} BTC"
         elif self == Unit.auth:
             return f"{amount} AUTH"
         else:
@@ -629,18 +644,18 @@ class Amount:
     def sat_to_btc(self) -> str:
         if self.unit != Unit.sat:
             raise Exception("Amount must be in satoshis")
-        return f"{self.amount/1e8:.8f}"
+        return f"{self.amount / 1e8:.8f}"
 
     def msat_to_btc(self) -> str:
         if self.unit != Unit.msat:
             raise Exception("Amount must be in msat")
         sat_amount = Amount(Unit.msat, self.amount).to(Unit.sat, round="up")
-        return f"{sat_amount.amount/1e8:.8f}"
+        return f"{sat_amount.amount / 1e8:.8f}"
 
     def cents_to_usd(self) -> str:
         if self.unit != Unit.usd and self.unit != Unit.eur:
             raise Exception("Amount must be in cents")
-        return f"{self.amount/100:.2f}"
+        return f"{self.amount / 100:.2f}"
 
     def str(self) -> str:
         return self.unit.str(self.amount)
@@ -804,6 +819,7 @@ class MintKeyset:
     encrypted_seed: Optional[str] = None
     seed_encryption_method: Optional[str] = None
     public_keys: Optional[Dict[int, PublicKey]] = None
+    seed_derivation_method: str = MINT_KEY_DERIVATION_LEGACY
     valid_from: Optional[str] = None
     valid_to: Optional[str] = None
     first_seen: Optional[str] = None
@@ -821,6 +837,7 @@ class MintKeyset:
         seed: Optional[str] = None,
         encrypted_seed: Optional[str] = None,
         seed_encryption_method: Optional[str] = None,
+        seed_derivation_method: Optional[str] = None,
         amounts: Optional[List[int]] = None,
         valid_from: Optional[str] = None,
         valid_to: Optional[str] = None,
@@ -852,6 +869,11 @@ class MintKeyset:
             self.seed = seed
 
         assert self.seed, "seed not set"
+        self.seed_derivation_method = seed_derivation_method or (
+            MINT_KEY_DERIVATION_BIP39
+            if settings.mint_mnemonic
+            else MINT_KEY_DERIVATION_LEGACY
+        )
 
         if amounts:
             self.amounts = amounts
@@ -913,6 +935,11 @@ class MintKeyset:
             seed=row["seed"],
             encrypted_seed=row["encrypted_seed"],
             seed_encryption_method=row["seed_encryption_method"],
+            seed_derivation_method=(
+                MINT_KEY_DERIVATION_BIP39
+                if settings.mint_mnemonic
+                else MINT_KEY_DERIVATION_LEGACY
+            ),
             valid_from=row["valid_from"],
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
@@ -930,8 +957,7 @@ class MintKeyset:
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
         return {
-            int(amount): key.format().hex()
-            for amount, key in self.public_keys.items()
+            int(amount): key.format().hex() for amount, key in self.public_keys.items()
         }
 
     def generate_keys(self):
@@ -968,11 +994,16 @@ class MintKeyset:
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 20):
-            self.private_keys = derive_keys(
-                self.seed, self.derivation_path, self.amounts
-            )
+            if self.seed_derivation_method == MINT_KEY_DERIVATION_BIP39:
+                self.private_keys = derive_keys_from_bip39_mnemonic(
+                    self.seed, self.derivation_path, self.amounts
+                )
+            else:
+                self.private_keys = derive_keys(
+                    self.seed, self.derivation_path, self.amounts
+                )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
@@ -981,18 +1012,28 @@ class MintKeyset:
                 self.id = derive_keyset_id(self.public_keys)
                 logger.info(f"Generated keyset v1 ID: {self.id}")
         else:
-            self.private_keys = derive_keys(
-                self.seed, self.derivation_path, self.amounts
-            )
+            if self.seed_derivation_method == MINT_KEY_DERIVATION_BIP39:
+                self.private_keys = derive_keys_from_bip39_mnemonic(
+                    self.seed, self.derivation_path, self.amounts
+                )
+            else:
+                self.private_keys = derive_keys(
+                    self.seed, self.derivation_path, self.amounts
+                )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             # KEYSETS V2: Use new keyset ID derivation
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
+                self.id = derive_keyset_id_v2(
+                    self.public_keys,
+                    self.unit.name,
+                    self.final_expiry,
+                    self.input_fee_ppk,
+                )
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
@@ -1423,9 +1464,9 @@ class AuthProof(BaseModel):
     def to_base64(self):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
-        return (
-            self.prefix + base64.urlsafe_b64encode(json.dumps(serialize_dict).encode()).decode().rstrip("=")
-        )
+        return self.prefix + base64.urlsafe_b64encode(
+            json.dumps(serialize_dict).encode()
+        ).decode().rstrip("=")
 
     @classmethod
     def from_base64(cls, base64_str: str):

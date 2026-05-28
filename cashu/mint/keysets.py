@@ -96,10 +96,11 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         new_keyset = MintKeyset(
             derivation_path="/".join(new_derivation_path),
             seed=self.seed,
+            seed_derivation_method=self.seed_derivation_method,
             amounts=amounts,
             input_fee_ppk=input_fee_ppk,
             active=True,
-            final_expiry=final_expiry
+            final_expiry=final_expiry,
         )
 
         logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
@@ -156,6 +157,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             keyset = MintKeyset(
                 seed=seed,
                 derivation_path=derivation_path,
+                seed_derivation_method=self.seed_derivation_method,
                 amounts=self.amounts,
                 version=version,
                 input_fee_ppk=settings.mint_input_fee_ppk,

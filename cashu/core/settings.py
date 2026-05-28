@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from environs import Env  # type: ignore
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
@@ -50,6 +50,7 @@ class EnvSettings(CashuSettings):
 
 class MintSettings(CashuSettings):
     mint_private_key: Optional[str] = Field(default=None)
+    mint_mnemonic: Optional[str] = Field(default=None)
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
@@ -86,6 +87,16 @@ class MintSettings(CashuSettings):
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
 
+    @model_validator(mode="after")
+    def validate_mint_key_material(self):
+        if self.mint_private_key and self.mint_mnemonic:
+            raise ValueError("Set either MINT_PRIVATE_KEY or MINT_MNEMONIC, not both.")
+        if self.mint_mnemonic:
+            from .crypto.keys import validate_bip39_mnemonic
+
+            self.mint_mnemonic = validate_bip39_mnemonic(self.mint_mnemonic)
+        return self
+
 
 class MintWatchdogSettings(MintSettings):
     mint_watchdog_enabled: bool = Field(
@@ -102,6 +113,7 @@ class MintWatchdogSettings(MintSettings):
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
+
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
