@@ -23,7 +23,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
     derive_pubkey,
-    random_hash,
+    random_quote_id,
 )
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
@@ -360,7 +360,7 @@ class Ledger(
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MintQuote(
-            quote=random_hash(),
+            quote=random_quote_id(),
             method=method.name,
             request=request,
             checking_id=invoice_response.checking_id,
@@ -787,7 +787,7 @@ class Ledger(
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(
-            quote=random_hash(),
+            quote=random_quote_id(),
             method=method.name,
             request=request,
             checking_id=payment_quote.checking_id,
