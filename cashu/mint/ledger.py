@@ -1101,7 +1101,7 @@ class Ledger(
         # if the melt corresponds to an internal mint, mark both as paid
         melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
         # quote not paid yet (not internal), pay it with the backend
-        if melt_quote.state != MeltQuoteState.paid:
+        if melt_quote.state == MeltQuoteState.pending:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
             try:
                 payment = await self.backends[method][unit].pay_invoice(
