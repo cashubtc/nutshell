@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import os
 import secrets
 import time
 import uuid
@@ -188,8 +187,8 @@ def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
     ).decode()[:12]
 
 
-def random_quote_id() -> str:
-    """Returns a random UUIDv7 quote ID."""
+def generate_uuid_v7() -> str:
+    """Returns a random UUIDv7 string."""
     timestamp_ms = time.time_ns() // 1_000_000
     rand_a = secrets.randbits(12)
     rand_b = secrets.randbits(62)
@@ -197,8 +196,3 @@ def random_quote_id() -> str:
         (timestamp_ms << 80) | (0x7 << 76) | (rand_a << 64) | (0b10 << 62) | rand_b
     )
     return str(uuid.UUID(int=uuid_int))
-
-
-def random_hash() -> str:
-    """Returns a base64-urlsafe encoded random hash."""
-    return base64.urlsafe_b64encode(os.urandom(30)).decode()
