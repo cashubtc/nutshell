@@ -157,7 +157,7 @@ class SparkL2Wallet(LightningBackend):
                     description=(memo or "") if not description_hash else "",
                     amount_sats=amount_sats,
                     expiry_secs=None,
-                    payment_hash=description_hash.hex() if description_hash else None
+                    payment_hash=None
                 )
             )
             
