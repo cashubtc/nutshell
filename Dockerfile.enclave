@@ -1,23 +1,41 @@
-FROM python:3.10-slim
+# Stage 1: Builder
+FROM python:3.10-slim as builder
 
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && \
     apt-get install -y curl python3-dev autoconf g++ libpq-dev \
-    build-essential automake pkg-config libtool libffi-dev \
-    openssl && \
-    rm -rf /var/lib/apt/lists/*
+    build-essential automake pkg-config libtool libffi-dev openssl
 
 # Install Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.3.2
 ENV PATH="/root/.local/bin:$PATH"
 
-# Set up app directory
 WORKDIR /app
+COPY pyproject.toml poetry.lock ./
+
+# Install dependencies into a virtual environment so we can easily copy them
+RUN poetry config virtualenvs.create true && \
+    poetry config virtualenvs.in-project true && \
+    poetry install --without dev --no-root --no-interaction --no-ansi
+
+# Stage 2: Runtime
+FROM python:3.10-slim
+
+# Install runtime system dependencies (only what is needed to run, not build)
+RUN apt-get update && \
+    apt-get install -y libpq5 openssl && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the virtual environment from the builder stage
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
 COPY . .
 
-# Install Python dependencies
-RUN poetry config virtualenvs.create false && \
-    poetry install --without dev --no-root
+# Add the virtual environment to PATH so python/pip work seamlessly
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Set default enclave configuration
 ENV MINT_LISTEN_HOST="0.0.0.0"
@@ -32,9 +50,8 @@ ENV MINT_SPARK_NETWORK="MAINNET"
 # Expose the mint port
 EXPOSE 3338
 
-# Copy and setup entrypoint script
-COPY docker/enclave/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# Setup entrypoint script
+RUN chmod +x /app/docker/enclave/entrypoint.sh
 
 # Start using the entrypoint script
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/app/docker/enclave/entrypoint.sh"]

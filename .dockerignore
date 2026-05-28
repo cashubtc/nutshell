@@ -1,0 +1,36 @@
+# Ignore git history
+.git/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Ignore local data
+data/
+test_data/
+logs/
+*.log
+
+# Ignore test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+coverage.xml
+htmlcov/
+.coverage
+.tox/
+
+# Ignore environment files
+.env
+.env.*
+
+# MacOS
+.DS_Store
