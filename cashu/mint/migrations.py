@@ -1261,3 +1261,48 @@ async def m035_add_last_checked_to_mint_quotes(db: Database):
                 ADD COLUMN last_checked TIMESTAMP NULL
             """
         )
+
+
+async def m036_remove_paid_from_melt_quote(db: Database):
+    """Remove the deprecated 'paid' field from melt_quotes.
+    The 'state' column now fully represents payment status."""
+    async with db.connect() as conn:
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                    CREATE TABLE {db.table_with_schema('melt_quotes_new')} (
+                        quote TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        request TEXT NOT NULL,
+                        checking_id TEXT NOT NULL,
+                        unit TEXT NOT NULL,
+                        amount {db.big_int} NOT NULL,
+                        fee_reserve {db.big_int},
+                        created_time TIMESTAMP,
+                        paid_time TIMESTAMP,
+                        fee_paid {db.big_int},
+                        proof TEXT,
+                        state TEXT,
+                        expiry TIMESTAMP,
+                        UNIQUE (quote)
+                    );
+                """
+            )
+            await conn.execute(
+                f"""
+                    INSERT INTO {db.table_with_schema('melt_quotes_new')}
+                    (quote, method, request, checking_id, unit, amount, fee_reserve, created_time, paid_time, fee_paid, proof, state, expiry)
+                    SELECT quote, method, request, checking_id, unit, amount, fee_reserve, created_time, paid_time, fee_paid, proof, state, expiry
+                    FROM {db.table_with_schema('melt_quotes')};
+                """
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('melt_quotes')};")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes_new')} RENAME TO {db.table_with_schema('melt_quotes')};"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+        elif conn.type == "POSTGRES":
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS paid;"
+            )

@@ -533,7 +533,6 @@ class LedgerAPI(SupportsAuth):
                 unit="sat",
                 request="lnbc0",
                 fee_reserve=0,
-                paid=ret.paid or False,
                 state=(
                     MeltQuoteState.paid.value
                     if ret.paid

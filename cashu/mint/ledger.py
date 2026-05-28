@@ -807,7 +807,6 @@ class Ledger(
             unit=quote.unit,
             request=quote.request,
             fee_reserve=quote.fee_reserve,
-            paid=quote.paid,  # deprecated
             state=quote.state.value,
             expiry=quote.expiry,
         )
@@ -946,7 +945,7 @@ class Ledger(
             return melt_quote
 
         # we settle the transaction internally
-        if melt_quote.paid:
+        if melt_quote.state == MeltQuoteState.paid:
             raise TransactionError("melt quote already paid")
 
         # verify amounts from bolt11 invoice
@@ -1102,7 +1101,7 @@ class Ledger(
         # if the melt corresponds to an internal mint, mark both as paid
         melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
         # quote not paid yet (not internal), pay it with the backend
-        if not melt_quote.paid:
+        if melt_quote.state != MeltQuoteState.paid:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
             try:
                 payment = await self.backends[method][unit].pay_invoice(

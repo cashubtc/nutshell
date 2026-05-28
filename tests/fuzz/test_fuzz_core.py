@@ -171,17 +171,17 @@ def test_fuzz_melt_quote(quote, method, request, checking_id, unit, amount, fee_
     
     # Test property accessors
     if state == MeltQuoteState.paid:
-        assert mq.paid
-        assert not mq.unpaid
-        assert not mq.pending
+        assert mq.state == MeltQuoteState.paid
+        assert mq.state != MeltQuoteState.unpaid
+        assert mq.state != MeltQuoteState.pending
     elif state == MeltQuoteState.unpaid:
-        assert not mq.paid
-        assert mq.unpaid
-        assert not mq.pending
+        assert mq.state != MeltQuoteState.paid
+        assert mq.state == MeltQuoteState.unpaid
+        assert mq.state != MeltQuoteState.pending
     elif state == MeltQuoteState.pending:
-        assert not mq.paid
-        assert not mq.unpaid
-        assert mq.pending
+        assert mq.state != MeltQuoteState.paid
+        assert mq.state != MeltQuoteState.unpaid
+        assert mq.state == MeltQuoteState.pending
 
 @given(
     quote=st.text(min_size=1, max_size=50),

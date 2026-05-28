@@ -353,7 +353,6 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         unit=melt_quote.unit,
         request=melt_quote.request,
         fee_reserve=melt_quote.fee_reserve,
-        paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
         payment_preimage=melt_quote.payment_preimage,
