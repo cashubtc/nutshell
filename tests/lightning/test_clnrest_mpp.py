@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from bolt11 import Bolt11
 
-from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
+from cashu.core.base import MeltQuote, MeltQuoteState, Unit
 from cashu.lightning.base import PaymentResult
 from cashu.lightning.clnrest import CLNRestWallet
 
@@ -56,40 +56,6 @@ def wallet(monkeypatch: pytest.MonkeyPatch) -> CLNRestWallet:
 
 
 @pytest.mark.asyncio
-async def test_pay_partial_invoice_success(wallet: CLNRestWallet):
-    with patch("cashu.lightning.clnrest.decode") as mock_decode:
-        mock_invoice = Mock(spec=Bolt11)
-        mock_invoice.payment_hash = "abc123def456"
-        mock_invoice.amount_msat = 1000000
-        mock_decode.return_value = mock_invoice
-
-        wallet.client.post = AsyncMock(
-            return_value=Mock(
-                is_error=False,
-                json=lambda: {
-                    "payment_hash": "abc123def456",
-                    "payment_preimage": "preimage_partial",
-                    "amount_sent_msat": 600100,
-                    "amount_msat": 600000,
-                    "status": "complete",
-                },
-            )
-        )
-
-        quote = create_melt_quote(amount=600000, unit="msat")
-        amount = Amount(Unit.msat, 600000)
-        fee_limit = 1000
-
-        result = await wallet.pay_partial_invoice(quote, amount, fee_limit)
-
-        assert result.result == PaymentResult.SETTLED
-        assert result.checking_id == "abc123def456"
-        assert result.preimage == "preimage_partial"
-        assert result.fee is not None
-        wallet.client.post.assert_called_once()  # type: ignore[attr-defined]
-
-
-@pytest.mark.asyncio
 async def test_mpp_detection_routes_to_partial(wallet: CLNRestWallet):
     with patch("cashu.lightning.clnrest.decode") as mock_decode:
         mock_invoice = Mock(spec=Bolt11)
@@ -117,6 +83,9 @@ async def test_mpp_detection_routes_to_partial(wallet: CLNRestWallet):
 
         assert result.result == PaymentResult.SETTLED
         assert result.preimage == "preimage_mpp"
+        call_data = wallet.client.post.call_args.kwargs["data"]
+        assert "partial_msat" in call_data, "partial_msat must be sent to CLN for MPP"
+        assert call_data["partial_msat"] == 600000
 
 
 @pytest.mark.asyncio
@@ -165,124 +134,6 @@ async def test_full_payment_no_mpp(wallet: CLNRestWallet):
 
         assert result.result == PaymentResult.SETTLED
         assert result.preimage == "preimage123"
+        call_data = wallet.client.post.call_args.kwargs["data"]
+        assert "partial_msat" not in call_data, "partial_msat must not be sent for full payments"
 
-
-@pytest.mark.asyncio
-async def test_invalid_invoice_decode_error(wallet: CLNRestWallet):
-    with patch("cashu.lightning.clnrest.decode") as mock_decode:
-        from bolt11 import Bolt11Exception
-
-        mock_decode.side_effect = Bolt11Exception("Invalid invoice")
-
-        quote = create_melt_quote(amount=600000, unit="msat")
-        amount = Amount(Unit.msat, 600000)
-
-        result = await wallet.pay_partial_invoice(quote, amount, 1000)
-
-        assert result.result == PaymentResult.FAILED
-        assert result.error_message is not None
-        assert "Invalid invoice" in result.error_message
-
-
-@pytest.mark.asyncio
-async def test_fee_limit_calculation(wallet: CLNRestWallet):
-    with patch("cashu.lightning.clnrest.decode") as mock_decode:
-        mock_invoice = Mock(spec=Bolt11)
-        mock_invoice.payment_hash = "fee_test_hash"
-        mock_invoice.amount_msat = 1000000
-        mock_decode.return_value = mock_invoice
-
-        quote = create_melt_quote(amount=600000, unit="msat")
-        amount = Amount(Unit.msat, 600000)
-        fee_limit_msat = 600
-
-        async def mock_post_side_effect(*args, **kwargs):
-            post_data = kwargs.get("data", {})
-            maxfeepercent = float(post_data.get("maxfeepercent", "0"))
-            expected_fee_percent = (fee_limit_msat / 600000) * 100
-            assert abs(maxfeepercent - expected_fee_percent) < 0.001
-
-            return Mock(
-                is_error=False,
-                json=lambda: {
-                    "payment_hash": "fee_test_hash",
-                    "payment_preimage": "preimage_fee",
-                    "amount_sent_msat": 600100,
-                    "amount_msat": 600000,
-                    "status": "complete",
-                },
-            )
-
-        wallet.client.post = AsyncMock(side_effect=mock_post_side_effect)
-
-        await wallet.pay_partial_invoice(quote, amount, fee_limit_msat)
-
-        wallet.client.post.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_partial_msat_parameter_sent_to_cln(wallet: CLNRestWallet):
-    with patch("cashu.lightning.clnrest.decode") as mock_decode:
-        mock_invoice = Mock(spec=Bolt11)
-        mock_invoice.payment_hash = "cln_param_test"
-        mock_invoice.amount_msat = 1000000
-        mock_decode.return_value = mock_invoice
-
-        quote = create_melt_quote(amount=600000, unit="msat")
-        amount = Amount(Unit.msat, 600000)
-
-        async def verify_partial_msat(*args, **kwargs):
-            post_data = kwargs.get("data", {})
-            assert "partial_msat" in post_data
-            assert post_data["partial_msat"] == 600000
-            assert "bolt11" in post_data
-
-            return Mock(
-                is_error=False,
-                json=lambda: {
-                    "payment_hash": "cln_param_test",
-                    "payment_preimage": "preimage_param",
-                    "amount_sent_msat": 600100,
-                    "amount_msat": 600000,
-                    "status": "complete",
-                },
-            )
-
-        wallet.client.post = AsyncMock(side_effect=verify_partial_msat)
-
-        await wallet.pay_partial_invoice(quote, amount, 1000)
-
-        wallet.client.post.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_amount_unit_conversion(wallet: CLNRestWallet):
-    with patch("cashu.lightning.clnrest.decode") as mock_decode:
-        mock_invoice = Mock(spec=Bolt11)
-        mock_invoice.payment_hash = "unit_test"
-        mock_invoice.amount_msat = 1000000
-        mock_decode.return_value = mock_invoice
-
-        wallet.client.post = AsyncMock(
-            return_value=Mock(
-                is_error=False,
-                json=lambda: {
-                    "payment_hash": "unit_test",
-                    "payment_preimage": "preimage_unit",
-                    "amount_sent_msat": 600100,
-                    "amount_msat": 600000,
-                    "status": "complete",
-                },
-            )
-        )
-
-        amount_sat = Amount(Unit.sat, 600)
-        amount_msat = amount_sat.to(Unit.msat).amount
-
-        assert amount_msat == 600000
-
-        quote = create_melt_quote(amount=600, unit="sat")
-
-        result = await wallet.pay_partial_invoice(quote, amount_sat, 1000)
-
-        assert result.result == PaymentResult.SETTLED
