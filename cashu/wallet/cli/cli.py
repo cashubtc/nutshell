@@ -297,7 +297,8 @@ async def pay(
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
         if pr.m and wallet.url not in pr.m:
-            print(f"Error: Current mint {wallet.url} is not accepted by the receiver.")
+            print(
+                f"Error: Current mint {wallet.url} is not accepted by the receiver.")
             print(f"Accepted mints: {pr.m}")
             return
 
@@ -364,7 +365,8 @@ async def pay(
             if post_transports:
                 transport = post_transports[0]
                 url = transport.a
-                print(f"Sending token via POST to {url}...", end="", flush=True)
+                print(
+                    f"Sending token via POST to {url}...", end="", flush=True)
 
                 token_obj = deserialize_token_from_string(token)
                 assert isinstance(
@@ -509,7 +511,8 @@ async def invoice(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(
+        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
@@ -672,7 +675,8 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
+    amount = int(
+        input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -731,7 +735,8 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
+            print(
+                f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -832,7 +837,8 @@ async def send_command(
     force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(
+        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     await send(
         wallet,
         amount=amount,
@@ -1003,7 +1009,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"), reverse=True)  # type: ignore
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter(
+            "send_id"), reverse=True)  # type: ignore
         if number:
             number += offset
         for i, (key, value) in islice(
@@ -1043,7 +1050,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         print("To remove all pending tokens that are already spent use: cashu burn -a")
         print("To remove a specific pending token use: cashu burn <token>")
         print("To receive all pending tokens use: cashu receive -a")
-        
+
 
 @cli.command("proofs", help="List raw proofs in wallet.")
 @click.option(
@@ -1066,10 +1073,17 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     help="Filter by keyset ID.",
     type=str,
 )
+@click.option(
+    "--order",
+    "-o",
+    default=None,
+    help="Sort the proofs by amount in ascending (asc) or descending (desc) order.",
+    type=str,
+)
 @click.pass_context
 @coro
-async def proofs_command(
-    ctx: Context, all: bool, no_dleq: bool, indent: int, keyset: str
+async def proofs(
+    ctx: Context, all: bool, no_dleq: bool, indent: int, keyset: str, order: str
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_proofs()
@@ -1093,8 +1107,21 @@ async def proofs_command(
             print("No proofs found.")
         return
 
+    # Sort the proofs if ordering is specified.
+    if order is not None:
+        if order == "asc":
+            proofs = sorted(proofs, key=lambda p: p.amount)
+        elif order == "desc":
+            proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+        else:
+            print(
+                f"Unidentified order argument: {order}. Valid arguments are 'asc' and 'desc'."
+            )
+            return
+
     # Convert proofs to dictionary format
     include_dleq = not no_dleq
+
     proofs_dict = []
     for proof in proofs:
         proof_dict = {
@@ -1396,7 +1423,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
-                        print(f"        - Description: {mint_info['description']}")
+                        print(
+                            f"        - Description: {mint_info['description']}")
                     if mint_info.get("description_long"):
                         print(
                             f"        - Long description: {mint_info['description_long']}"
@@ -1408,7 +1436,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                     if mint_info.get("version"):
                         print(f"        - Version: {mint_info['version']}")
                     if mint_info.get("motd"):
-                        print(f"        - Message of the day: {mint_info['motd']}")
+                        print(
+                            f"        - Message of the day: {mint_info['motd']}")
                     if mint_info.get("time"):
                         print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
@@ -1552,7 +1581,8 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
 
     if mint:
         new_proofs = await auth_wallet.mint_blind_auth()
-        print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
+        print(
+            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
 
 @cli.group(cls=NaturalOrderGroup)
