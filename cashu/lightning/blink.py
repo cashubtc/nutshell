@@ -10,6 +10,7 @@ from bolt11 import (
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
@@ -301,9 +302,7 @@ class BlinkWallet(LightningBackend):
             )
 
         transaction = (
-            resp.get("data", {})
-            .get("lnInvoicePaymentSend", {})
-            .get("transaction", {})
+            resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {})
         )
 
         checking_id = quote.request
@@ -480,10 +479,7 @@ class BlinkWallet(LightningBackend):
                 }
             }
             """,
-            "variables": {
-                "amount": 1,
-                "currency": "USD"
-            },
+            "variables": {"amount": 1, "currency": "USD"},
         }
         try:
             r = await self.client.post(
@@ -505,7 +501,9 @@ class BlinkWallet(LightningBackend):
         sats_per_usd = conversion.get("btcSatAmount")
 
         if not sats_per_usd or sats_per_usd == 0:
-            logger.error(f"Invalid conversion data from Blink: btcSatAmount={sats_per_usd}")
+            logger.error(
+                f"Invalid conversion data from Blink: btcSatAmount={sats_per_usd}"
+            )
             raise Exception("Invalid conversion data: btcSatAmount is missing or zero")
 
         return int(sats_per_usd)
@@ -582,8 +580,7 @@ class BlinkWallet(LightningBackend):
                 )
             else:
                 fees_response_msat = (
-                    int(resp.get("data", {}).get(response_key, {}).get("amount"))
-                    * 1000
+                    int(resp.get("data", {}).get(response_key, {}).get("amount")) * 1000
                 )
         except httpx.ReadTimeout:
             pass
@@ -595,8 +592,11 @@ class BlinkWallet(LightningBackend):
             math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT / 1000) * 1000
         )
 
+        expected_reserve = fee_reserve(amount_msat)
+        capped_fees_response_msat = min(fees_response_msat, expected_reserve)
+
         fees_msat: int = max(
-            fees_response_msat,
+            capped_fees_response_msat,
             max(
                 fees_amount_msat,
                 MINIMUM_FEE_MSAT,
