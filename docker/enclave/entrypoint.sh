@@ -20,4 +20,4 @@ echo "Database: ${MINT_DATABASE:-sqlite}"
 echo "=========================================================="
 
 # Start the mint
-exec poetry run mint
+exec python -c "from cashu.mint.main import main; main()"
