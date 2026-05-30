@@ -583,6 +583,10 @@ class Amount:
     unit: Unit
     amount: int
 
+    def __post_init__(self):
+        if self.amount < 0:
+            raise ValueError(f"Amount cannot be negative: {self.amount}")
+
     def to(self, to_unit: Unit, round: Optional[str] = None):
         if self.unit == to_unit:
             return self

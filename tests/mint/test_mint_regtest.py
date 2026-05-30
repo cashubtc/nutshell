@@ -136,6 +136,8 @@ async def test_lightning_pay_invoice(ledger: Ledger):
     )
     assert status.settled
     assert status.preimage
+    if status.fee is not None:
+        assert status.fee.amount >= 0
     assert not status.error_message
 
 
@@ -243,6 +245,8 @@ async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
     )
     assert status.settled
     assert status.preimage
+    if status.fee is not None:
+        assert status.fee.amount >= 0
     assert not status.error_message
 
 
