@@ -1106,7 +1106,7 @@ class Ledger(
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
             try:
                 payment = await self.backends[method][unit].pay_invoice(
-                    melt_quote, melt_quote.fee_reserve * 1000
+                    melt_quote, Amount(unit, melt_quote.fee_reserve).to(Unit.msat).amount
                 )
                 logger.debug(
                     f"Melt – Result: {payment.result.name}: preimage: {payment.preimage},"

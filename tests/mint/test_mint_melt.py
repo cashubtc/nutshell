@@ -858,3 +858,89 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
         ),
         "proof unit usd does not match quote unit sat"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="fake wallet only")
+async def test_melt_fee_limit_msat_off_by_thousand_for_msat_unit(
+    ledger: Ledger, wallet: Wallet
+):
+    """Regression for ledger.py:944-946 - the call
+    `self.backends[method][unit].pay_invoice(melt_quote, melt_quote.fee_reserve * 1000)`
+    hardcodes a sat -> msat conversion. For a melt quote with unit=msat
+    (a supported configuration via `mint_backend_bolt11_msat`)
+    `melt_quote.fee_reserve` is already in msat, so the `* 1000` makes
+    fee_limit_msat 1000x too high. The lightning backend will then
+    accept up to 1000x the lightning fees that the user actually
+    deposited into the mint as proofs.
+    """
+    import time
+    from typing import List
+    from unittest.mock import MagicMock
+
+    from cashu.core.base import (
+        Amount,
+        MeltQuote,
+        MeltQuoteState,
+        Method,
+        Unit,
+    )
+    from cashu.lightning.base import PaymentResponse, PaymentResult
+
+    # Mint sat ecash via the existing default sat backend / keyset.
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet marks paid
+    await wallet.mint(64, quote_id=mint_quote.quote)
+
+    # Stand up an msat backend that records the fee_limit_msat arg.
+    captured_fee_limit_msat: List[int] = []
+
+    async def mock_pay_invoice(quote, fee_limit_msat):
+        captured_fee_limit_msat.append(fee_limit_msat)
+        return PaymentResponse(
+            result=PaymentResult.SETTLED,
+            checking_id=quote.checking_id,
+            fee=Amount(Unit.msat, 5),
+            preimage="0" * 64,
+        )
+
+    msat_backend = MagicMock()
+    msat_backend.pay_invoice = mock_pay_invoice
+    msat_backend.supports_mpp = False
+    ledger.backends[Method.bolt11][Unit.msat] = msat_backend
+
+    # Repurpose the existing keysets as msat (private keys are unchanged so
+    # BDHKE verification of the proofs minted above still succeeds).
+    for keyset in ledger.keysets.values():
+        keyset.unit = Unit.msat
+
+    # Manually insert a melt quote in msat with a small msat fee_reserve.
+    msat_quote = MeltQuote(
+        quote="test_msat_melt_quote_regression",
+        method="bolt11",
+        request=(
+            "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6va"
+            "lqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpz"
+            "q9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy"
+            "6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+        ),
+        checking_id="msat-ck-regression",
+        unit="msat",
+        amount=10,
+        fee_reserve=5,
+        state=MeltQuoteState.unpaid,
+        created_time=int(time.time()),
+    )
+    await ledger.crud.store_melt_quote(quote=msat_quote, db=ledger.db)
+
+    # Trigger the buggy call path.
+    await ledger.melt(proofs=wallet.proofs, quote=msat_quote.quote)
+
+    assert len(captured_fee_limit_msat) == 1
+    expected = Amount(Unit.msat, msat_quote.fee_reserve).to(Unit.msat).amount
+    assert captured_fee_limit_msat[0] == expected, (
+        f"ledger passes fee_limit_msat={captured_fee_limit_msat[0]} to pay_invoice "
+        f"but for unit=msat the correct value is {expected} "
+        f"(fee_reserve={msat_quote.fee_reserve} msat); the hardcoded "
+        f"`* 1000` at ledger.py:944-946 is wrong for non-sat units."
+    )
