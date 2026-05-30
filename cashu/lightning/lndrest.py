@@ -395,13 +395,10 @@ class LndRestWallet(LightningBackend):
                             if payment.get("payment_preimage") != "0" * 64
                             else None
                         )
+                        fee_msat = int(payment.get("fee_msat") or 0)
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment["status"]],
-                            fee=(
-                                Amount(unit=Unit.msat, amount=payment.get("fee_msat"))
-                                if payment.get("fee_msat")
-                                else None
-                            ),
+                            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
                             preimage=preimage,
                         )
                     else:
