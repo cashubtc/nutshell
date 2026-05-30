@@ -1,0 +1,10 @@
+spark-operator.breez.technology:443
+datasync.breez.technology:443
+bs1.breez.technology:443
+nd1.breez.technology:443
+nr1.breez.technology:443
+api.lightspark.com:443
+0.spark.lightspark.com:443
+api.flashnet.xyz:443
+2.spark.flashnet.xyz:443
+blockstream.info:443

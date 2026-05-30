@@ -39,13 +39,18 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Set default enclave configuration
 ENV MINT_LISTEN_HOST="0.0.0.0"
-ENV MINT_LISTEN_PORT="3338"
+ENV MINT_LISTEN_PORT=3338
 ENV MINT_DATABASE="data/mint"
 ENV CASHU_DIR="/data"
 
 # Pre-configure for Spark L2 / Breez
 ENV MINT_BACKEND_BOLT11_SAT="SparkL2Wallet"
 ENV MINT_SPARK_NETWORK="MAINNET"
+
+ARG SPARK_API_KEY
+ENV MINT_SPARK_API_KEY=$SPARK_API_KEY
+
+ENV DEBUG=TRUE
 
 # Expose the mint port
 EXPOSE 3338
