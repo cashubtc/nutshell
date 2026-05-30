@@ -1,9 +1,19 @@
+import time
 from typing import List, Tuple
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    Amount,
+    MeltQuote,
+    MeltQuoteState,
+    Method,
+    MintQuoteState,
+    Proof,
+    Unit,
+)
 from cashu.core.errors import (
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
@@ -11,7 +21,7 @@ from cashu.core.errors import (
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResponse, PaymentResult
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -874,18 +884,6 @@ async def test_melt_fee_limit_msat_off_by_thousand_for_msat_unit(
     accept up to 1000x the lightning fees that the user actually
     deposited into the mint as proofs.
     """
-    import time
-    from typing import List
-    from unittest.mock import MagicMock
-
-    from cashu.core.base import (
-        Amount,
-        MeltQuote,
-        MeltQuoteState,
-        Method,
-        Unit,
-    )
-    from cashu.lightning.base import PaymentResponse, PaymentResult
 
     # Mint sat ecash via the existing default sat backend / keyset.
     mint_quote = await wallet.request_mint(64)
