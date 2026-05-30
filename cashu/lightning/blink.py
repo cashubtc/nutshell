@@ -592,11 +592,24 @@ class BlinkWallet(LightningBackend):
             math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT / 1000) * 1000
         )
 
+        # The absolute maximum fee we are willing to accept from the probe.
+        # We must respect Blink's hardcoded minimums (10 sats or 0.5%) for small payments,
+        # but otherwise bound it by the mint's global fee_reserve.
         expected_reserve = fee_reserve(amount_msat)
-        capped_fees_response_msat = min(fees_response_msat, expected_reserve)
+        max_allowed_fee_msat = max(
+            expected_reserve,
+            fees_amount_msat,
+            MINIMUM_FEE_MSAT,
+        )
+
+        if fees_response_msat > max_allowed_fee_msat:
+            raise Exception(
+                f"Fee quote from Blink is unexpectedly high: "
+                f"{fees_response_msat} msat > allowed {max_allowed_fee_msat} msat"
+            )
 
         fees_msat: int = max(
-            capped_fees_response_msat,
+            fees_response_msat,
             max(
                 fees_amount_msat,
                 MINIMUM_FEE_MSAT,
