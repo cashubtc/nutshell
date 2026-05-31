@@ -1,0 +1,168 @@
+name: Regtest Run
+description: Shared regtest setup, isolated DB lifecycle, and test execution
+
+inputs:
+  mint-database:
+    description: Mint test database DSN/path
+    required: true
+  backend-wallet-class:
+    description: Backend wallet class for bolt11 sat
+    required: true
+  test-target:
+    description: Make target to run (e.g. test-mint, test-wallet)
+    required: true
+  use-github-postgres-service:
+    description: >
+      If true, skip docker run for Postgres and use the job's services: postgres
+      (localhost:5432). Caller must define a matching postgres service on the job.
+    required: false
+    default: "false"
+  postgres-image:
+    description: >
+      Postgres image ref (prefer tag@sha256:... for immutable CI). Must match services.postgres.image when
+      use-github-postgres-service is true; used for docker-run fallback and log capture.
+    required: false
+    default: "postgres:16"
+
+runs:
+  using: composite
+  steps:
+    - name: Start PostgreSQL service
+      if: ${{ contains(inputs.mint-database, 'postgres') && inputs.use-github-postgres-service != 'true' }}
+      shell: bash
+      env:
+        POSTGRES_IMAGE: ${{ inputs.postgres-image }}
+      run: |
+        docker run -d --name postgres \
+          -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu \
+          -p 5432:5432 \
+          "$POSTGRES_IMAGE"
+        until docker exec postgres pg_isready -U cashu -d postgres; do sleep 1; done
+
+    - name: Install PostgreSQL client (GitHub service container)
+      if: ${{ contains(inputs.mint-database, 'postgres') && inputs.use-github-postgres-service == 'true' }}
+      shell: bash
+      run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
+
+    - name: Setup Regtest
+      shell: bash
+      run: |
+        git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
+        cd regtest
+        chmod -R 777 .
+        bash ./start.sh
+
+    - name: Prepare isolated mint test database
+      shell: bash
+      env:
+        INPUT_DB: ${{ inputs.mint-database }}
+        BACKEND_WALLET_CLASS: ${{ inputs.backend-wallet-class }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_ATTEMPT: ${{ github.run_attempt }}
+        USE_GHA_PG: ${{ inputs.use-github-postgres-service }}
+        PGADMINURL: postgresql://cashu:cashu@127.0.0.1:5432/postgres
+      run: |
+        if [[ "$INPUT_DB" == postgres* ]]; then
+          TEST_DB_URL="$(python -c "from urllib.parse import urlparse, urlunparse; import os, re; input_db=os.environ['INPUT_DB']; backend=os.environ['BACKEND_WALLET_CLASS']; run_id=os.environ['RUN_ID']; run_attempt=os.environ['RUN_ATTEMPT']; parsed=urlparse(input_db); base_name=parsed.path.lstrip('/') or 'cashu'; safe_backend=re.sub(r'[^a-zA-Z0-9_]+','_', backend).lower(); db_name=f'{base_name}_{safe_backend}_{run_id}_{run_attempt}'; print(urlunparse(parsed._replace(path='/' + db_name)))")"
+          DB_NAME="${TEST_DB_URL##*/}"
+          echo "MINT_TEST_DATABASE=$TEST_DB_URL" >> "$GITHUB_ENV"
+          for i in 1 2 3; do
+            if [[ "$USE_GHA_PG" == "true" ]]; then
+              if psql "$PGADMINURL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$DB_NAME\";"; then
+                break
+              fi
+            else
+              if docker exec postgres psql -U cashu -d postgres -c "CREATE DATABASE \"$DB_NAME\";"; then
+                break
+              fi
+            fi
+            if [[ "$i" == "3" ]]; then
+              echo "Failed to create isolated database: $DB_NAME"
+              exit 1
+            fi
+            sleep 1
+          done
+        else
+          echo "MINT_TEST_DATABASE=$INPUT_DB" >> "$GITHUB_ENV"
+        fi
+
+    - name: Run Tests
+      shell: bash
+      env:
+        WALLET_NAME: test_wallet
+        MINT_HOST: localhost
+        MINT_PORT: 3337
+        MINT_TEST_DATABASE: ${{ env.MINT_TEST_DATABASE }}
+        TOR: false
+        MINT_BACKEND_BOLT11_SAT: ${{ inputs.backend-wallet-class }}
+        # LNbits wallet
+        MINT_LNBITS_ENDPOINT: http://localhost:5001
+        MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
+        # LndRestWallet
+        MINT_LND_REST_ENDPOINT: https://localhost:8081/
+        MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
+        MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+        # LndRPCWallet
+        MINT_LND_RPC_ENDPOINT: localhost:10009
+        MINT_LND_RPC_CERT: ./regtest/data/lnd-3/tls.cert
+        MINT_LND_RPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+        # CoreLightningRestWallet
+        MINT_CORELIGHTNING_REST_URL: https://localhost:3001
+        MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
+        MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
+        # CLNRestWallet
+        MINT_CLNREST_URL: https://localhost:3010
+        MINT_CLNREST_RUNE: ./regtest/data/clightning-2/rune
+        MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
+      run: |
+        sudo chmod -R 777 .
+        make ${{ inputs.test-target }}
+
+    - name: Cleanup isolated mint test database
+      if: ${{ always() && contains(inputs.mint-database, 'postgres') }}
+      shell: bash
+      env:
+        TEST_DB_URL: ${{ env.MINT_TEST_DATABASE }}
+        USE_GHA_PG: ${{ inputs.use-github-postgres-service }}
+        PGADMINURL: postgresql://cashu:cashu@127.0.0.1:5432/postgres
+      run: |
+        DB_NAME="${TEST_DB_URL##*/}"
+        for i in 1 2 3; do
+          if [[ "$USE_GHA_PG" == "true" ]]; then
+            psql "$PGADMINURL" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" || true
+            if psql "$PGADMINURL" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"; then
+              break
+            fi
+          else
+            docker exec postgres psql -U cashu -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();" || true
+            if docker exec postgres psql -U cashu -d postgres -c "DROP DATABASE IF EXISTS \"$DB_NAME\";"; then
+              break
+            fi
+          fi
+          if [[ "$i" == "3" ]]; then
+            echo "Warning: failed to drop isolated database: $DB_NAME"
+          fi
+          sleep 1
+        done
+
+    - name: Dump PostgreSQL logs on failure
+      if: ${{ failure() && contains(inputs.mint-database, 'postgres') }}
+      shell: bash
+      env:
+        USE_GHA_PG: ${{ inputs.use-github-postgres-service }}
+        POSTGRES_IMAGE: ${{ inputs.postgres-image }}
+      run: |
+        set +e
+        if [[ "$USE_GHA_PG" == "true" ]]; then
+          cid="$(docker ps -q --filter ancestor="$POSTGRES_IMAGE" | head -n1)"
+          if [[ -z "$cid" ]]; then
+            cid="$(docker ps -q --filter publish=5432 | head -n1)"
+          fi
+          if [[ -n "$cid" ]]; then
+            docker logs "$cid" --tail 200
+          else
+            echo "No Postgres container found for log dump (image=$POSTGRES_IMAGE)"
+          fi
+        else
+          docker logs postgres --tail 200
+        fi
