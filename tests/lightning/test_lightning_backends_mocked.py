@@ -3,8 +3,10 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
+import bolt11
 import httpx
 import pytest
+from bolt11 import TagChar
 
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
 from cashu.core.helpers import fee_reserve
@@ -18,6 +20,7 @@ from cashu.lightning.blink import BlinkWallet
 from cashu.lightning.clnrest import CLNRestWallet
 from cashu.lightning.corelightningrest import CoreLightningRestWallet
 from cashu.lightning.lnbits import LNbitsWallet  # type: ignore[attr-defined]
+from cashu.lightning.lnd_grpc.lnd_grpc import LndRPCWallet
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
 
@@ -529,3 +532,126 @@ async def test_blink_get_sats_per_usd_raises_on_missing_conversion():
     cast(Any, wallet).client = Client()
     with pytest.raises(Exception, match="Currency conversion service unavailable"):
         await wallet._get_sats_per_usd()
+
+
+@pytest.mark.asyncio
+async def test_lndrest_mpp_msat_unit_bug(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.msat
+    wallet.supports_mpp = True
+
+    requested_sats = None
+
+    class Client:
+        async def post(self, url, json=None, timeout=None):
+            nonlocal requested_sats
+            if "/v1/graph/routes/" in url:
+                requested_sats = int(url.split("/")[-1])
+                return _response(200, {
+                    "routes": [{
+                        "hops": [{
+                            "pub_key": "hop_pubkey"
+                        }]
+                    }]
+                })
+            elif url == "/v2/router/route/send":
+                return _response(200, {
+                    "status": "SUCCEEDED",
+                    "route": {
+                        "total_fees_msat": "100"
+                    },
+                    "preimage": base64.b64encode(b"preimage").decode()
+                })
+            return _response(200, {})
+
+    cast(Any, wallet).client = Client()
+
+    class MockTag:
+        def __init__(self, data):
+            self.data = data
+
+    class MockInvoice:
+        amount_msat = 2000
+        payment_hash = "00" * 32
+        tags = {
+            TagChar.payee: MockTag("00" * 33),
+            bolt11.TagChar("s"): MockTag("11" * 32),
+        }
+
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: MockInvoice(),
+    )
+
+    quote = _quote("lnbc1fake", amount=1000, unit="msat")
+    await wallet.pay_invoice(quote, fee_limit_msat=1000)
+
+    assert requested_sats == 1
+
+
+@pytest.mark.asyncio
+async def test_lnd_grpc_mpp_msat_unit_bug(monkeypatch):
+    wallet = object.__new__(LndRPCWallet)
+    wallet.unit = Unit.msat
+    wallet.supports_mpp = True
+    wallet.endpoint = "localhost:10009"
+    wallet.combined_creds = None
+
+    requested_sats = None
+
+    class MockRoute:
+        def __init__(self):
+            class MockHop:
+                class MockMppRecord:
+                    payment_addr = None
+                    total_amt_msat = None
+                mpp_record = MockMppRecord()
+            self.routes = [SimpleNamespace(hops=[MockHop()])]
+
+    class MockLNStub:
+        def __init__(self, channel):
+            pass
+        async def QueryRoutes(self, request):
+            nonlocal requested_sats
+            requested_sats = request.amt
+            return MockRoute()
+
+    class MockRouterStub:
+        def __init__(self, channel):
+            pass
+        async def SendToRouteV2(self, request):
+            return SimpleNamespace(status=1, failure=None, route=SimpleNamespace(total_fees_msat=100), preimage=b"preimage")
+
+    class MockChannel:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    monkeypatch.setattr("grpc.aio.secure_channel", lambda endpoint, creds: MockChannel())
+    monkeypatch.setattr("cashu.lightning.lnd_grpc.lnd_grpc.lightningstub.LightningStub", MockLNStub)
+    monkeypatch.setattr("cashu.lightning.lnd_grpc.lnd_grpc.routerstub.RouterStub", MockRouterStub)
+    monkeypatch.setattr("cashu.lightning.lnd_grpc.lnd_grpc.routerrpc.SendToRouteRequest", lambda **kwargs: SimpleNamespace(**kwargs))
+
+    class MockTag:
+        def __init__(self, data):
+            self.data = data
+
+    class MockInvoice:
+        amount_msat = 2000
+        payment_hash = "00" * 32
+        tags = {
+            TagChar.payee: MockTag("00" * 33),
+            bolt11.TagChar("s"): MockTag("11" * 32),
+        }
+
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.bolt11.decode",
+        lambda request: MockInvoice(),
+    )
+
+    quote = _quote("lnbc1fake", amount=1000, unit="msat")
+    await wallet.pay_invoice(quote, fee_limit_msat=1000)
+
+    assert requested_sats == 1
+

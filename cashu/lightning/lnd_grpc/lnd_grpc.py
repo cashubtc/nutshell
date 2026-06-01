@@ -162,9 +162,10 @@ class LndRPCWallet(LightningBackend):
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+            quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
+            if amount_msat != quote_amount_msat and self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    quote, Amount(Unit[quote.unit], quote.amount), fee_limit_msat
                 )
 
         # set the fee limit for the payment
