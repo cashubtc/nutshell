@@ -127,7 +127,7 @@ class LedgerMelt(LedgerBlindSignatures, SupportsEvents):
             PostMeltQuoteResponse: Melt quote response.
         """
         if settings.mint_bolt11_disable_melt:
-            raise NotAllowedError("Melting with bol11 is disabled.")
+            raise NotAllowedError("Melting with bolt11 is disabled.")
 
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, Method.bolt11.name
