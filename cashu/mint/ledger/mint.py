@@ -12,11 +12,10 @@ from ...core.base import (
     MintQuote,
     MintQuoteState,
 )
-from ...core.errors import CashuError
-from ...lightning.base import PaymentStatus
 from ...core.crypto.keys import random_hash
 from ...core.errors import (
     BatchDuplicateQuotesError,
+    CashuError,
     LightningError,
     NotAllowedError,
     QuoteAlreadyIssuedError,
@@ -31,7 +30,7 @@ from ...core.models import (
     PostMintQuoteRequest,
 )
 from ...core.settings import settings
-from ...lightning.base import InvoiceResponse
+from ...lightning.base import InvoiceResponse, PaymentStatus
 from ..protocols import SupportsEvents, SupportsWatchdog
 from .blind_signatures import LedgerBlindSignatures
 

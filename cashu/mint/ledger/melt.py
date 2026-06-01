@@ -17,13 +17,13 @@ from ...core.base import (
     Proof,
     Unit,
 )
+from ...core.crypto.keys import random_hash
 from ...core.errors import (
     LightningPaymentFailedError,
     NotAllowedError,
     TransactionError,
 )
 from ...core.helpers import sum_proofs
-from ...core.crypto.keys import random_hash
 from ...core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
