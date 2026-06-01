@@ -13,7 +13,7 @@ class LedgerSwap(LedgerBlindSignatures):
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
-    ):
+    ) -> List[BlindedSignature]:
         """Consumes proofs and prepares new promises based on the amount swap. Used for swapping tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
 
