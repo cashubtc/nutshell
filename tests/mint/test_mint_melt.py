@@ -858,3 +858,45 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
         ),
         "proof unit usd does not match quote unit sat"
     )
+
+@pytest.mark.asyncio
+async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wallet):
+    """
+    Test that when an internal melt quote settlement fails, the pending state of the proofs
+    and the melt quote is correctly unset.
+    """
+    # Get some proofs to use
+    mint_quote_req = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote_req.request)
+    proofs = await wallet.mint(64, quote_id=mint_quote_req.quote)
+    
+    # Create internal mint quote
+    sat_mint_quote = await ledger.mint_quote(
+        quote_request=PostMintQuoteRequest(amount=64, unit="sat")
+    )
+    
+    # Create internal melt quote for the same invoice
+    sat_melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=sat_mint_quote.request)
+    )
+    
+    # Make the mint quote "paid" to cause melt_mint_settle_internally to fail
+    sat_mint_quote.state = MintQuoteState.paid
+    await ledger.crud.update_mint_quote(quote=sat_mint_quote, db=ledger.db)
+    
+    # Try to melt - it should fail because mint quote is already paid
+    await assert_err(
+        ledger.melt(proofs=proofs, quote=sat_melt_quote.quote, outputs=[]),
+        "mint quote already paid"
+    )
+    
+    # Check that proofs are not pending
+    states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    assert not any(s.pending for s in states), "Proofs stuck in pending!"
+    
+    # Check that quote is not pending and is unpaid
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=sat_melt_quote.quote, db=ledger.db)
+    assert melt_quote is not None
+    assert melt_quote.state == MeltQuoteState.unpaid, "Quote state should be unpaid"
+    assert not melt_quote.pending, "Quote should not be pending"
+
