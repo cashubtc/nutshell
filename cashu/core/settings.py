@@ -349,6 +349,7 @@ class AuthSettings(MintSettings):
         ["POST", "/v1/swap"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
+        ["POST", "/v1/mint/bolt11/batch"],
         ["POST", "/v1/melt/bolt11"],
     ]
 
