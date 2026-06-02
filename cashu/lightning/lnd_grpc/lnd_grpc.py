@@ -162,9 +162,10 @@ class LndRPCWallet(LightningBackend):
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+            quote_amount = Amount(Unit[quote.unit], quote.amount)
+            if amount_msat != quote_amount.to(Unit.msat).amount and self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    quote, quote_amount, fee_limit_msat
                 )
 
         # set the fee limit for the payment
@@ -277,7 +278,7 @@ class LndRPCWallet(LightningBackend):
                             )
                             failed_dest = route.routes[0].hops[failure_index].pub_key
                             logger.debug(
-                                f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
+                                f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index - 1} of the route"
                             )
                             continue
                     break
@@ -377,7 +378,7 @@ class LndRPCWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 async with grpc.aio.secure_channel(
@@ -394,11 +395,16 @@ class LndRPCWallet(LightningBackend):
                         payment_hash = invoice.r_hash.hex()
                         yield payment_hash
             except AioRpcError as exc:
-                logger.error(f"SubscribeInvoices failed: {exc}. Retrying in {retry_delay} sec...")
+                logger.error(
+                    f"SubscribeInvoices failed: {exc}. Retrying in {retry_delay} sec..."
+                )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
-                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
+                retry_delay = max(
+                    settings.mint_retry_exponential_backoff_base_delay,
+                    min(retry_delay * 2, max_retry_delay),
+                )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
