@@ -3,7 +3,15 @@ from typing import List, Tuple
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    Amount,
+    MeltQuote,
+    MeltQuoteState,
+    Method,
+    MintQuoteState,
+    Proof,
+    Unit,
+)
 from cashu.core.errors import (
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
@@ -11,7 +19,7 @@ from cashu.core.errors import (
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResponse, PaymentResult
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -858,3 +866,85 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
         ),
         "proof unit usd does not match quote unit sat"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake or is_deprecated_api_only,
+    reason="only fakewallet and non-deprecated api",
+)
+@pytest.mark.parametrize(
+    "fee_paid_sat_offset",
+    [
+        pytest.param(0, id="overpaid_fee_zero"),
+        pytest.param(1, id="overpaid_fee_negative"),
+    ],
+)
+async def test_melt_early_return_leaves_no_orphan_blank_outputs(
+    wallet, ledger: Ledger, monkeypatch, fee_paid_sat_offset: int
+):
+    """When `_generate_change_promises` takes its early-return branch
+    (overpaid_fee <= 0), the wallet's blank NUT-08 outputs — already
+    inserted into `promises` with c_ IS NULL before the LN payment —
+    must not be left behind as orphans. Later operations that re-derive
+    the same B_ (e.g. NUT-13 seed restore) collide with them and surface
+    as `OutputsArePendingError`.
+
+    Both parametrize cases hit the same early-return branch:
+      - offset == 0  → overpaid_fee == 0  (fee exactly matched reserve)
+      - offset > 0   → overpaid_fee < 0   (backend took more than the
+        reserve, e.g. an LNbits backend skimming a service fee on top
+        of the routing fee)
+    """
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    # Clear the FakeWallet pay_invoice override so our monkeypatch is what runs.
+    settings.fakewallet_pay_invoice_state = ""
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+
+    mint_quote = await wallet.request_mint(100)
+    proofs = await wallet.mint(amount=100, quote_id=mint_quote.quote)
+
+    melt_quote = await wallet.melt_quote(invoice_64_sat)
+
+    total_provided = sum(p.amount for p in proofs)
+    input_fees = ledger.get_fees_for_proofs(proofs)
+    fee_reserve_provided = total_provided - melt_quote.amount - input_fees
+    fee_paid_sat = fee_reserve_provided + fee_paid_sat_offset
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def patched_pay_invoice(quote: MeltQuote, fee_limit_msat: int):
+        return PaymentResponse(
+            result=PaymentResult.SETTLED,
+            checking_id=quote.checking_id or "fake_checking_id",
+            fee=Amount(unit=Unit.sat, amount=fee_paid_sat),
+            preimage="0" * 64,
+        )
+
+    monkeypatch.setattr(backend, "pay_invoice", patched_pay_invoice)
+
+    n_change_outputs = 4
+    change_secrets, change_rs, _ = await wallet.generate_n_secrets(
+        n_change_outputs, skip_bump=True
+    )
+    change_outputs, _ = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+
+    response = await ledger.melt(
+        proofs=proofs, quote=melt_quote.quote, outputs=change_outputs
+    )
+
+    assert response.state == MeltQuoteState.paid.value
+    assert not response.change
+
+    orphans = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_quote.quote
+    )
+    assert orphans == [], (
+        f"Expected no orphan blank outputs for melt {melt_quote.quote}, "
+        f"got {len(orphans)} with B_s {[o.B_ for o in orphans]}"
+    )
+
+
