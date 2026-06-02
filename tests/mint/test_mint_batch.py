@@ -253,3 +253,41 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
 
     assert len(successes) == 1, f"Expected 1 success, got {len(successes)}"
     assert len(exceptions) == 1, f"Expected 1 exception, got {len(exceptions)}"
+
+
+def test_mint_batch_and_check_validation():
+    from pydantic import ValidationError
+
+    from cashu.core.constants import MAX_QUOTE_ID_LEN
+
+    # 1. Check PostMintBatchRequest with too long quote ID
+    long_quote = "a" * (MAX_QUOTE_ID_LEN + 1)
+    with pytest.raises(ValidationError) as excinfo:
+        PostMintBatchRequest(
+            quotes=[long_quote],
+            outputs=[],
+        )
+    assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
+
+    # 2. Check PostMintBatchRequest with too many quotes
+    too_many_quotes = ["a"] * (settings.mint_max_request_length + 1)
+    with pytest.raises(ValidationError) as excinfo:
+        PostMintBatchRequest(
+            quotes=too_many_quotes,
+            outputs=[],
+        )
+    assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
+
+    # 3. Check PostMintQuoteCheckRequest with too long quote ID
+    with pytest.raises(ValidationError) as excinfo:
+        PostMintQuoteCheckRequest(
+            quotes=[long_quote],
+        )
+    assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
+
+    # 4. Check PostMintQuoteCheckRequest with too many quotes
+    with pytest.raises(ValidationError) as excinfo:
+        PostMintQuoteCheckRequest(
+            quotes=too_many_quotes,
+        )
+    assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
