@@ -547,15 +547,16 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
     send_proofs_copy = copy.deepcopy(send_proofs)
 
-    # First, try to redeem with a preimage + signatures, which will trigger the preimage path and fail
+    # First, try to redeem with a wrong preimage + signatures. The receiver path
+    # fails, but the expired refund path is still considered.
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs_copy)
     for p, sig in zip(send_proofs_copy, signatures1):
         p.witness = HTLCWitness(preimage=preimage, signatures=[sig]).model_dump_json()
 
-    # Should fail because we need 2 signatures
+    # Should fail because the refund path requires 2 signatures.
     await assert_err(
         wallet1.redeem(send_proofs_copy),
-        "HTLC preimage does not match.",
+        "Mint Error: not enough pubkeys (3) or signatures (1) present for n_sigs (2)",
     )
 
     # NOW: try to redeem via locktime path but with only 1 signature

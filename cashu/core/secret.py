@@ -77,7 +77,7 @@ class Secret(BaseModel):
         )
 
     @classmethod
-    def deserialize(cls, from_proof: str):
+    def deserialize(cls, from_proof: str) -> "Secret":
         kind, kwargs = json.loads(from_proof)
         data = kwargs.pop("data")
         nonce = kwargs.pop("nonce")

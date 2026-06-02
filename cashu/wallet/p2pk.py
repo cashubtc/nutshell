@@ -17,6 +17,8 @@ from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
     schnorr_sign,
+    sig_all_melt_message,
+    sig_all_swap_message,
 )
 from ..core.secret import Secret, SecretKind, Tags
 from .protocols import SupportsDb, SupportsPrivateKey
@@ -120,21 +122,18 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         for proof in proofs:
             try:
                 secret = Secret.deserialize(proof.secret)
-                try:
-                    p2pk_secret = P2PKSecret.from_secret(secret)
-                    if p2pk_secret.sigflag is SigFlags.SIG_ALL:
-                        return True
-                except Exception:
-                    pass
-                try:
-                    htlc_secret = HTLCSecret.from_secret(secret)
-                    if htlc_secret.sigflag is SigFlags.SIG_ALL:
-                        return True
-                except Exception:
-                    pass
             except Exception:
                 # secret is not a spending condition so we treat is a normal secret
                 pass
+                continue
+
+            if SecretKind(secret.kind) == SecretKind.P2PK:
+                if P2PKSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
+                    return True
+            elif SecretKind(secret.kind) == SecretKind.HTLC:
+                if HTLCSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
+                    return True
+
         return False
 
     def add_witness_swap_sig_all(
@@ -154,9 +153,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             secrets = set([Secret.deserialize(p.secret) for p in proofs])
             if not len(secrets) == 1:
                 raise Exception("Secrets not identical")
-            message_to_sign = message_to_sign or "".join(
-                [p.secret for p in proofs] + [o.B_ for o in outputs]
-            )
+            message_to_sign = message_to_sign or sig_all_swap_message(proofs, outputs)
             signature = self.schnorr_sign_message(message_to_sign)
             # add witness to only the first proof
             signed_proofs = self.add_signatures_to_proofs([proofs[0]], [signature])
@@ -192,9 +189,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     ) -> List[Proof]:
         # sign proofs if they are P2PK SIG_INPUTS
         proofs = self.add_witnesses_sig_inputs(proofs)
-        message_to_sign = (
-            "".join([p.secret for p in proofs] + [o.B_ for o in outputs]) + quote_id
-        )
+        message_to_sign = sig_all_melt_message(proofs, outputs, quote_id)
         # sign first proof if swap is SIG_ALL
         return self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
 
@@ -251,18 +246,25 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return proofs
 
     def filter_proofs_locked_to_our_pubkey(self, proofs: List[Proof]) -> List[Proof]:
-        """This method assumes that secrets are all P2PK!"""
-        # filter proofs that require our pubkey
+        """Filter P2PK or HTLC proofs whose signer set includes our pubkey."""
         assert self.private_key.public_key
         our_pubkey = self.private_key.public_key.format().hex().lower()
         our_pubkey_proofs = []
         for p in proofs:
-            secret = P2PKSecret.deserialize(p.secret)
-            pubkeys = (
-                [secret.data]
-                + secret.tags.get_tag_all("pubkeys")
-                + secret.tags.get_tag_all("refund")
-            )
+            secret = Secret.deserialize(p.secret)
+
+            if SecretKind(secret.kind) == SecretKind.P2PK:
+                typed_secret = P2PKSecret.from_secret(secret)
+                pubkeys = [typed_secret.data] + typed_secret.tags.get_tag_all(
+                    "pubkeys"
+                )
+            elif SecretKind(secret.kind) == SecretKind.HTLC:
+                typed_secret = HTLCSecret.from_secret(secret)
+                pubkeys = typed_secret.tags.get_tag_all("pubkeys")
+            else:
+                continue
+
+            pubkeys += typed_secret.tags.get_tag_all("refund")
             pubkeys_lower = [pk.lower() for pk in pubkeys]
             if our_pubkey in pubkeys_lower:
                 # we are one of the signers
@@ -299,11 +301,17 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             return []
 
         # filter proofs that that are P2PK and SIG_INPUTS
-        sig_inputs_proofs = [
-            p
-            for p in p2pk_proofs
-            if P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_INPUTS
-        ]
+        sig_inputs_proofs = []
+        for p in p2pk_proofs:
+            secret = Secret.deserialize(p.secret)
+            if SecretKind(secret.kind) == SecretKind.P2PK:
+                typed_secret = P2PKSecret.from_secret(secret)
+            else:
+                typed_secret = HTLCSecret.from_secret(secret)
+
+            if typed_secret.sigflag == SigFlags.SIG_INPUTS:
+                sig_inputs_proofs.append(p)
+
         if not sig_inputs_proofs:
             return []
 

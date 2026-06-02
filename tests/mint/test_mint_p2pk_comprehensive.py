@@ -7,7 +7,7 @@ import pytest_asyncio
 
 from cashu.core.base import BlindedMessage, P2PKWitness
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import P2PKSecret, SigFlags
+from cashu.core.p2pk import P2PKSecret, SigFlags, sig_all_swap_message
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.mint.ledger import Ledger
 from cashu.wallet import migrations
@@ -95,7 +95,7 @@ async def test_p2pk_sig_inputs_basic(wallet1: Wallet, wallet2: Wallet, ledger: L
         ledger.swap(
             proofs=unsigned_proofs, outputs=await create_test_outputs(wallet2, 16)
         ),
-        "Witness is missing for p2pk signature",
+        "no signatures in proof",
     )
 
     # Redeem with proper signatures
@@ -133,7 +133,7 @@ async def test_p2pk_sig_all_valid(wallet1: Wallet, wallet2: Wallet, ledger: Ledg
     outputs = await create_test_outputs(wallet2, 16)
 
     # Create a message from concatenated inputs and outputs
-    message_to_sign = "".join([p.secret for p in send_proofs] + [o.B_ for o in outputs])
+    message_to_sign = sig_all_swap_message(send_proofs, outputs)
 
     # Sign with wallet2's private key
     signature = wallet2.schnorr_sign_message(message_to_sign)
@@ -376,7 +376,7 @@ async def test_p2pk_timelock_with_refund_before_locktime(
 
     await assert_err(
         ledger.swap(proofs=unsigned_proofs, outputs=outputs),
-        "Witness is missing for p2pk signature",
+        "no signatures in proof",
     )
 
     # Try to redeem with refund key signature before locktime (should fail)
@@ -668,7 +668,7 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     outputs = await create_test_outputs(wallet1, 16)
 
     # Create message to sign (all inputs + all outputs)
-    message_to_sign = "".join([p.secret for p in send_proofs] + [o.B_ for o in outputs])
+    message_to_sign = sig_all_swap_message(send_proofs, outputs)
 
     # Sign with wallet1's key
     signature1 = wallet1.schnorr_sign_message(message_to_sign)

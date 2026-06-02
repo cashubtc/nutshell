@@ -9,7 +9,7 @@ from coincurve import PublicKeyXOnly
 from cashu.core.base import P2PKWitness
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import P2PKSecret, SigFlags
+from cashu.core.p2pk import P2PKSecret, SigFlags, sig_all_swap_message
 from cashu.core.secret import SecretKind, Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
@@ -202,7 +202,7 @@ async def test_add_witness_swap_sig_all(wallet1: Wallet):
     assert len(witness.signatures) == 1
 
     # Verify the signature includes both inputs and outputs
-    message_to_sign = "".join([p.secret for p in proofs] + [o.B_ for o in outputs])
+    message_to_sign = sig_all_swap_message(proofs, outputs)
     signature = wallet1.schnorr_sign_message(message_to_sign)
     assert witness.signatures[0] == signature
 

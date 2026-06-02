@@ -1,4 +1,5 @@
 from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
@@ -10,6 +11,7 @@ from cashu.core.errors import (
     BlindAuthRateLimitExceededError,
     ClearAuthFailedError,
 )
+from cashu.core.secret import Secret, Tags
 from cashu.core.settings import settings
 from cashu.mint.auth.base import User
 from cashu.mint.auth.server import AuthLedger
@@ -212,6 +214,38 @@ async def test_verify_blind_auth_invalidates_on_success_and_unsets_pending():
         "invalidated": "secret",
         "unset": "secret",
     }
+
+
+@pytest.mark.asyncio
+async def test_verify_blind_auth_warns_on_nut10_secret():
+    ledger = _ledger()
+    token = _auth_token(
+        secret=Secret(kind="P2PK", data="pk", tags=Tags(tags=[]), nonce="0" * 32).serialize()
+    )
+
+    async def verify_inputs_and_outputs(*, proofs):
+        assert proofs[0].secret.startswith("[")
+
+    class DbWrite:
+        async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
+            return None
+
+        async def _unset_proofs_pending(self, proofs, keysets):
+            return None
+
+        async def invalidate_proofs(self, *, proofs, keysets):
+            return None
+
+    cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
+    cast(Any, ledger).db_write = DbWrite()
+    cast(Any, ledger).keysets = {"kid": object()}
+
+    with patch("cashu.mint.auth.server.logger.warning", MagicMock()) as warning:
+        async with ledger.verify_blind_auth(token):
+            pass
+
+    warning.assert_called_once()
+    assert "does not enforce spending conditions" in warning.call_args.args[0]
 
 
 @pytest.mark.asyncio
