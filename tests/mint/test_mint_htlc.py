@@ -1,6 +1,7 @@
 
 from cashu.core.base import Proof
 from cashu.core.errors import TransactionError
+from cashu.core.htlc import HTLCSecret
 from cashu.core.nuts.nut14 import verify_htlc_spending_conditions
 from cashu.core.htlc import HTLCSecret
 from cashu.core.secret import Secret
