@@ -633,17 +633,17 @@ class Ledger(
             )
             promises = await self._sign_blinded_messages(payload.outputs)
 
-            # Set all quotes to issued
-            await self.db_write._unset_mint_quotes_pending(
-                quote_ids=payload.quotes, state=MintQuoteState.issued
-            )
-
         except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
                 quote_ids=payload.quotes, state=MintQuoteState.paid
             )
             raise e
+
+        # Set all quotes to issued
+        await self.db_write._unset_mint_quotes_pending(
+            quote_ids=payload.quotes, state=MintQuoteState.issued
+        )
 
         return promises
 
