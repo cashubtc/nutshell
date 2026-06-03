@@ -291,3 +291,76 @@ def test_mint_batch_and_check_validation():
             quotes=too_many_quotes,
         )
     assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_post_sign_failure_leaves_pending(ledger: Ledger, wallet: Wallet, monkeypatch):
+    from cashu.core.base import MintQuoteState
+
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+
+    assert mint_quote1.privkey
+    assert mint_quote2.privkey
+
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+
+    original_unset_mint_quotes_pending = ledger.db_write._unset_mint_quotes_pending
+
+    async def mock_unset_mint_quotes_pending(quote_ids, state):
+        if state == MintQuoteState.issued:
+            raise Exception("failed to acquire database lock on mint_quotes")
+        return await original_unset_mint_quotes_pending(quote_ids, state)
+
+    monkeypatch.setattr(
+        ledger.db_write,
+        "_unset_mint_quotes_pending",
+        mock_unset_mint_quotes_pending,
+    )
+
+    req = PostMintBatchRequest(
+        quotes=[mint_quote1.quote, mint_quote2.quote],
+        quote_amounts=[64, 32],
+        outputs=outputs,
+        signatures=[sig1, sig2],
+    )
+
+    # Calling mint_batch should raise our simulated exception
+    with pytest.raises(Exception) as exc:
+        await ledger.mint_batch(req)
+    assert "failed to acquire database lock on mint_quotes" in str(exc.value)
+
+    # Verify that the quotes are left in PENDING state (not reverted to PAID)
+    q1 = await ledger.get_mint_quote(mint_quote1.quote)
+    q2 = await ledger.get_mint_quote(mint_quote2.quote)
+    assert q1 is not None
+    assert q2 is not None
+    assert q1.state == MintQuoteState.pending
+    assert q2.state == MintQuoteState.pending
+
+    # Re-minting with the same quotes should fail because they are PENDING (which prevents double-issuance)
+    monkeypatch.undo()  # restore original unset_mint_quotes_pending so we can attempt a normal mint, but it should fail on pending check
+    
+    secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(10002, 10003)
+    outputs2, rs2 = wallet._construct_outputs([64, 32], secrets2, rs2)
+    sig1_2 = nut20.sign_mint_quote(mint_quote1.quote, outputs2, mint_quote1.privkey)
+    sig2_2 = nut20.sign_mint_quote(mint_quote2.quote, outputs2, mint_quote2.privkey)
+
+    req2 = PostMintBatchRequest(
+        quotes=[mint_quote1.quote, mint_quote2.quote],
+        quote_amounts=[64, 32],
+        outputs=outputs2,
+        signatures=[sig1_2, sig2_2],
+    )
+
+    with pytest.raises(Exception) as exc:
+        await ledger.mint_batch(req2)
+    assert "mint quote already pending" in str(exc.value)
