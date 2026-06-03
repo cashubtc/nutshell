@@ -158,7 +158,7 @@ async def test_get_melt_quote(cli_prefix):
 
 @pytest.mark.asyncio
 async def test_get_quote_ttl_mint_quote(cli_prefix):
-    """Mint quotes do not persist expiry, so GetQuoteTtl should return NOT_FOUND."""
+    """Mint quotes persist expiry; GetQuoteTtl should return the expiry timestamp."""
     wallet = await init_wallet()
     mint_quote = await wallet.request_mint(100)
     await asyncio.sleep(1)
@@ -166,8 +166,7 @@ async def test_get_quote_ttl_mint_quote(cli_prefix):
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
     result = runner.invoke(cli, [*cli_prefix, "get", "quote-ttl", "--", mint_quote.quote])
     assert result.exception is None
-    # Mint quotes don't store expiry; the handler returns NOT_FOUND
-    assert "Error:" in result.output
+    assert "Quote expiry:" in result.output
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(

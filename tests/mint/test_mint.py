@@ -376,6 +376,8 @@ async def test_mint_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
         after = int(time.time())
         assert quote.expiry is not None
         assert before + ttl <= quote.expiry <= after + ttl
+        loaded = await ledger.get_mint_quote(quote.quote)
+        assert loaded.expiry == quote.expiry
     finally:
         settings.mint_quote_ttl = None
 

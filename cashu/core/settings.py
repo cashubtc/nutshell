@@ -220,6 +220,16 @@ class MintLimits(MintSettings):
         title="Websocket read timeout",
         description="Timeout for reading from a websocket.",
     )
+    mint_websocket_quote_expiry_check_interval: int = Field(
+        default=30,
+        gt=0,
+        title="Websocket quote expiry check interval",
+        description=(
+            "Interval in seconds at which the mint checks whether a websocket's"
+            " subscribed bolt11 mint quotes have expired while still unpaid, in"
+            " order to close idle connections that will never receive an update."
+        ),
+    )
 
 
 class FakeWalletSettings(MintSettings):

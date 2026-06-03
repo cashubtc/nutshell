@@ -1261,3 +1261,13 @@ async def m035_add_last_checked_to_mint_quotes(db: Database):
                 ADD COLUMN last_checked TIMESTAMP NULL
             """
         )
+
+
+async def m036_add_expiry_to_mint_quotes(db: Database):
+    """
+    Add expiry column to mint_quotes table (melt_quotes already has expiry).
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN expiry TIMESTAMP"
+        )
