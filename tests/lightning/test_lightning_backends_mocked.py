@@ -279,6 +279,79 @@ async def test_clnrest_pay_invoice_mpp_not_supported(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_clnrest_pay_invoice_mpp_sends_partial_msat(monkeypatch):
+    wallet = object.__new__(CLNRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = True
+
+    captured: dict = {}
+
+    class Client:
+        async def post(self, *args, **kwargs):
+            captured.update(kwargs.get("data", {}))
+            return _response(
+                200,
+                {
+                    "payment_hash": "hash789",
+                    "payment_preimage": "preimage_mpp",
+                    "amount_sent_msat": 601,
+                    "amount_msat": 600,
+                    "status": "complete",
+                },
+            )
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.clnrest.decode",
+        lambda request: SimpleNamespace(amount_msat=1000, payment_hash="hash789"),
+    )
+
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=600, unit="msat"), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.SETTLED
+    assert result.preimage == "preimage_mpp"
+    assert "partial_msat" in captured, "partial_msat must be sent to CLN for MPP"
+    assert captured["partial_msat"] == 600
+
+
+@pytest.mark.asyncio
+async def test_clnrest_pay_invoice_full_amount_no_partial_msat(monkeypatch):
+    wallet = object.__new__(CLNRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = True
+
+    captured: dict = {}
+
+    class Client:
+        async def post(self, *args, **kwargs):
+            captured.update(kwargs.get("data", {}))
+            return _response(
+                200,
+                {
+                    "payment_hash": "full_hash",
+                    "payment_preimage": "preimage123",
+                    "amount_sent_msat": 1001,
+                    "amount_msat": 1000,
+                    "status": "complete",
+                },
+            )
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.clnrest.decode",
+        lambda request: SimpleNamespace(amount_msat=1000, payment_hash="full_hash"),
+    )
+
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1000, unit="msat"), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.SETTLED
+    assert result.preimage == "preimage123"
+    assert "partial_msat" not in captured, "partial_msat must not be sent for full payments"
+
+
+@pytest.mark.asyncio
 async def test_clnrest_get_payment_status_not_found_is_unknown():
     wallet = object.__new__(CLNRestWallet)
     wallet.unit = Unit.sat
