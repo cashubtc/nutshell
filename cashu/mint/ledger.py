@@ -859,7 +859,7 @@ class Ledger(
                 logger.debug(f"Setting quote {quote_id} as paid")
                 melt_quote.state = MeltQuoteState.paid
                 if status.fee:
-                    melt_quote.fee_paid = status.fee.to(unit).amount
+                    melt_quote.fee_paid = status.fee.to(unit, round="up").amount
                 if status.preimage:
                     melt_quote.payment_preimage = status.preimage
                 melt_quote.paid_time = int(time.time())
