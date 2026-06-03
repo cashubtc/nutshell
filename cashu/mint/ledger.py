@@ -859,7 +859,11 @@ class Ledger(
                 logger.debug(f"Setting quote {quote_id} as paid")
                 melt_quote.state = MeltQuoteState.paid
                 if status.fee:
-                    melt_quote.fee_paid = status.fee.to(unit).amount
+                    # Round up so that the fee paid is never under-counted.
+                    # This must match the direct melt() path (round="up"); otherwise
+                    # the change returned to the wallet would exceed the fee actually
+                    # overpaid, leaking value from the mint.
+                    melt_quote.fee_paid = status.fee.to(unit, round="up").amount
                 if status.preimage:
                     melt_quote.payment_preimage = status.preimage
                 melt_quote.paid_time = int(time.time())
