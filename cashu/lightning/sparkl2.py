@@ -62,6 +62,29 @@ class SparkL2Wallet(LightningBackend):
         self.payment_queue: asyncio.Queue[str] = asyncio.Queue()
         self.listener: Optional[_SdkEventListener] = None
 
+    def _get_total_fee_sats(self, payment_method: breez_sdk_spark.SendPaymentMethod) -> int:
+        if payment_method.is_bolt11_invoice():
+            pm = payment_method
+            fee_sats = pm.lightning_fee_sats or 0
+            spark_fee = pm.spark_transfer_fee_sats or 0
+            return fee_sats + spark_fee
+        elif payment_method.is_spark_invoice():
+            pm = payment_method
+            return int(pm.fee)
+        elif payment_method.is_spark_address():
+            pm = payment_method
+            return int(pm.fee)
+        elif payment_method.is_bitcoin_address():
+            pm = payment_method
+            fq = pm.fee_quote
+            fees = []
+            for speed in [fq.speed_fast, fq.speed_medium, fq.speed_slow]:
+                if speed:
+                    fees.append(speed.user_fee_sat + speed.l1_broadcast_fee_sat)
+            return max(fees) if fees else 0
+        else:
+            return 0
+
     async def _ensure_sdk(self):
         if self.sdk is not None:
             return
@@ -199,19 +222,7 @@ class SparkL2Wallet(LightningBackend):
             prepare_res = await self.sdk.prepare_send_payment(prepare_req)
                 
             # Ensure fee is within limits
-            if prepare_res.payment_method.is_bolt11_invoice():
-                pm = prepare_res.payment_method
-                fee_sats = pm.lightning_fee_sats or 0
-                spark_fee = pm.spark_transfer_fee_sats or 0
-            elif prepare_res.payment_method.is_spark_invoice():
-                pm = prepare_res.payment_method
-                fee_sats = pm.lightning_fee_sats or 0
-                spark_fee = pm.spark_transfer_fee_sats or 0
-            else:
-                fee_sats = 0
-                spark_fee = 0
-            
-            total_fee_sats = fee_sats + spark_fee
+            total_fee_sats = self._get_total_fee_sats(prepare_res.payment_method)
             
             if total_fee_sats * 1000 > fee_limit_msat:
                 return PaymentResponse(
@@ -348,19 +359,7 @@ class SparkL2Wallet(LightningBackend):
             
             prepare_res = await self.sdk.prepare_send_payment(prepare_req)
             
-            if prepare_res.payment_method.is_bolt11_invoice():
-                pm = prepare_res.payment_method
-                fee_sats = pm.lightning_fee_sats or 0
-                spark_fee = pm.spark_transfer_fee_sats or 0
-            elif prepare_res.payment_method.is_spark_invoice():
-                pm = prepare_res.payment_method
-                fee_sats = pm.lightning_fee_sats or 0
-                spark_fee = pm.spark_transfer_fee_sats or 0
-            else:
-                fee_sats = 0
-                spark_fee = 0
-                
-            total_fee_sats = fee_sats + spark_fee
+            total_fee_sats = self._get_total_fee_sats(prepare_res.payment_method)
             
             fee_amount = Amount(Unit.sat, total_fee_sats)
             if self.unit == Unit.msat:
