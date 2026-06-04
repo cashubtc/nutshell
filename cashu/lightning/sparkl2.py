@@ -221,6 +221,12 @@ class SparkL2Wallet(LightningBackend):
             
             prepare_res = await self.sdk.prepare_send_payment(prepare_req)
                 
+            if prepare_res.payment_method.is_bitcoin_address():
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message="On-chain bitcoin payments are not supported by this mint"
+                )
+
             # Ensure fee is within limits
             total_fee_sats = self._get_total_fee_sats(prepare_res.payment_method)
             
@@ -358,6 +364,9 @@ class SparkL2Wallet(LightningBackend):
             )
             
             prepare_res = await self.sdk.prepare_send_payment(prepare_req)
+            
+            if prepare_res.payment_method.is_bitcoin_address():
+                raise Exception("On-chain bitcoin payments are not supported by this mint")
             
             total_fee_sats = self._get_total_fee_sats(prepare_res.payment_method)
             
