@@ -660,7 +660,7 @@ async def test_blink_get_sats_per_usd_raises_on_missing_conversion():
 
 
 @pytest.mark.asyncio
-async def test_spark_pay_invoice_rejects_on_chain():
+async def test_spark_pay_invoice_rejects_non_bolt11():
     from cashu.lightning.sparkl2 import SparkL2Wallet
     wallet = object.__new__(SparkL2Wallet)
     wallet.unit = Unit.sat
@@ -670,13 +670,7 @@ async def test_spark_pay_invoice_rejects_on_chain():
     wallet._ensure_sdk = mock_ensure_sdk
 
     class MockMethod:
-        def is_bitcoin_address(self):
-            return True
         def is_bolt11_invoice(self):
-            return False
-        def is_spark_invoice(self):
-            return False
-        def is_spark_address(self):
             return False
 
     class MockPrepareResponse:
@@ -688,13 +682,13 @@ async def test_spark_pay_invoice_rejects_on_chain():
 
     wallet.sdk = MockSDK()
 
-    res = await wallet.pay_invoice(_quote("on-chain-addr"), 1000)
+    res = await wallet.pay_invoice(_quote("non-bolt11"), 1000)
     assert res.result == PaymentResult.FAILED
-    assert "On-chain bitcoin payments are not supported" in res.error_message
+    assert "Only BOLT11 payments are supported" in res.error_message
 
 
 @pytest.mark.asyncio
-async def test_spark_get_payment_quote_rejects_on_chain():
+async def test_spark_get_payment_quote_rejects_non_bolt11():
     from cashu.lightning.sparkl2 import SparkL2Wallet
     wallet = object.__new__(SparkL2Wallet)
     wallet.unit = Unit.sat
@@ -704,13 +698,7 @@ async def test_spark_get_payment_quote_rejects_on_chain():
     wallet._ensure_sdk = mock_ensure_sdk
 
     class MockMethod:
-        def is_bitcoin_address(self):
-            return True
         def is_bolt11_invoice(self):
-            return False
-        def is_spark_invoice(self):
-            return False
-        def is_spark_address(self):
             return False
 
     class MockPrepareResponse:
@@ -722,6 +710,6 @@ async def test_spark_get_payment_quote_rejects_on_chain():
 
     wallet.sdk = MockSDK()
 
-    melt_quote = PostMeltQuoteRequest(unit="sat", request="on-chain-addr")
-    with pytest.raises(Exception, match="On-chain bitcoin payments are not supported"):
+    melt_quote = PostMeltQuoteRequest(unit="sat", request="non-bolt11")
+    with pytest.raises(Exception, match="Only BOLT11 payments are supported"):
         await wallet.get_payment_quote(melt_quote)
