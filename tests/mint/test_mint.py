@@ -379,3 +379,24 @@ async def test_melt_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
         assert before + ttl <= melt_quote.expiry <= after + ttl
     finally:
         settings.melt_quote_ttl = None
+
+
+@pytest.mark.asyncio
+async def test_mint_bls_infinity_dos(ledger: Ledger):
+    from cashu.core.base import BlindedMessage, MintKeyset
+    from cashu.core.errors import TransactionError
+    
+    keyset = MintKeyset(seed="TEST_PRIVATE_KEY", derivation_path="m/0'/0'/0'", version="0.21.0", unit="sat")
+    keyset.active = True
+    ledger.keysets[keyset.id] = keyset
+    
+    infinity_b_ = "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    
+    outputs = [
+        BlindedMessage(amount=1, B_=infinity_b_, id=keyset.id)
+    ]
+    
+    with pytest.raises(TransactionError) as exc_info:
+        await ledger._sign_blinded_messages(outputs)
+    
+    assert "point at infinity" in str(exc_info.value)

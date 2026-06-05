@@ -19,12 +19,15 @@ from ..core.base import (
     Proof,
     Unit,
 )
-from ..core.crypto import b_dhke
+from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.keys import (
     PublicKey,
     derive_pubkey,
     generate_uuid_v7,
+    is_bls_keyset,
+    random_hash,
 )
 from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
@@ -1401,10 +1404,6 @@ class Ledger(
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
-        from ..core.crypto import bls_dhke
-        from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import is_bls_keyset
-        
         promises: List[
             Tuple[str, Any, int, Any, Any, Any]
         ] = []
@@ -1433,10 +1432,13 @@ class Ledger(
             logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
             
-            if is_v3:
-                C_, e, s = bls_dhke.step2_bob(B_, private_key_amount) # type: ignore
-            else:
-                C_, e, s = b_dhke.step2_bob(B_, private_key_amount) # type: ignore
+            try:
+                if is_v3:
+                    C_, e, s = bls_dhke.step2_bob(B_, private_key_amount) # type: ignore
+                else:
+                    C_, e, s = b_dhke.step2_bob(B_, private_key_amount) # type: ignore
+            except ValueError as exc:
+                raise TransactionError(str(exc))
                 
             promises.append((keyset_id, B_, output.amount, C_, e, s))
 

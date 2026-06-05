@@ -21,7 +21,7 @@ from ..core.base import (
     WalletKeyset,
     WalletMint,
 )
-from ..core.crypto import b_dhke
+from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.keys import PrivateKey, PublicKey, is_bls_keyset, is_supported_keyset_version
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
@@ -1022,6 +1022,8 @@ class Wallet(
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
+        secp_proofs: List[Proof] = []
+        bls_proofs: List[Proof] = []
         
         for proof in proofs:
             if not proof.dleq:
@@ -1035,20 +1037,37 @@ class Wallet(
             
             is_v3 = is_bls_keyset(proof.id)
             if is_v3:
-                # BLS currently doesn't implement DLEQ verify, skip or use dummy
-                pass
+                bls_proofs.append(proof)
             else:
-                if not b_dhke.carol_verify_dleq(
-                    secret_msg=proof.secret,
-                    C=SecpPublicKey(bytes.fromhex(proof.C)),
-                    r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
-                    e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
-                    s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
-                    A=self.keysets[proof.id].public_keys[proof.amount], # type: ignore[arg-type]
+                secp_proofs.append(proof)
+                
+        if bls_proofs:
+            try:
+                K2s = [self.keysets[proof.id].public_keys[proof.amount] for proof in bls_proofs]
+                Cs = [BlsPublicKey(bytes.fromhex(proof.C)) for proof in bls_proofs]
+                secrets = [proof.secret for proof in bls_proofs]
+                if not bls_dhke.batch_pairing_verification(
+                    K2s=K2s,  # type: ignore[arg-type]
+                    Cs=Cs,
+                    secret_msgs=secrets,
                 ):
-                    raise Exception("DLEQ proof invalid.")
-                else:
-                    logger.trace("DLEQ proof valid.")
+                    raise Exception("BLS pairing verification invalid.")
+            except Exception as exc:
+                raise Exception(f"BLS pairing verification invalid: {exc}")
+                
+        for proof in secp_proofs:
+            assert proof.dleq is not None
+            if not b_dhke.carol_verify_dleq(
+                secret_msg=proof.secret,
+                C=SecpPublicKey(bytes.fromhex(proof.C)),
+                r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
+                e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
+                s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
+                A=self.keysets[proof.id].public_keys[proof.amount], # type: ignore[arg-type]
+            ):
+                raise Exception("DLEQ proof invalid.")
+            else:
+                logger.trace("DLEQ proof valid.")
         logger.debug("Verified incoming DLEQ proofs.")
 
     async def _construct_proofs(
@@ -1072,9 +1091,6 @@ class Wallet(
         Returns:
             List[Proof]: list of proofs that can be used as ecash
         """
-        from ..core.crypto import bls_dhke
-        from ..core.crypto.keys import is_bls_keyset
-
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
@@ -1171,9 +1187,6 @@ class Wallet(
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
-        
-        from ..core.crypto import bls_dhke
-        from ..core.crypto.keys import is_bls_keyset
         
         for secret, amount, r in zip(secrets, amounts, rs_):
             is_v3 = is_bls_keyset(keyset_id)
