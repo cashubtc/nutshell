@@ -1,5 +1,7 @@
 from coincurve import PrivateKey, PublicKey
+
 from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
+
 
 # We extend the public key to define some operations on points
 # Picked from https://github.com/WTRMQDev/secp256k1-zkp-py/blob/master/secp256k1_zkp/__init__.py

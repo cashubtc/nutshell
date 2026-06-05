@@ -55,6 +55,7 @@ import hmac
 from typing import Optional, Tuple
 
 from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
+
 from .secp import PrivateKey, PublicKey
 
 DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_Cashu_"
