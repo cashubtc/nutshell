@@ -6,7 +6,6 @@ import respx
 from httpx import Request, Response
 
 from cashu.core.base import BlindedSignature
-from cashu.core.crypto.b_dhke import hash_to_curve
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
