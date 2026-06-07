@@ -42,7 +42,10 @@ def test_subscription_manager_builds_websocket_url(monkeypatch):
 
 def test_subscription_manager_subscribe_and_close(monkeypatch):
     monkeypatch.setattr("cashu.wallet.subscriptions.WebSocketApp", FakeWebSocketApp)
-    monkeypatch.setattr("cashu.wallet.subscriptions.random_hash", lambda: "sub-1")
+    monkeypatch.setattr(
+        "cashu.wallet.subscriptions.generate_uuid_v7",
+        lambda: "018f0f61-8c4d-7cc2-8f21-4a6b5f0b6a11",
+    )
     manager = SubscriptionManager("https://mint.test")
     monkeypatch.setattr(manager, "wait_until_connected", lambda: None)
 
@@ -53,11 +56,11 @@ def test_subscription_manager_subscribe_and_close(monkeypatch):
 
     manager.subscribe(JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE, ["quote-1"], callback)
     assert manager.id_counter == 1
-    assert "sub-1" in manager.callback_map
+    assert "018f0f61-8c4d-7cc2-8f21-4a6b5f0b6a11" in manager.callback_map
 
     sent = json.loads(cast(Any, manager).websocket.sent[0])
     assert sent["method"] == JSONRPCMethods.SUBSCRIBE.value
-    assert sent["params"]["subId"] == "sub-1"
+    assert sent["params"]["subId"] == "018f0f61-8c4d-7cc2-8f21-4a6b5f0b6a11"
 
     manager.close()
     unsubscribe_messages = [
@@ -65,7 +68,10 @@ def test_subscription_manager_subscribe_and_close(monkeypatch):
         for message in cast(Any, manager).websocket.sent[1:]
         if json.loads(message)["method"] == JSONRPCMethods.UNSUBSCRIBE.value
     ]
-    assert any(msg["params"]["subId"] == "sub-1" for msg in unsubscribe_messages)
+    assert any(
+        msg["params"]["subId"] == "018f0f61-8c4d-7cc2-8f21-4a6b5f0b6a11"
+        for msg in unsubscribe_messages
+    )
     assert cast(Any, manager).websocket.closed is True
 
 

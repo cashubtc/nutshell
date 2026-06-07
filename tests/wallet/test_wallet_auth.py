@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import Unit
-from cashu.core.crypto.keys import random_hash
+from cashu.core.crypto.keys import generate_uuid_v7
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     BlindAuthFailedError,
@@ -138,7 +138,7 @@ async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
     assert len(auth_wallet.proofs) == 0
 
     # invalidate CAT in the database
-    auth_wallet.oidc_client.access_token = random_hash()
+    auth_wallet.oidc_client.access_token = generate_uuid_v7()
 
     # this is the code executed in auth_wallet.mint_blind_auth():
     clear_auth_token = auth_wallet.oidc_client.access_token
@@ -209,7 +209,7 @@ async def test_wallet_auth_invoice_invalid_bat(wallet: Wallet):
     # invalidate blind auth proofs
     for p in auth_wallet.proofs:
         await auth_wallet.db.execute(
-            f"UPDATE proofs SET secret = '{random_hash()}' WHERE secret = '{p.secret}'"
+            f"UPDATE proofs SET secret = '{generate_uuid_v7()}' WHERE secret = '{p.secret}'"
         )
 
     wallet.auth_db = auth_wallet.db
