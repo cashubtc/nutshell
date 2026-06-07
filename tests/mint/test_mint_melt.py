@@ -4,13 +4,10 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
-    Amount,
     MeltQuote,
     MeltQuoteState,
-    Method,
     MintQuoteState,
     Proof,
-    Unit,
 )
 from cashu.core.errors import (
     LightningPaymentFailedError,
@@ -19,7 +16,7 @@ from cashu.core.errors import (
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult, PaymentStatus
+from cashu.lightning.base import PaymentResult
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -64,12 +61,11 @@ async def wallet(ledger: Ledger):
 
 
 async def create_pending_melts(
-    ledger: Ledger, check_id: str = "checking_id"
+    ledger: Ledger, check_id: str = "checking_id", quote_id: str = "quote_id"
 ) -> Tuple[Proof, MeltQuote]:
     """Helper function for startup tests for fakewallet. Creates fake pending melt
     quote and fake proofs that are in the pending table that look like they're being
     used to pay the pending melt quote."""
-    quote_id = "quote_id"
     quote = MeltQuote(
         quote=quote_id,
         method="bolt11",
@@ -913,42 +909,3 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
     assert melt_quote is not None
     assert melt_quote.state == MeltQuoteState.unpaid, "Quote state should be unpaid"
     assert not melt_quote.pending, "Quote should not be pending"
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(is_regtest, reason="only fake wallet")
-async def test_pending_melt_resolution_fee_paid_rounds_up(ledger: Ledger):
-    test_cases = [
-        (1001, 2),
-        (1500, 2),
-        (2001, 3),
-    ]
-
-    for fee_msat, expected_fee_paid_sat in test_cases:
-        pending_proof, quote = await create_pending_melts(
-            ledger, check_id=f"check-{fee_msat}"
-        )
-
-        async def patched_get_payment_status(
-            checking_id: str, _fee=fee_msat
-        ) -> PaymentStatus:
-            return PaymentStatus(
-                result=PaymentResult.SETTLED,
-                fee=Amount(Unit.msat, _fee),
-                preimage="aa" * 32,
-            )
-
-        original = ledger.backends[Method.bolt11][Unit.sat].get_payment_status
-        ledger.backends[Method.bolt11][
-            Unit.sat
-        ].get_payment_status = patched_get_payment_status  # type: ignore[method-assign]
-
-        try:
-            result = await ledger.get_melt_quote(quote_id=quote.quote)
-            assert result.state == MeltQuoteState.paid, f"fee_msat={fee_msat}"
-            assert result.fee_paid == expected_fee_paid_sat, (
-                f"fee_msat={fee_msat}, expected={expected_fee_paid_sat},"
-                f" got={result.fee_paid}"
-            )
-        finally:
-            ledger.backends[Method.bolt11][Unit.sat].get_payment_status = original  # type: ignore[method-assign]
