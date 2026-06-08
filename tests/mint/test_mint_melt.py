@@ -3,7 +3,12 @@ from typing import List, Tuple
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintQuoteState,
+    Proof,
+)
 from cashu.core.errors import (
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
@@ -56,12 +61,11 @@ async def wallet(ledger: Ledger):
 
 
 async def create_pending_melts(
-    ledger: Ledger, check_id: str = "checking_id"
+    ledger: Ledger, check_id: str = "checking_id", quote_id: str = "quote_id"
 ) -> Tuple[Proof, MeltQuote]:
     """Helper function for startup tests for fakewallet. Creates fake pending melt
     quote and fake proofs that are in the pending table that look like they're being
     used to pay the pending melt quote."""
-    quote_id = "quote_id"
     quote = MeltQuote(
         quote=quote_id,
         method="bolt11",
@@ -776,6 +780,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
         "Melt quote already paid or pending.",
     )
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_deprecated_api_only, reason="Can't run on the deprecated API")
 async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
@@ -793,7 +798,11 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     proofs2 = await wallet.mint(128, quote_id=mq2.quote)
 
     # Invoice for 64 sats (+2 fee = 66 sats needed)
-    invoice = get_real_invoice(64)["payment_request"] if is_regtest else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice = (
+        get_real_invoice(64)["payment_request"]
+        if is_regtest
+        else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    )
     melt_quote1 = await wallet.melt_quote(invoice)
     melt_quote2 = await wallet.melt_quote(invoice)
 
@@ -802,7 +811,7 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     responses = await asyncio.gather(
         ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
         ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
-        return_exceptions=True
+        return_exceptions=True,
     )
 
     failures = [r for r in responses if isinstance(r, Exception)]
@@ -817,7 +826,9 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
 
     # We expect them to NOT be pending if the bug is fixed
-    assert not any(s.pending for s in states), "Proofs from failed melt request stuck in pending!"
+    assert not any(s.pending for s in states), (
+        "Proofs from failed melt request stuck in pending!"
+    )
 
 
 @pytest.mark.asyncio
@@ -832,32 +843,29 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
         unit="usd",
     )
     await wallet_usd.load_mint()
-    
+
     mint_quote_usd = await wallet_usd.request_mint(100)
     await pay_if_regtest(mint_quote_usd.request)
     usd_proofs = await wallet_usd.mint(100, quote_id=mint_quote_usd.quote)
     assert wallet_usd.unit.name == "usd"
-    
+
     sat_mint_quote = await ledger.mint_quote(
         quote_request=PostMintQuoteRequest(amount=100, unit="sat")
     )
     sat_invoice = sat_mint_quote.request
-    
+
     sat_melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="sat", request=sat_invoice)
     )
-    
+
     assert sat_melt_quote.amount == 100
     assert sat_melt_quote.unit == "sat"
-    
+
     await assert_err(
-        ledger.melt(
-            proofs=usd_proofs, 
-            quote=sat_melt_quote.quote, 
-            outputs=[]
-        ),
-        "proof unit usd does not match quote unit sat"
+        ledger.melt(proofs=usd_proofs, quote=sat_melt_quote.quote, outputs=[]),
+        "proof unit usd does not match quote unit sat",
     )
+
 
 @pytest.mark.asyncio
 async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wallet):
@@ -869,34 +877,35 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
     mint_quote_req = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote_req.request)
     proofs = await wallet.mint(64, quote_id=mint_quote_req.quote)
-    
+
     # Create internal mint quote
     sat_mint_quote = await ledger.mint_quote(
         quote_request=PostMintQuoteRequest(amount=64, unit="sat")
     )
-    
+
     # Create internal melt quote for the same invoice
     sat_melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="sat", request=sat_mint_quote.request)
     )
-    
+
     # Make the mint quote "paid" to cause melt_mint_settle_internally to fail
     sat_mint_quote.state = MintQuoteState.paid
     await ledger.crud.update_mint_quote(quote=sat_mint_quote, db=ledger.db)
-    
+
     # Try to melt - it should fail because mint quote is already paid
     await assert_err(
         ledger.melt(proofs=proofs, quote=sat_melt_quote.quote, outputs=[]),
-        "mint quote already paid"
+        "mint quote already paid",
     )
-    
+
     # Check that proofs are not pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
     assert not any(s.pending for s in states), "Proofs stuck in pending!"
-    
+
     # Check that quote is not pending and is unpaid
-    melt_quote = await ledger.crud.get_melt_quote(quote_id=sat_melt_quote.quote, db=ledger.db)
+    melt_quote = await ledger.crud.get_melt_quote(
+        quote_id=sat_melt_quote.quote, db=ledger.db
+    )
     assert melt_quote is not None
     assert melt_quote.state == MeltQuoteState.unpaid, "Quote state should be unpaid"
     assert not melt_quote.pending, "Quote should not be pending"
-
