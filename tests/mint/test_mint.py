@@ -3,11 +3,13 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, Proof, Unit
+from cashu.core.base import BlindedMessage, MintKeyset, Proof, Unit
 from cashu.core.crypto.bls_dhke import step1_alice
+from cashu.core.errors import TransactionError
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
+from cashu.core.split import amount_split
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
 
@@ -224,10 +226,6 @@ async def test_maximum_balance(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Ledger):
-    from cashu.core.base import BlindedMessage
-    from cashu.core.crypto.bls_dhke import step1_alice
-    from cashu.core.split import amount_split
-
     # Create a real melt quote to satisfy FK on promises.melt_quote
     mint_quote_resp = await ledger.mint_quote(
         PostMintQuoteRequest(amount=64, unit="sat")
@@ -293,9 +291,6 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
 
 @pytest.mark.asyncio
 async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledger):
-    from cashu.core.base import BlindedMessage
-    from cashu.core.crypto.bls_dhke import step1_alice
-
     # Create a real melt quote to satisfy FK on promises.melt_quote
     mint_quote_resp = await ledger.mint_quote(
         PostMintQuoteRequest(amount=64, unit="sat")
@@ -383,9 +378,6 @@ async def test_melt_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_bls_infinity_dos(ledger: Ledger):
-    from cashu.core.base import BlindedMessage, MintKeyset
-    from cashu.core.errors import TransactionError
-    
     keyset = MintKeyset(seed="TEST_PRIVATE_KEY", derivation_path="m/0'/0'/0'", version="0.21.0", unit="sat")
     keyset.active = True
     ledger.keysets[keyset.id] = keyset

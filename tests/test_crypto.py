@@ -1,3 +1,5 @@
+import pytest
+
 from cashu.core.base import Proof
 from cashu.core.crypto import bls, bls_dhke
 from cashu.core.crypto.b_dhke import (
@@ -636,7 +638,6 @@ def test_bls_batch_verification_vector():
 
 
 def test_dleq_step2_bob_dleq_invalid_key_type():
-    import pytest
     B_ = PublicKey(
         bytes.fromhex(
             "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"

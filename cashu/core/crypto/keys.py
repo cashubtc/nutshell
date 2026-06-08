@@ -1,6 +1,6 @@
 import base64
 import hashlib
-import os
+import random
 import secrets
 import time
 import uuid
@@ -11,6 +11,7 @@ from loguru import logger
 
 from .bls import PrivateKey as BlsPrivateKey
 from .bls import PublicKey as BlsPublicKey
+from .bls import curve_order
 from .secp import PrivateKey as SecpPrivateKey
 from .secp import PublicKey as SecpPublicKey
 
@@ -249,17 +250,22 @@ def random_hash() -> str:
 def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
     """
     Deterministic derivation of BLS12-381 keys for 2^n values.
-    Since BIP32 doesn't technically cover BLS12-381, we use HKDF or simple hashing on the BIP32 seed.
-    For simplicity and backwards compatibility of mnemonic/path logic, we use the BIP32 path output directly to generate the scalar.
+    Uses rejection sampling to ensure private keys are uniformly distributed in [1, r-1]
+    without any modulo bias.
     """
     bip32 = BIP32.from_seed(mnemonic.encode())
-    orders_str = [f"/{a}'" for a in range(len(amounts))]
-    return {
-        a: BlsPrivateKey(
-            bip32.get_privkey_from_path(derivation_path + orders_str[i])
-        )
-        for i, a in enumerate(amounts)
-    }
+    keys = {}
+    for i, a in enumerate(amounts):
+        attempt = 0
+        while True:
+            path = f"{derivation_path}/{i}'/{attempt}'"
+            privkey_bytes = bip32.get_privkey_from_path(path)
+            privkey_int = int.from_bytes(privkey_bytes, "big")
+            if privkey_int != 0 and privkey_int < curve_order:
+                keys[a] = BlsPrivateKey(privkey_bytes)
+                break
+            attempt += 1
+    return keys
 
 def derive_keyset_id_v3(
     keys: Dict[int, BlsPublicKey], 

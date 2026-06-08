@@ -30,6 +30,7 @@ from .crypto.keys import (
     derive_keyset_id_v2,
     derive_keyset_id_v3,
     derive_pubkeys,
+    is_bls_keyset,
 )
 from .crypto.secp import PrivateKey as SecpPrivateKey
 from .crypto.secp import PublicKey as SecpPublicKey
@@ -951,10 +952,6 @@ class WalletKeyset:
     @classmethod
     def from_row(cls, row: RowMapping):
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
-            from .crypto.bls import PublicKey as BlsPublicKey
-            from .crypto.keys import is_bls_keyset
-            from .crypto.secp import PublicKey as SecpPublicKey
-            
             is_v3 = is_bls_keyset(row["id"])
             pub_keys: Dict[int, PublicKey] = {}
             for amount, hex_key in dict(json.loads(serialized)).items():
