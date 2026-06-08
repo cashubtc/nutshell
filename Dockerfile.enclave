@@ -40,7 +40,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Set default enclave configuration
 ENV MINT_LISTEN_HOST="0.0.0.0"
 ENV MINT_LISTEN_PORT=3338
-ENV MINT_DATABASE="data/mint"
+ENV MINT_DATABASE="/data/mint"
 ENV CASHU_DIR="/data"
 
 # Pre-configure for Spark L2 / Breez
