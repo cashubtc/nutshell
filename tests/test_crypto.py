@@ -633,3 +633,15 @@ def test_bls_batch_verification_vector():
     scalars = bls_dhke.derive_batch_random_scalars([K, K], [C_1, C_2], [secret_1, secret_2])
     assert hex(scalars[0])[2:].zfill(64) == "0e7ff8be2ccb756d4ef390991bdd77eb65e8db624a2729fa1657c3cf8d7d4b55"
     assert hex(scalars[1])[2:].zfill(64) == "6d026a181a6215b233e73b121d01908a1a1eb6911955bea5130bbf2f2966554d"
+
+
+def test_dleq_step2_bob_dleq_invalid_key_type():
+    import pytest
+    B_ = PublicKey(
+        bytes.fromhex(
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+        )
+    )
+    bls_key = bls.PrivateKey()
+    with pytest.raises(TypeError, match="Expected SecpPrivateKey"):
+        step2_bob_dleq(B_, bls_key)  # type: ignore

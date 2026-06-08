@@ -28,7 +28,9 @@ from .crypto.keys import (
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
     derive_pubkeys,
-)
+    derive_keys_v3,
+    derive_keyset_id_v3
+) 
 from .crypto.secp import PrivateKey as SecpPrivateKey
 from .crypto.secp import PublicKey as SecpPublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
@@ -1190,7 +1192,6 @@ class MintKeyset:
                 )
                 logger.info(f"Generated keyset v2 ID: {self.id}")
         else:
-            from .crypto.keys import derive_keys_v3, derive_keyset_id_v3
             self.private_keys = derive_keys_v3(
                 self.seed, self.derivation_path, self.amounts
             )  # type: ignore[assignment]
