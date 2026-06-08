@@ -1,7 +1,10 @@
 import pytest
 
+from cashu.core.base import DLEQWallet, Proof, WalletKeyset
+from cashu.core.crypto import bls_dhke
 from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
 from cashu.wallet.secrets import WalletSecrets
+from cashu.wallet.wallet import Wallet
 
 
 @pytest.mark.asyncio
@@ -29,11 +32,6 @@ async def test_nut13_v3_secret_derivation():
 
 @pytest.mark.asyncio
 async def test_wallet_bls_signature_verification():
-    from cashu.core.base import DLEQWallet, Proof, WalletKeyset
-    from cashu.core.crypto import bls_dhke
-    from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
-    from cashu.wallet.wallet import Wallet
-    
     keyset_id = "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
     amount = 1
     
