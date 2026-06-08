@@ -10,18 +10,6 @@ from .bls import G2, PrivateKey, PublicKey, curve_order
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
 BLS_BATCH_DST = b"Cashu_BLS_Batch_v1"
 
-def ext_euclid(a, b):
-    if b == 0:
-        return 1, 0, a
-    x, y, g = ext_euclid(b, a % b)
-    return y, x - y * (a // b), g
-
-def mod_inverse(a, m):
-    x, y, g = ext_euclid(a, m)
-    if g != 1:
-        raise Exception('modular inverse does not exist')
-    return x % m
-
 def hash_to_curve(message: bytes) -> PublicKey:
     """
     Hash a message to a point on G1 using SSWU.
@@ -63,7 +51,7 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
     """
     Alice unblinds the signature: C = C' * (1/r)
     """
-    r_inv = mod_inverse(r.scalar, curve_order)
+    r_inv = pow(r.scalar, -1, curve_order)
     C: PublicKey = C_ * r_inv
     logger.trace(f"BLS step3: C_={C_.format().hex()} C={C.format().hex()} r={r.to_hex()}")
     return C
