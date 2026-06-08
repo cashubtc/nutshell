@@ -228,7 +228,6 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             raise RuntimeError("V3 blinding factor derivation failed")
             
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
-        from loguru import logger
         logger.trace(f"HMAC-SHA256 V3 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
