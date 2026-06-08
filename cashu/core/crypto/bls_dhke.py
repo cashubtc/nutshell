@@ -160,18 +160,3 @@ def hash_e(*publickeys: PublicKey) -> bytes:
         _p = p.format(compressed=True).hex()
         e_ += str(_p)
     return hashlib.sha256(e_.encode("utf-8")).digest()
-
-# Deprecated functions (kept to avoid import errors, though they shouldn't be called)
-def hash_to_curve_deprecated(message: bytes) -> PublicKey:
-    return hash_to_curve(message)
-
-def step1_alice_deprecated(
-    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
-) -> tuple[PublicKey, PrivateKey]:
-    return step1_alice(secret_msg, blinding_factor)
-
-def verify_deprecated(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
-    return keyed_verification(a, C, secret_msg)
-
-def carol_verify_dleq_deprecated(*args, **kwargs):
-    return True
