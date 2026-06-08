@@ -61,8 +61,7 @@ def keyed_verification(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Mint verification: checks C == Y * a
     """
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    valid = C == Y * a
-    return valid
+    return C == Y * a
 
 def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     """
