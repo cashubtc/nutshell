@@ -229,13 +229,13 @@ def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> D
     """
     Deterministic derivation of BLS12-381 keys for 2^n values.
     Since BIP32 doesn't technically cover BLS12-381, we use HKDF or simple hashing on the BIP32 seed.
-    For simplicity and backwards compatibility of mnemonic/path logic, we hash the BIP32 path output to generate the scalar.
+    For simplicity and backwards compatibility of mnemonic/path logic, we use the BIP32 path output directly to generate the scalar.
     """
     bip32 = BIP32.from_seed(mnemonic.encode())
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
         a: BlsPrivateKey(
-            hashlib.sha256(bip32.get_privkey_from_path(derivation_path + orders_str[i])).digest()
+            bip32.get_privkey_from_path(derivation_path + orders_str[i])
         )
         for i, a in enumerate(amounts)
     }
