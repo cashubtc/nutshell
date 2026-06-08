@@ -19,6 +19,9 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import PublicKey, is_bls_keyset
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,
@@ -243,9 +246,6 @@ class LedgerAPI(SupportsAuth):
         keys = KeysResponse.model_validate(keys_dict)
         keysets_str = " ".join([f"{k.id} ({k.unit})" for k in keys.keysets])
         logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
-        from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import PublicKey, is_bls_keyset
-        from ..core.crypto.secp import PublicKey as SecpPublicKey
         
         ret = []
         for keyset in keys.keysets:
@@ -287,9 +287,6 @@ class LedgerAPI(SupportsAuth):
 
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
-        from ..core.crypto.bls import PublicKey as BlsPublicKey
-        from ..core.crypto.keys import PublicKey, is_bls_keyset
-        from ..core.crypto.secp import PublicKey as SecpPublicKey
 
         keys = KeysResponse.model_validate(keys_dict)
         this_keyset = keys.keysets[0]

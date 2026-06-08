@@ -27,7 +27,6 @@ from ..core.crypto.keys import (
     derive_pubkey,
     generate_uuid_v7,
     is_bls_keyset,
-    random_hash,
 )
 from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
