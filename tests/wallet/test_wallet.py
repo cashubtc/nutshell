@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from types import SimpleNamespace
 from typing import List, Union
@@ -100,7 +101,7 @@ async def test_get_keys(wallet1: Wallet):
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
     assert (
         keyset.id
-        == "0200351069db7a17336468dda24c22ce79a0fc1ebaf81b75adff42ecb7db118288"
+        == "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
     )
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
@@ -484,8 +485,6 @@ async def test_split_race_condition(wallet1: Wallet):
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     # run two splits in parallel
-    import asyncio
-
     # Await both attempts: the losing split can fail before the winning split
     # releases its SQLite transaction, which otherwise leaks into the next test.
     results = await asyncio.gather(
@@ -581,11 +580,11 @@ async def test_token_state(wallet1: Wallet):
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
     assert list(wallet1.keysets.keys()) == [
-        "0200351069db7a17336468dda24c22ce79a0fc1ebaf81b75adff42ecb7db118288"
+        "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
     ]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
     await wallet1.activate_keyset(
-        keyset_id="0200351069db7a17336468dda24c22ce79a0fc1ebaf81b75adff42ecb7db118288"
+        keyset_id="022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
     )
     # expect deprecated keyset id to be present
     await assert_err(
