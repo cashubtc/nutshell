@@ -1,5 +1,16 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
+
+
+class WalletTransactionState(Enum):
+    mint = "mint"
+    melt = "melt"
+    send = "send"
+    receive = "receive"
+
+    def __str__(self):
+        return self.name
 
 
 @dataclass
