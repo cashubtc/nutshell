@@ -28,6 +28,7 @@ from cashu.wallet.crud import (
     get_proofs,
     get_reserved_proofs,
     get_seed_and_mnemonic,
+    get_transactions,
     invalidate_proof,
     secret_used,
     set_secret_derivation,
@@ -37,11 +38,13 @@ from cashu.wallet.crud import (
     store_mint,
     store_proof,
     store_seed_and_mnemonic,
+    store_transaction,
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
     update_mint,
     update_proof,
+    update_transaction_state,
 )
 
 
@@ -297,3 +300,139 @@ async def test_seed_and_mint_roundtrip(wallet_db: Database):
 @pytest.mark.asyncio
 async def test_get_mint_by_url_returns_none_when_missing(wallet_db: Database):
     assert await get_mint_by_url(db=wallet_db, url="https://missing.test") is None
+
+
+# ---------------------------------------------------------------------------
+# Transaction history CRUD
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_transaction_store_and_fetch(wallet_db: Database):
+    await store_transaction(
+        wallet_db,
+        tx_type="mint",
+        amount=100,
+        unit="sat",
+        mint="https://mint.test",
+        state="completed",
+        quote_id="quote-abc",
+    )
+    txs = await get_transactions(wallet_db)
+    assert len(txs) == 1
+    tx = txs[0]
+    assert tx.tx_type == "mint"
+    assert tx.amount == 100
+    assert tx.unit == "sat"
+    assert tx.mint == "https://mint.test"
+    assert tx.state == "completed"
+    assert tx.quote_id == "quote-abc"
+    assert tx.fee is None
+    assert tx.preimage is None
+
+
+@pytest.mark.asyncio
+async def test_transaction_update_state(wallet_db: Database):
+    await store_transaction(
+        wallet_db,
+        tx_type="melt",
+        amount=50,
+        unit="sat",
+        mint="https://mint.test",
+        state="pending",
+        quote_id="quote-xyz",
+    )
+    await update_transaction_state(
+        wallet_db,
+        quote_id="quote-xyz",
+        state="completed",
+        fee=2,
+        preimage="preimage-abc",
+    )
+    txs = await get_transactions(wallet_db)
+    assert len(txs) == 1
+    assert txs[0].state == "completed"
+    assert txs[0].fee == 2
+    assert txs[0].preimage == "preimage-abc"
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_empty(wallet_db: Database):
+    txs = await get_transactions(wallet_db)
+    assert txs == []
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_filter_by_type(wallet_db: Database):
+    await store_transaction(
+        wallet_db,
+        tx_type="mint",
+        amount=10,
+        unit="sat",
+        mint="https://mint.test",
+        state="completed",
+    )
+    await store_transaction(
+        wallet_db,
+        tx_type="melt",
+        amount=20,
+        unit="sat",
+        mint="https://mint.test",
+        state="completed",
+    )
+
+    mints = await get_transactions(wallet_db, tx_type="mint")
+    melts = await get_transactions(wallet_db, tx_type="melt")
+    all_txs = await get_transactions(wallet_db)
+
+    assert len(mints) == 1 and mints[0].tx_type == "mint"
+    assert len(melts) == 1 and melts[0].tx_type == "melt"
+    assert len(all_txs) == 2
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_filter_by_mint(wallet_db: Database):
+    await store_transaction(
+        wallet_db,
+        tx_type="mint",
+        amount=10,
+        unit="sat",
+        mint="https://mint-a.test",
+        state="completed",
+    )
+    await store_transaction(
+        wallet_db,
+        tx_type="mint",
+        amount=20,
+        unit="sat",
+        mint="https://mint-b.test",
+        state="completed",
+    )
+
+    from_a = await get_transactions(wallet_db, mint="https://mint-a.test")
+    from_b = await get_transactions(wallet_db, mint="https://mint-b.test")
+
+    assert len(from_a) == 1 and from_a[0].mint == "https://mint-a.test"
+    assert len(from_b) == 1 and from_b[0].mint == "https://mint-b.test"
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_limit(wallet_db: Database):
+    for i in range(5):
+        await store_transaction(
+            wallet_db,
+            tx_type="mint",
+            amount=10 * (i + 1),
+            unit="sat",
+            mint="https://mint.test",
+            state="completed",
+        )
+
+    limited = await get_transactions(wallet_db, limit=3)
+    assert len(limited) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_limit_invalid(wallet_db: Database):
+    with pytest.raises(ValueError):
+        await get_transactions(wallet_db, limit=0)
