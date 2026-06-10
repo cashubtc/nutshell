@@ -173,15 +173,7 @@ async def mint_quote(
     """
     logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
     quote = await ledger.mint_quote(payload)
-    resp = PostMintQuoteResponse(
-        quote=quote.quote,
-        request=quote.request,
-        amount=quote.amount,
-        unit=quote.unit,
-        state=quote.state.value,
-        expiry=quote.expiry,
-        pubkey=quote.pubkey,
-    )
+    resp = PostMintQuoteResponse.from_mint_quote(quote)
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
 
@@ -199,15 +191,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     """
     logger.trace(f"> GET /v1/mint/quote/bolt11/{quote}")
     mint_quote = await ledger.get_mint_quote(quote)
-    resp = PostMintQuoteResponse(
-        quote=mint_quote.quote,
-        request=mint_quote.request,
-        amount=mint_quote.amount,
-        unit=mint_quote.unit,
-        state=mint_quote.state.value,
-        expiry=mint_quote.expiry,
-        pubkey=mint_quote.pubkey,
-    )
+    resp = PostMintQuoteResponse.from_mint_quote(mint_quote)
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
 
@@ -226,15 +210,7 @@ async def mint_quote_check(
     logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
     quotes = await ledger.mint_quote_check(payload)
     resp = [
-        PostMintQuoteResponse(
-            quote=quote.quote,
-            request=quote.request,
-            amount=quote.amount,
-            unit=quote.unit,
-            state=quote.state.value,
-            expiry=quote.expiry,
-            pubkey=quote.pubkey,
-        )
+        PostMintQuoteResponse.from_mint_quote(quote)
         for quote in quotes
     ]
     logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")

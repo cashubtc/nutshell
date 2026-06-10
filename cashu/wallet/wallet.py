@@ -569,25 +569,52 @@ class Wallet(
         """
         mint_quote_response = await super().get_mint_quote(quote_id)
         mint_quote_local = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
-        mint_quote = MintQuote.from_resp_wallet(
-            mint_quote_response,
-            mint=self.url,
-            amount=(
-                mint_quote_response.amount or mint_quote_local.amount
-                if mint_quote_local
-                else 0  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
-            unit=(
-                mint_quote_response.unit or mint_quote_local.unit
-                if mint_quote_local
-                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
-        )
+
+        # Check if the response is stale according to the spec
+        is_stale = False
+        if mint_quote_local:
+            response_updated_at = getattr(mint_quote_response, "updated_at", None)
+            if response_updated_at is not None and response_updated_at < mint_quote_local.updated_at:
+                is_stale = True
+
+            response_amount_paid = getattr(mint_quote_response, "amount_paid", None)
+            if response_amount_paid is not None and response_amount_paid < mint_quote_local.amount_paid:
+                is_stale = True
+
+            response_amount_issued = getattr(mint_quote_response, "amount_issued", None)
+            if response_amount_issued is not None and response_amount_issued < mint_quote_local.amount_issued:
+                is_stale = True
+
+        if is_stale and mint_quote_local:
+            mint_quote = mint_quote_local
+        else:
+            mint_quote = MintQuote.from_resp_wallet(
+                mint_quote_response,
+                mint=self.url,
+                amount=(
+                    mint_quote_response.amount or mint_quote_local.amount
+                    if mint_quote_local
+                    else 0  # BACKWARD COMPATIBILITY mint response < 0.17.0
+                ),
+                unit=(
+                    mint_quote_response.unit or mint_quote_local.unit
+                    if mint_quote_local
+                    else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
+                ),
+            )
+
         if mint_quote_local and mint_quote_local.privkey:
             mint_quote.privkey = mint_quote_local.privkey
 
         if not mint_quote_local:
             await store_bolt11_mint_quote(db=self.db, quote=mint_quote)
+        elif mint_quote_local.state != mint_quote.state:
+            await update_bolt11_mint_quote(
+                db=self.db,
+                quote=mint_quote.quote,
+                state=mint_quote.state,
+                paid_time=mint_quote.paid_time or int(time.time()),
+            )
 
         return mint_quote
 

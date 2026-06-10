@@ -218,6 +218,10 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
+    assert resp_quote.amount_paid == 0
+    assert resp_quote.amount_issued == 0
+    assert resp_quote.updated_at is not None
+    assert resp_quote.updated_at > 0
 
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
@@ -245,6 +249,10 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
+    assert resp_quote.amount_paid == 100
+    assert resp_quote.amount_issued == 0
+    assert resp_quote.updated_at is not None
+    assert resp_quote.updated_at >= result["updated_at"]
 
     assert resp_quote.pubkey == "02" + "00" * 32
 

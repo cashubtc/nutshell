@@ -470,6 +470,26 @@ class MintQuote(LedgerEvent):
 
     @classmethod
     def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
+        # Prefer amount_paid/amount_issued if present
+        if getattr(mint_quote_resp, "amount_paid", None) is not None and getattr(mint_quote_resp, "amount_issued", None) is not None:
+            amount_paid = mint_quote_resp.amount_paid
+            amount_issued = mint_quote_resp.amount_issued
+            if amount_paid == 0 and amount_issued == 0:
+                if getattr(mint_quote_resp, "state", None) == "PENDING":
+                    state = MintQuoteState.pending
+                else:
+                    state = MintQuoteState.unpaid
+            elif amount_paid > amount_issued:
+                state = MintQuoteState.paid
+            elif amount_paid == amount_issued and amount_issued > 0:
+                state = MintQuoteState.issued
+            else:
+                state = MintQuoteState.unpaid
+        elif getattr(mint_quote_resp, "state", None):
+            state = MintQuoteState(mint_quote_resp.state)
+        else:
+            state = MintQuoteState.unpaid
+
         return cls(
             quote=mint_quote_resp.quote,
             method="bolt11",
@@ -479,12 +499,34 @@ class MintQuote(LedgerEvent):
             or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=mint_quote_resp.amount
             or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            state=MintQuoteState(mint_quote_resp.state),
+            state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
             created_time=int(time.time()),
             pubkey=mint_quote_resp.pubkey,
         )
+
+    @property
+    def amount_paid(self) -> int:
+        if self.state in [MintQuoteState.paid, MintQuoteState.issued]:
+            return self.amount
+        return 0
+
+    @property
+    def amount_issued(self) -> int:
+        if self.state == MintQuoteState.issued:
+            return self.amount
+        return 0
+
+    @property
+    def updated_at(self) -> int:
+        if self.issued_time is not None:
+            return self.issued_time
+        if self.paid_time is not None:
+            return self.paid_time
+        if self.created_time is not None:
+            return self.created_time
+        return 0
 
     @property
     def identifier(self) -> str:
