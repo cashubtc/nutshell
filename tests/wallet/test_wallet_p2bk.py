@@ -566,6 +566,73 @@ def test_p2bk_refund_key_unblind():
     assert verify_schnorr_signature(msg, sender_derived.public_key, sig_s)
 
 
+def test_p2bk_cosigner_refund_path():
+    """Wallet holding keys in both pubkeys (slot 1) and refund (slot 2) derives
+    both signing keys and produces a valid signature for each slot independently.
+
+    Regression test for: first-match early-return in _derive_p2bk_signing_keys
+    would discard the refund key, locking funds when only the refund path is active.
+    """
+    bob_priv = PrivateKey()
+    alice_priv = PrivateKey()
+    assert bob_priv.public_key and alice_priv.public_key
+    bob_pub = bob_priv.public_key.format(compressed=True).hex()
+    alice_pub = alice_priv.public_key.format(compressed=True).hex()
+
+    # Alice is co-signer (slot 1) AND the sole refund holder (slot 2)
+    e = PrivateKey()
+    blinded_data, blinded_add, blinded_refund, E = blind_pubkeys(
+        data_pubkey=bob_pub,
+        additional_pubkeys=[alice_pub],
+        refund_pubkeys=[alice_pub],
+        ephemeral_privkey=e,
+    )
+
+    # Build a minimal Proof so _derive_p2bk_signing_keys can be called on it
+    secret = P2PKSecret(
+        kind=SecretKind.P2PK.value,
+        data=blinded_data,
+        tags=Tags(),
+    )
+    secret.tags["pubkeys"] = [blinded_add[0]]
+    secret.tags["refund"] = [blinded_refund[0]]
+    proof = Proof(
+        id="test", amount=1,
+        secret=secret.serialize(),
+        C="02" + "aa" * 32,
+        p2pk_e=E,
+    )
+
+    # Simulate what _derive_p2bk_signing_keys does via wallet2 fixture equivalent
+    # We call the function directly via a minimal duck-typed object
+    class _FakeWallet:
+        private_key = alice_priv
+
+        def _derive_p2bk_signing_keys(self, proof):
+            from cashu.wallet.p2bk import WalletP2BK
+            return WalletP2BK._derive_p2bk_signing_keys(self, proof)  # type: ignore[arg-type]
+
+    wallet = _FakeWallet()
+    keys = wallet._derive_p2bk_signing_keys(proof)
+
+    # Alice must yield exactly TWO keys: one for slot 1, one for slot 2
+    assert len(keys) == 2, f"Expected 2 keys, got {len(keys)}"
+
+    msg = b"test"
+    sig1 = schnorr_sign(msg, keys[0])
+    sig2 = schnorr_sign(msg, keys[1])
+
+    # Each signature must validate against its own blinded pubkey
+    pk1 = PublicKey(bytes.fromhex(blinded_add[0]))
+    pk2 = PublicKey(bytes.fromhex(blinded_refund[0]))
+    assert verify_schnorr_signature(msg, pk1, sig1), "slot-1 sig must be valid for slot-1 pk"
+    assert verify_schnorr_signature(msg, pk2, sig2), "slot-2 sig must be valid for slot-2 pk"
+
+    # Cross-validation must fail: slot-1 sig is wrong for slot-2 pk, and vice versa
+    assert not verify_schnorr_signature(msg, pk2, sig1), "slot-1 sig must NOT validate for slot-2 pk"
+    assert not verify_schnorr_signature(msg, pk1, sig2), "slot-2 sig must NOT validate for slot-1 pk"
+
+
 def test_p2bk_multisig_slot_independence():
     """Each receiver unblind only their own slot, not the other's."""
     receiver1_priv = PrivateKey()
@@ -672,7 +739,7 @@ async def test_p2bk_htlc_inheritance(wallet1: Wallet, wallet2: Wallet):
     # Verify wallet2 can derive the P2BK signing key for the HTLC proof
     for p in send_proofs:
         assert p.p2pk_e == ephemeral_pub
-        assert wallet2._derive_p2bk_signing_key(p) is not None
+        assert wallet2._derive_p2bk_signing_keys(p)
 
     # Set preimage on witness before redemption
     for p in send_proofs:

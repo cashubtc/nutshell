@@ -89,13 +89,15 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
             tags=blinded_tags,
         ), ephemeral_pubkey_hex
 
-    def _derive_p2bk_signing_key(self, proof: Proof) -> Optional[PrivateKey]:
-        """If proof has p2pk_e, derive the blinded private key for our slot.
+    def _derive_p2bk_signing_keys(self, proof: Proof) -> List[PrivateKey]:
+        """If proof has p2pk_e, derive blinded private keys for every slot we own.
 
-        Returns the blinded private key if we can unblind a slot, else None.
+        Returns all derivable keys across [data, ...pubkeys, ...refund] slots.
+        A wallet may legitimately hold keys in multiple slots (e.g. co-signer
+        and refund holder), and each slot requires a distinct signature.
         """
         if not proof.p2pk_e:
-            return None
+            return []
         secret = P2PKSecret.deserialize(proof.secret)
 
         all_blinded_pubkeys = (
@@ -103,6 +105,7 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
             + secret.tags.get_tag_all("pubkeys")
             + secret.tags.get_tag_all("refund")
         )
+        keys: List[PrivateKey] = []
         for i, blinded_pk in enumerate(all_blinded_pubkeys):
             try:
                 derived = derive_blinded_private_key(
@@ -115,12 +118,12 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
                 # Slot value is not a valid pubkey (e.g. HTLC preimage hash)
                 continue
             if derived is not None:
-                return derived
-        return None
+                keys.append(derived)
+        return keys
 
     def filter_p2bk_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Filter P2BK proofs (those with p2pk_e) that we can unblind."""
         return [
             p for p in proofs
-            if p.p2pk_e and self._derive_p2bk_signing_key(p) is not None
+            if p.p2pk_e and self._derive_p2bk_signing_keys(p)
         ]

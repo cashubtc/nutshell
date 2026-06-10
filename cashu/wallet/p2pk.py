@@ -98,7 +98,8 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
 
         signatures = []
         for proof in proofs:
-            signing_key = self._derive_p2bk_signing_key(proof) or private_key
+            p2bk_keys = self._derive_p2bk_signing_keys(proof)
+            signing_key = p2bk_keys[0] if p2bk_keys else private_key
             signatures.append(
                 schnorr_sign(
                     message=proof.secret.encode("utf-8"),
@@ -162,7 +163,8 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
                 proofs, outputs
             )
             # For P2BK proofs, use the derived blinded signing key
-            signing_key = self._derive_p2bk_signing_key(proofs[0])
+            p2bk_keys = self._derive_p2bk_signing_keys(proofs[0])
+            signing_key = p2bk_keys[0] if p2bk_keys else None
             signature = self.schnorr_sign_message(message_to_sign, signing_key)
             # add witness to only the first proof
             signed_proofs = self.add_signatures_to_proofs([proofs[0]], [signature])
@@ -192,7 +194,7 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         proofs = self.add_witness_swap_sig_all(proofs, outputs)
 
         # p2pk_e stripped AFTER signing: add_witnesses_sig_inputs derives the
-        # blinded key via _derive_p2bk_signing_key before we clear the field.
+        # blinded key via _derive_p2bk_signing_keys before we clear the field.
         for p in proofs:
             p.p2pk_e = None
 
@@ -208,7 +210,7 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         proofs = self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
 
         # p2pk_e stripped AFTER signing: add_witnesses_sig_inputs derives the
-        # blinded key via _derive_p2bk_signing_key before we clear the field.
+        # blinded key via _derive_p2bk_signing_keys before we clear the field.
         for p in proofs:
             p.p2pk_e = None
 
@@ -274,7 +276,7 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         for p in proofs:
             # P2BK: if p2pk_e is present, try to unblind and check
             if p.p2pk_e:
-                if self._derive_p2bk_signing_key(p) is not None:
+                if self._derive_p2bk_signing_keys(p):
                     our_pubkey_proofs.append(p)
                 continue
             # Plain P2PK: check if our pubkey is in the secret
@@ -312,7 +314,7 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
                     secret.tags.get_tag("pubkeys") or secret.tags.get_tag("refund")
                 ):
                     # NUT-28: P2BK is inherited here — HTLC reuses the P2PK
-                    # signature path which calls _derive_p2bk_signing_key.
+                    # signature path which calls _derive_p2bk_signing_keys.
                     # No HTLC-specific P2BK handling is needed.
                     p2pk_proofs.append(p)
             except Exception:
@@ -335,6 +337,16 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         signed_proofs = self.add_signatures_to_proofs(
             our_pubkey_proofs, p2pk_signatures
         )
+        # For P2BK proofs where the wallet holds keys in multiple slots (e.g.
+        # co-signer and refund holder), sign with every derivable key so the
+        # mint can satisfy whichever spending path is currently active.
+        for proof in signed_proofs:
+            if proof.p2pk_e:
+                for extra_key in self._derive_p2bk_signing_keys(proof)[1:]:
+                    extra_sig = schnorr_sign(
+                        proof.secret.encode("utf-8"), extra_key
+                    ).hex()
+                    self.add_signatures_to_proofs([proof], [extra_sig])
         return signed_proofs
 
     def add_witnesses_sig_inputs(self, proofs: List[Proof]) -> List[Proof]:
