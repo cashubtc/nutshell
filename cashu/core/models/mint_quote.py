@@ -47,45 +47,10 @@ class PostMintQuoteResponse(BaseModel):
 
     @classmethod
     def from_mint_quote(cls, mint_quote: MintQuote) -> "PostMintQuoteResponse":
-        if hasattr(mint_quote, "model_dump"):
-            to_dict = mint_quote.model_dump()
-        else:
-            to_dict = {
-                "quote": mint_quote.quote,
-                "request": mint_quote.request,
-                "amount": mint_quote.amount,
-                "unit": mint_quote.unit,
-                "state": getattr(mint_quote, "state", None),
-                "expiry": getattr(mint_quote, "expiry", None),
-                "pubkey": getattr(mint_quote, "pubkey", None),
-            }
-
-        if hasattr(to_dict.get("state"), "value"):
-            to_dict["state"] = to_dict["state"].value
-        elif hasattr(mint_quote, "state") and hasattr(mint_quote.state, "value"):
-            to_dict["state"] = mint_quote.state.value
-
-        amount_paid = getattr(mint_quote, "amount_paid", None)
-        if amount_paid is None:
-            state_val = to_dict.get("state")
-            if state_val in ["PAID", "ISSUED"]:
-                amount_paid = mint_quote.amount
-            else:
-                amount_paid = 0
-        to_dict["amount_paid"] = amount_paid
-
-        amount_issued = getattr(mint_quote, "amount_issued", None)
-        if amount_issued is None:
-            state_val = to_dict.get("state")
-            if state_val == "ISSUED":
-                amount_issued = mint_quote.amount
-            else:
-                amount_issued = 0
-        to_dict["amount_issued"] = amount_issued
-
-        updated_at = getattr(mint_quote, "updated_at", None)
-        if updated_at is None:
-            updated_at = getattr(mint_quote, "created_time", 0) or getattr(mint_quote, "expiry", 0) or 0
-        to_dict["updated_at"] = updated_at
-
+        to_dict = mint_quote.model_dump()
+        # turn state into string
+        to_dict["state"] = mint_quote.state.value
+        to_dict["amount_paid"] = mint_quote.amount_paid
+        to_dict["amount_issued"] = mint_quote.amount_issued
+        to_dict["updated_at"] = mint_quote.updated_at
         return cls.model_validate(to_dict)
