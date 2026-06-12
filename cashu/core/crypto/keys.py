@@ -170,6 +170,27 @@ def get_keyset_id_version(keyset_id: str) -> str:
     return keyset_id[:2]
 
 
+def is_supported_keyset_version(keyset_id: str) -> bool:
+    """
+    Check if the keyset ID's version is supported by this wallet.
+    Supported versions:
+    - "base64" (pre-0.15.0 legacy keysets)
+    - "00" (legacy keysets)
+    - "01" (v2 keysets)
+    """
+    try:
+        version = get_keyset_id_version(keyset_id)
+        if version == "base64":
+            return True
+        # If the version prefix is not a 2-hex-digit string, it represents a legacy keyset ID.
+        is_hex_version = len(version) == 2 and all(c in "0123456789abcdefABCDEF" for c in version)
+        if not is_hex_version:
+            return True
+        return version in ("00", "01")
+    except Exception:
+        return False
+
+
 def is_keyset_id_v2(keyset_id: str) -> bool:
     """Check if a keyset ID is version 2 (starts with '01')."""
     return get_keyset_id_version(keyset_id) == "01"

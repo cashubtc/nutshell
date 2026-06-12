@@ -19,6 +19,7 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
+from ..core.crypto.keys import is_supported_keyset_version
 from ..core.crypto.secp import PublicKey
 from ..core.db import Database
 from ..core.models import (
@@ -244,18 +245,24 @@ class LedgerAPI(SupportsAuth):
         keys = KeysResponse.model_validate(keys_dict)
         keysets_str = " ".join([f"{k.id} ({k.unit})" for k in keys.keysets])
         logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
-        ret = [
-            WalletKeyset(
-                id=keyset.id,
-                unit=keyset.unit,
-                public_keys={
-                    int(amt): PublicKey(bytes.fromhex(val))
-                    for amt, val in keyset.keys.items()
-                },
-                mint_url=self.url,
-            )
-            for keyset in keys.keysets
-        ]
+        ret = []
+        for keyset in keys.keysets:
+            if not is_supported_keyset_version(keyset.id):
+                logger.warning(f"Skipping unsupported keyset version in _get_keys: {keyset.id}")
+                continue
+            try:
+                ret.append(WalletKeyset(
+                    id=keyset.id,
+                    unit=keyset.unit,
+                    public_keys={
+                        int(amt): PublicKey(bytes.fromhex(val))
+                        for amt, val in keyset.keys.items()
+                    },
+                    mint_url=self.url,
+                ))
+            except Exception as exc:
+                logger.error(f"Failed to parse keyset {keyset.id}: {exc}")
+                continue
         return ret
 
     @async_set_httpx_client
@@ -272,6 +279,9 @@ class LedgerAPI(SupportsAuth):
         Raises:
             Exception: If no keys are received from the mint
         """
+        if not is_supported_keyset_version(keyset_id):
+            raise ValueError(f"Unsupported keyset version: {keyset_id}")
+
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = await self._request(GET, f"keys/{keyset_id_urlsafe}")
 
@@ -311,7 +321,15 @@ class LedgerAPI(SupportsAuth):
         keysets = KeysetsResponse.model_validate(keysets_dict).keysets
         if not keysets:
             raise Exception("did not receive any keysets")
-        return keysets
+
+        # Gracefully filter out unsupported keyset versions
+        supported_keysets = []
+        for keyset in keysets:
+            if is_supported_keyset_version(keyset.id):
+                supported_keysets.append(keyset)
+            else:
+                logger.warning(f"Ignoring unsupported keyset version: {keyset.id}")
+        return supported_keysets
 
     @async_set_httpx_client
     async def _get_info(self) -> GetInfoResponse:
