@@ -100,10 +100,7 @@ class LndRestWallet(LightningBackend):
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
-            base_url=self.endpoint,
-            headers=self.auth,
-            verify=self.cert,
-            timeout=None,
+            base_url=self.endpoint, headers=self.auth, verify=self.cert, timeout=None,
         )
         if self.supports_mpp:
             logger.info("LNDRestWallet enabling MPP feature")
@@ -194,10 +191,9 @@ class LndRestWallet(LightningBackend):
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
-            quote_amount = Amount(Unit[quote.unit], quote.amount)
-            if amount_msat != quote_amount.to(Unit.msat).amount and self.supports_mpp:
+            if amount_msat != quote.amount * 1000 and self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, quote_amount, fee_limit_msat
+                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
                 )
 
         # set the fee limit for the payment
@@ -311,7 +307,7 @@ class LndRestWallet(LightningBackend):
                         "pub_key"
                     ]
                     logger.debug(
-                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index - 1} of the route"
+                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
                     )
                     continue
             break
@@ -402,9 +398,7 @@ class LndRestWallet(LightningBackend):
                         fee_msat = int(payment.get("fee_msat") or 0)
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment["status"]],
-                            fee=Amount(unit=Unit.msat, amount=fee_msat)
-                            if fee_msat
-                            else None,
+                            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
                             preimage=preimage,
                         )
                     else:
@@ -420,7 +414,7 @@ class LndRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-
+        
         while True:
             try:
                 url = "/v1/invoices/subscribe"
@@ -443,12 +437,9 @@ class LndRestWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-
+                
                 # Exponential backoff with jitter
-                retry_delay = max(
-                    settings.mint_retry_exponential_backoff_base_delay,
-                    min(retry_delay * 2, max_retry_delay),
-                )
+                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
