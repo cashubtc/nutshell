@@ -479,6 +479,12 @@ class Wallet(
         Returns:
             MintQuote: Mint Quote
         """
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            raise KeysetNotFoundError(
+                f"Cannot request mint quote: no active keysets found for unit {self.unit.name} (or they are unsupported by this wallet)."
+            )
+
         # generate a key for signing the quote request
         privkey_hex, pubkey_hex = nut20.generate_keypair()
         mint_quote = await super().mint_quote(amount, self.unit, memo, pubkey_hex)
@@ -515,6 +521,12 @@ class Wallet(
         Returns:
             MintQuote: Mint Quote
         """
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            raise KeysetNotFoundError(
+                f"Cannot request mint quote: no active keysets found for unit {self.unit.name} (or they are unsupported by this wallet)."
+            )
+
         # generate a key for signing the quote request
         privkey_hex, pubkey_hex = nut20.generate_keypair()
 

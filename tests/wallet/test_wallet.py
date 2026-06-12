@@ -599,3 +599,11 @@ async def test_raise_on_unsupported_version_non_404(wallet1: Wallet):
 
     # should not raise
     wallet1.raise_on_unsupported_version(resp, "GET /v1/keys")
+
+
+@pytest.mark.asyncio
+async def test_request_mint_raises_no_active_keysets(wallet1: Wallet):
+    wallet1.keysets = {}
+    with pytest.raises(KeysetNotFoundError) as excinfo:
+        await wallet1.request_mint(64)
+    assert "no active keysets found" in str(excinfo.value)
