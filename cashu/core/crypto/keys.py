@@ -96,7 +96,8 @@ def derive_keyset_id_v2(
     )
 
     # add the lowercase unit string to the byte array (no separator necessary since we hash)
-    keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
+    unit_str = unit.name if hasattr(unit, "name") else str(unit)
+    keyset_id_bytes += f"|unit:{unit_str.lower()}".encode("utf-8")
 
     # add the input_fee_ppk if > 0
     if input_fee_ppk > 0:
@@ -278,7 +279,8 @@ def derive_keyset_id_v3(
     """
     sorted_keys = dict(sorted(keys.items()))
     keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
-    keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
+    unit_str = unit.name if hasattr(unit, "name") else str(unit)
+    keyset_id_bytes += f"|unit:{unit_str.lower()}".encode("utf-8")
     if input_fee_ppk > 0:
         keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
     if final_expiry is not None:
