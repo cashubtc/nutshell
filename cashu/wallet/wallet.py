@@ -481,6 +481,13 @@ class Wallet(
         """
         active_keysets = [k for k in self.keysets.values() if k.active]
         if not active_keysets:
+            try:
+                await self.load_mint()
+                active_keysets = [k for k in self.keysets.values() if k.active]
+            except Exception as e:
+                logger.error(f"Could not load mint keysets: {e}")
+
+        if not active_keysets:
             raise KeysetNotFoundError(
                 f"Cannot request mint quote: no active keysets found for unit {self.unit.name} (or they are unsupported by this wallet)."
             )
@@ -522,6 +529,13 @@ class Wallet(
             MintQuote: Mint Quote
         """
         active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            try:
+                await self.load_mint()
+                active_keysets = [k for k in self.keysets.values() if k.active]
+            except Exception as e:
+                logger.error(f"Could not load mint keysets: {e}")
+
         if not active_keysets:
             raise KeysetNotFoundError(
                 f"Cannot request mint quote: no active keysets found for unit {self.unit.name} (or they are unsupported by this wallet)."
