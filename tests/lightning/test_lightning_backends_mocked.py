@@ -383,14 +383,66 @@ async def test_lndrest_create_invoice_decodes_r_hash():
 
 
 @pytest.mark.asyncio
-async def test_lndrest_pay_invoice_returns_failed_on_payment_error(monkeypatch):
+async def test_lndrest_pay_invoice_settled_reads_stream_result(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat
     wallet.supports_mpp = False
 
+    lines = [
+        json.dumps(
+            {
+                "result": {
+                    "status": "SUCCEEDED",
+                    "payment_hash": "11" * 32,
+                    "fee_msat": "7",
+                    "payment_preimage": "ab" * 32,
+                }
+            }
+        )
+    ]
+
     class Client:
-        async def post(self, *args, **kwargs):
-            return _response(200, {"payment_error": "denied"})
+        def stream(self, method, url, json=None, timeout=None):
+            assert method == "POST"
+            assert url == "/v2/router/send"
+            assert json["payment_request"] == "lnbc1fake"
+            assert json["fee_limit_msat"] == "1000"
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.SETTLED
+    assert result.checking_id == "11" * 32
+    assert result.fee == Amount(Unit.msat, 7)
+    assert result.preimage == "ab" * 32
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_returns_failed_on_payment_failure(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    lines = [
+        json.dumps(
+            {
+                "result": {
+                    "status": "FAILED",
+                    "failure_reason": "FAILURE_REASON_NO_ROUTE",
+                }
+            }
+        )
+    ]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse(lines)
 
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
@@ -401,7 +453,52 @@ async def test_lndrest_pay_invoice_returns_failed_on_payment_error(monkeypatch):
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
     )
     assert result.result == PaymentResult.FAILED
-    assert result.error_message == "denied"
+    assert result.error_message == "FAILURE_REASON_NO_ROUTE"
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_returns_failed_on_rest_proxy_error(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    lines = [json.dumps({"code": 5, "message": "Not Found", "details": []})]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.FAILED
+    assert result.error_message == "Not Found"
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_unknown_on_empty_stream(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse([])
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.UNKNOWN
 
 
 @pytest.mark.asyncio
