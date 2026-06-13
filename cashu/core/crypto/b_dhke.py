@@ -142,7 +142,10 @@ def step2_bob_dleq(
     A = a.public_key
     assert A
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
-    s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
+    if isinstance(a, PrivateKey):
+        s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
+    else:
+        raise TypeError(f"Expected SecpPrivateKey, got {type(a)}")
     spk = PrivateKey(bytes.fromhex(s.to_hex()))
     epk = PrivateKey(e)
     return epk, spk

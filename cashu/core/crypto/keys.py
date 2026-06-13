@@ -1,13 +1,23 @@
 import base64
 import hashlib
+import random
 import secrets
 import time
 import uuid
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from bip32 import BIP32
+from loguru import logger
 
-from .secp import PrivateKey, PublicKey
+from .bls import PrivateKey as BlsPrivateKey
+from .bls import PublicKey as BlsPublicKey
+from .bls import curve_order
+from .secp import PrivateKey as SecpPrivateKey
+from .secp import PublicKey as SecpPublicKey
+
+# Typing aliases to remain backwards compatible for type hints in the rest of the codebase
+PrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
+PublicKey = Union[SecpPublicKey, BlsPublicKey]
 
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
@@ -17,7 +27,7 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     bip32 = BIP32.from_seed(mnemonic.encode())
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             bip32.get_privkey_from_path(derivation_path + orders_str[i]),
         )
         for i, a in enumerate(amounts)
@@ -31,7 +41,7 @@ def derive_keys_deprecated_pre_0_15(
     Deterministic derivation of keys for 2^n values.
     """
     return {
-        a: PrivateKey(
+        a: SecpPrivateKey(
             hashlib.sha256((seed + derivation_path + str(i)).encode("utf-8")).digest()[
                 :32
             ],
@@ -41,7 +51,7 @@ def derive_keys_deprecated_pre_0_15(
 
 
 def derive_pubkey(seed: str) -> PublicKey:
-    pubkey = PrivateKey(
+    pubkey = SecpPrivateKey(
         hashlib.sha256((seed).encode("utf-8")).digest()[:32],
     ).public_key
     assert pubkey
@@ -86,7 +96,8 @@ def derive_keyset_id_v2(
     )
 
     # add the lowercase unit string to the byte array (no separator necessary since we hash)
-    keyset_id_bytes += f"|unit:{unit}".encode("utf-8")
+    unit_str = unit.name if hasattr(unit, "name") else str(unit)
+    keyset_id_bytes += f"|unit:{unit_str.lower()}".encode("utf-8")
 
     # add the input_fee_ppk if > 0
     if input_fee_ppk > 0:
@@ -116,11 +127,14 @@ def derive_keyset_short_id(keyset_id: str) -> str:
     # For version 00, keep existing behavior (already short)
     if is_base64_keyset_id(keyset_id) or keyset_id.startswith("00"):
         return keyset_id
-
-    # For version 01, return first 16 chars (8 bytes in hex)
-    if keyset_id.startswith("01"):
-        return keyset_id[:16]
-
+    # For version 01 and onwards, return first 16 chars (8 bytes in hex)
+    version = get_keyset_id_version(keyset_id)
+    if version != "base64":
+        try:
+            if int(version) >= 1:
+                return keyset_id[:16]
+        except ValueError:
+            pass
     raise ValueError(f"Unsupported keyset version in ID: {keyset_id}")
 
 
@@ -140,7 +154,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
         True if the keyset ID is base64 format, False otherwise
     """
     # If it starts with a known version prefix, it's not base64
-    if keyset_id.startswith("00") or keyset_id.startswith("01"):
+    if keyset_id.startswith("00") or keyset_id.startswith("01") or keyset_id.startswith("02"):
         return False
 
     # Try to decode as base64 to confirm
@@ -170,6 +184,16 @@ def get_keyset_id_version(keyset_id: str) -> str:
     return keyset_id[:2]
 
 
+def is_bls_keyset(keyset_id: str) -> bool:
+    """Check if a keyset ID uses BLS12-381 cryptography (version >= 02)."""
+    version = get_keyset_id_version(keyset_id)
+    if version == "base64":
+        return False
+    try:
+        return int(version) >= 2
+    except ValueError:
+        return False
+
 def is_keyset_id_v2(keyset_id: str) -> bool:
     """Check if a keyset ID is version 2 (starts with '01')."""
     return get_keyset_id_version(keyset_id) == "01"
@@ -196,3 +220,51 @@ def generate_uuid_v7() -> str:
         (timestamp_ms << 80) | (0x7 << 76) | (rand_a << 64) | (0b10 << 62) | rand_b
     )
     return str(uuid.UUID(int=uuid_int))
+
+def random_hash() -> str:
+    """Returns a base64-urlsafe encoded random hash."""
+    return base64.urlsafe_b64encode(
+        bytes([random.getrandbits(8) for i in range(30)])
+    ).decode()
+
+def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
+    """
+    Deterministic derivation of BLS12-381 keys for 2^n values.
+    Uses rejection sampling to ensure private keys are uniformly distributed in [1, r-1]
+    without any modulo bias.
+    """
+    bip32 = BIP32.from_seed(mnemonic.encode())
+    keys = {}
+    for i, a in enumerate(amounts):
+        attempt = 0
+        while True:
+            path = f"{derivation_path}/{i}'/{attempt}'"
+            privkey_bytes = bip32.get_privkey_from_path(path)
+            privkey_int = int.from_bytes(privkey_bytes, "big")
+            if privkey_int != 0 and privkey_int < curve_order:
+                keys[a] = BlsPrivateKey(privkey_bytes)
+                break
+            attempt += 1
+    return keys
+
+def derive_keyset_id_v3(
+    keys: Dict[int, BlsPublicKey], 
+    unit: str, 
+    final_expiry: Optional[int] = None,
+    input_fee_ppk: int = 0,
+) -> str:
+    """
+    Deterministic derivation keyset_id v3 from set of BLS public keys (version 02).
+    """
+    sorted_keys = dict(sorted(keys.items()))
+    keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
+    unit_str = unit.name if hasattr(unit, "name") else str(unit)
+    keyset_id_bytes += f"|unit:{unit_str.lower()}".encode("utf-8")
+    if input_fee_ppk > 0:
+        keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
+    if final_expiry is not None:
+        keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
+    hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()
+    keyset_id = f"02{hash_digest}"
+    logger.trace(f"Derived v3 keyset_id: {keyset_id} from {len(keys)} keys")
+    return keyset_id

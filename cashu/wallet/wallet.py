@@ -21,8 +21,11 @@ from ..core.base import (
     WalletKeyset,
     WalletMint,
 )
-from ..core.crypto import b_dhke
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto import b_dhke, bls_dhke
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import PrivateKey, PublicKey, is_bls_keyset
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -941,6 +944,9 @@ class Wallet(
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
+        secp_proofs: List[Proof] = []
+        bls_proofs: List[Proof] = []
+        
         for proof in proofs:
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
@@ -950,13 +956,36 @@ class Wallet(
             assert (
                 proof.id in self.keysets
             ), f"Keyset {proof.id} not known, can not verify DLEQ."
+            
+            is_v3 = is_bls_keyset(proof.id)
+            if is_v3:
+                bls_proofs.append(proof)
+            else:
+                secp_proofs.append(proof)
+                
+        if bls_proofs:
+            try:
+                K2s = [self.keysets[proof.id].public_keys[proof.amount] for proof in bls_proofs]
+                Cs = [BlsPublicKey(bytes.fromhex(proof.C)) for proof in bls_proofs]
+                secrets = [proof.secret for proof in bls_proofs]
+                if not bls_dhke.batch_pairing_verification(
+                    K2s=K2s,  # type: ignore[arg-type]
+                    Cs=Cs,
+                    secret_msgs=secrets,
+                ):
+                    raise Exception("BLS pairing verification invalid.")
+            except Exception as exc:
+                raise Exception(f"BLS pairing verification invalid: {exc}")
+                
+        for proof in secp_proofs:
+            assert proof.dleq is not None
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C)),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
-                A=self.keysets[proof.id].public_keys[proof.amount],
+                C=SecpPublicKey(bytes.fromhex(proof.C)),
+                r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
+                e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
+                s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
+                A=self.keysets[proof.id].public_keys[proof.amount], # type: ignore[arg-type]
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
@@ -992,18 +1021,31 @@ class Wallet(
                 # we don't have the keyset for this promise, so we load all keysets from the mint
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
-            C_ = PublicKey(bytes.fromhex(promise.C_))
-            C = b_dhke.step3_alice(
-                C_, r, self.keysets[promise.id].public_keys[promise.amount]
-            )
+                
+            is_v3 = is_bls_keyset(promise.id)
+            C_: PublicKey
+            C: PublicKey
+            B_: PublicKey
+            if is_v3:
+                C_ = BlsPublicKey(bytes.fromhex(promise.C_))
+                C = bls_dhke.step3_alice( # type: ignore[assignment]
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount] # type: ignore[arg-type]
+                )
+            else:
+                C_ = SecpPublicKey(bytes.fromhex(promise.C_))
+                C = b_dhke.step3_alice( # type: ignore[assignment]
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount] # type: ignore[arg-type]
+                )
 
-            if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(secret, r) # type: ignore[arg-type, assignment]
+            elif not settings.wallet_use_deprecated_h2c:
+                B_, r = b_dhke.step1_alice(secret, r)  # type: ignore[arg-type, assignment] # recompute B_ for dleq proofs
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
                 B_, r = b_dhke.step1_alice_deprecated(
-                    secret, r
-                )  # recompute B_ for dleq proofs
+                    secret, r  # type: ignore[arg-type]
+                )  # type: ignore[assignment] # recompute B_ for dleq proofs
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
@@ -1051,7 +1093,7 @@ class Wallet(
         Args:
             amounts (List[int]): list of amounts
             secrets (List[str]): list of secrets
-            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+            rs (list[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
 
         Returns:
             List[BlindedMessage]: list of blinded messages that can be sent to the mint
@@ -1067,12 +1109,16 @@ class Wallet(
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
+        
         for secret, amount, r in zip(secrets, amounts, rs_):
-            if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r or None)
+            is_v3 = is_bls_keyset(keyset_id)
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(secret, r or None) # type: ignore[arg-type, assignment]
+            elif not settings.wallet_use_deprecated_h2c:
+                B_, r = b_dhke.step1_alice(secret, r or None) # type: ignore[arg-type, assignment]
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+                B_, r = b_dhke.step1_alice_deprecated(secret, r or None) # type: ignore[arg-type, assignment]
             # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             assert r

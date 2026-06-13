@@ -8,8 +8,9 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
-from ..core.crypto.keys import get_keyset_id_version
-from ..core.crypto.secp import PrivateKey
+from ..core.crypto.bls import PrivateKey as BlsPrivateKey
+from ..core.crypto.keys import PrivateKey, get_keyset_id_version, is_bls_keyset
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.db import Database
 from ..core.secret import Secret
 from ..core.settings import settings
@@ -88,7 +89,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         try:
             self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(
+            self.private_key = SecpPrivateKey(
                 self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
             )
         except ValueError:
@@ -130,7 +131,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         elif version == "01":
             # HMAC-SHA256 derivation for version 01 keysets (per NUT-13 test vectors)
             return await self._derive_secret_hmac_sha256(counter, keyset_id)
+        elif version == "02":
+            # HMAC-SHA256 derivation for version 02 keysets (with BLS rejection sampling)
+            return await self._derive_secret_hmac_sha256_v3(counter, keyset_id)
         else:
+            try:
+                if int(version) >= 2:
+                    return await self._derive_secret_hmac_sha256(counter, keyset_id)
+            except ValueError:
+                pass
             raise ValueError(f"Unsupported keyset version: {version}")
 
     async def _derive_secret_bip32(
@@ -185,6 +194,41 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
         r = hmac.new(self.seed, base + b"\x01", hashlib.sha256).digest()
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
+        logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
+        return secret, r, derivation_path
+
+    async def _derive_secret_hmac_sha256_v3(
+        self, counter: int, keyset_id: str
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "02".
+        NUT-13:
+        - message = b"Cashu_KDF_HMAC_SHA256" || keyset_id_bytes || counter_bytes || 0x01 || u32_BE(attempt)
+        """
+        assert self.seed, "Seed not initialized yet."
+        keyset_id_bytes = bytes.fromhex(keyset_id)
+        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
+        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+        secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
+        
+        # BLS12-381 G1 group order
+        BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+        
+        r = b""
+        for attempt in range(65536):
+            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
+            msg = base + b"\x01" + attempt_bytes
+            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
+            x = int.from_bytes(digest, "big")
+            if x != 0 and x < BLS_FR_ORDER:
+                r = digest
+                break
+                
+        if not r:
+            raise RuntimeError("V3 blinding factor derivation failed")
+            
+        derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
+        logger.trace(f"HMAC-SHA256 V3 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
     async def generate_n_secrets(
@@ -222,9 +266,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             # secrets are supplied as str
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
-            rs = [
-                PrivateKey(s[1]) for s in secrets_rs_derivationpaths
-            ]
+            rs: List[PrivateKey] = []
+            if is_bls_keyset(self.keyset_id):
+                rs = [
+                    BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ] # type: ignore[assignment]
+            else:
+                rs = [
+                    SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ] # type: ignore[assignment]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
 
@@ -257,7 +307,11 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
-        rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+        rs: List[PrivateKey] = []
+        if is_bls_keyset(keyset_id or self.keyset_id):
+            rs = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths] # type: ignore[assignment]
+        else:
+            rs = [SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths] # type: ignore[assignment]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
         return secrets, rs, derivation_paths
 

@@ -8,6 +8,11 @@ import pytest
 import pytest_asyncio
 
 from cashu.core import db
+from cashu.core.base import MeltQuote, MeltQuoteState
+from cashu.core.crypto import b_dhke, bls_dhke
+from cashu.core.crypto.bls import PublicKey as BlsPublicKey
+from cashu.core.crypto.keys import is_bls_keyset
+from cashu.core.crypto.secp import PublicKey as SecpPublicKey
 from cashu.core.db import Connection
 from cashu.core.migrations import backup_database
 from cashu.core.models import PostMeltQuoteRequest
@@ -358,9 +363,14 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_store_and_sign_blinded_message(ledger: Ledger):
-    # Localized imports to avoid polluting module scope
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
+    if is_bls_keyset(ledger.keyset.id):
+        PublicKey = BlsPublicKey
+        step1_alice = bls_dhke.step1_alice
+        step2_bob = bls_dhke.step2_bob
+    else:
+        PublicKey = SecpPublicKey  # type: ignore[assignment]
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
+        step2_bob = b_dhke.step2_bob  # type: ignore[assignment]
 
     # Arrange: prepare a blinded message tied to current active keyset
     amount = 8
@@ -379,7 +389,7 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
     # Act: compute a valid blind signature for the stored row and persist it
     private_key_amount = ledger.keyset.private_keys[amount]
     B_point = PublicKey(bytes.fromhex(B_hex))
-    C_point, e, s = step2_bob(B_point, private_key_amount)
+    C_point, e, s = step2_bob(B_point, private_key_amount)  # type: ignore[arg-type]
 
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
@@ -401,7 +411,10 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_get_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
     # Arrange
-    from cashu.core.crypto.b_dhke import step1_alice
+    if is_bls_keyset(ledger.keyset.id):
+        step1_alice = bls_dhke.step1_alice
+    else:
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
 
     amount = 8
     keyset_id = ledger.keyset.id
@@ -437,7 +450,10 @@ async def test_get_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_delete_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
-    from cashu.core.crypto.b_dhke import step1_alice
+    if is_bls_keyset(ledger.keyset.id):
+        step1_alice = bls_dhke.step1_alice
+    else:
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
 
     amount = 4
     keyset_id = ledger.keyset.id
@@ -481,8 +497,14 @@ async def test_delete_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger
 async def test_get_blinded_messages_by_melt_id_filters_signed(
     wallet: Wallet, ledger: Ledger
 ):
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
+    if is_bls_keyset(ledger.keyset.id):
+        PublicKey = BlsPublicKey
+        step1_alice = bls_dhke.step1_alice
+        step2_bob = bls_dhke.step2_bob
+    else:
+        PublicKey = SecpPublicKey  # type: ignore[assignment]
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
+        step2_bob = b_dhke.step2_bob  # type: ignore[assignment]
 
     amount = 2
     keyset_id = ledger.keyset.id
@@ -508,7 +530,7 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
 
     # Sign one of them (it should no longer be returned by get_blinded_messages_melt_id which filters c_ IS NULL)
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)  # type: ignore[arg-type]
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
@@ -529,7 +551,10 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
 
 @pytest.mark.asyncio
 async def test_store_blinded_message(ledger: Ledger):
-    from cashu.core.crypto.b_dhke import step1_alice
+    if is_bls_keyset(ledger.keyset.id):
+        step1_alice = bls_dhke.step1_alice
+    else:
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
 
     amount = 8
     keyset_id = ledger.keyset.id
@@ -559,8 +584,14 @@ async def test_store_blinded_message(ledger: Ledger):
 async def test_update_blinded_message_signature_before_store_blinded_message_errors(
     ledger: Ledger,
 ):
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
+    if is_bls_keyset(ledger.keyset.id):
+        PublicKey = BlsPublicKey
+        step1_alice = bls_dhke.step1_alice
+        step2_bob = bls_dhke.step2_bob
+    else:
+        PublicKey = SecpPublicKey  # type: ignore[assignment]
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
+        step2_bob = b_dhke.step2_bob  # type: ignore[assignment]
 
     amount = 8
     # Generate a blinded message that we will NOT store
@@ -569,7 +600,7 @@ async def test_update_blinded_message_signature_before_store_blinded_message_err
 
     # Create a valid signature tuple for that blinded message
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b_hex)), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b_hex)), priv)  # type: ignore[arg-type]
 
     # Expect a DB-level error; on SQLite/Postgres this is typically a no-op update, so this test is xfail.
     await assert_err(
@@ -587,7 +618,10 @@ async def test_update_blinded_message_signature_before_store_blinded_message_err
 
 @pytest.mark.asyncio
 async def test_store_blinded_message_duplicate_b_(ledger: Ledger):
-    from cashu.core.crypto.b_dhke import step1_alice
+    if is_bls_keyset(ledger.keyset.id):
+        step1_alice = bls_dhke.step1_alice
+    else:
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
 
     amount = 2
     keyset_id = ledger.keyset.id
@@ -604,8 +638,14 @@ async def test_store_blinded_message_duplicate_b_(ledger: Ledger):
 async def test_get_blind_signatures_by_melt_id_returns_signed(
     wallet: Wallet, ledger: Ledger
 ):
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
+    if is_bls_keyset(ledger.keyset.id):
+        PublicKey = BlsPublicKey
+        step1_alice = bls_dhke.step1_alice
+        step2_bob = bls_dhke.step2_bob
+    else:
+        PublicKey = SecpPublicKey  # type: ignore[assignment]
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
+        step2_bob = b_dhke.step2_bob  # type: ignore[assignment]
 
     amount = 4
     keyset_id = ledger.keyset.id
@@ -631,7 +671,7 @@ async def test_get_blind_signatures_by_melt_id_returns_signed(
 
     # Sign only one of them -> should be returned by get_blind_signatures_melt_id
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)  # type: ignore[arg-type]
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
@@ -656,8 +696,14 @@ async def test_get_blind_signatures_by_melt_id_returns_signed(
 async def test_get_melt_quote_preserves_change_signatures_order(
     wallet: Wallet, ledger: Ledger
 ):
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
+    if is_bls_keyset(ledger.keyset.id):
+        PublicKey = BlsPublicKey
+        step1_alice = bls_dhke.step1_alice
+        step2_bob = bls_dhke.step2_bob
+    else:
+        PublicKey = SecpPublicKey  # type: ignore[assignment]
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
+        step2_bob = b_dhke.step2_bob  # type: ignore[assignment]
 
     amount = 8
     keyset_id = ledger.keyset.id
@@ -689,7 +735,7 @@ async def test_get_melt_quote_preserves_change_signatures_order(
         
         # Sign it right away so it is returned in change
         priv = ledger.keyset.private_keys[amount]
-        _, e, s = step2_bob(PublicKey(bytes.fromhex(b_values[idx])), priv)
+        _, e, s = step2_bob(PublicKey(bytes.fromhex(b_values[idx])), priv)  # type: ignore[arg-type]
         await ledger.crud.update_blinded_message_signature(
             db=ledger.db,
             amount=amount,
@@ -717,8 +763,14 @@ async def test_get_melt_quote_preserves_change_signatures_order(
 async def test_get_melt_quote_includes_change_signatures(
     wallet: Wallet, ledger: Ledger
 ):
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
-    from cashu.core.crypto.secp import PublicKey
+    if is_bls_keyset(ledger.keyset.id):
+        PublicKey = BlsPublicKey
+        step1_alice = bls_dhke.step1_alice
+        step2_bob = bls_dhke.step2_bob
+    else:
+        PublicKey = SecpPublicKey  # type: ignore[assignment]
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
+        step2_bob = b_dhke.step2_bob  # type: ignore[assignment]
 
     amount = 8
     keyset_id = ledger.keyset.id
@@ -746,7 +798,7 @@ async def test_get_melt_quote_includes_change_signatures(
 
     # Sign one -> should appear in change loaded by get_melt_quote
     priv = ledger.keyset.private_keys[amount]
-    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex)), priv)  # type: ignore[arg-type]
     await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
@@ -770,7 +822,10 @@ async def test_get_melt_quote_includes_change_signatures(
 
 @pytest.mark.asyncio
 async def test_promises_fk_constraints_enforced(ledger: Ledger):
-    from cashu.core.crypto.b_dhke import step1_alice
+    if is_bls_keyset(ledger.keyset.id):
+        step1_alice = bls_dhke.step1_alice
+    else:
+        step1_alice = b_dhke.step1_alice  # type: ignore[assignment]
 
     keyset_id = ledger.keyset.id
     B1, _ = step1_alice("fk_check_melt")
@@ -820,8 +875,6 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger):
     """Test that concurrent attempts to set quotes with same checking_id as pending are handled correctly."""
-    from cashu.core.base import MeltQuote, MeltQuoteState
-
     checking_id = "test_checking_id_concurrent"
 
     # Create two quotes with the same checking_id

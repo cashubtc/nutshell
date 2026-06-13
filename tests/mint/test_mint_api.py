@@ -96,14 +96,14 @@ async def test_api_keysets(ledger: Ledger):
         "keysets": [
             {
                 "final_expiry": None,
-                "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+                "id": ledger.keyset.id,
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
             },
             {
                 "final_expiry": None,
-                "id": "01dadff4bbb5719ea6119c6b134d79cadfdd49b7483ca4b422a5e9fbdadbb32006",
+                "id": list(ledger.keysets.keys())[1],
                 "unit": "usd",
                 "active": True,
                 "input_fee_ppk": 0,
@@ -119,20 +119,20 @@ async def test_api_keysets(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc")
+    response = httpx.get(f"{BASE_URL}/v1/keys/{ledger.keyset.id}")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
                 "final_expiry": None,
-                "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+                "id": ledger.keyset.id,
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
-                    for k, v in ledger.keysets["01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets[ledger.keyset.id].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -146,20 +146,20 @@ async def test_api_keyset_keys(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc")
+    response = httpx.get(f"{BASE_URL}/v1/keys/{ledger.keyset.id}")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
                 "final_expiry": None,
-                "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+                "id": ledger.keyset.id,
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
-                    for k, v in ledger.keysets["01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets[ledger.keyset.id].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -189,7 +189,7 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert result["signatures"][0]["id"] == ledger.keyset.id
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -276,7 +276,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert result["signatures"][0]["id"] == ledger.keyset.id
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
