@@ -266,9 +266,9 @@ class SparkL2Wallet(LightningBackend):
             # Breez SDK provides list_payments but it might be inefficient.
             # However, for Spark L2 it's local.
             req = breez_sdk_spark.ListPaymentsRequest(
-                type_filter=None,
-                status_filter=None,
-                asset_filter=None,
+                type_filter=[breez_sdk_spark.PaymentType.RECEIVE],
+                asset_filter=breez_sdk_spark.AssetFilter.BITCOIN(),
+                payment_details_filter=[breez_sdk_spark.PaymentDetailsFilter.LIGHTNING(None)],
             )
             
             res = await self.sdk.list_payments(req)
