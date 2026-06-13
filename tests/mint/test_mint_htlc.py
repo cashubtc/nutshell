@@ -1,7 +1,9 @@
 
 from cashu.core.base import Proof
 from cashu.core.errors import TransactionError
+from cashu.core.htlc import HTLCSecret
 from cashu.core.nuts.nut14 import verify_htlc_spending_conditions
+from cashu.core.secret import Secret
 
 
 def test_htlc():    
@@ -50,6 +52,21 @@ def test_invalid_preimage():
         assert False, "Expected a TransactionError"
     except TransactionError as e:
         assert "HTLC preimage does not match." in e.detail
+
+def test_no_preimage():    
+    proof = Proof.from_dict({
+        "amount": 0,
+        "secret": "[\"HTLC\", {\"nonce\":\"66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925\",\"data\":\"4884fdaafea47c29fea7159d0daddd9c085d6200e1359e85bb81736af6b7c837\",\"tags\":[[\"locktime\",\"1767225600\"]]}]",
+        "C": "02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904",
+        "id": "009a1f293253e41e",
+        "witness": "{}"
+    })
+
+    print(f"{proof.secret = }")
+    htlc_secret = HTLCSecret.from_secret(Secret.deserialize(proof.secret))
+    assert htlc_secret.locktime
+
+    verify_htlc_spending_conditions(proof)
 
 def test_htlc_preimage_too_large():
     proof = Proof.from_dict({

@@ -55,6 +55,9 @@ jobs:
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           TOR: false
           MINT_BACKEND_BOLT11_SAT: ${{ inputs.backend-wallet-class }}
+          # LNbits wallet
+          MINT_LNBITS_ENDPOINT: http://localhost:5001
+          MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
           # LndRestWallet
           MINT_LND_REST_ENDPOINT: https://localhost:8081/
           MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
