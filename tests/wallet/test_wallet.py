@@ -610,6 +610,7 @@ async def test_request_mint_raises_no_active_keysets(wallet1: Wallet):
 
     wallet1.load_mint = mock_load_mint  # type: ignore
 
+    # Verify KeysetNotFoundError is raised when no active keysets are available
     with pytest.raises(KeysetNotFoundError) as excinfo:
         await wallet1.request_mint(64)
     assert "no active keysets found" in str(excinfo.value)
