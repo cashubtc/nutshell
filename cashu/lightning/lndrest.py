@@ -221,18 +221,25 @@ class LndRestWallet(LightningBackend):
                 except json.JSONDecodeError:
                     continue
 
-                # streaming errors from the REST proxy
+                # streaming errors from the REST proxy: the stream errored
+                # after the request was accepted (e.g. gRPC AlreadyExists when
+                # the payment is already in flight). We don't know whether the
+                # payment is live, so report UNKNOWN (never FAILED) and let the
+                # ledger re-check the real state with TrackPaymentV2.
                 if line.get("error"):
                     error = line["error"]
                     message = (
                         error["message"] if "message" in error else str(error)
                     )
                     return PaymentResponse(
-                        result=PaymentResult.FAILED, error_message=message
+                        result=PaymentResult.UNKNOWN, error_message=message
                     )
 
-                # immediate (non-streaming) errors from the REST proxy,
-                # e.g. {"code": 5, "message": "Not Found", "details": []}
+                # immediate (non-streaming) errors from the REST proxy reject
+                # the request before any payment is initiated, e.g.
+                # {"code": 5, "message": "Not Found", "details": []} when the
+                # route is unavailable. No payment was created, so this is an
+                # explicit FAILED.
                 if line.get("message") and "result" not in line:
                     return PaymentResponse(
                         result=PaymentResult.FAILED, error_message=line["message"]

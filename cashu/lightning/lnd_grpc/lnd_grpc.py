@@ -211,9 +211,12 @@ class LndRPCWallet(LightningBackend):
                         ),
                     )
         except AioRpcError as e:
+            # transport/RPC error: we don't know whether the payment was
+            # attempted, so report UNKNOWN (never FAILED) and let the ledger
+            # re-check the real state with TrackPaymentV2.
             error_message = f"SendPaymentV2 failed: {e}"
             return PaymentResponse(
-                result=PaymentResult.FAILED,
+                result=PaymentResult.UNKNOWN,
                 error_message=error_message,
             )
 
