@@ -561,3 +561,53 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
         "C",
         "witness",
     }
+
+
+@pytest.mark.asyncio
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+    async def fake_request(self, method, path, **kwargs):
+        if path == "keysets":
+            return _response(
+                200,
+                {
+                    "keysets": [
+                        {"id": "01abcd", "unit": "sat", "active": True},
+                        {"id": "02efgh", "unit": "sat", "active": True},  # Unsupported
+                        {"id": "00ijkl", "unit": "sat", "active": True},
+                    ]
+                },
+            )
+        if path == "keys":
+            pubkey_hex = PrivateKey().public_key.format().hex()
+            return _response(
+                200,
+                {
+                    "keysets": [
+                        {
+                            "id": "01abcd",
+                            "unit": "sat",
+                            "active": True,
+                            "keys": {"1": pubkey_hex},
+                        },
+                        {
+                            "id": "02efgh",  # Unsupported
+                            "unit": "sat",
+                            "active": True,
+                            "keys": {"1": "invalid-hex-unsupported"},
+                        },
+                    ]
+                },
+            )
+        raise AssertionError(f"Unexpected path {path}")
+
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    # Test _get_keysets filters out 02efgh
+    keysets = await api._get_keysets()
+    assert len(keysets) == 2
+    assert [k.id for k in keysets] == ["01abcd", "00ijkl"]
+
+    # Test _get_keys filters out 02efgh
+    wallet_keysets = await api._get_keys()
+    assert len(wallet_keysets) == 1
+    assert wallet_keysets[0].id == "01abcd"

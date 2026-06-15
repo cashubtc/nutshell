@@ -22,6 +22,7 @@ from ..core.base import (
     WalletMint,
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.keys import is_supported_keyset_version
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
@@ -313,6 +314,8 @@ class Wallet(
 
         # get all new keysets that are not in memory yet and store them in the database
         for mint_keyset in mint_keysets_dict.values():
+            if not is_supported_keyset_version(mint_keyset.id):
+                continue
             if mint_keyset.id not in keysets_in_db_dict:
                 logger.debug(
                     f"Storing new mint keyset: {mint_keyset.id} ({mint_keyset.unit})"
@@ -323,6 +326,8 @@ class Wallet(
                 await store_keyset(keyset=wallet_keyset, db=self.db)
 
         for mint_keyset in mint_keysets_dict.values():
+            if not is_supported_keyset_version(mint_keyset.id):
+                continue
             # if the active flag changes from active to inactive
             # or the fee attributes have changed, update them in the database
             if mint_keyset.id in keysets_in_db_dict:
@@ -474,6 +479,19 @@ class Wallet(
         Returns:
             MintQuote: Mint Quote
         """
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            try:
+                await self.load_mint()
+                active_keysets = [k for k in self.keysets.values() if k.active]
+            except Exception as e:
+                logger.error(f"Could not load mint keysets: {e}")
+
+        if not active_keysets:
+            raise KeysetNotFoundError(
+                f"Cannot request mint quote: no active keysets found for unit {self.unit.name} (or they are unsupported by this wallet)."
+            )
+
         # generate a key for signing the quote request
         privkey_hex, pubkey_hex = nut20.generate_keypair()
         mint_quote = await super().mint_quote(amount, self.unit, memo, pubkey_hex)
@@ -510,6 +528,19 @@ class Wallet(
         Returns:
             MintQuote: Mint Quote
         """
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            try:
+                await self.load_mint()
+                active_keysets = [k for k in self.keysets.values() if k.active]
+            except Exception as e:
+                logger.error(f"Could not load mint keysets: {e}")
+
+        if not active_keysets:
+            raise KeysetNotFoundError(
+                f"Cannot request mint quote: no active keysets found for unit {self.unit.name} (or they are unsupported by this wallet)."
+            )
+
         # generate a key for signing the quote request
         privkey_hex, pubkey_hex = nut20.generate_keypair()
 
