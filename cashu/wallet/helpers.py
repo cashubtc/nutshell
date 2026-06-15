@@ -11,8 +11,9 @@ from ..core.migrations import migrate_databases
 from ..core.secret import Tags
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keysets
+from ..wallet.crud import get_keysets, store_transaction
 from ..wallet.wallet import Wallet
+from .wallet_transaction import WalletTransactionState
 
 
 async def migrate_wallet_db(db: Database):
@@ -45,7 +46,11 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
         # load unit from wallet keyset db
         proof_keyset_id = token.token[0].proofs[0].id
         keysets = await get_keysets(id=proof_keyset_id, db=wallet.db)
-        if not keysets and proof_keyset_id.startswith("01") and len(proof_keyset_id) == 16:
+        if (
+            not keysets
+            and proof_keyset_id.startswith("01")
+            and len(proof_keyset_id) == 16
+        ):
             # This might be a v2 short ID, try to find a matching full ID
             all_keysets = await get_keysets(db=wallet.db)
             keysets = [k for k in all_keysets if k.id.startswith(proof_keyset_id)]
@@ -64,11 +69,11 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
         keyset_ids = mint_wallet._get_proofs_keyset_ids(t.proofs)
         logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
         await mint_wallet.load_mint()
-        
+
         # Expand short keyset IDs to full IDs
         # This is a no-op in the case of base64 keysets and v1 keysets
         await mint_wallet._expand_short_keyset_ids(t.proofs)
-        
+
         proofs_to_keep, _ = await mint_wallet.redeem(t.proofs)
         print(f"Received {mint_wallet.unit.str(sum_proofs(proofs_to_keep))}")
 
@@ -81,13 +86,13 @@ async def redeem_TokenV4(wallet: Wallet, token: TokenV4) -> Wallet:
     Redeem a token with a single mint.
     """
     await wallet.load_mint()
-    
+
     # Get proofs from token (these will have short keyset IDs)
     proofs = token.proofs
-    
+
     # Expand v2 short keyset IDs to full IDs in-place
     await wallet._expand_short_keyset_ids(proofs)
-    
+
     # Use the expanded proofs for redemption
     proofs_to_keep, _ = await wallet.redeem(proofs)
     print(f"Received {wallet.unit.str(sum_proofs(proofs_to_keep))}")
@@ -126,6 +131,14 @@ async def receive(
     mint_wallet = await redeem_universal(wallet, token)
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
+    await store_transaction(
+        db=wallet.db,
+        tx_type=WalletTransactionState.receive.name,
+        amount=token.amount,
+        unit=token.unit,
+        mint=mint_wallet.url,
+        state="completed",
+    )
     return mint_wallet
 
 
@@ -198,6 +211,16 @@ async def send(
     print(token)
 
     await wallet.set_reserved_for_send(send_proofs, reserved=True)
+
+    await store_transaction(
+        db=wallet.db,
+        tx_type=WalletTransactionState.send.name,
+        amount=amount,
+        unit=wallet.unit.name,
+        mint=wallet.url,
+        state="completed",
+    )
+
     return wallet.available_balance, token
 
 

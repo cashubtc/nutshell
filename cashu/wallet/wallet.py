@@ -59,11 +59,13 @@ from .crud import (
     store_keyset,
     store_mint,
     store_proof,
+    store_transaction,
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
     update_mint,
     update_proof,
+    update_transaction_state,
 )
 from .errors import BalanceTooLowError
 from .htlc import WalletHTLC
@@ -74,6 +76,7 @@ from .subscriptions import SubscriptionManager
 from .transactions import WalletTransactions
 from .utils import sanitize_url
 from .v1_api import LedgerAPI
+from .wallet_transaction import WalletTransactionState
 
 
 class Wallet(
@@ -282,7 +285,9 @@ class Wallet(
             logger.debug("Updating mint info in db.")
             await update_mint(
                 db=self.db,
-                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.model_dump())),
+                mint=WalletMint(
+                    url=self.url, info=json.dumps(self.mint_info.model_dump())
+                ),
             )
             return self.mint_info
         else:
@@ -658,6 +663,15 @@ class Wallet(
             state=MintQuoteState.issued,
             paid_time=int(time.time()),
         )
+        await store_transaction(
+            db=self.db,
+            tx_type=WalletTransactionState.mint.name,
+            amount=amount,
+            unit=self.unit.name,
+            mint=self.url,
+            state="completed",
+            quote_id=quote_id,
+        )
         # store the mint_id in proofs
         async with self.db.connect() as conn:
             for p in proofs:
@@ -731,9 +745,9 @@ class Wallet(
                 send_outputs, keep_outputs, secret_lock
             )
 
-        assert len(secrets) == len(
-            amounts
-        ), "number of secrets does not match number of outputs"
+        assert len(secrets) == len(amounts), (
+            "number of secrets does not match number of outputs"
+        )
         # verify that we didn't accidentally reuse a secret
         await self._check_used_secrets(secrets)
 
@@ -844,6 +858,13 @@ class Wallet(
                     payment_preimage=melt_quote.payment_preimage or "",
                     fee_paid=melt_quote.fee_paid,
                 )
+                await update_transaction_state(
+                    db=self.db,
+                    quote_id=quote,
+                    state="completed",
+                    fee=melt_quote.fee_paid,
+                    preimage=melt_quote.payment_preimage or "",
+                )
                 # invalidate proofs
                 if sum_proofs(proofs) == melt_quote.amount + melt_quote.fee_reserve:
                     await self.invalidate(proofs)
@@ -917,6 +938,15 @@ class Wallet(
         elif melt_quote.state == MeltQuoteState.pending:
             # payment is still pending
             logger.debug("Payment is still pending.")
+            await store_transaction(
+                db=self.db,
+                tx_type=WalletTransactionState.melt.name,
+                amount=melt_quote.amount,
+                unit=self.unit.name,
+                mint=self.url,
+                state="pending",
+                quote_id=quote_id,
+            )
             return melt_quote_resp
 
         # invoice was paid successfully
@@ -936,6 +966,18 @@ class Wallet(
             paid_time=int(time.time()),
             payment_preimage=melt_quote.payment_preimage or "",
             fee_paid=fee_paid,
+        )
+
+        await store_transaction(
+            db=self.db,
+            tx_type=WalletTransactionState.melt.name,
+            amount=melt_quote.amount,
+            unit=self.unit.name,
+            mint=self.url,
+            state="completed",
+            quote_id=quote_id,
+            fee=fee_paid,
+            preimage=melt_quote.payment_preimage or "",
         )
 
         # handle change and produce proofs
@@ -978,9 +1020,9 @@ class Wallet(
                 return
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
-            assert (
-                proof.id in self.keysets
-            ), f"Keyset {proof.id} not known, can not verify DLEQ."
+            assert proof.id in self.keysets, (
+                f"Keyset {proof.id} not known, can not verify DLEQ."
+            )
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C)),
@@ -1029,7 +1071,8 @@ class Wallet(
             )
 
             if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+                # recompute B_ for dleq proofs
+                B_, r = b_dhke.step1_alice(secret, r)
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
                 B_, r = b_dhke.step1_alice_deprecated(
@@ -1091,9 +1134,9 @@ class Wallet(
         Raises:
             AssertionError: if len(amounts) != len(secrets)
         """
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        assert len(amounts) == len(secrets), (
+            f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        )
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
@@ -1108,9 +1151,7 @@ class Wallet(
 
             assert r
             rs_return.append(r)
-            output = BlindedMessage(
-                amount=amount, B_=B_.format().hex(), id=keyset_id
-            )
+            output = BlindedMessage(amount=amount, B_=B_.format().hex(), id=keyset_id)
             outputs.append(output)
             logger.trace(f"Constructing output: {output}, r: {r.to_hex()}")
 
@@ -1380,7 +1421,8 @@ class Wallet(
         for key in balances_return.keys():
             if unit:
                 balances_return[key]["unit"] = unit.name
-        return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
+        # type: ignore
+        return dict(sorted(balances_return.items(), key=lambda item: item[0]))
 
     # ---------- RESTORE WALLET ----------
 

@@ -12,6 +12,7 @@ from ..core.base import (
     WalletMint,
 )
 from ..core.db import Connection, Database
+from .wallet_transaction import WalletTransaction
 
 
 class _UnsetType:
@@ -390,7 +391,9 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
+                json.dumps([c.model_dump() for c in quote.change])
+                if quote.change
+                else ""
             ),
         },
     )
@@ -618,3 +621,98 @@ async def get_mint_by_url(
         {"url": url},
     )
     return WalletMint.model_validate(dict(row)) if row else None
+
+
+async def store_transaction(
+    db: Database,
+    *,
+    tx_type: str,
+    amount: int,
+    unit: str,
+    mint: str,
+    state: str,
+    quote_id: Optional[str] = None,
+    fee: Optional[int] = None,
+    preimage: Optional[str] = None,
+    conn: Optional[Connection] = None,
+) -> None:
+    await (conn or db).execute(
+        """
+        INSERT INTO transactions
+          (type, amount, unit, mint, state, quote_id, fee, preimage, created_time)
+        VALUES (:type, :amount, :unit, :mint, :state, :quote_id, :fee, :preimage, :created_time)
+        """,
+        {
+            "type": tx_type,
+            "amount": amount,
+            "unit": unit,
+            "mint": mint,
+            "state": state,
+            "quote_id": quote_id,
+            "fee": fee,
+            "preimage": preimage,
+            "created_time": int(time.time()),
+        },
+    )
+
+
+async def update_transaction_state(
+    db: Database,
+    *,
+    quote_id: str,
+    state: str,
+    fee: Optional[int] = None,
+    preimage: Optional[str] = None,
+    conn: Optional[Connection] = None,
+) -> None:
+    clauses = ["state = :state"]
+    values: Dict[str, Any] = {"state": state, "quote_id": quote_id}
+
+    if fee is not None:
+        clauses.append("fee = :fee")
+        values["fee"] = fee
+    if preimage is not None:
+        clauses.append("preimage = :preimage")
+        values["preimage"] = preimage
+
+    await (conn or db).execute(
+        f"UPDATE transactions SET {', '.join(clauses)} WHERE quote_id = :quote_id",
+        values,
+    )
+
+
+async def get_transactions(
+    db: Database,
+    *,
+    tx_type: Optional[str] = None,
+    mint: Optional[str] = None,
+    limit: Optional[int] = None,
+    conn: Optional[Connection] = None,
+) -> List[WalletTransaction]:
+    clauses = []
+    values: Dict[str, Any] = {}
+
+    if tx_type:
+        clauses.append("type = :type")
+        values["type"] = tx_type
+    if mint:
+        clauses.append("mint = :mint")
+        values["mint"] = mint
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    limit_clause = "LIMIT :limit" if limit is not None else ""
+    if limit is not None:
+        if limit < 1:
+            raise ValueError("limit must be a positive integer")
+        values["limit"] = limit
+
+    rows = await (conn or db).fetchall(
+        f"""
+        SELECT * FROM transactions
+        {where}
+        ORDER BY created_time DESC
+        {limit_clause}
+        """,
+        values,
+    )
+    return [WalletTransaction.from_row(r) for r in rows] if rows else []

@@ -334,3 +334,26 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
+
+
+async def m017_create_transactions_table(db: Database):
+    """
+    Creates the transaction table used to track transaction history.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type         TEXT    NOT NULL,   -- 'mint' | 'melt' | 'send' | 'receive'
+                    amount       INTEGER NOT NULL,   -- always positive; direction implied by type
+                    unit         TEXT    NOT NULL,   -- e.g. 'sat'
+                    mint         TEXT    NOT NULL,   -- mint URL
+                    state        TEXT    NOT NULL,   -- 'pending' | 'completed' | 'failed'
+                    quote_id     TEXT,               -- bolt11 quote id for mint/melt; NULL for ecash
+                    fee          INTEGER,            -- melt only: actual fee paid
+                    preimage     TEXT,               -- melt only: payment preimage
+                    created_time INTEGER NOT NULL    -- unix timestamp
+                );
+            """
+        )

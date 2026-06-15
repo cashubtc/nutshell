@@ -41,6 +41,7 @@ from ...wallet.crud import (
     get_bolt11_mint_quotes,
     get_reserved_proofs,
     get_seed_and_mnemonic,
+    get_transactions,
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..auth.auth import WalletAuth
@@ -369,9 +370,9 @@ async def pay(
                     f"Sending token via POST to {url}...", end="", flush=True)
 
                 token_obj = deserialize_token_from_string(token)
-                assert isinstance(
-                    token_obj, TokenV4
-                ), "Only TokenV4 supported for POST transport"
+                assert isinstance(token_obj, TokenV4), (
+                    "Only TokenV4 supported for POST transport"
+                )
 
                 proofs = token_obj.proofs
 
@@ -735,8 +736,7 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(
-                f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i + 1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -748,7 +748,7 @@ async def balance(ctx: Context, verbose):
                 unit = Unit[str(v["unit"])]
                 print(
                     f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
-                    f" {unit.str(int(v['balance'])-int(v['available']))})"
+                    f" {unit.str(int(v['balance']) - int(v['available']))})"
                 )
             print("")
 
@@ -757,7 +757,7 @@ async def balance(ctx: Context, verbose):
     if verbose:
         print(
             f"Balance: {wallet.available_balance} (pending:"
-            f" {wallet.balance-wallet.available_balance}) in"
+            f" {wallet.balance - wallet.available_balance}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
@@ -1674,3 +1674,43 @@ async def lnurl_mint(ctx: Context):
             print("No tokens minted.")
     except Exception as e:
         print(f"Error minting quotes: {e}")
+
+
+@cli.command("history", help="Show transaction history.")
+@click.option(
+    "--detailed",
+    "-d",
+    default=False,
+    help="Show detailed information on transactions.",
+    is_flag=True,
+)
+@click.option(
+    "--number", "-n", default=None, help="Show only last n transactions.", type=int
+)
+@click.pass_context
+@coro
+async def history(ctx: Context, detailed: bool, number: int):
+    wallet: Wallet = ctx.obj["WALLET"]
+    txs = await get_transactions(wallet.db, limit=number)
+    if not txs:
+        print("No transaction history.")
+        return
+    print("-------------- Transaction history --------------")
+    print(f"{'Type':<10}  {'Amount':>14}  {'State':<10}  Time")
+    print("-------------------------------------------------")
+    for tx in txs:
+        sign = "+" if tx.tx_type in ("mint", "receive") else "-"
+        amount_str = f"{sign}{tx.amount} {tx.unit}"
+        time_str = datetime.fromtimestamp(tx.created_time, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        output = f"{tx.tx_type:<10}  {amount_str:>14}  {tx.state:<10}  {time_str}"
+        if detailed:
+            output += f"\n  Mint:  {tx.mint}"
+            if tx.quote_id:
+                output += f"\n  Quote: {tx.quote_id}"
+            if tx.fee is not None:
+                output += f"\n  Fee:   {tx.fee} {tx.unit}"
+            if tx.preimage:
+                output += f"\n  Preimage: {tx.preimage}"
+        print(output)

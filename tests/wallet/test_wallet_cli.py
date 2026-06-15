@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from cashu.core.base import TokenV4
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
+from cashu.wallet.crud import store_transaction
 from cashu.wallet.wallet import Wallet
 from tests.helpers import (
     get_real_invoice,
@@ -514,7 +515,9 @@ def test_send_too_much(mint, cli_prefix):
     assert "Balance too low" in str(result.exception)
 
 
-@pytest.mark.skip(reason="Test uses hardcoded token that doesn't match current mint keysets. Should be rewritten to generate token dynamically.")
+@pytest.mark.skip(
+    reason="Test uses hardcoded token that doesn't match current mint keysets. Should be rewritten to generate token dynamically."
+)
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICI0NzlkY2E0MzUzNzU4MTM4N2Q1ODllMDU1MGY0Y2Q2MjFmNjE0MDM1MGY5M2Q4ZmI1OTA2YjJlMGRiNmRjYmI3IiwgIkMiOiAiMDM1MGQ0ZmI0YzdiYTMzNDRjMWRjYWU1ZDExZjNlNTIzZGVkOThmNGY4ODdkNTQwZmYyMDRmNmVlOWJjMjkyZjQ1In0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIjZjNjAzNDgwOGQyNDY5N2IyN2YxZTEyMDllNjdjNjVjNmE2MmM2Zjc3NGI4NWVjMGQ5Y2Y3MjE0M2U0NWZmMDEiLCAiQyI6ICIwMjZkNDlhYTE0MmFlNjM1NWViZTJjZGQzYjFhOTdmMjE1MDk2NTlkMDE3YWU0N2FjNDY3OGE4NWVkY2E4MGMxYmQifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyJ9XX0="  # noqa
@@ -687,6 +690,105 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
 
 
+async def _seed_transactions(wallet: Wallet):
+    """Wipe and re-seed the transactions table with known rows."""
+    await wallet.db.execute("DELETE FROM transactions")
+    await store_transaction(
+        wallet.db,
+        tx_type="mint",
+        amount=200,
+        unit="sat",
+        mint=settings.mint_url,
+        state="completed",
+        quote_id="quote-mint-1",
+    )
+    await store_transaction(
+        wallet.db,
+        tx_type="melt",
+        amount=50,
+        unit="sat",
+        mint=settings.mint_url,
+        state="completed",
+        quote_id="quote-melt-1",
+        fee=2,
+        preimage="abc123preimage",
+    )
+
+
+def test_history_empty(cli_prefix):
+    wallet = asyncio.run(init_wallet())
+    asyncio.run(wallet.db.execute("DELETE FROM transactions"))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "history"])
+
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No transaction history." in result.output
+
+
+def test_history_shows_transactions(cli_prefix):
+    wallet = asyncio.run(init_wallet())
+    asyncio.run(_seed_transactions(wallet))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "history"])
+
+    print("HISTORY", result.output)
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "Transaction history" in result.output
+    assert "mint" in result.output
+    assert "+200 sat" in result.output
+    assert "melt" in result.output
+    assert "-50 sat" in result.output
+    assert "completed" in result.output
+
+
+def test_history_detailed(cli_prefix):
+    wallet = asyncio.run(init_wallet())
+    asyncio.run(_seed_transactions(wallet))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "history", "--detailed"])
+
+    print("HISTORY --detailed", result.output)
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "quote-melt-1" in result.output
+    assert "2 sat" in result.output
+    assert "abc123preimage" in result.output
+    assert settings.mint_url in result.output
+
+
+def test_history_number_limit(cli_prefix):
+    wallet = asyncio.run(init_wallet())
+    asyncio.run(wallet.db.execute("DELETE FROM transactions"))
+    for i in range(5):
+        asyncio.run(
+            store_transaction(
+                wallet.db,
+                tx_type="mint",
+                amount=10 * (i + 1),
+                unit="sat",
+                mint=settings.mint_url,
+                state="completed",
+            )
+        )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "history", "--number", "2"])
+
+    print("HISTORY --number 2", result.output)
+    assert result.exception is None
+    assert result.exit_code == 0
+    tx_lines = [
+        line
+        for line in result.output.split("\n")
+        if line.strip()
+        and any(line.startswith(t) for t in ("mint", "melt", "send", "receive"))
+    ]
+    assert len(tx_lines) == 2
 def test_proofs_basic(cli_prefix):
     """Test basic proofs command functionality"""
     runner = CliRunner(mix_stderr=False)  # Separate stdout/stderr, as we want to verify only stdout
