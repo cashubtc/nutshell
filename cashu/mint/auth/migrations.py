@@ -119,12 +119,6 @@ async def m002_add_balance_to_keysets_and_log_table(db: Database):
 async def m003_add_final_expiry_to_keysets(db: Database):
     """
     Add the final_expiry column to the auth keysets table for keysets v2 support.
-
-    The mint ledger migrations add this column in m031, and store_keyset() always
-    inserts it. The auth ledger uses its own database and migration set, so without
-    this migration storing the auth keyset fails at startup with
-    "table keysets has no column named final_expiry" and the mint aborts whenever
-    MINT_REQUIRE_AUTH is enabled.
     """
     async with db.connect() as conn:
         await conn.execute(
