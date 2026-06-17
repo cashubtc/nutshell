@@ -45,7 +45,7 @@ class PostMeltQuoteResponse(BaseModel):
     ]  # input unit (optional for BACKWARDS COMPAT mint response < 0.17.0)
     method: Optional[
         str
-    ] = None  # payment method (optional for BACKWARDS COMPAT mint response < 0.17.0)
+    ] = None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
     request: Optional[
         str
     ]  # output payment request (optional for BACKWARDS COMPAT mint response < 0.17.0)

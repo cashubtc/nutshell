@@ -40,7 +40,7 @@ class PostMintQuoteResponse(BaseModel):
     ]  # output unit (optional for BACKWARDS COMPAT mint response <  0.17.0)
     method: Optional[
         str
-    ] = None  # payment method (optional for BACKWARDS COMPAT mint response < 0.17.0)
+    ] = None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
     state: Optional[str]  # state of the quote (optional for backwards compat)
     expiry: Optional[int]  # expiry of the quote
     pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
