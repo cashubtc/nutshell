@@ -111,7 +111,7 @@ async def test_verify_clear_auth_maps_rate_limit_errors(monkeypatch):
 
     monkeypatch.setattr(ledger, "_get_user", get_user)
 
-    def fail_limit(identifier):
+    def fail_limit(identifier, *args, **kwargs):
         raise Exception("too many requests")
 
     monkeypatch.setattr("cashu.mint.auth.server.assert_limit", fail_limit)
@@ -131,7 +131,7 @@ async def test_verify_clear_auth_returns_user_on_success(monkeypatch):
         return expected_user
 
     monkeypatch.setattr(ledger, "_get_user", get_user)
-    monkeypatch.setattr("cashu.mint.auth.server.assert_limit", lambda identifier: None)
+    monkeypatch.setattr("cashu.mint.auth.server.assert_limit", lambda identifier, *args, **kwargs: None)
 
     user = await ledger.verify_clear_auth("token")
     assert user is expected_user
