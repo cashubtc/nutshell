@@ -154,11 +154,11 @@ def derive_dleq_nonce(
     )
     for ctr in range(256):
         h = hmac.new(a.secret, base + bytes([ctr]), hashlib.sha256).digest()
-        x = int.from_bytes(h, "big")
-        # Rejection sampling: accept x only if it is a valid scalar in [1, n-1].
+        r = int.from_bytes(h, "big")
+        # Rejection sampling: accept r only if it is a valid scalar in [1, n-1].
         # Reducing mod n instead would bias the nonce toward small values.
-        if 0 < x < SECP256K1_N:
-            return PrivateKey(x.to_bytes(32, "big"))
+        if 0 < r < SECP256K1_N:
+            return PrivateKey(r.to_bytes(32, "big"))
     raise ValueError("DLEQ nonce derivation failed")  # pragma: no cover
 
 
