@@ -687,13 +687,28 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
 
 
+def mint_tokens(runner, cli_prefix, amount: str):
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "-n", amount],
+    )
+    assert result.exception is None
+    invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
+    asyncio.run(pay_if_regtest(invoice))
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", amount, "--id", invoice_id],
+    )
+    assert result.exception is None
+    return result
+
+
 def test_proofs_basic(cli_prefix):
     """Test basic proofs command functionality"""
     runner = CliRunner(mix_stderr=False)  # Separate stdout/stderr, as we want to verify only stdout
 
     # First create some tokens like other tests do
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exception is None
+    mint_tokens(runner, cli_prefix, "64")
 
     # Verify wallet has balance
     wallet = asyncio.run(init_wallet())
@@ -724,8 +739,7 @@ def test_proofs_json_structure(cli_prefix):
     runner = CliRunner(mix_stderr=False)
 
     # First create some tokens
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exception is None
+    mint_tokens(runner, cli_prefix, "64")
 
     # Verify wallet has balance
     wallet = asyncio.run(init_wallet())
@@ -756,8 +770,7 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
     runner = CliRunner(mix_stderr=False)
 
     # First create some tokens
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exception is None
+    mint_tokens(runner, cli_prefix, "64")
 
     # Verify wallet has balance
     wallet = asyncio.run(init_wallet())
@@ -799,8 +812,7 @@ def test_proofs_with_keyset_filter(cli_prefix):
     runner = CliRunner(mix_stderr=False)
 
     # First create some tokens
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exception is None
+    mint_tokens(runner, cli_prefix, "64")
 
     # Verify wallet has balance
     wallet = asyncio.run(init_wallet())
@@ -861,8 +873,7 @@ def test_proofs_with_all_flag(cli_prefix):
     runner = CliRunner(mix_stderr=False)
 
     # Create some tokens first so we have proofs to list
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exit_code == 0
+    mint_tokens(runner, cli_prefix, "64")
     # Send some, in order to 'reserve' the tokens such that they are only included if --all is passed
     result = runner.invoke(cli, [*cli_prefix, "send", "12"])
     assert result.exit_code == 0
