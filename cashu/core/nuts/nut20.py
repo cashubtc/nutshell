@@ -2,6 +2,7 @@ from hashlib import sha256
 from typing import List
 
 from coincurve import PublicKeyXOnly
+from loguru import logger
 
 from ..base import BlindedMessage
 from ..crypto.secp import PrivateKey
@@ -67,6 +68,10 @@ def verify_mint_quote(
         pass
 
     # Fallback to the legacy method for backward compatibility
+    # Deprecated since version 0.20.2
+    logger.warning(
+        "Using legacy NUT-20 signature verification. This fallback is deprecated since version 0.20.2."
+    )
     msgbytes_legacy = construct_message_legacy(quote_id, outputs)
     try:
         return pubkey.verify(sig, msgbytes_legacy)
