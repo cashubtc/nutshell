@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import multiprocessing
 import os
@@ -15,9 +16,66 @@ from cashu.core.base import Method, Unit
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
+from cashu.lightning.fake import FakeWallet
+from cashu.lightning.lnbits import LNbitsWallet
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
+
+
+# Define dynamic client getter & setter for test environments
+def _lnbits_client_getter(self) -> httpx.AsyncClient:
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if (
+        not hasattr(self, "_client")
+        or getattr(self, "_loop", None) != current_loop
+        or self._client.is_closed
+    ):
+        self._client = httpx.AsyncClient(
+            verify=not settings.debug,
+            headers={"X-Api-Key": settings.mint_lnbits_key},
+            timeout=None,
+        )
+        self._loop = current_loop
+    return self._client
+
+
+def _lnbits_client_setter(self, value):
+    self._client = value
+
+
+# Apply patch to LNbitsWallet class only during tests
+LNbitsWallet.client = property(_lnbits_client_getter, _lnbits_client_setter)
+
+
+# Define dynamic paid_invoices_queue getter and setter for FakeWallet in test environments
+def _fake_wallet_queue_getter(self) -> asyncio.Queue:
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if (
+        not hasattr(self, "_paid_invoices_queue")
+        or getattr(self, "_queue_loop", None) != current_loop
+    ):
+        self._paid_invoices_queue = asyncio.Queue(0)
+        self._queue_loop = current_loop
+    return self._paid_invoices_queue
+
+
+def _fake_wallet_queue_setter(self, value):
+    self._paid_invoices_queue = value
+
+
+# Apply patch to FakeWallet class only during tests
+FakeWallet.paid_invoices_queue = property(
+    _fake_wallet_queue_getter, _fake_wallet_queue_setter
+)
 
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
@@ -76,6 +134,63 @@ class UvicornServer(multiprocessing.Process):
         self.terminate()
 
     def run(self, *args, **kwargs):
+        # We are inside the uvicorn subprocess. Apply the dynamic loop-safe patches
+        # so they are active inside this server process as well.
+        import asyncio
+
+        import httpx
+
+        from cashu.core.settings import settings
+        from cashu.lightning.fake import FakeWallet
+        from cashu.lightning.lnbits import LNbitsWallet
+
+        # 1. LNbits client patch
+        def _lnbits_client_getter(self) -> httpx.AsyncClient:
+            try:
+                current_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                current_loop = None
+
+            if (
+                not hasattr(self, "_client")
+                or getattr(self, "_loop", None) != current_loop
+                or self._client.is_closed
+            ):
+                self._client = httpx.AsyncClient(
+                    verify=not settings.debug,
+                    headers={"X-Api-Key": settings.mint_lnbits_key},
+                    timeout=None,
+                )
+                self._loop = current_loop
+            return self._client
+
+        def _lnbits_client_setter(self, value):
+            self._client = value
+
+        LNbitsWallet.client = property(_lnbits_client_getter, _lnbits_client_setter)
+
+        # 2. FakeWallet queue patch
+        def _fake_wallet_queue_getter(self) -> asyncio.Queue:
+            try:
+                current_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                current_loop = None
+
+            if (
+                not hasattr(self, "_paid_invoices_queue")
+                or getattr(self, "_queue_loop", None) != current_loop
+            ):
+                self._paid_invoices_queue = asyncio.Queue(0)
+                self._queue_loop = current_loop
+            return self._paid_invoices_queue
+
+        def _fake_wallet_queue_setter(self, value):
+            self._paid_invoices_queue = value
+
+        FakeWallet.paid_invoices_queue = property(
+            _fake_wallet_queue_getter, _fake_wallet_queue_setter
+        )
+
         self.server.run()
 
 
