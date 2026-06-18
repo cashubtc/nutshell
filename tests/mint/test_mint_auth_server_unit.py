@@ -131,7 +131,9 @@ async def test_verify_clear_auth_returns_user_on_success(monkeypatch):
         return expected_user
 
     monkeypatch.setattr(ledger, "_get_user", get_user)
-    monkeypatch.setattr("cashu.mint.auth.server.assert_limit", lambda identifier, *args, **kwargs: None)
+    monkeypatch.setattr(
+        "cashu.mint.auth.server.assert_limit", lambda identifier, *args, **kwargs: None
+    )
 
     user = await ledger.verify_clear_auth("token")
     assert user is expected_user
@@ -243,3 +245,151 @@ async def test_verify_blind_auth_wraps_inner_failure_and_still_unsets_pending():
 
     assert calls["invalidated"] is False
     assert calls["unset"] is True
+
+
+def test_verify_decode_jwt_success(monkeypatch):
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from cashu.core.settings import settings
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    ledger = _ledger()
+    ledger.issuer = "https://issuer.test"
+
+    class MockJWKSClient:
+        def get_signing_key_from_jwt(self, token):
+            class MockSigningKey:
+                def __init__(self, key):
+                    self.key = key
+
+            return MockSigningKey(public_key)
+
+    ledger.jwks_client = cast(Any, MockJWKSClient())
+
+    # Token with matching audience and matching azp
+    token = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": settings.mint_auth_oicd_client_id,
+            "azp": settings.mint_auth_oicd_client_id,
+            "sub": "alice",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    decoded = ledger._verify_decode_jwt(token)
+    assert decoded["sub"] == "alice"
+
+    # Token with matching audience and no azp
+    token_no_azp = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": settings.mint_auth_oicd_client_id,
+            "sub": "bob",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+    decoded_no_azp = ledger._verify_decode_jwt(token_no_azp)
+    assert decoded_no_azp["sub"] == "bob"
+
+
+def test_verify_decode_jwt_rejects_mismatched_audience(monkeypatch):
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    ledger = _ledger()
+    ledger.issuer = "https://issuer.test"
+
+    class MockJWKSClient:
+        def get_signing_key_from_jwt(self, token):
+            class MockSigningKey:
+                def __init__(self, key):
+                    self.key = key
+
+            return MockSigningKey(public_key)
+
+    ledger.jwks_client = cast(Any, MockJWKSClient())
+
+    # Token with mismatched audience
+    token = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": "wrong-client",
+            "sub": "alice",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    with pytest.raises(jwt.InvalidTokenError):
+        ledger._verify_decode_jwt(token)
+
+
+def test_verify_decode_jwt_rejects_mismatched_azp(monkeypatch):
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from cashu.core.settings import settings
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    ledger = _ledger()
+    ledger.issuer = "https://issuer.test"
+
+    class MockJWKSClient:
+        def get_signing_key_from_jwt(self, token):
+            class MockSigningKey:
+                def __init__(self, key):
+                    self.key = key
+
+            return MockSigningKey(public_key)
+
+    ledger.jwks_client = cast(Any, MockJWKSClient())
+
+    # Token with matching audience but mismatched azp
+    token = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": settings.mint_auth_oicd_client_id,
+            "azp": "wrong-client",
+            "sub": "alice",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    with pytest.raises(jwt.InvalidTokenError, match="does not match mint client"):
+        ledger._verify_decode_jwt(token)
+
+
+@pytest.mark.asyncio
+async def test_verify_clear_auth_uses_correct_rate_limit(monkeypatch):
+    ledger = _ledger()
+    monkeypatch.setattr(ledger, "_verify_oicd_issuer", lambda token: None)
+    monkeypatch.setattr(ledger, "_verify_decode_jwt", lambda token: {"sub": "alice"})
+
+    async def get_user(decoded):
+        return User(id="alice")
+
+    monkeypatch.setattr(ledger, "_get_user", get_user)
+
+    captured_limit = []
+
+    def mock_assert_limit(identifier, limit=None):
+        captured_limit.append(limit)
+
+    monkeypatch.setattr("cashu.mint.auth.server.assert_limit", mock_assert_limit)
+    monkeypatch.setattr(settings, "mint_auth_rate_limit_per_minute", 42)
+
+    await ledger.verify_clear_auth("token")
+    assert len(captured_limit) == 1
+    assert captured_limit[0] == 42
