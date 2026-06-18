@@ -136,6 +136,9 @@ class LNbitsWallet(LightningBackend):
 
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)
+        while payment.result == PaymentResult.PENDING:
+            await asyncio.sleep(1)
+            payment = await self.get_payment_status(checking_id)
 
         return PaymentResponse(
             result=payment.result,
