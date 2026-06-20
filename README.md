@@ -214,6 +214,26 @@ poetry run mint
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
+### Automatic Keyset Rotations
+
+Nutshell supports automatic keyset rotations to ensure active keysets are regularly rotated. This behavior is **enabled by default** with a default rotation interval of **30 days**.
+
+When a keyset rotation occurs:
+1. A new keyset is activated (by automatically incrementing the derivation path counter, e.g., `m/0'/0'/0'` -> `m/0'/0'/1'`).
+2. The old keyset is set to inactive but remains usable for redeeming existing ecash proofs.
+3. The mint automatically recovers the latest active keyset from the database on subsequent restarts. You do **not** need to manually update `MINT_DERIVATION_PATH` in your `.env` file.
+
+#### Configuration
+You can customize or disable automatic keyset rotations in your `.env`:
+
+```bash
+# Enable or disable automatic rotations (default: TRUE)
+MINT_KEYSET_ROTATION_ENABLED=TRUE
+
+# Set the rotation interval in seconds (default: 2592000 for 30 days)
+MINT_KEYSET_ROTATION_INTERVAL_SECONDS=2592000
+```
+
 ### NUT-19 Caching with Redis
 
 To cache HTTP responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)), you can either install Redis manually or use the docker compose file in `docker/redis/docker-compose.yaml` to start Redis in a container.
