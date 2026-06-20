@@ -86,6 +86,18 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
+    mint_keyset_rotation_enabled: bool = Field(
+        default=True,
+        title="Keyset rotation enabled",
+        description="Whether to automatically rotate keysets when they exceed the interval.",
+    )
+    mint_keyset_rotation_interval_seconds: int = Field(
+        default=2592000,
+        gt=0,
+        title="Keyset rotation interval",
+        description="The interval in seconds after which active keysets are automatically rotated.",
+    )
+
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
 
