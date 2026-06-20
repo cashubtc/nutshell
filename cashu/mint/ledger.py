@@ -182,6 +182,7 @@ class Ledger(
             await self.init_mnemonic_keysets()
             return
         await self.init_keysets()
+        await self.rotate_keysets_if_needed()
         for derivation_path in settings.mint_derivation_path_list:
             derivation_path = self.maybe_update_derivation_path(derivation_path)
             await self.activate_keyset(derivation_path=derivation_path)
@@ -195,6 +196,7 @@ class Ledger(
         while True:
             try:
                 await self._check_pending_proofs_and_melt_quotes()
+                await self.rotate_keysets_if_needed()
                 await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
             except Exception as e:
                 logger.error(f"Ledger regular task failed: {e}")
