@@ -1018,7 +1018,13 @@ class Ledger(
             raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
 
         # Launch actual melt task
-        asyncio.create_task(self.melt(proofs=proofs, quote=quote, outputs=outputs))
+        async def melt_task():
+            try:
+                await self.melt(proofs=proofs, quote=quote, outputs=outputs)
+            except Exception as e:
+                logger.error(f"Error in background melt task: {e}")
+
+        asyncio.create_task(melt_task())
 
         melt_quote.state = MeltQuoteState.pending
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
