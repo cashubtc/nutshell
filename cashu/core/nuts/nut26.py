@@ -273,6 +273,13 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
             out += _tlv_entry(0x07, _encode_transport(tr))
     if pr.nut10 is not None:
         out += _tlv_entry(0x08, _encode_nut10(pr.nut10))
+    if pr.ms is not None:
+        out += _tlv_entry(0x09, bytes([1 if pr.ms else 0]))
+    if pr.fr is not None:
+        out += _tlv_entry(0x0A, struct.pack(">Q", pr.fr))
+    if pr.sm:
+        for method in pr.sm:
+            out += _tlv_entry(0x0B, method.encode())
     return out
 
 def _tlv_to_pr(data: bytes) -> PaymentRequest:
@@ -280,6 +287,7 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
     kwargs: dict = {}
     mints: List[str] = []
     transports: List[Transport] = []
+    supported_methods: List[str] = []
 
     for tag, val in entries:
         if len(val) == 0 and tag in (0x01,):
@@ -307,11 +315,19 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
             transports.append(_decode_transport(val))
         elif tag == 0x08:
             kwargs["nut10"] = _decode_nut10(val)
+        elif tag == 0x09:
+            kwargs["ms"] = val[0] == 1
+        elif tag == 0x0A:
+            kwargs["fr"] = struct.unpack(">Q", val)[0]
+        elif tag == 0x0B:
+            supported_methods.append(val.decode())
 
     if mints:
         kwargs["m"] = mints
     if transports:
         kwargs["t"] = transports
+    if supported_methods:
+        kwargs["sm"] = supported_methods
 
     return PaymentRequest(**kwargs)
 
