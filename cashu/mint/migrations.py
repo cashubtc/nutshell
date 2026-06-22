@@ -218,6 +218,8 @@ async def m007_proofs_and_promises_store_id(db: Database):
 async def m008_promises_dleq(db: Database):
     """
     Add columns for DLEQ proof to promises table.
+    DEPRECATED: Since deterministic DLEQ nonces (NUT-12), these columns are unused
+    for new promises and will be dropped in a future migration.
     """
     async with db.connect() as conn:
         await conn.execute(
@@ -696,8 +698,8 @@ async def m017_foreign_keys_proof_tables(db: Database):
                         id TEXT,
                         b_ TEXT NOT NULL,
                         c_ TEXT NOT NULL,
-                        dleq_e TEXT,
-                        dleq_s TEXT,
+                        dleq_e TEXT, -- DEPRECATED (NUT-12)
+                        dleq_s TEXT, -- DEPRECATED (NUT-12)
                         created TIMESTAMP,
                         mint_quote TEXT,
                         swap_id TEXT,
@@ -1081,8 +1083,8 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
                             id TEXT,
                             b_ TEXT NOT NULL,
                             c_ TEXT,
-                            dleq_e TEXT,
-                            dleq_s TEXT,
+                            dleq_e TEXT, -- DEPRECATED (NUT-12)
+                            dleq_s TEXT, -- DEPRECATED (NUT-12)
                             created TIMESTAMP,
                             signed_at TIMESTAMP,
                             mint_quote TEXT,

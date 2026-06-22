@@ -51,6 +51,7 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 """
 
 import hashlib
+import hmac
 from typing import Optional, Tuple
 
 from .secp import PrivateKey, PublicKey
@@ -125,20 +126,47 @@ def hash_e(*publickeys: PublicKey) -> bytes:
     return e
 
 
+SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+
+def deterministic_dleq_nonce(
+    a: PrivateKey, B_: PublicKey, C_: PublicKey
+) -> PrivateKey:
+    """Derive deterministic DLEQ nonce r according to NUT-12."""
+    a_bytes = bytes.fromhex(a.to_hex())
+    A = a.public_key
+    assert A
+    A_bytes = A.format(compressed=False)
+    B_bytes = B_.format(compressed=False)
+    C_bytes = C_.format(compressed=False)
+
+    ctr = 0
+    while ctr < 256:
+        data = b"Cashu_DLEQ_R_v1" + A_bytes + B_bytes + C_bytes + bytes([ctr])
+        r_digest = hmac.new(a_bytes, data, hashlib.sha256).digest()
+        r_val = int.from_bytes(r_digest, "big")
+        if 0 < r_val < SECP256K1_N:
+            return PrivateKey(r_digest)
+        ctr += 1
+    raise ValueError("Could not derive deterministic nonce after 256 iterations")
+
+
 def step2_bob_dleq(
     B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""
 ) -> Tuple[PrivateKey, PrivateKey]:
+    # Compute C_ once at the start
+    C_: PublicKey = B_ * a  # type: ignore
+
     if p_bytes:
         # deterministic p for testing
         p = PrivateKey(p_bytes)
     else:
-        # normally, we generate a random p
-        p = PrivateKey()
+        # derive deterministic nonce p using NUT-12 spec
+        p = deterministic_dleq_nonce(a, B_, C_)
 
     R1 = p.public_key  # R1 = pG
     assert R1
     R2: PublicKey = B_ * p  # type: ignore
-    C_: PublicKey = B_ * a  # type: ignore
     A = a.public_key
     assert A
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)

@@ -189,6 +189,29 @@ def test_dleq_step2_bob_dleq():
     )
 
 
+def test_dleq_deterministic_nonce_vector():
+    # Test vector from NUT-12 deterministic nonce derivation spec
+    a = PrivateKey(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+    )
+    B_ = PublicKey(
+        bytes.fromhex(
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+        )
+    )
+    e, s = step2_bob_dleq(B_, a)
+    assert (
+        e.to_hex()
+        == "2a16ffee280aff3c429045607f9b8e0bf8b35910c44c1b20b9dfaf01b263d7b3"
+    )
+    assert (
+        s.to_hex()
+        == "9df27731238334718d120d4f74611a7c668233f988e687ac3fb188f0a34a2dab"
+    )
+
+
 def test_dleq_alice_verify_dleq():
     # e from test_step2_bob_dleq for a=0x1
     e = PrivateKey(

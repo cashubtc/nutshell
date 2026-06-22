@@ -846,6 +846,26 @@ class Ledger(
         if not melt_quote:
             raise Exception("quote not found")
 
+        # Reconstruct missing DLEQ proofs on-the-fly for melt change signatures
+        if melt_quote.change:
+            melt_outputs = await self.crud.get_blinded_messages_melt_id(
+                melt_id=quote_id, db=self.db
+            )
+            outputs_by_amount: Dict[int, List[str]] = {}
+            for out in melt_outputs:
+                outputs_by_amount.setdefault(out.amount, []).append(out.B_)
+
+            for sig in melt_quote.change:
+                if sig.dleq is None or not sig.dleq.e or not sig.dleq.s:
+                    if sig.amount in outputs_by_amount and outputs_by_amount[sig.amount]:
+                        b_hex = outputs_by_amount[sig.amount].pop(0)
+                        B_ = PublicKey(bytes.fromhex(b_hex))
+                        if sig.id in self.keysets:
+                            keyset = self.keysets[sig.id]
+                            private_key_amount = keyset.private_keys[sig.amount]
+                            e, s = b_dhke.step2_bob_dleq(B_, private_key_amount)
+                            sig.dleq = DLEQ(e=e.to_hex(), s=s.to_hex())
+
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
         )
@@ -1332,6 +1352,13 @@ class Ledger(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
+                    if promise.dleq is None or not promise.dleq.e or not promise.dleq.s:
+                        B_ = PublicKey(bytes.fromhex(output.B_))
+                        if promise.id in self.keysets:
+                            keyset = self.keysets[promise.id]
+                            private_key_amount = keyset.private_keys[promise.amount]
+                            e, s = b_dhke.step2_bob_dleq(B_, private_key_amount)
+                            promise.dleq = DLEQ(e=e.to_hex(), s=s.to_hex())
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
@@ -1427,8 +1454,8 @@ class Ledger(
                     amount=amount,
                     b_=B_.format().hex(),
                     c_=C_.format().hex(),
-                    e=e.to_hex(),
-                    s=s.to_hex(),
+                    e="",
+                    s="",
                     db=self.db,
                     conn=conn,
                 )
