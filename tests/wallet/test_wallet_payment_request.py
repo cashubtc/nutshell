@@ -65,7 +65,7 @@ def test_nut18_preferred_mints_vector():
         "Oi8vbWludC5leGFtcGxlLmNvbWJtc_RiZnICYnNtgWZib2x0MTE"
     )
     req = PaymentRequest(
-        i="b7a90177",
+        i="preferred_fee_methods",
         a=100,
         u="sat",
         m=["https://mint.example.com"],
@@ -194,7 +194,7 @@ def test_nut26_preferred_mints_vector():
         "QQQQQG9SQPNZDAK8GVF3A8DTHZ"
     )
     req = PaymentRequest(
-        i="b7a90178",
+        i="preferred_fee_methods",
         a=100,
         u="sat",
         m=["https://mint.example.com"],
