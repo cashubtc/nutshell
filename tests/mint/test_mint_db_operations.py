@@ -200,7 +200,7 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_db_verify_spent_proofs_and_set_pending_race_condition(
@@ -230,7 +230,7 @@ async def test_db_verify_spent_proofs_and_set_pending_race_condition(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_db_verify_spent_proofs_and_set_pending_delayed_no_race_condition(
@@ -261,7 +261,7 @@ async def test_db_verify_spent_proofs_and_set_pending_delayed_no_race_condition(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_different_proofs(
@@ -335,7 +335,7 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
@@ -871,7 +871,7 @@ async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_concurrent_set_mint_quote_pending_same_quote(wallet: Wallet, ledger: Ledger):
@@ -896,7 +896,7 @@ async def test_concurrent_set_mint_quote_pending_same_quote(wallet: Wallet, ledg
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_concurrent_set_mint_quote_pending_different_quotes(wallet: Wallet, ledger: Ledger):
@@ -918,7 +918,7 @@ async def test_concurrent_set_mint_quote_pending_different_quotes(wallet: Wallet
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_concurrent_set_melt_quote_pending_same_quote(wallet: Wallet, ledger: Ledger):
@@ -943,7 +943,7 @@ async def test_concurrent_set_melt_quote_pending_same_quote(wallet: Wallet, ledg
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_concurrent_set_melt_quote_pending_different_quotes(wallet: Wallet, ledger: Ledger):
@@ -969,7 +969,7 @@ async def test_concurrent_set_melt_quote_pending_different_quotes(wallet: Wallet
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_concurrent_swap_same_proofs(wallet: Wallet, ledger: Ledger):
@@ -996,7 +996,7 @@ async def test_concurrent_swap_same_proofs(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    is_github_actions and is_regtest and not is_postgres,
+    is_github_actions and not is_postgres,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
 async def test_concurrent_swap_different_proofs(wallet: Wallet, ledger: Ledger):
