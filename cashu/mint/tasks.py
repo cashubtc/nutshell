@@ -15,8 +15,6 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         tasks = []
         for method, unitbackends in self.backends.items():
             for unit, backend in unitbackends.items():
-                if backend.__class__.__name__ == "FakeWallet":
-                    continue
                 logger.debug(
                     f"Dispatching backend invoice listener for {method} {unit} {backend.__class__.__name__}"
                 )
