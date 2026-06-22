@@ -2,6 +2,7 @@ import secrets
 from typing import AsyncGenerator, Dict, Optional, Union
 
 import httpx
+from loguru import logger
 from pydantic import BaseModel
 
 from ..core.base import Amount, MeltQuote, Unit
@@ -132,6 +133,12 @@ class StrikeWallet(LightningBackend):
             headers=bearer_auth,
             timeout=None,
         )
+
+    async def cleanup(self):
+        try:
+            await self.client.aclose()
+        except RuntimeError as e:
+            logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
         try:

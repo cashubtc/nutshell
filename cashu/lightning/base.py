@@ -119,6 +119,10 @@ class LightningBackend(ABC):
         if unit not in self.supported_units:
             raise Unsupported(f"Unit {unit} is not supported")
 
+    async def cleanup(self) -> None:
+        """Cleanup method for backends to release resources like connections"""
+        pass
+
     @abstractmethod
     def __init__(self, unit: Unit, **kwargs):
         pass
