@@ -57,6 +57,7 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
 
     mint_database: str = Field(default="data/mint")
+    mint_database_lock_timeout: int = Field(default=5000) # Postgres lock timeout in milliseconds
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
     mint_max_witness_length: int = Field(default=1024)

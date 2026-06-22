@@ -41,6 +41,7 @@ class FakeWallet(LightningBackend):
     def paid_invoices_queue(self) -> asyncio.Queue[Bolt11]:
         if getattr(self, "_paid_invoices_queue", None) is None:
             self._paid_invoices_queue = asyncio.Queue(0)
+        assert self._paid_invoices_queue is not None
         return self._paid_invoices_queue
 
     payment_secrets: Dict[str, str] = dict()

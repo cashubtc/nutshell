@@ -139,6 +139,11 @@ class Database(Compat):
             kwargs["poolclass"] = AsyncAdaptedQueuePool  # type: ignore[assignment]
             kwargs["pool_size"] = 50  # type: ignore[assignment]
             kwargs["max_overflow"] = 100  # type: ignore[assignment]
+            kwargs["connect_args"] = {  # type: ignore[assignment]
+                "server_settings": {
+                    "lock_timeout": str(settings.mint_database_lock_timeout)
+                }
+            }
 
         self.engine = create_async_engine(database_uri, **kwargs)
 
@@ -207,7 +212,13 @@ class Database(Compat):
             return retry_delay
 
         def _is_lock_exception(e):
-            if "database is locked" in str(e) or "could not obtain lock" in str(e):
+            if (
+                "database is locked" in str(e)
+                or "could not obtain lock" in str(e)
+                or "lock timeout" in str(e).lower()
+                or "lock_not_available" in str(e).lower()
+                or "55p03" in str(e).lower()  # lock_not_available postgres error code
+            ):
                 logger.trace(f"Lock exception: {e}")
                 return True
 
