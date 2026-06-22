@@ -196,11 +196,23 @@ class Ledger(
         logger.debug("Shutting down invoice listeners")
         for task in self.invoice_listener_tasks:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         for task in self.watchdog_tasks:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         logger.debug("Shutting down regular tasks")
         for task in self.regular_tasks:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
