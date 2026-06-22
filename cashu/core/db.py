@@ -137,8 +137,8 @@ class Database(Compat):
             kwargs["poolclass"] = NullPool
         elif self.type == POSTGRES:
             kwargs["poolclass"] = AsyncAdaptedQueuePool  # type: ignore[assignment]
-            kwargs["pool_size"] = 50  # type: ignore[assignment]
-            kwargs["max_overflow"] = 100  # type: ignore[assignment]
+            kwargs["pool_size"] = 5 if "test" in self.name else 50  # type: ignore[assignment]
+            kwargs["max_overflow"] = 10 if "test" in self.name else 100  # type: ignore[assignment]
             kwargs["connect_args"] = {  # type: ignore[assignment]
                 "server_settings": {
                     "lock_timeout": str(settings.mint_database_lock_timeout)
