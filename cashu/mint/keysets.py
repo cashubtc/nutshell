@@ -248,6 +248,10 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 await self.crud.update_keyset(keyset=keyset, db=self.db)
 
     def _parse_valid_from(self, keyset: MintKeyset) -> float:
+        # Handles multiple types for keyset.valid_from because database drivers return
+        # different types (PostgreSQL returns datetime.datetime, SQLite stores/returns
+        # stringified timestamp integers/floats), while test mocks or JSON payloads 
+        # may supply formatted datetime strings.
         if not keyset.valid_from:
             raise ValueError("keyset.valid_from is None")
         try:
