@@ -247,22 +247,27 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 self.keysets[keyset.id] = keyset
                 await self.crud.update_keyset(keyset=keyset, db=self.db)
 
+    def _parse_valid_from(self, keyset: MintKeyset) -> float:
+        if not keyset.valid_from:
+            raise ValueError("keyset.valid_from is None")
+        try:
+            if isinstance(keyset.valid_from, datetime.datetime):
+                return keyset.valid_from.timestamp()
+            else:
+                return float(keyset.valid_from)
+        except (ValueError, TypeError):
+            return datetime.datetime.strptime(
+                keyset.valid_from, "%Y-%m-%d %H:%M:%S"
+            ).timestamp()
+
     def should_rotate_keyset(self, keyset: MintKeyset) -> bool:
         if not keyset.active or not keyset.valid_from:
             return False
         try:
-            if isinstance(keyset.valid_from, datetime.datetime):
-                valid_from_ts = keyset.valid_from.timestamp()
-            else:
-                valid_from_ts = float(keyset.valid_from)
-        except (ValueError, TypeError):
-            try:
-                valid_from_ts = datetime.datetime.strptime(
-                    keyset.valid_from, "%Y-%m-%d %H:%M:%S"
-                ).timestamp()
-            except Exception:
-                logger.warning(f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation.")
-                return True
+            valid_from_ts = self._parse_valid_from(keyset)
+        except Exception:
+            logger.warning(f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation.")
+            return True
 
         return (time.time() - valid_from_ts) >= settings.mint_keyset_rotation_interval_seconds
 
@@ -279,11 +284,20 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                     f"Rotating now."
                 )
                 try:
+                    new_final_expiry = None
+                    if keyset.final_expiry is not None:
+                        try:
+                            valid_from_ts = self._parse_valid_from(keyset)
+                        except Exception:
+                            valid_from_ts = time.time()
+                        active_duration = int(time.time() - valid_from_ts)
+                        new_final_expiry = keyset.final_expiry + active_duration
+
                     new_keyset = await self.rotate_next_keyset(
                         unit=keyset.unit,
                         max_order=len(keyset.amounts),
                         input_fee_ppk=keyset.input_fee_ppk,
-                        final_expiry=keyset.final_expiry,
+                        final_expiry=new_final_expiry,
                     )
                     logger.info(f"Successfully rotated keyset {keyset.id} -> {new_keyset.id} for unit {keyset.unit.name}")
                 except Exception as e:
