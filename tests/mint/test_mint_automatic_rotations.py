@@ -1,10 +1,25 @@
 import asyncio
 import datetime
+import time
 
 import pytest
 
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
+
+
+@pytest.fixture(autouse=True)
+def disable_global_ledger_rotation():
+    from cashu.mint.startup import ledger as global_ledger
+
+    original_method = global_ledger.rotate_keysets_if_needed
+
+    async def noop_rotate(*args, **kwargs):
+        pass
+
+    global_ledger.rotate_keysets_if_needed = noop_rotate
+    yield
+    global_ledger.rotate_keysets_if_needed = original_method
 
 
 @pytest.mark.asyncio
@@ -22,9 +37,9 @@ async def test_should_rotate_keyset_behavior(ledger: Ledger):
 
     # If valid_from is mocked in the far past, it should rotate
     original_valid_from = keyset.valid_from
-    keyset.valid_from = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=31)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    keyset.valid_from = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=31)
+    ).strftime("%Y-%m-%d %H:%M:%S")
     assert ledger.should_rotate_keyset(keyset)
 
     # Restore
@@ -65,13 +80,17 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
 
             # Verify the old keyset is now inactive in memory and DB
             assert not old_keyset.active
-            db_old_keysets = await ledger.crud.get_keyset(db=ledger.db, id=old_keyset.id)
+            db_old_keysets = await ledger.crud.get_keyset(
+                db=ledger.db, id=old_keyset.id
+            )
             assert len(db_old_keysets) == 1
             assert not db_old_keysets[0].active
 
             # Verify new keyset is active in memory and DB
             assert new_keyset.active
-            db_new_keysets = await ledger.crud.get_keyset(db=ledger.db, id=new_keyset.id)
+            db_new_keysets = await ledger.crud.get_keyset(
+                db=ledger.db, id=new_keyset.id
+            )
             assert len(db_new_keysets) == 1
             assert db_new_keysets[0].active
 
@@ -83,7 +102,11 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
             old_path = old_keyset.derivation_path.split("/")
             new_path = new_keyset.derivation_path.split("/")
             assert old_path[:-1] == new_path[:-1]
-            assert int(new_path[-1].replace("'", "")) - int(old_path[-1].replace("'", "")) == 1
+            assert (
+                int(new_path[-1].replace("'", ""))
+                - int(old_path[-1].replace("'", ""))
+                == 1
+            )
 
     finally:
         # Restore settings
@@ -110,11 +133,57 @@ async def test_automatic_keyset_rotation_disabled(ledger: Ledger):
         await ledger.rotate_keysets_if_needed()
 
         # Get active keyset for the same unit
-        active_keysets = [k for k in ledger.keysets.values() if k.active and k.unit == keyset.unit]
+        active_keysets = [
+            k
+            for k in ledger.keysets.values()
+            if k.active and k.unit == keyset.unit
+        ]
         assert len(active_keysets) == 1
         assert active_keysets[0].id == keyset.id
         assert active_keysets[0].active
 
     finally:
+        settings.mint_keyset_rotation_interval_seconds = original_interval
+        settings.mint_keyset_rotation_enabled = original_enabled
+
+
+@pytest.mark.asyncio
+async def test_automatic_keyset_rotation_preserves_grace_period(ledger: Ledger):
+    # Get any active keyset
+    keyset = next(k for k in ledger.keysets.values() if k.active)
+
+    original_interval = settings.mint_keyset_rotation_interval_seconds
+    original_enabled = settings.mint_keyset_rotation_enabled
+
+    try:
+        settings.mint_keyset_rotation_enabled = True
+        settings.mint_keyset_rotation_interval_seconds = 1
+
+        # Set a mock final_expiry on the old keyset
+        keyset.final_expiry = 2000000000
+
+        # Generate the timestamp 5 seconds ago using the database's format to avoid timezone shifts
+        past_ts = int(time.time() - 5)
+        keyset.valid_from = ledger.db.timestamp_from_seconds(past_ts)
+
+        # Trigger automatic rotation check
+        await ledger.rotate_keysets_if_needed()
+
+        # Retrieve the new active keyset for this unit
+        new_keyset = next(
+            k
+            for k in ledger.keysets.values()
+            if k.active and k.unit == keyset.unit
+        )
+
+        # Verify a rotation occurred
+        assert keyset.id != new_keyset.id
+
+        # Expected new final_expiry should be original final_expiry (2000000000) + active_duration (approx 5)
+        assert new_keyset.final_expiry is not None
+        assert 2000000004 <= new_keyset.final_expiry <= 2000000008
+
+    finally:
+        # Restore settings
         settings.mint_keyset_rotation_interval_seconds = original_interval
         settings.mint_keyset_rotation_enabled = original_enabled
