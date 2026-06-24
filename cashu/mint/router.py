@@ -75,6 +75,7 @@ async def info() -> GetInfoResponse:
 async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     logger.trace("> GET /v1/keys")
+    await ledger.rotate_keysets_if_needed()
     keyset = ledger.keyset
     keyset_for_response = []
     for keyset in ledger.keysets.values():
@@ -140,6 +141,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     logger.trace("> GET /v1/keysets")
+    await ledger.rotate_keysets_if_needed()
     keysets = []
     for id, keyset in ledger.keysets.items():
         keysets.append(
