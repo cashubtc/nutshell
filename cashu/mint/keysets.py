@@ -13,6 +13,9 @@ from .protocols import SupportsBackends, SupportsDb, SupportsKeysets, SupportsSe
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends):
+    keyset: MintKeyset
+    derivation_path: str
+
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -121,7 +124,12 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
         await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
         self.keysets[selected_keyset.id] = selected_keyset
 
-        logger.debug(f"Keyset {keyset.id} was de-activated")
+        if self.keyset and self.keyset.id == selected_keyset.id:
+            self.keyset = new_keyset
+            self.derivation_path = new_keyset.derivation_path
+            logger.info(f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}")
+
+        logger.debug(f"Keyset {selected_keyset.id} was de-activated")
         return new_keyset
 
     async def activate_mnemonic_keyset(
