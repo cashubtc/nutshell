@@ -193,3 +193,64 @@ async def test_automatic_keyset_rotation_preserves_grace_period(ledger: Ledger):
         # Restore settings
         settings.mint_keyset_rotation_interval_seconds = original_interval
         settings.mint_keyset_rotation_enabled = original_enabled
+
+
+@pytest.mark.asyncio
+async def test_automatic_keyset_rotation_background(ledger: Ledger):
+    # Keep track of original settings
+    original_interval = settings.mint_keyset_rotation_interval_seconds
+    original_enabled = settings.mint_keyset_rotation_enabled
+    original_tasks_interval = settings.mint_regular_tasks_interval_seconds
+
+    try:
+        # Set configuration so that background tasks and keyset rotations run very frequently
+        settings.mint_keyset_rotation_enabled = True
+        settings.mint_keyset_rotation_interval_seconds = 1
+        settings.mint_regular_tasks_interval_seconds = 1  # Check every second
+
+        # Cancel existing regular tasks so we can restart with the new interval
+        for task in ledger.regular_tasks:
+            task.cancel()
+        ledger.regular_tasks = []
+
+        # Start a new regular tasks loop with the updated 1-second interval
+        ledger.regular_tasks.append(asyncio.create_task(ledger._run_regular_tasks()))
+
+        # Keep track of active keysets before background rotation
+        active_keysets_before = {
+            k.unit: k for k in ledger.keysets.values() if k.active
+        }
+        assert len(active_keysets_before) > 0
+
+        # Wait to exceed the rotation interval and allow the background task to run
+        # Keyset rotation interval is 1s, and task runs every 1s, so 2.5s is plenty of time
+        await asyncio.sleep(2.5)
+
+        # Get active keysets after background rotation
+        active_keysets_after = {
+            k.unit: k for k in ledger.keysets.values() if k.active
+        }
+
+        # Verify background rotation occurred successfully
+        for unit, old_keyset in active_keysets_before.items():
+            new_keyset = active_keysets_after[unit]
+            assert old_keyset.id != new_keyset.id
+            assert not old_keyset.active
+            assert new_keyset.active
+
+            # If the rotated unit matches the default keyset's unit, verify that
+            # the default keyset and derivation path are updated on the ledger
+            if unit == ledger.keyset.unit:
+                assert ledger.keyset.id == new_keyset.id
+                assert ledger.derivation_path == new_keyset.derivation_path
+
+    finally:
+        # Restore settings and restart original tasks loop
+        settings.mint_keyset_rotation_interval_seconds = original_interval
+        settings.mint_keyset_rotation_enabled = original_enabled
+        settings.mint_regular_tasks_interval_seconds = original_tasks_interval
+
+        for task in ledger.regular_tasks:
+            task.cancel()
+        ledger.regular_tasks = []
+        ledger.regular_tasks.append(asyncio.create_task(ledger._run_regular_tasks()))
