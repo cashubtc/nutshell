@@ -556,6 +556,7 @@ class Unit(Enum):
     usd = 2
     eur = 3
     btc = 4
+    thb = 5
     auth = 999
 
     def str(self, amount: int | float) -> str:
@@ -567,6 +568,8 @@ class Unit(Enum):
             return f"${amount/100:.2f} USD"
         elif self == Unit.eur:
             return f"{amount/100:.2f} EUR"
+        elif self == Unit.thb:
+            return f"{amount/100:.2f} THB"
         elif self == Unit.btc:
             return f"{amount/1e8:.8f} BTC"
         elif self == Unit.auth:
@@ -610,7 +613,7 @@ class Amount:
             return self
 
     def to_float_string(self) -> str:
-        if self.unit == Unit.usd or self.unit == Unit.eur:
+        if self.unit == Unit.usd or self.unit == Unit.eur or self.unit == Unit.thb:
             return self.cents_to_usd()
         elif self.unit == Unit.sat:
             return self.sat_to_btc()
@@ -621,7 +624,7 @@ class Amount:
 
     @classmethod
     def from_float(cls, amount: float, unit: Unit) -> "Amount":
-        if unit == Unit.usd or unit == Unit.eur:
+        if unit == Unit.usd or unit == Unit.eur or Unit.thb:
             return cls(unit, int(round(amount * 100)))
         elif unit == Unit.sat:
             return cls(unit, int(round(amount * 1e8)))
@@ -642,7 +645,7 @@ class Amount:
         return f"{sat_amount.amount/1e8:.8f}"
 
     def cents_to_usd(self) -> str:
-        if self.unit != Unit.usd and self.unit != Unit.eur:
+        if self.unit != Unit.usd and self.unit != Unit.eur and self.unit != Unit.thb:
             raise Exception("Amount must be in cents")
         return f"{self.amount/100:.2f}"
 
