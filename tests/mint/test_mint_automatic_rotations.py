@@ -108,6 +108,12 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
                 == 1
             )
 
+            # If the rotated unit matches the default keyset's unit, verify that
+            # the default keyset and derivation path are updated on the ledger
+            if unit == ledger.keyset.unit:
+                assert ledger.keyset.id == new_keyset.id
+                assert ledger.derivation_path == new_keyset.derivation_path
+
     finally:
         # Restore settings
         settings.mint_keyset_rotation_interval_seconds = original_interval
