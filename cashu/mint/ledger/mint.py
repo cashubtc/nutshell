@@ -12,7 +12,7 @@ from ...core.base import (
     MintQuote,
     MintQuoteState,
 )
-from ...core.crypto.keys import random_hash
+from ...core.crypto.keys import generate_uuid_v7
 from ...core.errors import (
     BatchDuplicateQuotesError,
     CashuError,
@@ -108,7 +108,7 @@ class LedgerMint(LedgerBlindSignatures, SupportsWatchdog, SupportsEvents):
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MintQuote(
-            quote=random_hash(),
+            quote=generate_uuid_v7(),
             method=method.name,
             request=request,
             checking_id=invoice_response.checking_id,
@@ -381,16 +381,16 @@ class LedgerMint(LedgerBlindSignatures, SupportsWatchdog, SupportsEvents):
             )
             promises = await self._sign_blinded_messages(payload.outputs)
 
-            # Set all quotes to issued
-            await self.db_write._unset_mint_quotes_pending(
-                quote_ids=payload.quotes, state=MintQuoteState.issued
-            )
-
         except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
                 quote_ids=payload.quotes, state=MintQuoteState.paid
             )
             raise e
+
+        # Set all quotes to issued
+        await self.db_write._unset_mint_quotes_pending(
+            quote_ids=payload.quotes, state=MintQuoteState.issued
+        )
 
         return promises
