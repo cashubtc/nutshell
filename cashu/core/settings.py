@@ -89,7 +89,7 @@ class MintSettings(CashuSettings):
         description="Whether to automatically rotate keysets when they exceed the interval.",
     )
     mint_keyset_rotation_interval_seconds: int = Field(
-        default=2592000,
+        default=7776000,
         gt=0,
         title="Keyset rotation interval",
         description="The interval in seconds after which active keysets are automatically rotated.",
