@@ -298,9 +298,11 @@ def test_verify_decode_jwt_success(monkeypatch):
     assert decoded_no_azp["sub"] == "bob"
 
 
-def test_verify_decode_jwt_rejects_mismatched_audience(monkeypatch):
+def test_verify_decode_jwt_accepts_non_client_audience(monkeypatch):
     import jwt
     from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from cashu.core.settings import settings
 
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public_key = private_key.public_key()
@@ -318,19 +320,20 @@ def test_verify_decode_jwt_rejects_mismatched_audience(monkeypatch):
 
     ledger.jwks_client = cast(Any, MockJWKSClient())
 
-    # Token with mismatched audience
+    # NUT-21 does not require access token audience to match the OIDC client id.
     token = jwt.encode(
         {
             "iss": "https://issuer.test",
-            "aud": "wrong-client",
+            "aud": "account",
+            "azp": settings.mint_auth_oicd_client_id,
             "sub": "alice",
         },
         private_key,
         algorithm="RS256",
     )
 
-    with pytest.raises(jwt.InvalidTokenError):
-        ledger._verify_decode_jwt(token)
+    decoded = ledger._verify_decode_jwt(token)
+    assert decoded["sub"] == "alice"
 
 
 def test_verify_decode_jwt_rejects_mismatched_azp(monkeypatch):

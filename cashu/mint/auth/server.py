@@ -109,8 +109,8 @@ class AuthLedger(Ledger):
                 clear_auth_token,
                 signing_key.key,
                 algorithms=["RS256", "ES256"],
-                audience=settings.mint_auth_oicd_client_id,
                 issuer=self.issuer,
+                options={"verify_aud": False},
             )
             logger.trace(f"Decoded JWT: {decoded}")
             # Bind the token to this mint's OIDC client. Keycloak puts the client
