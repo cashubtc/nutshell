@@ -17,7 +17,7 @@ from ...core.base import (
     Proof,
     Unit,
 )
-from ...core.crypto.keys import random_hash
+from ...core.crypto.keys import generate_uuid_v7
 from ...core.errors import (
     LightningPaymentFailedError,
     NotAllowedError,
@@ -182,7 +182,7 @@ class LedgerMelt(LedgerBlindSignatures, SupportsEvents):
             expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(
-            quote=random_hash(),
+            quote=generate_uuid_v7(),
             method=method.name,
             request=request,
             checking_id=payment_quote.checking_id,
@@ -235,9 +235,11 @@ class LedgerMelt(LedgerBlindSignatures, SupportsEvents):
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
-        is_internal = await self.crud.get_mint_quote(
+        mint_quote = await self.crud.get_mint_quote(
             request=melt_quote.request, db=self.db
         )
+
+        is_internal = mint_quote is not None and mint_quote.unit == melt_quote.unit
 
         if melt_quote.pending and not is_internal:
             logger.debug(
@@ -252,7 +254,7 @@ class LedgerMelt(LedgerBlindSignatures, SupportsEvents):
                 logger.debug(f"Setting quote {quote_id} as paid")
                 melt_quote.state = MeltQuoteState.paid
                 if status.fee:
-                    melt_quote.fee_paid = status.fee.to(unit).amount
+                    melt_quote.fee_paid = status.fee.to(unit, round="up").amount
                 if status.preimage:
                     melt_quote.payment_preimage = status.preimage
                 melt_quote.paid_time = int(time.time())
@@ -497,18 +499,34 @@ class LedgerMelt(LedgerBlindSignatures, SupportsEvents):
             quote=melt_quote, proofs=proofs, keysets=self.keysets
         )
 
-        # store the change outputs
-        if outputs:
-            await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
+        try:
+            # store the change outputs
+            if outputs:
+                await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
 
-        # if the melt corresponds to an internal mint, mark both as paid
-        melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
+            # if the melt corresponds to an internal mint, mark both as paid
+            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
+        except Exception as e:
+            logger.debug(f"Melt failed before backend payment: {e}")
+            await self.db_write.unset_melt_quote_pending_and_proofs(
+                quote=melt_quote,
+                proofs=proofs,
+                keysets=self.keysets,
+                state=MeltQuoteState.unpaid,
+            )
+            raise e
+
         # quote not paid yet (not internal), pay it with the backend
         if not melt_quote.paid:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
             try:
+                fee_limit_msat = (
+                    Amount(Unit[melt_quote.unit], melt_quote.fee_reserve)
+                    .to(Unit.msat)
+                    .amount
+                )
                 payment = await self.backends[method][unit].pay_invoice(
-                    melt_quote, melt_quote.fee_reserve * 1000
+                    melt_quote, fee_limit_msat
                 )
                 logger.debug(
                     f"Melt – Result: {payment.result.name}: preimage: {payment.preimage},"
