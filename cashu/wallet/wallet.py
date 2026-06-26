@@ -282,7 +282,9 @@ class Wallet(
             logger.debug("Updating mint info in db.")
             await update_mint(
                 db=self.db,
-                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.model_dump())),
+                mint=WalletMint(
+                    url=self.url, info=json.dumps(self.mint_info.model_dump())
+                ),
             )
             return self.mint_info
         else:
@@ -583,13 +585,18 @@ class Wallet(
 
         if not mint_quote_local:
             await store_bolt11_mint_quote(db=self.db, quote=mint_quote)
-        elif mint_quote_local.state != mint_quote.state:
-            await update_bolt11_mint_quote(
-                db=self.db,
-                quote=mint_quote.quote,
-                state=mint_quote.state,
-                paid_time=mint_quote.paid_time or int(time.time()),
-            )
+        elif (
+            mint_quote_local.state != mint_quote.state
+            or mint_quote_local.amount_paid != mint_quote.amount_paid
+            or mint_quote_local.amount_issued != mint_quote.amount_issued
+            or mint_quote_local.updated_at != mint_quote.updated_at
+        ):
+            if mint_quote.paid_time is None and mint_quote.state in [
+                MintQuoteState.paid,
+                MintQuoteState.issued,
+            ]:
+                mint_quote.paid_time = int(time.time())
+            await update_bolt11_mint_quote(db=self.db, quote=mint_quote)
 
         return mint_quote
 
@@ -654,12 +661,9 @@ class Wallet(
         )
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
-        await update_bolt11_mint_quote(
-            db=self.db,
-            quote=quote_id,
-            state=MintQuoteState.issued,
-            paid_time=int(time.time()),
-        )
+        quote.state = MintQuoteState.issued
+        quote.paid_time = int(time.time())
+        await update_bolt11_mint_quote(db=self.db, quote=quote)
         # store the mint_id in proofs
         async with self.db.connect() as conn:
             for p in proofs:
@@ -733,9 +737,9 @@ class Wallet(
                 send_outputs, keep_outputs, secret_lock
             )
 
-        assert len(secrets) == len(
-            amounts
-        ), "number of secrets does not match number of outputs"
+        assert len(secrets) == len(amounts), (
+            "number of secrets does not match number of outputs"
+        )
         # verify that we didn't accidentally reuse a secret
         await self._check_used_secrets(secrets)
 
@@ -980,9 +984,9 @@ class Wallet(
                 return
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
-            assert (
-                proof.id in self.keysets
-            ), f"Keyset {proof.id} not known, can not verify DLEQ."
+            assert proof.id in self.keysets, (
+                f"Keyset {proof.id} not known, can not verify DLEQ."
+            )
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C)),
@@ -1093,9 +1097,9 @@ class Wallet(
         Raises:
             AssertionError: if len(amounts) != len(secrets)
         """
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        assert len(amounts) == len(secrets), (
+            f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        )
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
@@ -1110,9 +1114,7 @@ class Wallet(
 
             assert r
             rs_return.append(r)
-            output = BlindedMessage(
-                amount=amount, B_=B_.format().hex(), id=keyset_id
-            )
+            output = BlindedMessage(amount=amount, B_=B_.format().hex(), id=keyset_id)
             outputs.append(output)
             logger.trace(f"Constructing output: {output}, r: {r.to_hex()}")
 

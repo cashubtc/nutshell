@@ -334,3 +334,53 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
+
+
+async def m017_add_mint_quote_accounting(db: Database):
+    """
+    Store canonical NUT-04 quote accounting fields in wallet mint quotes.
+    """
+    async with db.connect() as conn:
+        columns = await conn.fetchall(
+            """
+                SELECT name FROM pragma_table_info('bolt11_mint_quotes');
+            """
+        )
+        column_names = {col["name"] for col in columns}
+        if "amount_paid" not in column_names:
+            await conn.execute(
+                """
+                    ALTER TABLE bolt11_mint_quotes
+                    ADD COLUMN amount_paid INTEGER NOT NULL DEFAULT 0;
+                """
+            )
+        if "amount_issued" not in column_names:
+            await conn.execute(
+                """
+                    ALTER TABLE bolt11_mint_quotes
+                    ADD COLUMN amount_issued INTEGER NOT NULL DEFAULT 0;
+                """
+            )
+        if "updated_at" not in column_names:
+            await conn.execute(
+                """
+                    ALTER TABLE bolt11_mint_quotes
+                    ADD COLUMN updated_at INTEGER DEFAULT NULL;
+                """
+            )
+
+        await conn.execute(
+            """
+                UPDATE bolt11_mint_quotes
+                SET
+                    amount_paid = CASE
+                        WHEN state IN ('PAID', 'ISSUED') THEN amount
+                        ELSE 0
+                    END,
+                    amount_issued = CASE
+                        WHEN state = 'ISSUED' THEN amount
+                        ELSE 0
+                    END
+                WHERE amount_paid = 0 AND amount_issued = 0;
+            """
+        )

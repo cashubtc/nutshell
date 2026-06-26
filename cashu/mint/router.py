@@ -183,7 +183,8 @@ async def mint_quote(
         pubkey=quote.pubkey,
         amount_paid=quote.amount_paid,
         amount_issued=quote.amount_issued,
-        updated_at=quote.updated_at,
+        updated_at=getattr(quote, "accounting_updated_at", None)
+        or getattr(quote, "updated_at", None),
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -212,7 +213,8 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         pubkey=mint_quote.pubkey,
         amount_paid=mint_quote.amount_paid,
         amount_issued=mint_quote.amount_issued,
-        updated_at=mint_quote.updated_at,
+        updated_at=getattr(mint_quote, "accounting_updated_at", None)
+        or getattr(mint_quote, "updated_at", None),
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
@@ -242,7 +244,8 @@ async def mint_quote_check(
             pubkey=quote.pubkey,
             amount_paid=quote.amount_paid,
             amount_issued=quote.amount_issued,
-            updated_at=quote.updated_at,
+            updated_at=getattr(quote, "accounting_updated_at", None)
+            or getattr(quote, "updated_at", None),
         )
         for quote in quotes
     ]

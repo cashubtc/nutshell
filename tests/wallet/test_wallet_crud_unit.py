@@ -1,4 +1,5 @@
 import time
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -218,19 +219,67 @@ async def test_mint_quote_crud_lifecycle(wallet_db: Database):
     assert len(pending) == 1
     assert pending[0].quote == "quote-2"
 
-    await update_bolt11_mint_quote(
-        db=wallet_db,
-        quote="quote-1",
-        state=MintQuoteState.paid,
-        paid_time=123,
-    )
+    assert by_quote is not None
+    by_quote.state = MintQuoteState.paid
+    by_quote.paid_time = 123
+    await update_bolt11_mint_quote(db=wallet_db, quote=by_quote)
     updated = await get_bolt11_mint_quote(db=wallet_db, quote="quote-1")
     assert updated is not None
     assert updated.state == MintQuoteState.paid
     assert updated.paid_time == 123
+    assert updated.amount_paid == 21
+    assert updated.amount_issued == 0
+    assert updated.updated_at is None
 
     with pytest.raises(ValueError, match="quote or request must be provided"):
         await get_bolt11_mint_quote(db=wallet_db)
+
+
+def test_mint_quote_stale_check_ignores_local_paid_time():
+    local = _mint_quote("quote-local", MintQuoteState.unpaid)
+    local.state = MintQuoteState.paid
+    local.paid_time = 5000
+
+    resp = SimpleNamespace(
+        quote="quote-local",
+        request=local.request,
+        amount=21,
+        unit="sat",
+        amount_paid=21,
+        amount_issued=21,
+        updated_at=10,
+        state="PAID",
+        expiry=local.expiry,
+        pubkey=None,
+    )
+
+    quote = MintQuote.check_stale_and_from_resp_wallet(
+        resp, mint="https://mint.test", mint_quote_local=local
+    )
+
+    assert quote.state == MintQuoteState.issued
+    assert quote.updated_at == 10
+
+
+def test_mint_quote_state_is_derived_from_accounting_when_present():
+    resp = SimpleNamespace(
+        quote="quote-accounting",
+        request="req-quote-accounting",
+        amount=21,
+        unit="sat",
+        amount_paid=0,
+        amount_issued=0,
+        updated_at=10,
+        state="PENDING",
+        expiry=None,
+        pubkey=None,
+    )
+
+    quote = MintQuote.from_resp_wallet(
+        resp, mint="https://mint.test", amount=21, unit="sat"
+    )
+
+    assert quote.state == MintQuoteState.unpaid
 
 
 @pytest.mark.asyncio

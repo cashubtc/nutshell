@@ -52,5 +52,5 @@ class PostMintQuoteResponse(BaseModel):
         to_dict["state"] = mint_quote.state.value
         to_dict["amount_paid"] = mint_quote.amount_paid
         to_dict["amount_issued"] = mint_quote.amount_issued
-        to_dict["updated_at"] = mint_quote.updated_at
+        to_dict["updated_at"] = mint_quote.accounting_updated_at
         return cls.model_validate(to_dict)

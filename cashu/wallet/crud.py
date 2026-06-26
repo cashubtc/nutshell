@@ -262,8 +262,8 @@ async def store_bolt11_mint_quote(
     await (conn or db).execute(
         """
         INSERT INTO bolt11_mint_quotes
-            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey)
-        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey)
+            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey, amount_paid, amount_issued, updated_at)
+        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey, :amount_paid, :amount_issued, :updated_at)
         """,
         {
             "quote": quote.quote,
@@ -278,6 +278,9 @@ async def store_bolt11_mint_quote(
             "paid_time": quote.paid_time,
             "expiry": quote.expiry,
             "privkey": quote.privkey or "",
+            "amount_paid": quote.amount_paid,
+            "amount_issued": quote.amount_issued,
+            "updated_at": quote.updated_at,
         },
     )
 
@@ -344,21 +347,27 @@ async def get_bolt11_mint_quotes(
 
 async def update_bolt11_mint_quote(
     db: Database,
-    quote: str,
-    state: MintQuoteState,
-    paid_time: int,
+    quote: MintQuote,
     conn: Optional[Connection] = None,
 ) -> None:
     await (conn or db).execute(
         """
         UPDATE bolt11_mint_quotes
-        SET state = :state, paid_time = :paid_time
+        SET
+            state = :state,
+            paid_time = :paid_time,
+            amount_paid = :amount_paid,
+            amount_issued = :amount_issued,
+            updated_at = :updated_at
         WHERE quote = :quote
         """,
         {
-            "state": state.value,
-            "paid_time": paid_time,
-            "quote": quote,
+            "state": quote.state.value,
+            "paid_time": quote.paid_time,
+            "amount_paid": quote.amount_paid,
+            "amount_issued": quote.amount_issued,
+            "updated_at": quote.updated_at,
+            "quote": quote.quote,
         },
     )
 
@@ -390,7 +399,9 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
+                json.dumps([c.model_dump() for c in quote.change])
+                if quote.change
+                else ""
             ),
         },
     )
