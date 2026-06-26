@@ -469,7 +469,15 @@ class MintQuote(LedgerEvent):
         )
 
     @classmethod
-    def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
+    def from_resp_wallet(
+        cls,
+        mint_quote_resp,
+        mint: str,
+        amount: int,
+        unit: str,
+        paid_time: Optional[int] = None,
+        issued_time: Optional[int] = None,
+    ):
         # Prefer amount_paid/amount_issued if present
         amount_paid = mint_quote_resp.amount_paid
         amount_issued = mint_quote_resp.amount_issued
@@ -491,6 +499,14 @@ class MintQuote(LedgerEvent):
         else:
             state = MintQuoteState.unpaid
 
+        if paid_time is None and mint_quote_resp.updated_at is not None:
+            if state in [MintQuoteState.paid, MintQuoteState.issued]:
+                paid_time = mint_quote_resp.updated_at
+
+        if issued_time is None and mint_quote_resp.updated_at is not None:
+            if state == MintQuoteState.issued:
+                issued_time = mint_quote_resp.updated_at
+
         return cls(
             quote=mint_quote_resp.quote,
             method="bolt11",
@@ -502,6 +518,8 @@ class MintQuote(LedgerEvent):
             mint=mint,
             expiry=mint_quote_resp.expiry,
             created_time=int(time.time()),
+            paid_time=paid_time,
+            issued_time=issued_time,
             pubkey=mint_quote_resp.pubkey,
         )
 
@@ -532,21 +550,26 @@ class MintQuote(LedgerEvent):
             return mint_quote_local
 
         amount = (
-            mint_quote_resp.amount or mint_quote_local.amount
+            (mint_quote_resp.amount or mint_quote_local.amount)
             if mint_quote_local
             else default_amount
         )
         unit = (
-            mint_quote_resp.unit or mint_quote_local.unit
+            (mint_quote_resp.unit or mint_quote_local.unit)
             if mint_quote_local
             else default_unit
         )
+
+        paid_time = mint_quote_local.paid_time if mint_quote_local else None
+        issued_time = mint_quote_local.issued_time if mint_quote_local else None
 
         return cls.from_resp_wallet(
             mint_quote_resp,
             mint=mint,
             amount=amount,
             unit=unit,
+            paid_time=paid_time,
+            issued_time=issued_time,
         )
 
     @property
