@@ -576,6 +576,8 @@ class Ledger(
         methods = set([q.method for q in quotes])
         if len(methods) > 1:
             raise TransactionError("all quotes must have the same method")
+        if "bolt11" not in methods:
+            raise TransactionError("all quotes must be of bolt11 method")
 
         # Check currency unit consistency
         units = set([q.unit for q in quotes])

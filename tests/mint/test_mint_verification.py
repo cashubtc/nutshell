@@ -379,6 +379,20 @@ def test_verify_mint_quote_witness_rejects_bad_signature(ledger: Ledger):
     assert ledger._verify_mint_quote_witness(quote, outs, signature=wrong_sig) is False
 
 
+def test_verify_mint_quote_witness_legacy_fallback(ledger: Ledger):
+    priv, pub = nut20.generate_keypair()
+    quote = _mint_quote_with_pubkey(pub)
+    outs = [_blinded_output(ledger, label="nut20_legacy")]
+
+    from cashu.core.crypto.secp import PrivateKey
+
+    privkey = PrivateKey(bytes.fromhex(priv))
+    msgbytes_legacy = nut20.construct_message_legacy(quote.quote, outs)
+    sig_legacy = privkey.sign_schnorr(msgbytes_legacy).hex()
+
+    assert ledger._verify_mint_quote_witness(quote, outs, signature=sig_legacy) is True
+
+
 # ---------------------------------------------------------------------------
 # _verify_proof_bdhke
 # ---------------------------------------------------------------------------
