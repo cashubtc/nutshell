@@ -975,7 +975,7 @@ class Wallet(
         for proof in proofs:
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
-                return
+                continue
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
             assert (
