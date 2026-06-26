@@ -119,6 +119,10 @@ class MintBackends(MintSettings):
     mint_strike_key: Optional[str] = Field(default=None)
     mint_blink_key: Optional[str] = Field(default=None)
 
+    mint_spark_network: str = Field(default="TESTNET")
+    mint_spark_api_key: Optional[str] = Field(default=None)
+    mint_spark_mnemonic: Optional[str] = Field(default=None)
+
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(

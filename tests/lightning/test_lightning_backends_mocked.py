@@ -657,3 +657,59 @@ async def test_blink_get_sats_per_usd_raises_on_missing_conversion():
     cast(Any, wallet).client = Client()
     with pytest.raises(Exception, match="Currency conversion service unavailable"):
         await wallet._get_sats_per_usd()
+
+
+@pytest.mark.asyncio
+async def test_spark_pay_invoice_rejects_non_bolt11():
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+    wallet = object.__new__(SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+    wallet._ensure_sdk = mock_ensure_sdk
+
+    class MockMethod:
+        def is_bolt11_invoice(self):
+            return False
+
+    class MockPrepareResponse:
+        payment_method = MockMethod()
+
+    class MockSDK:
+        async def prepare_send_payment(self, req):
+            return MockPrepareResponse()
+
+    wallet.sdk = MockSDK()
+
+    res = await wallet.pay_invoice(_quote("non-bolt11"), 1000)
+    assert res.result == PaymentResult.FAILED
+    assert "Only BOLT11 payments are supported" in res.error_message
+
+
+@pytest.mark.asyncio
+async def test_spark_get_payment_quote_rejects_non_bolt11():
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+    wallet = object.__new__(SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+    wallet._ensure_sdk = mock_ensure_sdk
+
+    class MockMethod:
+        def is_bolt11_invoice(self):
+            return False
+
+    class MockPrepareResponse:
+        payment_method = MockMethod()
+
+    class MockSDK:
+        async def prepare_send_payment(self, req):
+            return MockPrepareResponse()
+
+    wallet.sdk = MockSDK()
+
+    melt_quote = PostMeltQuoteRequest(unit="sat", request="non-bolt11")
+    with pytest.raises(Exception, match="Only BOLT11 payments are supported"):
+        await wallet.get_payment_quote(melt_quote)
