@@ -549,6 +549,7 @@ class LedgerAPI(SupportsAuth):
                 quote=quote,
                 amount=0,
                 unit="sat",
+                method="bolt11",
                 request="lnbc0",
                 fee_reserve=0,
                 paid=ret.paid or False,

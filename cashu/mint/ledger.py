@@ -817,6 +817,7 @@ class Ledger(
             quote=quote.quote,
             amount=quote.amount,
             unit=quote.unit,
+            method=quote.method,
             request=quote.request,
             fee_reserve=quote.fee_reserve,
             paid=quote.paid,  # deprecated
