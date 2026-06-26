@@ -610,8 +610,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("mint_quotes")}
-            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, last_checked, pubkey)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :last_checked, :pubkey)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, last_checked, pubkey, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :last_checked, :pubkey, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -640,6 +640,11 @@ class LedgerCrudSqlite(LedgerCrud):
                 if quote.last_checked
                 else None,
                 "pubkey": quote.pubkey or "",
+                "expiry": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.expiry) or ""
+                )
+                if quote.expiry
+                else None,
             },
         )
 

@@ -440,6 +440,7 @@ class MintQuote(LedgerEvent):
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
             issued_time = int(row["issued_time"]) if "issued_time" in row.keys() and row["issued_time"] else None
             last_checked = int(row["last_checked"]) if "last_checked" in row.keys() and row["last_checked"] else None
+            expiry = int(row["expiry"]) if "expiry" in row.keys() and row["expiry"] else None
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -451,6 +452,9 @@ class MintQuote(LedgerEvent):
             )
             last_checked = (
                 int(row["last_checked"].timestamp()) if "last_checked" in row.keys() and row["last_checked"] else None
+            )
+            expiry = (
+                int(row["expiry"].timestamp()) if "expiry" in row.keys() and row["expiry"] else None
             )
         return cls(
             quote=row["quote"],
@@ -464,6 +468,7 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
             last_checked=last_checked,
+            expiry=expiry,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
         )

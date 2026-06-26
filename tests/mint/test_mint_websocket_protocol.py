@@ -1,4 +1,6 @@
 import json
+import time
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -28,6 +30,9 @@ class FakeWebSocket:
         self.messages = messages or []
         self.sent: list[str] = []
         self.accepted = False
+        self.closed = False
+        self.close_code: int | None = None
+        self.close_reason: str | None = None
 
     async def accept(self):
         self.accepted = True
@@ -39,6 +44,11 @@ class FakeWebSocket:
 
     async def send_text(self, data: str):
         self.sent.append(data)
+
+    async def close(self, code: int = 1000, reason: str | None = None):
+        self.closed = True
+        self.close_code = code
+        self.close_reason = reason
 
 
 def _client_manager(websocket: FakeWebSocket) -> LedgerEventClientManager:
@@ -172,8 +182,6 @@ async def test_init_subscription_sends_initial_snapshots():
     )
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
 
-    from contextlib import asynccontextmanager
-    
     @asynccontextmanager
     async def mock_connect():
         yield object()
@@ -312,3 +320,112 @@ def test_remove_subscription_removes_all_filter_entries_for_subid(monkeypatch):
     assert kind_map["quote-1"] == []
     assert kind_map["quote-2"] == []
     assert kind_map["quote-3"] == []
+
+
+class _StopMonitor(Exception):
+    """Sentinel used to break out of the monitor's infinite loop in tests."""
+
+
+def _manager_with_mint_quote(
+    websocket: FakeWebSocket, mint_quote: MintQuote | None
+) -> LedgerEventClientManager:
+    manager = _client_manager(websocket)
+    manager.subscriptions = {
+        JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE: {"quote-1": ["sub-1"]}
+    }
+
+    @asynccontextmanager
+    async def mock_connect():
+        yield object()
+
+    async def get_mint_quote(quote_id, db, conn=None):
+        return mint_quote if quote_id == "quote-1" else None
+
+    manager.db_read = cast(
+        Any,
+        SimpleNamespace(
+            db=SimpleNamespace(connect=mock_connect),
+            crud=SimpleNamespace(get_mint_quote=get_mint_quote, get_melt_quote=None),
+            get_proofs_states=None,
+        ),
+    )
+    return manager
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state, expiry",
+    [
+        (MintQuoteState.unpaid, lambda: int(time.time()) - 10),
+        (MintQuoteState.paid, lambda: int(time.time()) - 10),
+    ],
+)
+async def test_monitor_closes_websocket_when_mint_quote_terminal(
+    monkeypatch, state, expiry
+):
+    websocket = FakeWebSocket()
+    terminal_quote = MintQuote(
+        quote="quote-1",
+        method="bolt11",
+        request="lnbc1",
+        checking_id="check",
+        unit="sat",
+        amount=1,
+        state=state,
+        expiry=expiry(),
+    )
+    manager = _manager_with_mint_quote(websocket, terminal_quote)
+
+    async def no_sleep(_):
+        return None
+
+    monkeypatch.setattr("cashu.mint.events.client.asyncio.sleep", no_sleep)
+
+    await manager._monitor_expired_mint_quote_subscriptions()
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1000
+    assert websocket.close_reason == "mint quote subscription terminal"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state, expiry",
+    [
+        # unpaid but not yet expired -> keep open
+        (MintQuoteState.unpaid, lambda: int(time.time()) + 3600),
+        # unpaid with no expiry data -> keep open
+        (MintQuoteState.unpaid, lambda: None),
+    ],
+)
+async def test_monitor_keeps_websocket_open_when_not_expired_unpaid(
+    monkeypatch, state, expiry
+):
+    websocket = FakeWebSocket()
+    mint_quote = MintQuote(
+        quote="quote-1",
+        method="bolt11",
+        request="lnbc1",
+        checking_id="check",
+        unit="sat",
+        amount=1,
+        state=state,
+        expiry=expiry(),
+    )
+    manager = _manager_with_mint_quote(websocket, mint_quote)
+
+    calls = {"n": 0}
+
+    async def sleep_stub(_):
+        calls["n"] += 1
+        # allow exactly one full check iteration, then break the loop
+        if calls["n"] >= 2:
+            raise _StopMonitor()
+        return None
+
+    monkeypatch.setattr("cashu.mint.events.client.asyncio.sleep", sleep_stub)
+
+    with pytest.raises(_StopMonitor):
+        await manager._monitor_expired_mint_quote_subscriptions()
+
+    assert websocket.closed is False
