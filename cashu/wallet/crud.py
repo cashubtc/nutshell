@@ -242,17 +242,21 @@ async def get_keysets(
 async def delete_keyset(
     keyset_id: str,
     db: Database,
+    mint_url: Optional[str] = None,
     conn: Optional[Connection] = None,
 ) -> None:
     await (conn or db).execute(
         """
         UPDATE keysets
         SET deleted_at = :deleted_at
-        WHERE id = :id AND deleted_at IS NULL
+        WHERE id = :id
+        AND (:mint_url IS NULL OR mint_url = :mint_url)
+        AND deleted_at IS NULL
         """,
         {
             "deleted_at": int(time.time()),
             "id": keyset_id,
+            "mint_url": mint_url,
         },
     )
 
@@ -267,11 +271,13 @@ async def update_keyset(
         UPDATE keysets
         SET active = :active, deleted_at = :deleted_at, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
+        AND (:mint_url IS NULL OR mint_url = :mint_url)
         """,
         {
             "active": keyset.active,
             "deleted_at": keyset.deleted_at,
             "id": keyset.id,
+            "mint_url": keyset.mint_url,
             "input_fee_ppk": keyset.input_fee_ppk,
         },
     )

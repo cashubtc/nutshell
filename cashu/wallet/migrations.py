@@ -335,6 +335,7 @@ async def m016_remove_nostr_table(db: Database):
             """
         )
 
+
 async def m017_add_deleted_at_column_to_keysets(db: Database):
     """
     Add a deleted_at column to keysets. A deleted keyset is one that disappeared

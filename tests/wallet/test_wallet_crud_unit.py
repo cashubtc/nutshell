@@ -71,12 +71,12 @@ def _proof(
     )
 
 
-def _keyset(keyset_id: str = "keyset-1"):
+def _keyset(keyset_id: str = "keyset-1", mint_url: str = "https://mint.test"):
     return WalletKeyset(
         id=keyset_id,
         unit="sat",
         public_keys={1: PrivateKey().public_key},
-        mint_url="https://mint.test",
+        mint_url=mint_url,
         active=True,
         input_fee_ppk=1,
     )
@@ -224,6 +224,42 @@ async def test_delete_keyset_excludes_keyset(wallet_db: Database):
     await update_keyset(deleted_keysets[0], db=wallet_db)
     restored_keysets = await get_keysets(id="keyset-delete", db=wallet_db)
     assert len(restored_keysets) == 1
+
+
+@pytest.mark.asyncio
+async def test_keyset_updates_are_scoped_by_mint_url(wallet_db: Database):
+    keyset_a = _keyset("shared-keyset", mint_url="https://mint-a.test")
+    keyset_b = _keyset("shared-keyset", mint_url="https://mint-b.test")
+    await store_keyset(keyset_a, db=wallet_db)
+    await store_keyset(keyset_b, db=wallet_db)
+
+    await delete_keyset(
+        keyset_id="shared-keyset", mint_url="https://mint-a.test", db=wallet_db
+    )
+
+    visible_keysets = await get_keysets(id="shared-keyset", db=wallet_db)
+    assert len(visible_keysets) == 1
+    assert visible_keysets[0].mint_url == "https://mint-b.test"
+
+    all_keysets = await get_keysets(
+        id="shared-keyset", db=wallet_db, exclude_deleted=False
+    )
+    keysets_by_mint = {keyset.mint_url: keyset for keyset in all_keysets}
+    assert keysets_by_mint["https://mint-a.test"].deleted_at is not None
+    assert keysets_by_mint["https://mint-b.test"].deleted_at is None
+
+    keyset_b.active = False
+    keyset_b.input_fee_ppk = 9
+    await update_keyset(keyset_b, db=wallet_db)
+
+    all_keysets = await get_keysets(
+        id="shared-keyset", db=wallet_db, exclude_deleted=False
+    )
+    keysets_by_mint = {keyset.mint_url: keyset for keyset in all_keysets}
+    assert keysets_by_mint["https://mint-a.test"].active is True
+    assert keysets_by_mint["https://mint-a.test"].input_fee_ppk == 1
+    assert keysets_by_mint["https://mint-b.test"].active is False
+    assert keysets_by_mint["https://mint-b.test"].input_fee_ppk == 9
 
 
 @pytest.mark.asyncio

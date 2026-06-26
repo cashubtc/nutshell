@@ -321,7 +321,7 @@ class Wallet(
             logger.debug(
                 f"Keyset {key_id} no longer reported by mint, marking as deleted"
             )
-            await delete_keyset(keyset_id=key_id, db=self.db)
+            await delete_keyset(keyset_id=key_id, mint_url=self.url, db=self.db)
 
         # db is empty, get all keys from the mint and store them
         if not keysets_in_db:
