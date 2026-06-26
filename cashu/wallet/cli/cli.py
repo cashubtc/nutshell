@@ -25,6 +25,7 @@ from ...core.base import (
     Method,
     MintQuote,
     MintQuoteState,
+    PaymentRequest,
     TokenV4,
     Unit,
 )
@@ -33,6 +34,8 @@ from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
 from ...core.nuts.nut18 import deserialize as deserialize_payment_request
+from ...core.nuts.nut18 import serialize as serialize_payment_request
+from ...core.nuts.nut26 import serialize as serialize_payment_request_bech32
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -296,10 +299,18 @@ async def pay(
         if pr.a:
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
-        if pr.m and wallet.url not in pr.m:
+        # The mint list is strict unless `ms` is explicitly false
+        mint_outside_list = pr.m is not None and wallet.url not in pr.m
+        mint_list_strict = pr.ms is None or pr.ms
+        if mint_outside_list and mint_list_strict:
             print(
                 f"Error: Current mint {wallet.url} is not accepted by the receiver.")
             print(f"Accepted mints: {pr.m}")
+            return
+
+        # The sending mint must support one of the requested methods
+        if pr.sm is not None and Method.bolt11.name not in pr.sm:
+            print(f"Error: Current mint does not support a requested method: {pr.sm}")
             return
 
         amount_to_pay = pr.a
@@ -307,6 +318,14 @@ async def pay(
             # TODO: Handle amounts not specified in request (ask user)
             print("Error: Amount not specified in payment request.")
             return
+
+        # Add the fee reserve when paying from a mint outside a non-strict list
+        if mint_outside_list and pr.fr:
+            amount_to_pay += pr.fr
+            print(
+                f"Adding fee reserve of {wallet.unit.str(pr.fr)} "
+                "(paying from a mint outside the preferred list)."
+            )
 
         if not yes and not ctx.obj.get("YES"):
             message = f"Pay {wallet.unit.str(amount_to_pay)}?"
@@ -476,6 +495,76 @@ async def pay(
         print(" Error paying invoice.")
 
     await print_balance(ctx)
+
+
+@cli.command("request", help="Create a NUT-18 payment request.")
+@click.argument("amount", type=int)
+@click.option("--description", "-d", default=None, help="Human-readable description.")
+@click.option(
+    "--mint",
+    "-m",
+    "mints",
+    multiple=True,
+    help="Accepted mint URL (repeatable, defaults to the current mint).",
+)
+@click.option(
+    "--preferred",
+    default=False,
+    is_flag=True,
+    help="Treat the mint list as preferred rather than strict.",
+)
+@click.option(
+    "--fee-reserve",
+    "-f",
+    "fee_reserve",
+    default=None,
+    type=int,
+    help="Fee reserve a payer adds when paying from a mint outside a preferred list.",
+)
+@click.option(
+    "--method",
+    "methods",
+    multiple=True,
+    help="Required supported method, e.g. bolt11 (repeatable).",
+)
+@click.option(
+    "--single-use", "-s", default=False, is_flag=True, help="Mark the request single use."
+)
+@click.option(
+    "--bech32", default=False, is_flag=True, help="Encode as a NUT-26 bech32m request."
+)
+@click.pass_context
+@coro
+@init_auth_wallet
+async def request(
+    ctx: Context,
+    amount: int,
+    description: Optional[str],
+    mints: tuple,
+    preferred: bool,
+    fee_reserve: Optional[int],
+    methods: tuple,
+    single_use: bool,
+    bech32: bool,
+):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    pr = PaymentRequest(
+        a=amount,
+        u=wallet.unit.name,
+        m=list(mints) or [wallet.url],
+        ms=False if preferred else None,
+        fr=fee_reserve,
+        sm=list(methods) or None,
+        s=True if single_use else None,
+        d=description,
+    )
+    encoded = (
+        serialize_payment_request_bech32(pr)
+        if bech32
+        else serialize_payment_request(pr)
+    )
+    print(encoded)
 
 
 @cli.command("invoice", help="Create Lighting invoice.")

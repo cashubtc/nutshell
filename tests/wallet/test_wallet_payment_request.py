@@ -58,6 +58,49 @@ def test_nut18_round_trip():
     assert decoded.i is None
 
 
+def test_nut18_preferred_mints_vector():
+    """Encoding vector for the preferred mint list, fee reserve and methods."""
+    expected = (
+        "creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBz"
+        "Oi8vbWludC5leGFtcGxlLmNvbWJtc_RiZnICYnNtgWZib2x0MTE"
+    )
+    req = PaymentRequest(
+        i="preferred_fee_methods",
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        ms=False,
+        fr=2,
+        sm=["bolt11"],
+    )
+    assert serialize(req) == expected
+
+
+def test_nut18_round_trip_mint_list_fields():
+    """ms, fr and sm round-trip through the CBOR format."""
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        ms=False,
+        fr=2,
+        sm=["bolt11"],
+    )
+    decoded = deserialize(serialize(req))
+    assert decoded.ms is False
+    assert decoded.fr == 2
+    assert decoded.sm == ["bolt11"]
+
+
+def test_nut18_omits_mint_list_fields_when_unset():
+    """ms, fr and sm must not appear in the encoding when unset."""
+    req = PaymentRequest(a=100, u="sat")
+    decoded = deserialize(serialize(req))
+    assert decoded.ms is None
+    assert decoded.fr is None
+    assert decoded.sm is None
+
+
 # ─── NUT-26 Tests ────────────────────────────────────────────────────
 def test_nut26_spec_example():
     """Test the example from the NUT-26 spec."""
@@ -141,6 +184,56 @@ def test_nut26_round_trip_nut10():
     assert decoded.nut10 is not None
     assert decoded.nut10.k == "P2PK"
     assert decoded.nut10.d == "abcdef1234567890" * 4
+
+
+def test_nut26_preferred_mints_vector():
+    """Encoding vector for the mint list, fee reserve and supported methods."""
+    expected = (
+        "CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQ"
+        "QZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGQPGQQSQQQQQQQ"
+        "QQQQQG9SQPNZDAK8GVF3A8DTHZ"
+    )
+    req = PaymentRequest(
+        i="preferred_fee_methods",
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        ms=False,
+        fr=2,
+        sm=["bolt11"],
+    )
+    assert serialize_bech32m(req) == expected
+
+
+def test_nut26_round_trip_mint_list_fields():
+    """ms, fr and sm round-trip through the TLV format."""
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        ms=False,
+        fr=2,
+        sm=["bolt11"],
+    )
+    decoded = deserialize(serialize_bech32m(req))
+    assert decoded.ms is False
+    assert decoded.fr == 2
+    assert decoded.sm == ["bolt11"]
+
+
+def test_nut26_round_trip_strict_mint_list():
+    """ms=True round-trips and a single supported method is preserved."""
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        ms=True,
+        sm=["bolt11"],
+    )
+    decoded = deserialize(serialize_bech32m(req))
+    assert decoded.ms is True
+    assert decoded.fr is None
+    assert decoded.sm == ["bolt11"]
 
 
 def test_nut26_case_insensitive_decode():
