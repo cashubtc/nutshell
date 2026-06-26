@@ -1,4 +1,6 @@
 import base64
+import datetime
+import time
 from typing import Dict, List, Optional
 
 from loguru import logger
@@ -11,6 +13,9 @@ from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
+    keyset: MintKeyset
+    derivation_path: str
+
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -111,7 +116,12 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
         self.keysets[selected_keyset.id] = selected_keyset
 
-        logger.debug(f"Keyset {keyset.id} was de-activated")
+        if self.keyset and self.keyset.id == selected_keyset.id:
+            self.keyset = new_keyset
+            self.derivation_path = new_keyset.derivation_path
+            logger.info(f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}")
+
+        logger.debug(f"Keyset {selected_keyset.id} was de-activated")
         return new_keyset
 
     async def activate_keyset(
@@ -244,6 +254,66 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 keyset.active = False
                 self.keysets[keyset.id] = keyset
                 await self.crud.update_keyset(keyset=keyset, db=self.db)
+
+    def _parse_valid_from(self, keyset: MintKeyset) -> float:
+        # Handles multiple types for keyset.valid_from because database drivers return
+        # different types (PostgreSQL returns datetime.datetime, SQLite stores/returns
+        # stringified timestamp integers/floats), while test mocks or JSON payloads 
+        # may supply formatted datetime strings.
+        if not keyset.valid_from:
+            raise ValueError("keyset.valid_from is None")
+        try:
+            if isinstance(keyset.valid_from, datetime.datetime):
+                return keyset.valid_from.timestamp()
+            else:
+                return float(keyset.valid_from)
+        except (ValueError, TypeError):
+            return datetime.datetime.strptime(
+                keyset.valid_from, "%Y-%m-%d %H:%M:%S"
+            ).timestamp()
+
+    def should_rotate_keyset(self, keyset: MintKeyset) -> bool:
+        if not keyset.active or not keyset.valid_from:
+            return False
+        try:
+            valid_from_ts = self._parse_valid_from(keyset)
+        except Exception:
+            logger.warning(f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation.")
+            return True
+
+        return (time.time() - valid_from_ts) >= settings.mint_keyset_rotation_interval_seconds
+
+    async def rotate_keysets_if_needed(self) -> None:
+        if not settings.mint_keyset_rotation_enabled:
+            return
+
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        for keyset in active_keysets:
+            if self.should_rotate_keyset(keyset):
+                logger.warning(
+                    f"Active keyset {keyset.id} for unit {keyset.unit.name} is older than "
+                    f"the configured rotation interval ({settings.mint_keyset_rotation_interval_seconds}s). "
+                    f"Rotating now."
+                )
+                try:
+                    new_final_expiry = None
+                    if keyset.final_expiry is not None:
+                        try:
+                            valid_from_ts = self._parse_valid_from(keyset)
+                        except Exception:
+                            valid_from_ts = time.time()
+                        active_duration = int(time.time() - valid_from_ts)
+                        new_final_expiry = keyset.final_expiry + active_duration
+
+                    new_keyset = await self.rotate_next_keyset(
+                        unit=keyset.unit,
+                        max_order=len(keyset.amounts),
+                        input_fee_ppk=keyset.input_fee_ppk,
+                        final_expiry=new_final_expiry,
+                    )
+                    logger.info(f"Successfully rotated keyset {keyset.id} -> {new_keyset.id} for unit {keyset.unit.name}")
+                except Exception as e:
+                    logger.error(f"Failed to automatically rotate keyset {keyset.id}: {e}")
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
