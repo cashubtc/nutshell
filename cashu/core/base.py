@@ -469,22 +469,133 @@ class MintQuote(LedgerEvent):
         )
 
     @classmethod
-    def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
+    def from_resp_wallet(
+        cls,
+        mint_quote_resp,
+        mint: str,
+        amount: int,
+        unit: str,
+        paid_time: Optional[int] = None,
+        issued_time: Optional[int] = None,
+    ):
+        # Prefer amount_paid/amount_issued if present
+        amount_paid = mint_quote_resp.amount_paid
+        amount_issued = mint_quote_resp.amount_issued
+
+        if amount_paid is not None and amount_issued is not None:
+            if amount_paid == 0 and amount_issued == 0:
+                if mint_quote_resp.state == "PENDING":
+                    state = MintQuoteState.pending
+                else:
+                    state = MintQuoteState.unpaid
+            elif amount_paid > amount_issued:
+                state = MintQuoteState.paid
+            elif amount_paid == amount_issued and amount_issued > 0:
+                state = MintQuoteState.issued
+            else:
+                state = MintQuoteState.unpaid
+        elif mint_quote_resp.state:
+            state = MintQuoteState(mint_quote_resp.state)
+        else:
+            state = MintQuoteState.unpaid
+
+        if paid_time is None and mint_quote_resp.updated_at is not None:
+            if state in [MintQuoteState.paid, MintQuoteState.issued]:
+                paid_time = mint_quote_resp.updated_at
+
+        if issued_time is None and mint_quote_resp.updated_at is not None:
+            if state == MintQuoteState.issued:
+                issued_time = mint_quote_resp.updated_at
+
         return cls(
             quote=mint_quote_resp.quote,
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            state=MintQuoteState(mint_quote_resp.state),
+            unit=mint_quote_resp.unit or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            amount=mint_quote_resp.amount or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
             created_time=int(time.time()),
+            paid_time=paid_time,
+            issued_time=issued_time,
             pubkey=mint_quote_resp.pubkey,
         )
+
+    @classmethod
+    def check_stale_and_from_resp_wallet(
+        cls,
+        mint_quote_resp,
+        mint: str,
+        mint_quote_local: Optional["MintQuote"] = None,
+        default_amount: int = 0,
+        default_unit: str = "sat",
+    ) -> "MintQuote":
+        # Check if the response is stale according to the spec
+        is_stale = False
+        if mint_quote_local:
+            resp_updated_at = mint_quote_resp.updated_at
+            resp_amount_paid = mint_quote_resp.amount_paid
+            resp_amount_issued = mint_quote_resp.amount_issued
+            local_updated_at = (
+                mint_quote_local.issued_time or mint_quote_local.paid_time
+            )
+
+            if (
+                (resp_updated_at is not None and local_updated_at is not None and resp_updated_at < local_updated_at)
+                or (resp_amount_paid is not None and resp_amount_paid < mint_quote_local.amount_paid)
+                or (resp_amount_issued is not None and resp_amount_issued < mint_quote_local.amount_issued)
+            ):
+                is_stale = True
+
+        if is_stale and mint_quote_local:
+            return mint_quote_local
+
+        amount = (
+            (mint_quote_resp.amount or mint_quote_local.amount)
+            if mint_quote_local
+            else default_amount
+        )
+        unit = (
+            (mint_quote_resp.unit or mint_quote_local.unit)
+            if mint_quote_local
+            else default_unit
+        )
+
+        paid_time = mint_quote_local.paid_time if mint_quote_local else None
+        issued_time = mint_quote_local.issued_time if mint_quote_local else None
+
+        return cls.from_resp_wallet(
+            mint_quote_resp,
+            mint=mint,
+            amount=amount,
+            unit=unit,
+            paid_time=paid_time,
+            issued_time=issued_time,
+        )
+
+    @property
+    def amount_paid(self) -> int:
+        if self.state in [MintQuoteState.paid, MintQuoteState.issued]:
+            return self.amount
+        return 0
+
+    @property
+    def amount_issued(self) -> int:
+        if self.state == MintQuoteState.issued:
+            return self.amount
+        return 0
+
+    @property
+    def updated_at(self) -> int:
+        if self.issued_time is not None:
+            return self.issued_time
+        if self.paid_time is not None:
+            return self.paid_time
+        if self.created_time is not None:
+            return self.created_time
+        return 0
 
     @property
     def identifier(self) -> str:
