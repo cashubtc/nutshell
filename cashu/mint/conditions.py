@@ -9,7 +9,7 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.htlc import HTLCSecret
-from ..core.nuts.nut14 import verify_htlc_spending_conditions
+from ..core.nuts import nut11, nut14
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
@@ -221,7 +221,7 @@ class LedgerSpendingConditions:
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
             htlc_secret = HTLCSecret.from_secret(secret)
-            verify_htlc_spending_conditions(proof)
+            nut14.verify_htlc_spending_conditions(proof)
             return self._verify_p2pk_sig_inputs(proof, htlc_secret)
 
         # no spending condition present
@@ -335,8 +335,8 @@ class LedgerSpendingConditions:
         main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
         main_n_sigs = secret_lock.n_sigs or 1
 
-        message_to_sign = message_to_sign or "".join(
-            [p.secret for p in proofs] + [o.B_ for o in outputs]
+        message_to_sign = message_to_sign or nut11.sigall_message_to_sign(
+            proofs, outputs
         )
 
 
