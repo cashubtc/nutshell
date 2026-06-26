@@ -620,8 +620,9 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     real_keyset_id = list(wallet1.keysets.keys())[0]
 
     # Seed a second fake keyset in the DB so we have 2 keysets
+    fake_keyset_id = "01" + "f" * 62
     fake_keyset = WalletKeyset(
-        id="fake_keyset_to_disappear",
+        id=fake_keyset_id,
         unit=wallet1.unit.name,
         mint_url=wallet1.url,
         active=True,
@@ -653,13 +654,11 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     assert real_keyset_id in wallet1.keysets
 
     # Assert the disappeared keyset is marked as deleted in the DB
-    disappeared_keysets_db = await get_keysets(
-        db=wallet1.db, id="fake_keyset_to_disappear"
-    )
+    disappeared_keysets_db = await get_keysets(db=wallet1.db, id=fake_keyset_id)
     assert len(disappeared_keysets_db) == 0
     disappeared_keyset_row = await wallet1.db.fetchone(
         "SELECT deleted_at FROM keysets WHERE id = :id",
-        {"id": "fake_keyset_to_disappear"},
+        {"id": fake_keyset_id},
     )
     assert disappeared_keyset_row is not None
     assert disappeared_keyset_row["deleted_at"] is not None
@@ -677,7 +676,7 @@ async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
     """
 
     real_keyset_id = list(wallet1.keysets.keys())[0]
-    fake_keyset_id = "fake_keyset_to_reappear"
+    fake_keyset_id = "01" + "e" * 62
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,
@@ -738,3 +737,18 @@ async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
     assert len(restored_keysets) == 1
     assert restored_keysets[0].deleted_at is None
     assert restored_keysets[0].input_fee_ppk == 7
+
+
+@pytest.mark.asyncio
+async def test_request_mint_raises_no_active_keysets(wallet1: Wallet):
+    wallet1.keysets = {}
+
+    async def mock_load_mint(*args, **kwargs):
+        pass
+
+    wallet1.load_mint = mock_load_mint  # type: ignore
+
+    # Verify KeysetNotFoundError is raised when no active keysets are available
+    with pytest.raises(KeysetNotFoundError) as excinfo:
+        await wallet1.request_mint(64)
+    assert "no active keysets found" in str(excinfo.value)

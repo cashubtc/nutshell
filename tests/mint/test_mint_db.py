@@ -272,8 +272,9 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
 
     # add event client
     websocket_mock = AsyncMock(spec=WebSocket)
+    websocket_mock.receive.return_value = {"type": "websocket.disconnect"}
     client = ledger.events.add_client(websocket_mock, ledger.db, ledger.crud)
-    asyncio.create_task(client.start())
+    task = asyncio.create_task(client.start())
     await asyncio.sleep(0.1)
     websocket_mock.accept.assert_called_once()
 
@@ -295,6 +296,13 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
 
     # remove subscription
     client.remove_subscription("subId")
+    task.cancel()
+    try:
+        await task
+    except Exception:
+        pass
+    except asyncio.CancelledError:
+        pass
 
 
 @pytest.mark.asyncio

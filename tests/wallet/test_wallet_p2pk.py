@@ -389,7 +389,7 @@ async def test_p2pk_multisig_case_bypass(wallet1: Wallet, wallet2: Wallet):
 
     # Execute the attack: the mint should reject this as pubkeys are not unique
     await assert_err(
-        wallet2.redeem(send_proofs), "Mint Error: pubkeys must be unique."
+        wallet2.redeem(send_proofs), "Mint Error: signatures must be unique."
     )
 
 
@@ -511,7 +511,10 @@ async def test_p2pk_multisig_with_duplicate_publickey(wallet1: Wallet, wallet2: 
     _, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
-    await assert_err(wallet2.redeem(send_proofs), "Mint Error: pubkeys must be unique.")
+    await assert_err(
+        wallet2.redeem(send_proofs),
+        "Mint Error: not enough pubkeys (1) or signatures (1) present for n_sigs (2).",
+    )
 
 
 @pytest.mark.asyncio

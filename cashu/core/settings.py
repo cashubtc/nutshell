@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
-VERSION = "0.20.0"
+VERSION = "0.20.2"
 
 
 def find_env_file():
@@ -57,12 +57,27 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
 
     mint_database: str = Field(default="data/mint")
+    mint_database_lock_timeout: int = Field(
+        default=30000
+    )  # Postgres lock timeout in milliseconds
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
     mint_max_witness_length: int = Field(default=1024)
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Mint quote TTL",
+        description="Time-to-live in seconds for newly created mint quotes.",
+    )
+    melt_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Melt quote TTL",
+        description="Time-to-live in seconds for newly created melt quotes.",
+    )
 
     mint_regular_tasks_interval_seconds: int = Field(
         default=3600,
@@ -90,6 +105,7 @@ class MintWatchdogSettings(MintSettings):
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
+
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
@@ -142,6 +158,11 @@ class MintLimits(MintSettings):
         gt=0,
         title="Transaction rate limit per minute",
         description="Number of requests an IP can make per minute to transaction endpoints.",
+    )
+    mint_quote_backend_check_rate_limit: int = Field(
+        default=10,
+        title="Quote backend check rate limit",
+        description="Minimum seconds between checks with the backend for unpaid mint quotes.",
     )
     mint_max_request_length: int = Field(
         default=1000,
@@ -331,6 +352,7 @@ class AuthSettings(MintSettings):
         ["POST", "/v1/swap"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
+        ["POST", "/v1/mint/bolt11/batch"],
         ["POST", "/v1/melt/bolt11"],
     ]
 
@@ -339,6 +361,7 @@ class MintRedisCache(MintSettings):
     mint_redis_cache_enabled: bool = Field(default=False)
     mint_redis_cache_url: Optional[str] = Field(default=None)
     mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week
+    mint_redis_cache_cluster: bool = Field(default=False)
 
 
 class Settings(

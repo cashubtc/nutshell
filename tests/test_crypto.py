@@ -2,6 +2,7 @@ from cashu.core.base import Proof
 from cashu.core.crypto.b_dhke import (
     alice_verify_dleq,
     carol_verify_dleq,
+    derive_dleq_nonce,
     hash_e,
     hash_to_curve,
     hash_to_curve_deprecated,
@@ -186,6 +187,82 @@ def test_dleq_step2_bob_dleq():
     assert (
         s.to_hex()
         == "b6d41ac1e12415862bf8cace95e5355e9262eab8a11d201dadd3b6e41584ea6e"
+    )
+
+
+def test_dleq_deterministic_nonce_spec_vector():
+    # NUT-12 deterministic DLEQ test vector (cashubtc/nuts#368). All values are
+    # fixed; the implementation MUST reproduce e and s exactly.
+    a = PrivateKey(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+    )
+    B_ = PublicKey(
+        bytes.fromhex(
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+        )
+    )
+
+    A = a.public_key
+    assert A
+    C_: PublicKey = B_ * a  # type: ignore
+    assert (
+        A.format(compressed=True).hex()
+        == "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+    )
+    assert (
+        C_.format(compressed=True).hex()
+        == "0244eccfc7a348274458bb38044c7f3c389b3c2086c7ec18b5812d2877ab937787"
+    )
+
+    e, s = step2_bob_dleq(B_, a)
+    assert (
+        e.to_hex()
+        == "2a16ffee280aff3c429045607f9b8e0bf8b35910c44c1b20b9dfaf01b263d7b3"
+    )
+    assert (
+        s.to_hex()
+        == "9df27731238334718d120d4f74611a7c668233f988e687ac3fb188f0a34a2dab"
+    )
+
+    # Verification (e == hash(R1, R2, A, C_)) MUST pass.
+    assert alice_verify_dleq(B_, C_, e, s, A)
+
+
+def test_dleq_deterministic_nonce_is_reproducible():
+    # Same key + same B_ must always yield the same (e, s).
+    B_, _ = step1_alice("test_message")
+    a = PrivateKey()
+    e1, s1 = step2_bob_dleq(B_, a)
+    e2, s2 = step2_bob_dleq(B_, a)
+    assert e1.to_hex() == e2.to_hex()
+    assert s1.to_hex() == s2.to_hex()
+
+
+def test_dleq_deterministic_nonce_varies_with_context():
+    a = PrivateKey()
+    other = PrivateKey()
+    B1, _ = step1_alice("message_one")
+    B2, _ = step1_alice("message_two")
+
+    A = a.public_key
+    assert A
+    C1: PublicKey = B1 * a  # type: ignore
+    C2: PublicKey = B2 * a  # type: ignore
+
+    # Different B_ -> different nonce.
+    assert (
+        derive_dleq_nonce(a, A, B1, C1).to_hex()
+        != derive_dleq_nonce(a, A, B2, C2).to_hex()
+    )
+    # Different private key -> different nonce for the same context.
+    other_A = other.public_key
+    assert other_A
+    other_C1: PublicKey = B1 * other  # type: ignore
+    assert (
+        derive_dleq_nonce(a, A, B1, C1).to_hex()
+        != derive_dleq_nonce(other, other_A, B1, other_C1).to_hex()
     )
 
 

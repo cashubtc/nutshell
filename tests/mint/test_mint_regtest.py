@@ -6,6 +6,7 @@ import pytest_asyncio
 
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Unit
 from cashu.core.models import PostMeltQuoteRequest
+from cashu.lightning.base import PaymentResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -136,6 +137,8 @@ async def test_lightning_pay_invoice(ledger: Ledger):
     )
     assert status.settled
     assert status.preimage
+    if status.fee is not None:
+        assert status.fee.amount >= 0
     assert not status.error_message
 
 
@@ -232,6 +235,22 @@ async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
 
     # collect the payment
     payment = await task
+    if payment.pending:
+        # If the backend is non-blocking, we poll until it settles
+        for _ in range(20):
+            status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+                quote.checking_id
+            )
+            if not status.pending:
+                payment = PaymentResponse(
+                    result=status.result,
+                    checking_id=quote.checking_id,
+                    fee=status.fee,
+                    preimage=status.preimage,
+                )
+                break
+            await asyncio.sleep(0.5)
+
     assert payment.settled
     assert payment.preimage
     assert payment.checking_id
@@ -243,6 +262,8 @@ async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
     )
     assert status.settled
     assert status.preimage
+    if status.fee is not None:
+        assert status.fee.amount >= 0
     assert not status.error_message
 
 
@@ -293,6 +314,22 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
 
     # collect the payment
     payment = await task
+    if payment.pending:
+        # If the backend is non-blocking, we poll until it fails
+        for _ in range(20):
+            status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+                quote.checking_id
+            )
+            if not status.pending:
+                payment = PaymentResponse(
+                    result=status.result,
+                    checking_id=quote.checking_id,
+                    fee=status.fee,
+                    preimage=status.preimage,
+                )
+                break
+            await asyncio.sleep(0.5)
+
     assert payment.failed
     assert not payment.preimage
     # assert payment.error_message
