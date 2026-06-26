@@ -538,9 +538,12 @@ class MintQuote(LedgerEvent):
             resp_updated_at = mint_quote_resp.updated_at
             resp_amount_paid = mint_quote_resp.amount_paid
             resp_amount_issued = mint_quote_resp.amount_issued
+            local_updated_at = (
+                mint_quote_local.issued_time or mint_quote_local.paid_time
+            )
 
             if (
-                (resp_updated_at is not None and resp_updated_at < mint_quote_local.updated_at)
+                (resp_updated_at is not None and local_updated_at is not None and resp_updated_at < local_updated_at)
                 or (resp_amount_paid is not None and resp_amount_paid < mint_quote_local.amount_paid)
                 or (resp_amount_issued is not None and resp_amount_issued < mint_quote_local.amount_issued)
             ):
