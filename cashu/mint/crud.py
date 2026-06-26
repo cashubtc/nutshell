@@ -1048,7 +1048,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 "version": keyset.version,
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
-                "balance": keyset.balance,
                 "final_expiry": keyset.final_expiry,  # NEW: Update final expiry
             },
         )
