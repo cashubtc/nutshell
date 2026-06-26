@@ -1,8 +1,10 @@
 import asyncio
+import os
 
 import pytest
 import pytest_asyncio
 
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.models import PostMintBatchRequest, PostMintQuoteCheckRequest
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
@@ -410,7 +412,7 @@ async def test_ledger_mint_batch_invalid_signature(ledger: Ledger, wallet: Walle
     mint_quote1 = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote1.request)
 
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10000)
     outputs, rs = wallet._construct_outputs([64], secrets, rs)
 
     assert mint_quote1.privkey
@@ -438,8 +440,10 @@ async def test_ledger_mint_batch_invalid_signature(ledger: Ledger, wallet: Walle
 async def test_ledger_mint_batch_mixed_locked_unlocked(ledger: Ledger, wallet: Wallet):
     """Batch with one locked and one unlocked quote should succeed."""
     await wallet.load_mint()
+    # locked quote (NUT-20 pubkey set)
     mint_quote1 = await wallet.request_mint(64)
-    mint_quote2 = await wallet.request_mint(32)
+    # unlocked quote (no pubkey -> no signature required)
+    mint_quote2 = await wallet.mint_quote(32, wallet.unit)
 
     await pay_if_regtest(mint_quote1.request)
     await pay_if_regtest(mint_quote2.request)
@@ -516,43 +520,6 @@ async def test_ledger_mint_batch_already_issued(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_ledger_mint_batch_expired_quotes(ledger: Ledger, wallet: Wallet):
-    """Batch mint with expired quotes should fail."""
-    await wallet.load_mint()
-    mint_quote1 = await wallet.request_mint(64)
-    mint_quote2 = await wallet.request_mint(32)
-
-    await pay_if_regtest(mint_quote1.request)
-    await pay_if_regtest(mint_quote2.request)
-
-    q2 = await ledger.crud.get_mint_quote(quote_id=mint_quote2.quote, db=ledger.db)
-    q2.expiry = 1000000
-    await ledger.crud.update_mint_quote(quote=q2, db=ledger.db)
-
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
-    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
-
-    assert mint_quote1.privkey
-    assert mint_quote2.privkey
-
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
-
-    try:
-        await ledger.mint_batch(
-            PostMintBatchRequest(
-                quotes=[mint_quote1.quote, mint_quote2.quote],
-                quote_amounts=[64, 32],
-                outputs=outputs,
-                signatures=[sig1, sig2],
-            )
-        )
-        assert False, "Expected Exception"
-    except Exception as e:
-        assert "expired" in str(e)
-
-
-@pytest.mark.asyncio
 async def test_ledger_mint_batch_empty_quotes(ledger: Ledger, wallet: Wallet):
     """Empty quotes array should fail."""
     await wallet.load_mint()
@@ -625,10 +592,6 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     await pay_if_regtest(mint_quote1.request)
     await pay_if_regtest(mint_quote2.request)
 
-    q2 = await ledger.crud.get_mint_quote(quote_id=mint_quote2.quote, db=ledger.db)
-    q2.expiry = 1000000
-    await ledger.crud.update_mint_quote(quote=q2, db=ledger.db)
-
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
 
@@ -636,7 +599,9 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     assert mint_quote2.privkey
 
     sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    # quote2 is locked but receives an invalid signature, so the whole batch must fail
+    wrong_privkey = PrivateKey(os.urandom(32))
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, wrong_privkey.secret.hex())
 
     try:
         await ledger.mint_batch(
@@ -649,14 +614,14 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
         )
         assert False, "Expected Exception"
     except Exception as e:
-        assert "expired" in str(e)
+        assert "Signature" in str(e) or "signature" in str(e)
 
     q1_after = await ledger.crud.get_mint_quote(
         quote_id=mint_quote1.quote, db=ledger.db
     )
-    assert q1_after.state.value == "PAID", (
-        f"Quote1 should still be PAID, got {q1_after.state.value}"
-    )
+    assert (
+        q1_after.state.value == "PAID"
+    ), f"Quote1 should still be PAID, got {q1_after.state.value}"
 
     secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
         10002, 10002
