@@ -36,18 +36,27 @@ async def test_should_rotate_keyset_behavior(ledger: Ledger):
     keyset.active = True
 
     # If valid_from is mocked in the far past, it should rotate
-    original_valid_from = keyset.valid_from
-    keyset.valid_from = (
-        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=31)
-    ).strftime("%Y-%m-%d %H:%M:%S")
-    assert ledger.should_rotate_keyset(keyset)
-
-    # Restore
-    keyset.valid_from = original_valid_from
+    original_interval = settings.mint_keyset_rotation_interval_seconds
+    settings.mint_keyset_rotation_interval_seconds = 2592000  # 30 days
+    try:
+        original_valid_from = keyset.valid_from
+        keyset.valid_from = (
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=31)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        assert ledger.should_rotate_keyset(keyset)
+    finally:
+        # Restore
+        keyset.valid_from = original_valid_from
+        settings.mint_keyset_rotation_interval_seconds = original_interval
 
 
 @pytest.mark.asyncio
 async def test_automatic_keyset_rotation_flow(ledger: Ledger):
+    # Cancel background tasks to avoid race conditions with manual triggering
+    for task in ledger.regular_tasks:
+        task.cancel()
+    ledger.regular_tasks = []
+
     # Set a very short rotation interval
     original_interval = settings.mint_keyset_rotation_interval_seconds
     original_enabled = settings.mint_keyset_rotation_enabled
@@ -122,6 +131,11 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_automatic_keyset_rotation_disabled(ledger: Ledger):
+    # Cancel background tasks to avoid race conditions with manual triggering
+    for task in ledger.regular_tasks:
+        task.cancel()
+    ledger.regular_tasks = []
+
     # Keep track of active keyset
     keyset = next(k for k in ledger.keysets.values() if k.active)
 
@@ -155,6 +169,11 @@ async def test_automatic_keyset_rotation_disabled(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_automatic_keyset_rotation_preserves_grace_period(ledger: Ledger):
+    # Cancel background tasks to avoid race conditions with manual triggering
+    for task in ledger.regular_tasks:
+        task.cancel()
+    ledger.regular_tasks = []
+
     # Get any active keyset
     keyset = next(k for k in ledger.keysets.values() if k.active)
 
@@ -206,14 +225,14 @@ async def test_automatic_keyset_rotation_background(ledger: Ledger):
         # Set configuration so that background tasks and keyset rotations run very frequently
         settings.mint_keyset_rotation_enabled = True
         settings.mint_keyset_rotation_interval_seconds = 1
-        settings.mint_regular_tasks_interval_seconds = 1  # Check every second
+        settings.mint_regular_tasks_interval_seconds = 2  # Check every 2 seconds
 
         # Cancel existing regular tasks so we can restart with the new interval
         for task in ledger.regular_tasks:
             task.cancel()
         ledger.regular_tasks = []
 
-        # Start a new regular tasks loop with the updated 1-second interval
+        # Start a new regular tasks loop with the updated 2-second interval
         ledger.regular_tasks.append(asyncio.create_task(ledger._run_regular_tasks()))
 
         # Keep track of active keysets before background rotation
@@ -223,7 +242,8 @@ async def test_automatic_keyset_rotation_background(ledger: Ledger):
         assert len(active_keysets_before) > 0
 
         # Wait to exceed the rotation interval and allow the background task to run
-        # Keyset rotation interval is 1s, and task runs every 1s, so 2.5s is plenty of time
+        # Keyset rotation interval is 1s, and task runs every 2s, so 2.5s is plenty of time
+        # for exactly one background rotation to run and complete.
         await asyncio.sleep(2.5)
 
         # Get active keysets after background rotation
