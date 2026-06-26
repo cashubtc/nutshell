@@ -216,7 +216,7 @@ For testing, you can use Nutshell without a Lightning backend by setting `MINT_B
 
 ### Automatic Keyset Rotations
 
-Nutshell supports automatic keyset rotations to ensure active keysets are regularly rotated. This behavior is **enabled by default** with a default rotation interval of **30 days**.
+Nutshell supports automatic keyset rotations to ensure active keysets are regularly rotated. This behavior is **enabled by default** with a default rotation interval of **90 days**.
 
 When a keyset rotation occurs:
 1. A new keyset is activated (by automatically incrementing the derivation path counter, e.g., `m/0'/0'/0'` -> `m/0'/0'/1'`).
@@ -230,8 +230,8 @@ You can customize or disable automatic keyset rotations in your `.env`:
 # Enable or disable automatic rotations (default: TRUE)
 MINT_KEYSET_ROTATION_ENABLED=TRUE
 
-# Set the rotation interval in seconds (default: 2592000 for 30 days)
-MINT_KEYSET_ROTATION_INTERVAL_SECONDS=2592000
+# Set the rotation interval in seconds (default: 7776000 for 90 days)
+MINT_KEYSET_ROTATION_INTERVAL_SECONDS=7776000
 ```
 
 ### NUT-19 Caching with Redis
