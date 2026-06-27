@@ -234,6 +234,64 @@ async def test_mint_quote_crud_lifecycle(wallet_db: Database):
 
 
 @pytest.mark.asyncio
+async def test_mint_quote_accounting_fields_lifecycle(wallet_db: Database):
+    # Test fallback validation
+    quote_1 = _mint_quote("quote-acc-1", MintQuoteState.unpaid)
+    assert quote_1.amount_paid == 0
+    assert quote_1.amount_issued == 0
+    assert quote_1.updated_at == quote_1.created_time
+
+    # Explicit fields
+    quote_2 = MintQuote(
+        quote="quote-acc-2",
+        method="bolt11",
+        request="req-quote-acc-2",
+        checking_id="chk-quote-acc-2",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.paid,
+        mint="https://mint.test",
+        created_time=1000,
+        paid_time=2000,
+        amount_paid=40,
+        amount_issued=20,
+        updated_at=1500,
+    )
+    assert quote_2.amount_paid == 40
+    assert quote_2.amount_issued == 20
+    assert quote_2.updated_at == 1500
+
+    # Store
+    await store_bolt11_mint_quote(db=wallet_db, quote=quote_2)
+
+    # Fetch and verify
+    fetched = await get_bolt11_mint_quote(db=wallet_db, quote="quote-acc-2")
+    assert fetched is not None
+    assert fetched.amount_paid == 40
+    assert fetched.amount_issued == 20
+    assert fetched.updated_at == 1500
+
+    # Update
+    await update_bolt11_mint_quote(
+        db=wallet_db,
+        quote="quote-acc-2",
+        state=MintQuoteState.issued,
+        paid_time=3000,
+        amount_paid=100,
+        amount_issued=100,
+        updated_at=3000,
+    )
+
+    # Fetch again and verify
+    fetched_updated = await get_bolt11_mint_quote(db=wallet_db, quote="quote-acc-2")
+    assert fetched_updated is not None
+    assert fetched_updated.state == MintQuoteState.issued
+    assert fetched_updated.amount_paid == 100
+    assert fetched_updated.amount_issued == 100
+    assert fetched_updated.updated_at == 3000
+
+
+@pytest.mark.asyncio
 async def test_melt_quote_crud_lifecycle(wallet_db: Database):
     quote_1 = _melt_quote("mquote-1", MeltQuoteState.unpaid)
     quote_2 = _melt_quote("mquote-2", MeltQuoteState.pending)

@@ -431,6 +431,34 @@ class MintQuote(LedgerEvent):
     mint: Optional[str] = None
     privkey: Optional[str] = None
     pubkey: Optional[str] = None
+    amount_paid: Optional[int] = None
+    amount_issued: Optional[int] = None
+    updated_at: Optional[int] = None
+
+    @model_validator(mode="after")
+    def populate_fallback_fields(self) -> "MintQuote":
+        if self.amount_paid is None:
+            if self.state in [MintQuoteState.paid, MintQuoteState.issued]:
+                self.amount_paid = self.amount
+            else:
+                self.amount_paid = 0
+
+        if self.amount_issued is None:
+            if self.state == MintQuoteState.issued:
+                self.amount_issued = self.amount
+            else:
+                self.amount_issued = 0
+
+        if self.updated_at is None:
+            if self.issued_time is not None:
+                self.updated_at = self.issued_time
+            elif self.paid_time is not None:
+                self.updated_at = self.paid_time
+            elif self.created_time is not None:
+                self.updated_at = self.created_time
+            else:
+                self.updated_at = 0
+        return self
 
     @classmethod
     def from_row(cls, row: Row):
@@ -438,8 +466,16 @@ class MintQuote(LedgerEvent):
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
-            issued_time = int(row["issued_time"]) if "issued_time" in row.keys() and row["issued_time"] else None
-            last_checked = int(row["last_checked"]) if "last_checked" in row.keys() and row["last_checked"] else None
+            issued_time = (
+                int(row["issued_time"])
+                if "issued_time" in row.keys() and row["issued_time"]
+                else None
+            )
+            last_checked = (
+                int(row["last_checked"])
+                if "last_checked" in row.keys() and row["last_checked"]
+                else None
+            )
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -447,10 +483,14 @@ class MintQuote(LedgerEvent):
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             issued_time = (
-                int(row["issued_time"].timestamp()) if "issued_time" in row.keys() and row["issued_time"] else None
+                int(row["issued_time"].timestamp())
+                if "issued_time" in row.keys() and row["issued_time"]
+                else None
             )
             last_checked = (
-                int(row["last_checked"].timestamp()) if "last_checked" in row.keys() and row["last_checked"] else None
+                int(row["last_checked"].timestamp())
+                if "last_checked" in row.keys() and row["last_checked"]
+                else None
             )
         return cls(
             quote=row["quote"],
@@ -466,6 +506,15 @@ class MintQuote(LedgerEvent):
             last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
+            amount_paid=row["amount_paid"]
+            if "amount_paid" in row.keys() and row["amount_paid"] is not None
+            else None,
+            amount_issued=row["amount_issued"]
+            if "amount_issued" in row.keys() and row["amount_issued"] is not None
+            else None,
+            updated_at=row["updated_at"]
+            if "updated_at" in row.keys() and row["updated_at"] is not None
+            else None,
         )
 
     @classmethod
@@ -512,8 +561,10 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=mint_quote_resp.unit or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            amount=mint_quote_resp.amount or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            unit=mint_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            amount=mint_quote_resp.amount
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -521,6 +572,9 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
             pubkey=mint_quote_resp.pubkey,
+            amount_paid=mint_quote_resp.amount_paid,
+            amount_issued=mint_quote_resp.amount_issued,
+            updated_at=mint_quote_resp.updated_at,
         )
 
     @classmethod
@@ -543,9 +597,19 @@ class MintQuote(LedgerEvent):
             )
 
             if (
-                (resp_updated_at is not None and local_updated_at is not None and resp_updated_at < local_updated_at)
-                or (resp_amount_paid is not None and resp_amount_paid < mint_quote_local.amount_paid)
-                or (resp_amount_issued is not None and resp_amount_issued < mint_quote_local.amount_issued)
+                (
+                    resp_updated_at is not None
+                    and local_updated_at is not None
+                    and resp_updated_at < local_updated_at
+                )
+                or (
+                    resp_amount_paid is not None
+                    and resp_amount_paid < mint_quote_local.amount_paid
+                )
+                or (
+                    resp_amount_issued is not None
+                    and resp_amount_issued < mint_quote_local.amount_issued
+                )
             ):
                 is_stale = True
 
@@ -574,28 +638,6 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
         )
-
-    @property
-    def amount_paid(self) -> int:
-        if self.state in [MintQuoteState.paid, MintQuoteState.issued]:
-            return self.amount
-        return 0
-
-    @property
-    def amount_issued(self) -> int:
-        if self.state == MintQuoteState.issued:
-            return self.amount
-        return 0
-
-    @property
-    def updated_at(self) -> int:
-        if self.issued_time is not None:
-            return self.issued_time
-        if self.paid_time is not None:
-            return self.paid_time
-        if self.created_time is not None:
-            return self.created_time
-        return 0
 
     @property
     def identifier(self) -> str:
@@ -1045,8 +1087,7 @@ class MintKeyset:
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
         return {
-            int(amount): key.format().hex()
-            for amount, key in self.public_keys.items()
+            int(amount): key.format().hex() for amount, key in self.public_keys.items()
         }
 
     def generate_keys(self):
@@ -1087,7 +1128,7 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
@@ -1100,14 +1141,19 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            
+
             # KEYSETS V2: Use new keyset ID derivation
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
+                self.id = derive_keyset_id_v2(
+                    self.public_keys,
+                    self.unit.name,
+                    self.final_expiry,
+                    self.input_fee_ppk,
+                )
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
@@ -1538,9 +1584,9 @@ class AuthProof(BaseModel):
     def to_base64(self):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
-        return (
-            self.prefix + base64.urlsafe_b64encode(json.dumps(serialize_dict).encode()).decode().rstrip("=")
-        )
+        return self.prefix + base64.urlsafe_b64encode(
+            json.dumps(serialize_dict).encode()
+        ).decode().rstrip("=")
 
     @classmethod
     def from_base64(cls, base64_str: str):
