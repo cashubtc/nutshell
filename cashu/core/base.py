@@ -431,34 +431,21 @@ class MintQuote(LedgerEvent):
     mint: Optional[str] = None
     privkey: Optional[str] = None
     pubkey: Optional[str] = None
-    amount_paid: Optional[int] = None
-    amount_issued: Optional[int] = None
-    updated_at: Optional[int] = None
+    amount_paid_db: Optional[int] = None
+    amount_issued_db: Optional[int] = None
+    updated_at_db: Optional[int] = None
 
-    @model_validator(mode="after")
-    def populate_fallback_fields(self) -> "MintQuote":
-        if self.amount_paid is None:
-            if self.state in [MintQuoteState.paid, MintQuoteState.issued]:
-                self.amount_paid = self.amount
-            else:
-                self.amount_paid = 0
-
-        if self.amount_issued is None:
-            if self.state == MintQuoteState.issued:
-                self.amount_issued = self.amount
-            else:
-                self.amount_issued = 0
-
-        if self.updated_at is None:
-            if self.issued_time is not None:
-                self.updated_at = self.issued_time
-            elif self.paid_time is not None:
-                self.updated_at = self.paid_time
-            elif self.created_time is not None:
-                self.updated_at = self.created_time
-            else:
-                self.updated_at = 0
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def populate_db_fields_from_init(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "amount_paid" in data and "amount_paid_db" not in data:
+                data["amount_paid_db"] = data.pop("amount_paid")
+            if "amount_issued" in data and "amount_issued_db" not in data:
+                data["amount_issued_db"] = data.pop("amount_issued")
+            if "updated_at" in data and "updated_at_db" not in data:
+                data["updated_at_db"] = data.pop("updated_at")
+        return data
 
     @classmethod
     def from_row(cls, row: Row):
@@ -506,13 +493,13 @@ class MintQuote(LedgerEvent):
             last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
-            amount_paid=row["amount_paid"]
+            amount_paid_db=row["amount_paid"]
             if "amount_paid" in row.keys() and row["amount_paid"] is not None
             else None,
-            amount_issued=row["amount_issued"]
+            amount_issued_db=row["amount_issued"]
             if "amount_issued" in row.keys() and row["amount_issued"] is not None
             else None,
-            updated_at=row["updated_at"]
+            updated_at_db=row["updated_at"]
             if "updated_at" in row.keys() and row["updated_at"] is not None
             else None,
         )
@@ -572,9 +559,9 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
             pubkey=mint_quote_resp.pubkey,
-            amount_paid=mint_quote_resp.amount_paid,
-            amount_issued=mint_quote_resp.amount_issued,
-            updated_at=mint_quote_resp.updated_at,
+            amount_paid_db=mint_quote_resp.amount_paid,
+            amount_issued_db=mint_quote_resp.amount_issued,
+            updated_at_db=mint_quote_resp.updated_at,
         )
 
     @classmethod
@@ -638,6 +625,34 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
         )
+
+    @property
+    def amount_paid(self) -> int:
+        if self.amount_paid_db is not None and self.amount_paid_db > 0:
+            return self.amount_paid_db
+        if self.state in [MintQuoteState.paid, MintQuoteState.issued]:
+            return self.amount
+        return 0
+
+    @property
+    def amount_issued(self) -> int:
+        if self.amount_issued_db is not None and self.amount_issued_db > 0:
+            return self.amount_issued_db
+        if self.state == MintQuoteState.issued:
+            return self.amount
+        return 0
+
+    @property
+    def updated_at(self) -> int:
+        if self.updated_at_db is not None and self.updated_at_db > 0:
+            return self.updated_at_db
+        if self.issued_time is not None:
+            return self.issued_time
+        if self.paid_time is not None:
+            return self.paid_time
+        if self.created_time is not None:
+            return self.created_time
+        return 0
 
     @property
     def identifier(self) -> str:
