@@ -416,15 +416,13 @@ class MintQuoteState(Enum):
 
 
 class MintQuote(LedgerEvent):
-    model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
-
     quote: str
     method: str
     request: str
     checking_id: str
     unit: str
     amount: int
-    state_db: MintQuoteState = Field(..., alias="state")
+    state_val: MintQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     issued_time: Union[int, None] = None
@@ -433,9 +431,14 @@ class MintQuote(LedgerEvent):
     mint: Optional[str] = None
     privkey: Optional[str] = None
     pubkey: Optional[str] = None
-    amount_paid_db: Optional[int] = Field(default=None, alias="amount_paid")
-    amount_issued_db: Optional[int] = Field(default=None, alias="amount_issued")
-    updated_at_db: Optional[int] = Field(default=None, alias="updated_at")
+    amount_paid: Optional[int] = 0
+    amount_issued: Optional[int] = 0
+    updated_at: Optional[int] = Field(default_factory=lambda: int(time.time()))
+
+    def __init__(self, **data: Any):
+        if "state" in data and "state_val" not in data:
+            data["state_val"] = data.pop("state")
+        super().__init__(**data)
 
     @classmethod
     def from_row(cls, row: Row):
@@ -491,7 +494,7 @@ class MintQuote(LedgerEvent):
             else None,
             updated_at=row["updated_at"]
             if "updated_at" in row.keys() and row["updated_at"] is not None
-            else None,
+            else (issued_time or paid_time or created_time or int(time.time())),
         )
 
     @classmethod
@@ -617,46 +620,28 @@ class MintQuote(LedgerEvent):
         )
 
     @property
-    def amount_paid(self) -> int:
-        return self.amount_paid_db or 0
-
-    @property
-    def amount_issued(self) -> int:
-        return self.amount_issued_db or 0
-
-    @property
-    def updated_at(self) -> int:
-        if self.updated_at_db is not None:
-            return self.updated_at_db
-        if self.issued_time is not None:
-            return self.issued_time
-        if self.paid_time is not None:
-            return self.paid_time
-        return self.created_time or 0
-
-    @property
     def state(self) -> MintQuoteState:
-        if self.amount_paid_db is not None and self.amount_issued_db is not None:
-            if self.amount_paid_db > self.amount_issued_db:
+        if self.amount_paid is not None and self.amount_issued is not None:
+            if self.amount_paid > self.amount_issued:
                 return MintQuoteState.paid
-            elif self.amount_paid_db == self.amount_issued_db and self.amount_issued_db > 0:
+            elif self.amount_paid == self.amount_issued and self.amount_issued > 0:
                 return MintQuoteState.issued
-            elif self.amount_paid_db == 0 and self.amount_issued_db == 0:
-                return self.state_db
-        return self.state_db
+            elif self.amount_paid == 0 and self.amount_issued == 0:
+                return self.state_val
+        return self.state_val
 
     @state.setter
     def state(self, value: MintQuoteState) -> None:
-        self.state_db = value
+        self.state_val = value
         if value in [MintQuoteState.paid, MintQuoteState.issued]:
-            self.amount_paid_db = self.amount
+            self.amount_paid = self.amount
         else:
-            self.amount_paid_db = 0
+            self.amount_paid = 0
 
         if value == MintQuoteState.issued:
-            self.amount_issued_db = self.amount
+            self.amount_issued = self.amount
         else:
-            self.amount_issued_db = 0
+            self.amount_issued = 0
 
     @property
     def identifier(self) -> str:
