@@ -39,6 +39,7 @@ from ...wallet.crud import (
     get_bolt11_melt_quotes,
     get_bolt11_mint_quote,
     get_bolt11_mint_quotes,
+    get_proofs,
     get_reserved_proofs,
     get_seed_and_mnemonic,
 )
@@ -1674,3 +1675,205 @@ async def lnurl_mint(ctx: Context):
             print("No tokens minted.")
     except Exception as e:
         print(f"Error minting quotes: {e}")
+
+
+@cli.group("pol", help="Proof of Liabilities (PoL) auditing commands.")
+def pol():
+    pass
+
+
+@pol.command(
+    "manifest", help="Retrieve the Proof of Liabilities manifest from the mint."
+)
+@click.argument("keyset_id", required=False, type=str)
+@click.option("--epoch", type=int, help="Fetch a specific epoch index.")
+@click.pass_context
+@coro
+async def pol_manifest_cmd(
+    ctx: Context, keyset_id: Optional[str], epoch: Optional[int]
+):
+    wallet: Wallet = ctx.obj["WALLET"]
+
+    # Use wallet's current keyset ID if not provided
+    if not keyset_id:
+        await wallet.load_proofs()
+        if wallet.keysets:
+            keyset_id = list(wallet.keysets.keys())[0]
+        else:
+            print(
+                "No active keyset found in wallet database. Please specify a keyset ID."
+            )
+            return
+
+    # Call the mint
+    print(f"Connecting to mint {wallet.url} to fetch PoL manifest...")
+    try:
+        url = f"{wallet.url}/v1/pol/{keyset_id}/manifest"
+        params = {}
+        if epoch:
+            params["epoch_index"] = epoch
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, params=params)
+
+        if resp.status_code != 200:
+            print(f"Error from mint: {resp.text}")
+            return
+
+        manifest = resp.json()
+
+        # Verify outstanding balance sum consistency
+        root_issued_sum = manifest["root_issued"]["sum"]
+        root_spent_sum = manifest["root_spent"]["sum"]
+        outstanding_balance = manifest["outstanding_balance"]
+        sum_check_str = (
+            "✓ Match"
+            if outstanding_balance == root_issued_sum - root_spent_sum
+            else "❌ MISMATCH (cheating detected!)"
+        )
+
+        print("\n=== Proof of Liabilities Manifest ===")
+        print(f"Keyset ID:          {manifest['keyset_id']}")
+        print(f"Epoch Index:        {manifest['epoch_index']}")
+        print(f"Timestamp:          {manifest['timestamp']}")
+        print(f"Signing Pubkey:     {manifest['signing_pubkey']}")
+        print(f"Root Issued Hash:   {manifest['root_issued']['hash']}")
+        print(f"Root Issued Sum:    {manifest['root_issued']['sum']}")
+        print(f"Root Spent Hash:    {manifest['root_spent']['hash']}")
+        print(f"Root Spent Sum:     {manifest['root_spent']['sum']}")
+        print(
+            f"Outstanding Balance: {manifest['outstanding_balance']} ({sum_check_str})"
+        )
+        print(
+            f"OTS Receipt (hex):  {manifest['ots_receipt'][:64]}... ({len(manifest['ots_receipt'])} chars)"
+        )
+        print(f"Signature:          {manifest['mint_signature']}")
+        print("=====================================")
+    except Exception as e:
+        print(f"Failed to fetch PoL manifest: {e}")
+
+
+@pol.command(
+    "audit", help="Audit all unspent wallet tokens against the mint's public ledgers."
+)
+@click.argument("keyset_id", required=False, type=str)
+@click.option("--epoch", type=int, help="Audit against a specific epoch index.")
+@click.pass_context
+@coro
+async def pol_audit_cmd(ctx: Context, keyset_id: Optional[str], epoch: Optional[int]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs(reload=True)
+
+    try:
+        spent_proofs = await get_proofs(db=wallet.db, table="proofs_used")
+    except Exception:
+        spent_proofs = []
+
+    if keyset_id:
+        keyset_ids = [keyset_id]
+    else:
+        # Load unique keyset IDs from all unspent and spent proofs
+        keyset_ids = sorted(
+            list(set([p.id for p in wallet.proofs] + [p.id for p in spent_proofs]))
+        )
+
+    if not keyset_ids:
+        print("No unspent or spent tokens found in this wallet to audit.")
+        return
+
+    print(
+        f"Starting Proof of Liabilities Solvency Audit across {len(keyset_ids)} keyset(s)..."
+    )
+
+    global_success = True
+    all_challenges = []
+    global_unspent_count = 0
+    global_spent_count = 0
+    global_blinded_count = 0
+
+    for kid in keyset_ids:
+        unspent_for_keyset = [p for p in wallet.proofs if p.id == kid]
+        spent_for_keyset = [p for p in spent_proofs if p.id == kid]
+        all_for_keyset = unspent_for_keyset + spent_for_keyset
+
+        # Pre-generate KDF lookup map for this keyset to count derivable blinded messages
+        deterministic_secrets_map = {}
+        try:
+            row = await wallet.db.fetchone(
+                f"SELECT counter FROM {wallet.db.table_with_schema('keysets')} WHERE id = :keyset_id",
+                {"keyset_id": kid},
+            )
+            max_counter = row["counter"] if row else 0
+            for counter in range(0, max_counter + 100):
+                try:
+                    (
+                        secret_bytes,
+                        r_bytes,
+                        _,
+                    ) = await wallet.generate_determinstic_secret(counter, kid)
+                    deterministic_secrets_map[secret_bytes.hex()] = True
+                    try:
+                        deterministic_secrets_map[secret_bytes.decode("utf-8")] = True
+                    except Exception:
+                        pass
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        derivable_count = 0
+        for p in all_for_keyset:
+            p_dleq = p.dleq
+            if p_dleq and p_dleq.r:
+                derivable_count += 1
+            elif p.secret in deterministic_secrets_map:
+                derivable_count += 1
+            elif p.derivation_path:
+                derivable_count += 1
+
+        print(f"\n--- Auditing Keyset ID: {kid} ---")
+        print(f"• Unspent ecash notes:  {len(unspent_for_keyset)}")
+        print(f"• Spent ecash notes:    {len(spent_for_keyset)}")
+        print(f"• Blinded messages:     {derivable_count} (promises to reconstruct)")
+
+        global_unspent_count += len(unspent_for_keyset)
+        global_spent_count += len(spent_for_keyset)
+        global_blinded_count += derivable_count
+
+        try:
+            (
+                success,
+                challenges,
+                skipped_no_path,
+                skipped_error,
+                status_msg,
+            ) = await wallet.verify_solvency(kid, epoch)
+        except Exception as e:
+            print(f"Solvency verification failed for keyset {kid}: {e}")
+            global_success = False
+            continue
+
+        print(status_msg)
+
+        if not success:
+            global_success = False
+            all_challenges.extend(challenges)
+
+    print("\n=======================================")
+    print("SOLVENCY AUDIT CONSOLIDATED SUMMARY")
+    print(f"• Total Keyset(s) Audited: {len(keyset_ids)}")
+    print(f"• Total Unspent Notes:     {global_unspent_count}")
+    print(f"• Total Spent Notes:       {global_spent_count}")
+    print(f"• Total Blinded Messages:  {global_blinded_count}")
+    print("=======================================")
+
+    if global_success:
+        print("\n🎉 AUDIT COMPLETE: ALL CHECKS PASSED. MINT IS 100% SOLVENT.")
+    else:
+        print("\n❌ SOLVENCY AUDIT FAILED. MINT CHEATING DETECTED!")
+        print("\n=== CRYPTOGRAPHIC FRAUD CHALLENGE ===")
+        print(
+            "Publish these self-contained fraud proofs to hold the mint publicly accountable:"
+        )
+        print(json.dumps(all_challenges, indent=2))
+        print("=======================================")

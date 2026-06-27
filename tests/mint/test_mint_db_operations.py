@@ -80,6 +80,7 @@ async def test_db_tables(ledger: Ledger):
             "balance",
             "balance_issued",
             "balance_redeemed",
+            "pol_epochs",
         ]
 
         tables.sort()

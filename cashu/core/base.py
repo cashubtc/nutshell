@@ -143,6 +143,7 @@ class Proof(BaseModel):
     melt_id: Union[None, str] = (
         None  # holds the id of the melt operation that destroyed this proof
     )
+    pol_receipt: Optional["PolReceipt"] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -158,6 +159,19 @@ class Proof(BaseModel):
         else:
             # overwrite the empty string with None
             proof_dict["dleq"] = None
+
+        pol_receipt_val = proof_dict.get("pol_receipt")
+        if pol_receipt_val:
+            try:
+                proof_dict["pol_receipt"] = PolReceipt.model_validate_json(pol_receipt_val)
+            except Exception:
+                try:
+                    proof_dict["pol_receipt"] = PolReceipt.model_validate(pol_receipt_val)
+                except Exception:
+                    proof_dict["pol_receipt"] = None
+        else:
+            proof_dict["pol_receipt"] = None
+
         c = cls(**proof_dict)
         return c
 
@@ -254,6 +268,11 @@ class BlindedMessage_Deprecated(BaseModel):
         return P2PKWitness.from_witness(self.witness).signatures
 
 
+class PolReceipt(BaseModel):
+    target_epoch: int
+    signature: str
+
+
 class BlindedSignature(BaseModel):
     """
     Blinded signature or "promise" which is the signature on a `BlindedMessage`
@@ -263,6 +282,7 @@ class BlindedSignature(BaseModel):
     amount: int
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
+    pol_receipt: Optional[PolReceipt] = None
 
     @classmethod
     def from_row(cls, row: Row):
