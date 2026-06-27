@@ -64,6 +64,7 @@ from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .keysets import LedgerKeysets
+from .pol import update_pol_manifests
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
 from .watchdog import LedgerWatchdog
@@ -147,6 +148,7 @@ class Ledger(
         await self._startup_keysets()
         await self._check_backends()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
+        self.regular_tasks.append(asyncio.create_task(self._run_pol_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
         if settings.mint_watchdog_enabled:
             self.watchdog_tasks = await self.dispatch_watchdogs()
@@ -169,6 +171,20 @@ class Ledger(
                 await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
             except Exception as e:
                 logger.error(f"Ledger regular task failed: {e}")
+                await asyncio.sleep(60)
+
+    async def _run_pol_regular_tasks(self) -> None:
+        """
+        Runs periodic PoL epoch checks and manifest updates.
+        """
+        logger.info("Starting ledger PoL regular tasks loop")
+        interval = settings.mint_pol_epoch_seconds or 86400
+        while True:
+            try:
+                await update_pol_manifests(self)
+                await asyncio.sleep(interval)
+            except Exception as e:
+                logger.error(f"Ledger PoL regular task failed: {e}")
                 await asyncio.sleep(60)
 
     async def _check_backends(self) -> None:

@@ -2,7 +2,7 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from cashu.core.base import BlindedSignature, MeltQuote
+from cashu.core.base import BlindedSignature, MeltQuote, PolReceipt
 from cashu.core.constants import MAX_PAYMENT_REQUEST_LEN, MAX_UNIT_LEN
 
 
@@ -54,6 +54,7 @@ class PostMeltQuoteResponse(BaseModel):
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None  # NUT-08 change
+    spent_receipts: Optional[List[PolReceipt]] = None
 
     @classmethod
     def from_melt_quote(cls, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":

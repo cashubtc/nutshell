@@ -86,6 +86,30 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
+    mint_pol_epoch_seconds: int = Field(
+        default=86400,
+        title="PoL Epoch seconds",
+        description="Time window for Proof of Liability epochs.",
+    )
+
+    mint_pol_mock_ots: bool = Field(
+        default=True,
+        title="Mock OTS",
+        description="If True, generate mock OTS receipts without making network requests.",
+    )
+
+    mint_pol_forget_probability: float = Field(
+        default=0.0,
+        title="PoL Forget Probability",
+        description="Probability (0.0 to 1.0) of randomly forgetting to include some proofs/promises in the Merkle-Sum Trees for testing and debugging.",
+    )
+
+    mint_pol_cheat_value_probability: float = Field(
+        default=0.0,
+        title="PoL Cheat Value Probability",
+        description="Probability (0.0 to 1.0) of randomly altering (adding/subtracting) the value of included proofs/promises in the Merkle-Sum Trees for testing and debugging.",
+    )
+
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
 
