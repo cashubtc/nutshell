@@ -1684,7 +1684,7 @@ class PaymentRequest(BaseModel):
     u: Optional[str] = None  # unit
     s: Optional[bool] = None  # single use
     m: Optional[List[str]] = None  # mints
-    ms: Optional[bool] = None  # mint list strict
+    mp: Optional[bool] = None  # mint list preferred
     fr: Optional[int] = None  # fee reserve
     sm: Optional[List[str]] = None  # supported methods
     d: Optional[str] = None  # description

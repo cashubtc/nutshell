@@ -273,8 +273,8 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
             out += _tlv_entry(0x07, _encode_transport(tr))
     if pr.nut10 is not None:
         out += _tlv_entry(0x08, _encode_nut10(pr.nut10))
-    if pr.ms is not None:
-        out += _tlv_entry(0x09, bytes([1 if pr.ms else 0]))
+    if pr.mp is not None:
+        out += _tlv_entry(0x09, bytes([1 if pr.mp else 0]))
     if pr.fr is not None:
         out += _tlv_entry(0x0A, struct.pack(">Q", pr.fr))
     if pr.sm:
@@ -316,7 +316,7 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
         elif tag == 0x08:
             kwargs["nut10"] = _decode_nut10(val)
         elif tag == 0x09:
-            kwargs["ms"] = val[0] == 1
+            kwargs["mp"] = val[0] == 1
         elif tag == 0x0A:
             kwargs["fr"] = struct.unpack(">Q", val)[0]
         elif tag == 0x0B:

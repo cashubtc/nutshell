@@ -299,10 +299,9 @@ async def pay(
         if pr.a:
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
-        # The mint list is strict unless `ms` is explicitly false
+        # The mint list is strict unless `mp` is explicitly true (preferred)
         mint_outside_list = pr.m is not None and wallet.url not in pr.m
-        mint_list_strict = pr.ms is None or pr.ms
-        if mint_outside_list and mint_list_strict:
+        if mint_outside_list and not pr.mp:
             print(
                 f"Error: Current mint {wallet.url} is not accepted by the receiver.")
             print(f"Accepted mints: {pr.m}")
@@ -553,7 +552,7 @@ async def request(
         a=amount,
         u=wallet.unit.name,
         m=list(mints) or [wallet.url],
-        ms=False if preferred else None,
+        mp=True if preferred else None,
         fr=fee_reserve,
         sm=list(methods) or None,
         s=True if single_use else None,
