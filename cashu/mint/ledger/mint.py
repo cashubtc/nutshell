@@ -31,11 +31,15 @@ from ...core.models import (
 )
 from ...core.settings import settings
 from ...lightning.base import InvoiceResponse, PaymentStatus
-from ..protocols import SupportsEvents, SupportsWatchdog
+from ..crud import LedgerCrudSqlite
+from ..protocols import SupportsEvents
+from ..watchdog import LedgerWatchdog
 from .blind_signatures import LedgerBlindSignatures
 
 
-class LedgerMint(LedgerBlindSignatures, SupportsWatchdog, SupportsEvents):
+class LedgerMint(LedgerBlindSignatures, LedgerWatchdog, SupportsEvents):
+    crud: LedgerCrudSqlite
+
     async def mint_quote(self, quote_request: PostMintQuoteRequest) -> MintQuote:
         """Creates a mint quote and stores it in the database.
 

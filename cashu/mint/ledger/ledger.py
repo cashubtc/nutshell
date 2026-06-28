@@ -28,12 +28,11 @@ from .swap import LedgerSwap
 
 
 class Ledger(
-    LedgerMint,
+    LedgerMint,  # provides LedgerWatchdog via inheritance
     LedgerMelt,
     LedgerSwap,
     LedgerTasks,
     LedgerFeatures,
-    LedgerWatchdog,
     LedgerKeysets,
 ):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}

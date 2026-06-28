@@ -254,17 +254,6 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
-    async def try_update_mint_quote_last_checked(
-        self,
-        *,
-        quote_id: str,
-        last_checked: int,
-        rate_limit: int,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> bool: ...
-
-    @abstractmethod
     async def update_mint_quote(
         self,
         *,
