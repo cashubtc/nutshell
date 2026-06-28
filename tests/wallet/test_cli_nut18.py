@@ -85,11 +85,11 @@ def test_pay_nut18_wrong_mint(mint, cli_prefix):
 
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
 def test_pay_nut18_preferred_mint_with_fee_reserve(mint, cli_prefix):
-    """A non-strict (ms=False) mint list is accepted and adds the fee reserve."""
+    """A preferred (mp=True) mint list is accepted and adds the fee reserve."""
     runner = CliRunner()
 
     pr = PaymentRequest(
-        a=10, u="sat", m=["https://other.mint/"], ms=False, fr=5
+        a=10, u="sat", m=["https://other.mint/"], mp=True, fr=5
     )
     creq = serialize(pr)
 
@@ -147,7 +147,7 @@ def test_request_creates_payment_request(mint, cli_prefix):
     assert pr.u == "sat"
     assert pr.d == "Coffee"
     assert pr.m == ["https://mint.example.com"]
-    assert pr.ms is False
+    assert pr.mp is True
     assert pr.fr == 2
     assert pr.sm == ["bolt11"]
     assert pr.s is True

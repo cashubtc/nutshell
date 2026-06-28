@@ -62,14 +62,14 @@ def test_nut18_preferred_mints_vector():
     """Encoding vector for the preferred mint list, fee reserve and methods."""
     expected = (
         "creqAp2FpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBz"
-        "Oi8vbWludC5leGFtcGxlLmNvbWJtc_RiZnICYnNtgWZib2x0MTE"
+        "Oi8vbWludC5leGFtcGxlLmNvbWJtcPViZnICYnNtgWZib2x0MTE"
     )
     req = PaymentRequest(
         i="preferred_fee_methods",
         a=100,
         u="sat",
         m=["https://mint.example.com"],
-        ms=False,
+        mp=True,
         fr=2,
         sm=["bolt11"],
     )
@@ -77,26 +77,26 @@ def test_nut18_preferred_mints_vector():
 
 
 def test_nut18_round_trip_mint_list_fields():
-    """ms, fr and sm round-trip through the CBOR format."""
+    """mp, fr and sm round-trip through the CBOR format."""
     req = PaymentRequest(
         a=100,
         u="sat",
         m=["https://mint.example.com"],
-        ms=False,
+        mp=True,
         fr=2,
         sm=["bolt11"],
     )
     decoded = deserialize(serialize(req))
-    assert decoded.ms is False
+    assert decoded.mp is True
     assert decoded.fr == 2
     assert decoded.sm == ["bolt11"]
 
 
 def test_nut18_omits_mint_list_fields_when_unset():
-    """ms, fr and sm must not appear in the encoding when unset."""
+    """mp, fr and sm must not appear in the encoding when unset."""
     req = PaymentRequest(a=100, u="sat")
     decoded = deserialize(serialize(req))
-    assert decoded.ms is None
+    assert decoded.mp is None
     assert decoded.fr is None
     assert decoded.sm is None
 
@@ -190,15 +190,15 @@ def test_nut26_preferred_mints_vector():
     """Encoding vector for the mint list, fee reserve and supported methods."""
     expected = (
         "CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQ"
-        "QZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGQPGQQSQQQQQQQ"
-        "QQQQQG9SQPNZDAK8GVF3A8DTHZ"
+        "QZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQ"
+        "QQQQQG9SQPNZDAK8GVF3KE6Q6F"
     )
     req = PaymentRequest(
         i="preferred_fee_methods",
         a=100,
         u="sat",
         m=["https://mint.example.com"],
-        ms=False,
+        mp=True,
         fr=2,
         sm=["bolt11"],
     )
@@ -206,32 +206,32 @@ def test_nut26_preferred_mints_vector():
 
 
 def test_nut26_round_trip_mint_list_fields():
-    """ms, fr and sm round-trip through the TLV format."""
+    """mp, fr and sm round-trip through the TLV format."""
     req = PaymentRequest(
         a=100,
         u="sat",
         m=["https://mint.example.com"],
-        ms=False,
+        mp=True,
         fr=2,
         sm=["bolt11"],
     )
     decoded = deserialize(serialize_bech32m(req))
-    assert decoded.ms is False
+    assert decoded.mp is True
     assert decoded.fr == 2
     assert decoded.sm == ["bolt11"]
 
 
 def test_nut26_round_trip_strict_mint_list():
-    """ms=True round-trips and a single supported method is preserved."""
+    """mp=False round-trips and a single supported method is preserved."""
     req = PaymentRequest(
         a=100,
         u="sat",
         m=["https://mint.example.com"],
-        ms=True,
+        mp=False,
         sm=["bolt11"],
     )
     decoded = deserialize(serialize_bech32m(req))
-    assert decoded.ms is True
+    assert decoded.mp is False
     assert decoded.fr is None
     assert decoded.sm == ["bolt11"]
 
