@@ -386,3 +386,36 @@ async def test_mint_quote_unpaid_update_does_not_set_paid_time(wallet_db: Databa
     assert fetched.state == MintQuoteState.unpaid
     assert fetched.paid_time is None or fetched.paid_time == 0
     assert fetched.updated_at == 1500
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_pending_not_overridden_by_accounting(wallet_db: Database):
+    quote = MintQuote(
+        quote="quote-pending-test",
+        method="bolt11",
+        request="req-pending",
+        checking_id="chk-pending",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.pending,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=100,
+        amount_issued=0,
+    )
+    assert quote.state == MintQuoteState.pending
+
+    quote2 = MintQuote(
+        quote="quote-pending-test2",
+        method="bolt11",
+        request="req-pending2",
+        checking_id="chk-pending2",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.pending,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=100,
+        amount_issued=100,
+    )
+    assert quote2.state == MintQuoteState.pending
