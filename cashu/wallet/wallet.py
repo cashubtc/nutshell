@@ -595,7 +595,7 @@ class Wallet(
                 db=self.db,
                 quote=mint_quote.quote,
                 state=mint_quote.state,
-                paid_time=mint_quote.paid_time or int(time.time()),
+                paid_time=mint_quote.paid_time or (int(time.time()) if mint_quote.state in [MintQuoteState.paid, MintQuoteState.issued] else None),
                 amount_paid=mint_quote.amount_paid,
                 amount_issued=mint_quote.amount_issued,
                 updated_at=mint_quote.updated_at,

@@ -349,18 +349,20 @@ async def update_bolt11_mint_quote(
     db: Database,
     quote: str,
     state: MintQuoteState,
-    paid_time: int,
+    paid_time: Optional[int] = None,
     amount_paid: Optional[int] = None,
     amount_issued: Optional[int] = None,
     updated_at: Optional[int] = None,
     conn: Optional[Connection] = None,
 ) -> None:
-    clauses = ["state = :state", "paid_time = :paid_time"]
+    clauses = ["state = :state"]
     values: Dict[str, Any] = {
         "state": state.value,
-        "paid_time": paid_time,
         "quote": quote,
     }
+    if paid_time is not None:
+        clauses.append("paid_time = :paid_time")
+        values["paid_time"] = paid_time
     if amount_paid is not None:
         clauses.append("amount_paid = :amount_paid")
         values["amount_paid"] = amount_paid

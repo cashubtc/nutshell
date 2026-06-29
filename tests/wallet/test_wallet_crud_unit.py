@@ -355,3 +355,34 @@ async def test_seed_and_mint_roundtrip(wallet_db: Database):
 @pytest.mark.asyncio
 async def test_get_mint_by_url_returns_none_when_missing(wallet_db: Database):
     assert await get_mint_by_url(db=wallet_db, url="https://missing.test") is None
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_unpaid_update_does_not_set_paid_time(wallet_db: Database):
+    quote = MintQuote(
+        quote="quote-unpaid",
+        method="bolt11",
+        request="req-unpaid",
+        checking_id="chk-unpaid",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.unpaid,
+        mint="https://mint.test",
+        created_time=1000,
+        paid_time=None,
+    )
+    await store_bolt11_mint_quote(db=wallet_db, quote=quote)
+
+    await update_bolt11_mint_quote(
+        db=wallet_db,
+        quote="quote-unpaid",
+        state=MintQuoteState.unpaid,
+        paid_time=None,
+        updated_at=1500,
+    )
+
+    fetched = await get_bolt11_mint_quote(db=wallet_db, quote="quote-unpaid")
+    assert fetched is not None
+    assert fetched.state == MintQuoteState.unpaid
+    assert fetched.paid_time is None or fetched.paid_time == 0
+    assert fetched.updated_at == 1500
