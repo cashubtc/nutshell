@@ -446,21 +446,9 @@ class MintQuote(LedgerEvent):
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
-            issued_time = (
-                int(row["issued_time"])
-                if "issued_time" in row.keys() and row["issued_time"]
-                else None
-            )
-            last_checked = (
-                int(row["last_checked"])
-                if "last_checked" in row.keys() and row["last_checked"]
-                else None
-            )
-            updated_at = (
-                int(row["updated_at"])
-                if "updated_at" in row.keys() and row["updated_at"]
-                else None
-            )
+            issued_time = int(row["issued_time"]) if "issued_time" in row.keys() and row["issued_time"] else None
+            last_checked = int(row["last_checked"]) if "last_checked" in row.keys() and row["last_checked"] else None
+            updated_at = int(row["updated_at"]) if "updated_at" in row.keys() and row["updated_at"] else None
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -468,19 +456,13 @@ class MintQuote(LedgerEvent):
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             issued_time = (
-                int(row["issued_time"].timestamp())
-                if "issued_time" in row.keys() and row["issued_time"]
-                else None
+                int(row["issued_time"].timestamp()) if "issued_time" in row.keys() and row["issued_time"] else None
             )
             last_checked = (
-                int(row["last_checked"].timestamp())
-                if "last_checked" in row.keys() and row["last_checked"]
-                else None
+                int(row["last_checked"].timestamp()) if "last_checked" in row.keys() and row["last_checked"] else None
             )
             updated_at = (
-                int(row["updated_at"].timestamp())
-                if "updated_at" in row.keys() and row["updated_at"]
-                else None
+                int(row["updated_at"].timestamp()) if "updated_at" in row.keys() and row["updated_at"] else None
             )
         return cls(
             quote=row["quote"],
@@ -496,15 +478,9 @@ class MintQuote(LedgerEvent):
             last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
-            amount_paid=row["amount_paid"]
-            if "amount_paid" in row.keys() and row["amount_paid"] is not None
-            else None,
-            amount_issued=row["amount_issued"]
-            if "amount_issued" in row.keys() and row["amount_issued"] is not None
-            else None,
-            updated_at=updated_at
-            if updated_at is not None
-            else (issued_time or paid_time or created_time or int(time.time())),
+            amount_paid=row["amount_paid"] if "amount_paid" in row.keys() and row["amount_paid"] is not None else None,
+            amount_issued=row["amount_issued"] if "amount_issued" in row.keys() and row["amount_issued"] is not None else None,
+            updated_at=updated_at if updated_at is not None else (issued_time or paid_time or created_time or int(time.time())),
         )
 
     @classmethod
@@ -551,10 +527,8 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            unit=mint_quote_resp.unit or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            amount=mint_quote_resp.amount or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -587,19 +561,9 @@ class MintQuote(LedgerEvent):
             )
 
             if (
-                (
-                    resp_updated_at is not None
-                    and local_updated_at is not None
-                    and resp_updated_at < local_updated_at
-                )
-                or (
-                    resp_amount_paid is not None
-                    and resp_amount_paid < mint_quote_local.amount_paid
-                )
-                or (
-                    resp_amount_issued is not None
-                    and resp_amount_issued < mint_quote_local.amount_issued
-                )
+                (resp_updated_at is not None and local_updated_at is not None and resp_updated_at < local_updated_at)
+                or (resp_amount_paid is not None and resp_amount_paid < mint_quote_local.amount_paid)
+                or (resp_amount_issued is not None and resp_amount_issued < mint_quote_local.amount_issued)
             ):
                 is_stale = True
 
@@ -645,6 +609,8 @@ class MintQuote(LedgerEvent):
     @state.setter
     def state(self, value: MintQuoteState) -> None:
         self.state_val = value
+        if value == MintQuoteState.pending:
+            return
         if value in [MintQuoteState.paid, MintQuoteState.issued]:
             self.amount_paid = self.amount
         else:
@@ -1103,7 +1069,8 @@ class MintKeyset:
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
         return {
-            int(amount): key.format().hex() for amount, key in self.public_keys.items()
+            int(amount): key.format().hex()
+            for amount, key in self.public_keys.items()
         }
 
     def generate_keys(self):
@@ -1144,7 +1111,7 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-
+            
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
@@ -1157,19 +1124,14 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-
+            
             # KEYSETS V2: Use new keyset ID derivation
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v2(
-                    self.public_keys,
-                    self.unit.name,
-                    self.final_expiry,
-                    self.input_fee_ppk,
-                )
+                self.id = derive_keyset_id_v2(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
@@ -1600,9 +1562,9 @@ class AuthProof(BaseModel):
     def to_base64(self):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
-        return self.prefix + base64.urlsafe_b64encode(
-            json.dumps(serialize_dict).encode()
-        ).decode().rstrip("=")
+        return (
+            self.prefix + base64.urlsafe_b64encode(json.dumps(serialize_dict).encode()).decode().rstrip("=")
+        )
 
     @classmethod
     def from_base64(cls, base64_str: str):

@@ -419,3 +419,27 @@ async def test_mint_quote_pending_not_overridden_by_accounting(wallet_db: Databa
         amount_issued=100,
     )
     assert quote2.state == MintQuoteState.pending
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_pending_state_setter_keeps_accounting_fields(wallet_db: Database):
+    quote = MintQuote(
+        quote="quote-setter-test",
+        method="bolt11",
+        request="req-setter",
+        checking_id="chk-setter",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.paid,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=40,
+        amount_issued=20,
+    )
+    assert quote.amount_paid == 40
+    assert quote.amount_issued == 20
+
+    quote.state = MintQuoteState.pending
+    assert quote.state == MintQuoteState.pending
+    assert quote.amount_paid == 40
+    assert quote.amount_issued == 20
