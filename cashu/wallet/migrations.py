@@ -334,10 +334,3 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
-
-
-async def m017_add_mint_quote_accounting_fields(db: Database):
-    async with db.connect() as conn:
-        await conn.execute("ALTER TABLE bolt11_mint_quotes ADD COLUMN amount_paid INTEGER DEFAULT NULL;")
-        await conn.execute("ALTER TABLE bolt11_mint_quotes ADD COLUMN amount_issued INTEGER DEFAULT NULL;")
-        await conn.execute("ALTER TABLE bolt11_mint_quotes ADD COLUMN updated_at INTEGER DEFAULT NULL;")

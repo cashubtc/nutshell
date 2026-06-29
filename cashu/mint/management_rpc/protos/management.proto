@@ -224,12 +224,6 @@ message Nut04Quote {
     optional string pubkey = 13;
     // Optional: The Unix timestamp when the ecash has been issued.
     optional int64 issued_time = 14;
-    // Optional: The amount paid in the quote.
-    optional uint64 amount_paid = 15;
-    // Optional: The amount of tokens issued.
-    optional uint64 amount_issued = 16;
-    // Optional: The Unix timestamp when the quote was updated.
-    optional int64 updated_at = 17;
 }
 
 // BlindedMessage represents a blinded message used in Cashu.
