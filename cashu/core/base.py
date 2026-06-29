@@ -456,6 +456,11 @@ class MintQuote(LedgerEvent):
                 if "last_checked" in row.keys() and row["last_checked"]
                 else None
             )
+            updated_at = (
+                int(row["updated_at"])
+                if "updated_at" in row.keys() and row["updated_at"]
+                else None
+            )
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -470,6 +475,11 @@ class MintQuote(LedgerEvent):
             last_checked = (
                 int(row["last_checked"].timestamp())
                 if "last_checked" in row.keys() and row["last_checked"]
+                else None
+            )
+            updated_at = (
+                int(row["updated_at"].timestamp())
+                if "updated_at" in row.keys() and row["updated_at"]
                 else None
             )
         return cls(
@@ -492,8 +502,8 @@ class MintQuote(LedgerEvent):
             amount_issued=row["amount_issued"]
             if "amount_issued" in row.keys() and row["amount_issued"] is not None
             else None,
-            updated_at=row["updated_at"]
-            if "updated_at" in row.keys() and row["updated_at"] is not None
+            updated_at=updated_at
+            if updated_at is not None
             else (issued_time or paid_time or created_time or int(time.time())),
         )
 
