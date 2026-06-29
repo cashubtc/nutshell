@@ -1,5 +1,7 @@
 import asyncio
+import contextlib
 import json
+import time
 from typing import List, Union
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -46,6 +48,19 @@ class LedgerEventClientManager:
     async def start(self):
         await self.websocket.accept()
 
+        # Close connections that only subscribe to mint quotes which expire
+        # unpaid, so a client cannot hold the socket open until the read timeout.
+        expiry_monitor_task = asyncio.create_task(
+            self._monitor_expired_mint_quote_subscriptions()
+        )
+        try:
+            await self._receive_loop()
+        finally:
+            expiry_monitor_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await expiry_monitor_task
+
+    async def _receive_loop(self):
         while True:
             message = await asyncio.wait_for(
                 self.websocket.receive(),
@@ -173,6 +188,61 @@ class LedgerEventClientManager:
     ):
         logger.debug(f"Sending websocket message: {data.model_dump_json()}")
         await self.websocket.send_text(data.model_dump_json())
+
+    async def _monitor_expired_mint_quote_subscriptions(self) -> None:
+        """Close the websocket once every subscribed bolt11 mint quote is in a
+        terminal state.
+
+        A subscription to a mint quote can only produce a finite set of state
+        transitions. Once all subscribed quotes are either paid, or have expired
+        while unpaid, no more useful events are expected. Proactively closing
+        such connections frees server resources and reflects that the
+        subscription is dead.
+        """
+        interval = settings.mint_websocket_quote_expiry_check_interval
+        while True:
+            await asyncio.sleep(interval)
+            quote_filters = list(
+                self.subscriptions.get(
+                    JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE, {}
+                )
+            )
+            if not quote_filters:
+                continue
+
+            now = int(time.time())
+            all_terminal = True
+            async with self.db_read.db.connect() as conn:
+                for quote_id in quote_filters:
+                    mint_quote = await self.db_read.crud.get_mint_quote(
+                        quote_id=quote_id, db=self.db_read.db, conn=conn
+                    )
+                    # A quote is terminal when it is paid, or when it is
+                    # unpaid and has passed its expiry.
+                    terminal = bool(
+                        mint_quote
+                        and (
+                            mint_quote.paid
+                            or (
+                                mint_quote.unpaid
+                                and mint_quote.expiry
+                                and mint_quote.expiry <= now
+                            )
+                        )
+                    )
+                    if not terminal:
+                        all_terminal = False
+                        break
+
+            if all_terminal:
+                logger.info(
+                    "Closing websocket: all subscribed mint quotes are terminal"
+                )
+                with contextlib.suppress(Exception):
+                    await self.websocket.close(
+                        code=1000, reason="mint quote subscription terminal"
+                    )
+                return
 
     def add_subscription(
         self,
