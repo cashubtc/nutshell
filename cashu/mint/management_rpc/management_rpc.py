@@ -143,11 +143,12 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         mint_quote_dict = mint_quote.dict()
         mint_quote_dict['state'] = str(mint_quote.state)
         mint_quote_dict.pop('state_val', None)
-        mint_quote_dict.pop('amount_paid', None)
-        mint_quote_dict.pop('amount_issued', None)
-        mint_quote_dict.pop('updated_at', None)
         del mint_quote_dict['mint'] # unused
         del mint_quote_dict['privkey'] # unused
+        # Remove any None values to prevent protobuf type validation errors
+        for key in list(mint_quote_dict.keys()):
+            if mint_quote_dict[key] is None:
+                del mint_quote_dict[key]
         return management_pb2.GetNut04QuoteResponse(
             quote=management_pb2.Nut04Quote(**mint_quote_dict)
         )
