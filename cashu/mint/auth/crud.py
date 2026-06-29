@@ -388,8 +388,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, amount_paid, amount_issued, updated_at)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :amount_paid, :amount_issued, :updated_at)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time)
             """,
             {
                 "quote": quote.quote,
@@ -411,13 +411,6 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                     db.timestamp_from_seconds(quote.issued_time) or ""
                 )
                 if quote.issued_time
-                else None,
-                "amount_paid": quote.amount_paid,
-                "amount_issued": quote.amount_issued,
-                "updated_at": db.to_timestamp(
-                    db.timestamp_from_seconds(quote.updated_at) or ""
-                )
-                if quote.updated_at
                 else None,
             },
         )
@@ -480,7 +473,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time, amount_paid = :amount_paid, amount_issued = :amount_issued, updated_at = :updated_at WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time WHERE quote = :quote",
             {
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(
@@ -492,13 +485,6 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                     db.timestamp_from_seconds(quote.issued_time) or ""
                 )
                 if quote.issued_time
-                else None,
-                "amount_paid": quote.amount_paid,
-                "amount_issued": quote.amount_issued,
-                "updated_at": db.to_timestamp(
-                    db.timestamp_from_seconds(quote.updated_at) or ""
-                )
-                if quote.updated_at
                 else None,
                 "quote": quote.quote,
             },

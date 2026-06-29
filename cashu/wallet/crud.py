@@ -262,8 +262,8 @@ async def store_bolt11_mint_quote(
     await (conn or db).execute(
         """
         INSERT INTO bolt11_mint_quotes
-            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey, amount_paid, amount_issued, updated_at)
-        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey, :amount_paid, :amount_issued, :updated_at)
+            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey)
+        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey)
         """,
         {
             "quote": quote.quote,
@@ -278,9 +278,6 @@ async def store_bolt11_mint_quote(
             "paid_time": quote.paid_time,
             "expiry": quote.expiry,
             "privkey": quote.privkey or "",
-            "amount_paid": quote.amount_paid,
-            "amount_issued": quote.amount_issued,
-            "updated_at": quote.updated_at,
         },
     )
 
@@ -349,37 +346,20 @@ async def update_bolt11_mint_quote(
     db: Database,
     quote: str,
     state: MintQuoteState,
-    paid_time: Optional[int] = None,
-    amount_paid: Optional[int] = None,
-    amount_issued: Optional[int] = None,
-    updated_at: Optional[int] = None,
+    paid_time: int,
     conn: Optional[Connection] = None,
 ) -> None:
-    clauses = ["state = :state"]
-    values: Dict[str, Any] = {
-        "state": state.value,
-        "quote": quote,
-    }
-    if paid_time is not None:
-        clauses.append("paid_time = :paid_time")
-        values["paid_time"] = paid_time
-    if amount_paid is not None:
-        clauses.append("amount_paid = :amount_paid")
-        values["amount_paid"] = amount_paid
-    if amount_issued is not None:
-        clauses.append("amount_issued = :amount_issued")
-        values["amount_issued"] = amount_issued
-    if updated_at is not None:
-        clauses.append("updated_at = :updated_at")
-        values["updated_at"] = updated_at
-
     await (conn or db).execute(
-        f"""
+        """
         UPDATE bolt11_mint_quotes
-        SET {', '.join(clauses)}
+        SET state = :state, paid_time = :paid_time
         WHERE quote = :quote
         """,
-        values,
+        {
+            "state": state.value,
+            "paid_time": paid_time,
+            "quote": quote,
+        },
     )
 
 
@@ -410,9 +390,7 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.model_dump() for c in quote.change])
-                if quote.change
-                else ""
+                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
             ),
         },
     )

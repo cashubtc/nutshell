@@ -198,9 +198,6 @@ async def test_nut04_quote(rpc_servicer):
     assert response_get.quote.quote == quote_id
     assert response_get.quote.state == str(MintQuoteState.unpaid)
     assert response_get.quote.amount == 100
-    assert response_get.quote.amount_paid == 0
-    assert response_get.quote.amount_issued == 0
-    assert response_get.quote.updated_at > 0
     
     # Mock UpdateNut04Quote state update
     rpc_servicer.ledger.db_write._update_mint_quote_state = AsyncMock()
