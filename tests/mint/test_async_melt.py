@@ -105,18 +105,14 @@ async def test_async_melt_commits_pending_before_returning(ledger):
         assert persisted is not None
         assert persisted.state == MeltQuoteState.pending
 
-        for _ in range(30):
-            persisted = await ledger.crud.get_melt_quote(
-                quote_id=melt_quote.quote, db=ledger.db
-            )
-            assert persisted is not None
-            if persisted.state == MeltQuoteState.paid:
-                break
-            await asyncio.sleep(0.1)
-        else:
-            pytest.fail("background async melt did not settle before test exit")
+        # Wait for the background payment to complete
+        await asyncio.sleep(settings.fakewallet_delay_outgoing_payment + 1)
     finally:
         settings.fakewallet_delay_outgoing_payment = original_delay
+
+    persisted = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
+    assert persisted is not None
+    assert persisted.state == MeltQuoteState.paid
 
 
 @pytest.mark.asyncio
