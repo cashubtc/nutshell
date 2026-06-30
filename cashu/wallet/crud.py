@@ -29,8 +29,8 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id)
-        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id)
+          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id, pol_receipt)
+        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id, :pol_receipt)
         """,
         {
             "id": proof.id,
@@ -42,6 +42,9 @@ async def store_proof(
             "dleq": json.dumps(proof.dleq.model_dump()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "pol_receipt": json.dumps(proof.pol_receipt.model_dump())
+            if proof.pol_receipt
+            else "",
         },
     )
 
@@ -109,8 +112,8 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id)
-        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id)
+          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id, pol_receipt)
+        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id, :pol_receipt)
         """,
         {
             "amount": proof.amount,
@@ -121,6 +124,9 @@ async def invalidate_proof(
             "derivation_path": proof.derivation_path,
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "pol_receipt": json.dumps(proof.pol_receipt.model_dump())
+            if proof.pol_receipt
+            else "",
         },
     )
 

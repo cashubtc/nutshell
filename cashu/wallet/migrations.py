@@ -334,3 +334,12 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
+
+
+async def m017_add_pol_receipts(db: Database):
+    """
+    Adds pol_receipt column to proofs and proofs_used tables.
+    """
+    async with db.connect() as conn:
+        await conn.execute("ALTER TABLE proofs ADD COLUMN pol_receipt TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN pol_receipt TEXT")

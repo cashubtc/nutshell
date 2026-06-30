@@ -1261,3 +1261,27 @@ async def m035_add_last_checked_to_mint_quotes(db: Database):
                 ADD COLUMN last_checked TIMESTAMP NULL
             """
         )
+
+
+async def m036_pol_epochs(db: Database):
+    """
+    Create pol_epochs table to store historical Sparse Merkle Sum Tree roots and OTS receipts per epoch.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema("pol_epochs")} (
+                    keyset_id TEXT NOT NULL,
+                    epoch_index INTEGER NOT NULL,
+                    timestamp TIMESTAMP NOT NULL,
+                    root_issued_hash TEXT NOT NULL,
+                    root_issued_sum {db.big_int} NOT NULL,
+                    root_spent_hash TEXT NOT NULL,
+                    root_spent_sum {db.big_int} NOT NULL,
+                    outstanding_balance {db.big_int} NOT NULL,
+                    ots_receipt TEXT NOT NULL,
+                    signature TEXT NOT NULL,
+                    PRIMARY KEY (keyset_id, epoch_index)
+                );
+            """
+        )
