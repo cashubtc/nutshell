@@ -172,6 +172,11 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
             logger.debug(
                 f"SIGALL Adding witness to proof: {proofs[0].secret} with signature: {signature}"
             )
+            # Sign message_to_sign with remaining keys for SIG_ALL multi-key slots
+            if proofs[0].p2pk_e and len(p2bk_keys) > 1:
+                for extra_key in p2bk_keys[1:]:
+                    extra_sig = self.schnorr_sign_message(message_to_sign, extra_key)
+                    self.add_signatures_to_proofs([proofs[0]], [extra_sig])
         except Exception:
             logger.error("not all secrets are the same, skipping SIG_ALL signature")
             return proofs

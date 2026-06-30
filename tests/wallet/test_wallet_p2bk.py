@@ -749,6 +749,56 @@ async def test_p2bk_htlc_inheritance(wallet1: Wallet, wallet2: Wallet):
     await wallet2.redeem(send_proofs)
 
 
+@pytest.mark.asyncio
+async def test_p2bk_sig_all_multisig(wallet1: Wallet, wallet2: Wallet):
+    """P2BK with SIG_ALL spending condition and multiple signatures required."""
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+
+    # Create a lock where wallet2 holds both keys (slot 0 and slot 1)
+    # and requires 2 signatures to spend (n_sigs=2).
+    tags = Tags()
+    tags["pubkeys"] = [pubkey_wallet2]
+    secret_lock, ephemeral_pub = await wallet1.create_p2bk_lock(
+        pubkey_wallet2, tags=tags, sig_all=True, n_sigs=2
+    )
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock, p2pk_e=ephemeral_pub
+    )
+
+    # Verify SIG_ALL and n_sigs flags
+    for p in send_proofs:
+        secret = P2PKSecret.deserialize(p.secret)
+        p2pk = P2PKSecret.from_secret(secret)
+        assert p2pk.sigflag == SigFlags.SIG_ALL
+        assert p2pk.n_sigs == 2
+
+    # Under our fix, wallet2 will derive 2 signing keys, sign with both,
+    # and redeem successfully.
+    await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_p2bk_lock_no_tag_duplication(wallet1: Wallet):
+    """Verify that create_p2bk_lock does not duplicate tags when rebuilding with multiple input tags."""
+    pubkey = await wallet1.create_p2pk_pubkey()
+    tags = Tags()
+    tags.root.append(["pubkeys", pubkey])
+    tags.root.append(["pubkeys", pubkey])
+
+    secret_lock, _ = await wallet1.create_p2bk_lock(
+        pubkey, tags=tags
+    )
+
+    # Check that there is only one "pubkeys" tag in secret_lock.tags.root
+    pubkeys_tags = [t for t in secret_lock.tags.root if t[0] == "pubkeys"]
+
+    assert len(pubkeys_tags) == 1, f"Expected exactly 1 pubkeys tag, got {len(pubkeys_tags)}"
+
+
 async def _create_outputs(wallet: Wallet, amount: int) -> List[BlindedMessage]:
     """Helper to create blinded outputs."""
     output_amounts = [amount]

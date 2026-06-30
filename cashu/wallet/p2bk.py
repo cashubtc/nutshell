@@ -75,11 +75,17 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
         # Rebuild tags with blinded keys.
         # Tags stores multi-value as [key, v1, v2, ...]; list assignment is safe.
         blinded_tags = Tags()
+        pubkeys_added = False
+        refund_added = False
         for tag in tags.root:
             if tag[0] == "pubkeys":
-                blinded_tags["pubkeys"] = blinded_additional
+                if not pubkeys_added:
+                    blinded_tags["pubkeys"] = blinded_additional
+                    pubkeys_added = True
             elif tag[0] == "refund":
-                blinded_tags["refund"] = blinded_refund
+                if not refund_added:
+                    blinded_tags["refund"] = blinded_refund
+                    refund_added = True
             else:
                 blinded_tags.root.append(tag)
 
