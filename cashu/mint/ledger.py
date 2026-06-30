@@ -1022,24 +1022,21 @@ class Ledger(
         Returns:
             PostMeltQuoteResponse: Melt quote response with pending state.
         """
-        # get melt quote
-        melt_quote = await self.get_melt_quote(quote_id=quote)
-        if not melt_quote:
-            raise TransactionError("melt quote not found")
-        if not melt_quote.unpaid:
-            raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
+        # validate and set the quote to pending before responding
+        melt_quote = await self._prepare_melt(proofs=proofs, quote=quote, outputs=outputs)
 
-        # Launch actual melt task
+        # run the payment in the background
         async def melt_task():
             try:
-                await self.melt(proofs=proofs, quote=quote, outputs=outputs)
+                await self._execute_melt_payment(melt_quote, proofs, outputs)
             except Exception as e:
                 logger.error(f"Error in background melt task: {e}")
 
         asyncio.create_task(melt_task())
 
-        melt_quote.state = MeltQuoteState.pending
-        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+        # respond pending now that it is durably committed
+        pending_quote = melt_quote.model_copy(update={"state": MeltQuoteState.pending})
+        return PostMeltQuoteResponse.from_melt_quote(pending_quote)
 
     async def melt(
         self,
@@ -1061,6 +1058,17 @@ class Ledger(
         Returns:
             PostMeltQuoteResponse: Melt quote response.
         """
+        melt_quote = await self._prepare_melt(proofs=proofs, quote=quote, outputs=outputs)
+        return await self._execute_melt_payment(melt_quote, proofs, outputs)
+
+    async def _prepare_melt(
+        self,
+        *,
+        proofs: List[Proof],
+        quote: str,
+        outputs: Optional[List[BlindedMessage]] = None,
+    ) -> MeltQuote:
+        """Validates a melt request and sets the quote and its proofs to pending."""
         # make sure we're allowed to melt
         if self.disable_melt and settings.mint_disable_melt_on_error:
             raise NotAllowedError("Melt is disabled. Please contact the operator.")
@@ -1070,9 +1078,7 @@ class Ledger(
         if not melt_quote.unpaid:
             raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
 
-        unit, method = self._verify_and_get_unit_method(
-            melt_quote.unit, melt_quote.method
-        )
+        unit, _ = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
 
         # make sure that the proofs are in the same unit as the quote
         self._verify_proofs_unit(proofs, expected_unit=unit)
@@ -1131,6 +1137,21 @@ class Ledger(
                 state=MeltQuoteState.unpaid,
             )
             raise e
+
+        return melt_quote
+
+    async def _execute_melt_payment(
+        self,
+        melt_quote: MeltQuote,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]],
+    ) -> PostMeltQuoteResponse:
+        """Pays the Lightning invoice for a pending melt quote and finalizes it."""
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, melt_quote.method
+        )
+        input_fees = self.get_fees_for_proofs(proofs)
+        fee_reserve_provided = sum_proofs(proofs) - melt_quote.amount - input_fees
 
         # quote not paid yet (not internal), pay it with the backend
         if not melt_quote.paid:
