@@ -1023,7 +1023,9 @@ class Ledger(
             PostMeltQuoteResponse: Melt quote response with pending state.
         """
         # validate and set the quote to pending before responding
-        melt_quote = await self._prepare_melt(proofs=proofs, quote=quote, outputs=outputs)
+        melt_quote = await self._prepare_melt(
+            proofs=proofs, quote=quote, outputs=outputs
+        )
 
         # run the payment in the background
         async def melt_task():
@@ -1058,7 +1060,9 @@ class Ledger(
         Returns:
             PostMeltQuoteResponse: Melt quote response.
         """
-        melt_quote = await self._prepare_melt(proofs=proofs, quote=quote, outputs=outputs)
+        melt_quote = await self._prepare_melt(
+            proofs=proofs, quote=quote, outputs=outputs
+        )
         return await self._execute_melt_payment(melt_quote, proofs, outputs)
 
     async def _prepare_melt(

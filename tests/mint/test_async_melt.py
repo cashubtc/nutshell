@@ -11,13 +11,17 @@ from tests.helpers import is_fake, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 async def test_async_melt(ledger):
     # This test uses direct API calls because the wallet fixture issue
     # for async melt is complex in this setup.
     from cashu.wallet.wallet import Wallet
-    wallet = await Wallet.with_db(url=SERVER_ENDPOINT, db="test_data/wallet_async_melt", name="wallet_async_melt")
+
+    wallet = await Wallet.with_db(
+        url=SERVER_ENDPOINT, db="test_data/wallet_async_melt", name="wallet_async_melt"
+    )
     await wallet.load_mint()
 
     # Setup: get some funds
@@ -47,15 +51,16 @@ async def test_async_melt(ledger):
     assert response.status_code == 200
     result = response.json()
     assert result["state"] == MeltQuoteState.pending.value
-    
+
     # Wait a bit for the background task to complete
     await asyncio.sleep(2)
-    
+
     # Verify it became paid
     response = httpx.get(f"{BASE_URL}/v1/melt/quote/bolt11/{quote.quote}")
     assert response.status_code == 200
     result = response.json()
     assert result["state"] == MeltQuoteState.paid.value
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
@@ -110,7 +115,9 @@ async def test_async_melt_commits_pending_before_returning(ledger):
     finally:
         settings.fakewallet_delay_outgoing_payment = original_delay
 
-    persisted = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
+    persisted = await ledger.crud.get_melt_quote(
+        quote_id=melt_quote.quote, db=ledger.db
+    )
     assert persisted is not None
     assert persisted.state == MeltQuoteState.paid
 
