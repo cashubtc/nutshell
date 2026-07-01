@@ -328,6 +328,30 @@ def test_mint_quote_stale_check_handles_missing_local_accounting_fields():
     assert quote.amount_issued == 0
 
 
+def test_mint_quote_from_resp_wallet_prioritizes_pending():
+    mint_response = PostMintQuoteResponse(
+        quote="quote-pending-test",
+        request="req-pending-test",
+        amount=100,
+        unit="sat",
+        state="PENDING",
+        amount_paid=100,
+        amount_issued=0,
+        updated_at=1500,
+    )
+
+    quote = MintQuote.from_resp_wallet(
+        mint_response,
+        mint="https://mint.test",
+        amount=100,
+        unit="sat",
+    )
+
+    assert quote.state == MintQuoteState.pending
+    assert quote.amount_paid == 100
+    assert quote.amount_issued == 0
+
+
 @pytest.mark.asyncio
 async def test_melt_quote_crud_lifecycle(wallet_db: Database):
     quote_1 = _melt_quote("mquote-1", MeltQuoteState.unpaid)

@@ -521,12 +521,15 @@ class MintQuote(LedgerEvent):
         amount_paid = mint_quote_resp.amount_paid
         amount_issued = mint_quote_resp.amount_issued
 
-        if amount_paid is not None and amount_issued is not None:
+        if (
+            mint_quote_resp.state == "PENDING"
+            or mint_quote_resp.state == MintQuoteState.pending
+            or mint_quote_resp.state == MintQuoteState.pending.value
+        ):
+            state = MintQuoteState.pending
+        elif amount_paid is not None and amount_issued is not None:
             if amount_paid == 0 and amount_issued == 0:
-                if mint_quote_resp.state == "PENDING":
-                    state = MintQuoteState.pending
-                else:
-                    state = MintQuoteState.unpaid
+                state = MintQuoteState.unpaid
             elif amount_paid > amount_issued:
                 state = MintQuoteState.paid
             elif amount_paid == amount_issued and amount_issued > 0:
