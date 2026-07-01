@@ -16,6 +16,7 @@ from cashu.core.base import (
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
+from cashu.core.models.mint_quote import PostMintQuoteResponse
 from cashu.wallet import migrations as wallet_migrations
 from cashu.wallet.crud import (
     bump_secret_derivation,
@@ -291,6 +292,42 @@ async def test_mint_quote_accounting_fields_lifecycle(wallet_db: Database):
     assert fetched_updated.updated_at == 3000
 
 
+def test_mint_quote_stale_check_handles_missing_local_accounting_fields():
+    local_quote = MintQuote(
+        quote="quote-migrated",
+        method="bolt11",
+        request="req-migrated",
+        checking_id="chk-migrated",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.unpaid,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=None,
+        amount_issued=None,
+    )
+    mint_response = PostMintQuoteResponse(
+        quote="quote-migrated",
+        request="req-migrated",
+        amount=100,
+        unit="sat",
+        state=MintQuoteState.unpaid.value,
+        amount_paid=0,
+        amount_issued=0,
+        updated_at=1500,
+    )
+
+    quote = MintQuote.check_stale_and_from_resp_wallet(
+        mint_response,
+        mint="https://mint.test",
+        mint_quote_local=local_quote,
+    )
+
+    assert quote.state == MintQuoteState.unpaid
+    assert quote.amount_paid == 0
+    assert quote.amount_issued == 0
+
+
 @pytest.mark.asyncio
 async def test_melt_quote_crud_lifecycle(wallet_db: Database):
     quote_1 = _melt_quote("mquote-1", MeltQuoteState.unpaid)
@@ -422,7 +459,9 @@ async def test_mint_quote_pending_not_overridden_by_accounting(wallet_db: Databa
 
 
 @pytest.mark.asyncio
-async def test_mint_quote_pending_state_setter_keeps_accounting_fields(wallet_db: Database):
+async def test_mint_quote_pending_state_setter_keeps_accounting_fields(
+    wallet_db: Database,
+):
     quote = MintQuote(
         quote="quote-setter-test",
         method="bolt11",
