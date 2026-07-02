@@ -167,6 +167,7 @@ class DbWriteHelper:
                 raise TransactionError("Mint quote is not paid yet.")
             # set the quote as pending
             quote.state = MintQuoteState.pending
+            quote.updated_at = int(time.time())
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -208,6 +209,7 @@ class DbWriteHelper:
                 
                 # set the quote as pending
                 quote.state = MintQuoteState.pending
+                quote.updated_at = int(time.time())
                 logger.trace(f"crud: setting quote {quote_id} as PENDING")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
@@ -240,8 +242,10 @@ class DbWriteHelper:
                 )
             # set the quote to previous state
             quote.state = state
+            now = int(time.time())
+            quote.updated_at = now
             if state == MintQuoteState.issued and not quote.issued_time:
-                quote.issued_time = int(time.time())
+                quote.issued_time = now
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -283,6 +287,7 @@ class DbWriteHelper:
                     )
                 # set the quote to previous state
                 quote.state = state
+                quote.updated_at = int(time.time())
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
@@ -381,6 +386,7 @@ class DbWriteHelper:
             if not mint_quote:
                 raise TransactionError("Mint quote not found.")
             mint_quote.state = state
+            mint_quote.updated_at = int(time.time())
             await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 
     async def _update_melt_quote_state(

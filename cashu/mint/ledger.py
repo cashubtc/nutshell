@@ -446,6 +446,7 @@ class Ledger(
                         quote.state = MintQuoteState.paid
                         quote.paid_time = now
                         quote.last_checked = now
+                        quote.updated_at = now
                         await self.crud.update_mint_quote(
                             quote=quote, db=self.db, conn=conn
                         )
@@ -995,6 +996,7 @@ class Ledger(
 
         mint_quote.state = MintQuoteState.paid
         mint_quote.paid_time = melt_quote.paid_time
+        mint_quote.updated_at = melt_quote.paid_time
 
         async with self.db.get_connection() as conn:
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)

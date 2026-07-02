@@ -1261,3 +1261,20 @@ async def m035_add_last_checked_to_mint_quotes(db: Database):
                 ADD COLUMN last_checked TIMESTAMP NULL
             """
         )
+
+
+async def m036_add_mint_quote_accounting_fields(db: Database):
+    """
+    Add accounting and status fields to the mint_quotes table.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN amount_paid {db.big_int} DEFAULT NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN amount_issued {db.big_int} DEFAULT NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN updated_at TIMESTAMP DEFAULT NULL"
+        )
+
