@@ -5,7 +5,15 @@ from typing import List, Union
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    DLEQWallet,
+    MeltQuote,
+    MeltQuoteState,
+    MintQuoteState,
+    Proof,
+    WalletKeyset,
+)
+from cashu.core.crypto import b_dhke
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -485,6 +493,42 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     await wallet1.invalidate(spendable_proofs)
     assert wallet1.balance == 32
     assert wallet1.available_balance == 32
+
+
+def test_verify_proofs_dleq_mixed_missing_and_invalid_dleq_proofs():
+    class MockWallet:
+        verify_proofs_dleq = Wallet.verify_proofs_dleq
+
+        def __init__(self, keysets):
+            self.keysets = keysets
+
+    mint_private_key = b_dhke.PrivateKey()
+    mint_public_key = mint_private_key.public_key
+    assert mint_public_key
+    keyset = WalletKeyset(public_keys={1: mint_public_key}, unit="sat")
+    wallet = MockWallet({keyset.id: keyset})
+
+    def make_proof(secret: str) -> Proof:
+        B_, r = b_dhke.step1_alice(secret)
+        C_, e, s = b_dhke.step2_bob(B_, mint_private_key)
+        C = b_dhke.step3_alice(C_, r, mint_public_key)
+        return Proof(
+            id=keyset.id,
+            amount=1,
+            secret=secret,
+            C=C.format().hex(),
+            dleq=DLEQWallet(r=r.to_hex(), e=e.to_hex(), s=s.to_hex()),
+        )
+
+    proofs = [make_proof("missing-dleq"), make_proof("invalid-dleq")]
+    proofs[0].dleq = None
+    assert proofs[1].dleq
+    proofs[1].dleq.e = (
+        ("0" if proofs[1].dleq.e[0] != "0" else "1") + proofs[1].dleq.e[1:]
+    )
+
+    with pytest.raises(Exception, match="DLEQ proof invalid."):
+        wallet.verify_proofs_dleq(proofs)
 
 
 @pytest.mark.asyncio
