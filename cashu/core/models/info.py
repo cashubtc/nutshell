@@ -10,6 +10,7 @@ class MintMethodBolt11OptionSetting(BaseModel):
 class MintMethodSetting(BaseModel):
     method: str
     unit: str
+    method_name: Optional[str] = None
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
     options: Optional[MintMethodBolt11OptionSetting] = None
@@ -18,6 +19,7 @@ class MintMethodSetting(BaseModel):
 class MeltMethodSetting(BaseModel):
     method: str
     unit: str
+    method_name: Optional[str] = None
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
 

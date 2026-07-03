@@ -70,6 +70,9 @@ def _dummy_ledger():
             state=SimpleNamespace(value="UNPAID"),
             expiry=123,
             pubkey=payload.pubkey,
+            amount_paid=0,
+            amount_issued=0,
+            updated_at=123,
         )
 
     async def get_mint_quote(quote):
@@ -82,6 +85,9 @@ def _dummy_ledger():
             state=SimpleNamespace(value="UNPAID"),
             expiry=123,
             pubkey=None,
+            amount_paid=0,
+            amount_issued=0,
+            updated_at=123,
         )
 
     async def melt_quote(payload):

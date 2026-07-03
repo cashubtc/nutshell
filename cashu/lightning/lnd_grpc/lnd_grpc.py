@@ -47,6 +47,7 @@ INVOICE_RESULT_MAP = {
 }
 
 MAX_ROUTE_RETRIES = 50
+PAYMENT_TIMEOUT_SECONDS = 60
 
 
 class LndRPCWallet(LightningBackend):
@@ -162,47 +163,68 @@ class LndRPCWallet(LightningBackend):
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+            quote_amount = Amount(Unit[quote.unit], quote.amount)
+            if amount_msat != quote_amount.to(Unit.msat).amount and self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    quote, quote_amount, fee_limit_msat
                 )
 
-        # set the fee limit for the payment
-        feelimit = lnrpc.FeeLimit(fixed_msat=fee_limit_msat)
-        r = None
+        # pay the invoice with routerrpc.SendPaymentV2, a streaming RPC that
+        # sends payment updates until a terminal status is reached. The
+        # previously used lnrpc.SendPaymentSync was removed in lnd v0.21.0.
+        request = routerrpc.SendPaymentRequest(
+            payment_request=quote.request,
+            fee_limit_msat=fee_limit_msat,
+            timeout_seconds=PAYMENT_TIMEOUT_SECONDS,
+            no_inflight_updates=True,
+        )
         try:
             async with grpc.aio.secure_channel(
                 self.endpoint, self.combined_creds
             ) as channel:
-                lnstub = lightningstub.LightningStub(channel)
-                r = await lnstub.SendPaymentSync(
-                    lnrpc.SendRequest(
-                        payment_request=quote.request,
-                        fee_limit=feelimit,
+                router_stub = routerstub.RouterStub(channel)
+                async for payment in router_stub.SendPaymentV2(request):
+                    result = PAYMENT_RESULT_MAP.get(
+                        payment.status, PaymentResult.UNKNOWN
                     )
-                )
+                    if result == PaymentResult.PENDING:
+                        # non-terminal in-flight update, wait for the next one
+                        continue
+
+                    if result == PaymentResult.SETTLED:
+                        return PaymentResponse(
+                            result=PaymentResult.SETTLED,
+                            checking_id=payment.payment_hash,
+                            fee=(
+                                Amount(unit=Unit.msat, amount=payment.fee_msat)
+                                if payment.fee_msat
+                                else None
+                            ),
+                            preimage=payment.payment_preimage,
+                            error_message=None,
+                        )
+
+                    return PaymentResponse(
+                        result=result,
+                        error_message=lnrpc.PaymentFailureReason.Name(
+                            payment.failure_reason
+                        ),
+                    )
         except AioRpcError as e:
-            error_message = f"SendPaymentSync failed: {e}"
+            # transport/RPC error: we don't know whether the payment was
+            # attempted, so report UNKNOWN (never FAILED) and let the ledger
+            # re-check the real state with TrackPaymentV2.
+            error_message = f"SendPaymentV2 failed: {e}"
             return PaymentResponse(
-                result=PaymentResult.FAILED,
+                result=PaymentResult.UNKNOWN,
                 error_message=error_message,
             )
 
-        if r.payment_error:
-            return PaymentResponse(
-                result=PaymentResult.FAILED,
-                error_message=r.payment_error,
-            )
-
-        checking_id = r.payment_hash.hex()
-        fee_msat = r.payment_route.total_fees_msat
-        preimage = r.payment_preimage.hex()
+        # stream ended without a terminal status, get_payment_status will
+        # check the payment state with TrackPaymentV2
         return PaymentResponse(
-            result=PaymentResult.SETTLED,
-            checking_id=checking_id,
-            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
-            preimage=preimage,
-            error_message=None,
+            result=PaymentResult.UNKNOWN,
+            error_message="SendPaymentV2 stream ended without a terminal payment status",
         )
 
     async def pay_partial_invoice(
@@ -277,7 +299,7 @@ class LndRPCWallet(LightningBackend):
                             )
                             failed_dest = route.routes[0].hops[failure_index].pub_key
                             logger.debug(
-                                f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
+                                f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index - 1} of the route"
                             )
                             continue
                     break
@@ -377,7 +399,7 @@ class LndRPCWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 async with grpc.aio.secure_channel(
@@ -394,11 +416,16 @@ class LndRPCWallet(LightningBackend):
                         payment_hash = invoice.r_hash.hex()
                         yield payment_hash
             except AioRpcError as exc:
-                logger.error(f"SubscribeInvoices failed: {exc}. Retrying in {retry_delay} sec...")
+                logger.error(
+                    f"SubscribeInvoices failed: {exc}. Retrying in {retry_delay} sec..."
+                )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
-                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
+                retry_delay = max(
+                    settings.mint_retry_exponential_backoff_base_delay,
+                    min(retry_delay * 2, max_retry_delay),
+                )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

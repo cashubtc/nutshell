@@ -51,6 +51,7 @@ async def test_info(ledger: Ledger):
     assert info.nuts[MINT_NUT]["disabled"] is False
     setting = MintMethodSetting.model_validate(info.nuts[MINT_NUT]["methods"][0])
     assert setting.method == "bolt11"
+    assert setting.method_name == "bolt11"
     assert setting.unit == "sat"
     assert setting.options
     assert setting.options.description is True
@@ -119,7 +120,9 @@ async def test_api_keysets(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc")
+    response = httpx.get(
+        f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
@@ -132,7 +135,9 @@ async def test_api_keyset_keys(ledger: Ledger):
                 "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
-                    for k, v in ledger.keysets["01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets[
+                        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+                    ].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -146,7 +151,9 @@ async def test_api_keyset_keys(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc")
+    response = httpx.get(
+        f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
@@ -159,7 +166,9 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
                 "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
-                    for k, v in ledger.keysets["01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets[
+                        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+                    ].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -189,7 +198,10 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert (
+        result["signatures"][0]["id"]
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -218,6 +230,10 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
+    assert resp_quote.amount_paid == 0
+    assert resp_quote.amount_issued == 0
+    assert resp_quote.updated_at is not None
+    assert resp_quote.updated_at > 0
 
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
@@ -245,6 +261,10 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
+    assert resp_quote.amount_paid == 100
+    assert resp_quote.amount_issued == 0
+    assert resp_quote.updated_at is not None
+    assert resp_quote.updated_at >= result["updated_at"]
 
     assert resp_quote.pubkey == "02" + "00" * 32
 
@@ -276,7 +296,10 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert (
+        result["signatures"][0]["id"]
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -440,6 +463,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.unit == "sat"
     assert resp_quote.request == invoice_payment_request
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     settings.debug_mint_only_deprecated,
@@ -500,6 +524,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert resp_quote.change[0].amount == 2
     assert resp_quote.state == MeltQuoteState.paid.value
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     settings.debug_mint_only_deprecated,
@@ -512,10 +537,10 @@ async def test_api_check_state(ledger: Ledger):
         json=payload.model_dump(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostCheckStateResponse.model_validate(response.json())
-    assert response
-    assert len(response.states) == 2
-    assert response.states[0].state.unspent
+    check_state_response = PostCheckStateResponse.model_validate(response.json())
+    assert check_state_response
+    assert len(check_state_response.states) == 2
+    assert check_state_response.states[0].state.unspent
 
 
 @pytest.mark.asyncio
@@ -545,12 +570,12 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert "signatures" in data
     assert "outputs" in data
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostRestoreResponse.model_validate(response.json())
-    assert response
-    assert response
-    assert len(response.signatures) == 1
-    assert len(response.outputs) == 1
-    assert response.outputs == outputs
+    restore_response = PostRestoreResponse.model_validate(response.json())
+    assert restore_response
+    assert len(restore_response.signatures) == 1
+    assert len(restore_response.outputs) == 1
+    assert restore_response.outputs == outputs
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -591,10 +616,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     # Output total 96, first quote is 64, second is 32
     outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
-    
+
     assert mint_quote1.privkey
     assert mint_quote2.privkey
-    
+
     # Signatures covering all outputs
     sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
     sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
@@ -611,8 +636,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         },
         timeout=None,
     )
-    
-    assert response.status_code == 200, f"{response.url} {response.status_code} {response.text}"
+
+    assert (
+        response.status_code == 200
+    ), f"{response.url} {response.status_code} {response.text}"
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64
@@ -636,7 +663,7 @@ async def test_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet):
             "signatures": [None, None],
         },
     )
-    
+
     assert response.status_code == 400
     assert "Duplicate quote IDs provided" in response.text
 
@@ -654,17 +681,18 @@ async def test_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
 
     outputs_payload = [o.model_dump() for o in outputs]
+    assert mint_quote1.privkey is not None
     sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
 
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11/batch",
         json={
             "quotes": [mint_quote1.quote],
-            "quote_amounts": [32], # Intentionally wrong quote amount
+            "quote_amounts": [32],  # Intentionally wrong quote amount
             "outputs": outputs_payload,
             "signatures": [sig1],
         },
     )
-    
+
     assert response.status_code == 400
     assert "does not match quote" in response.text

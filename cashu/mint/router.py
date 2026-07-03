@@ -178,9 +178,12 @@ async def mint_quote(
         request=quote.request,
         amount=quote.amount,
         unit=quote.unit,
-        state=quote.state.value,
+        state=str(quote.state.value),
         expiry=quote.expiry,
         pubkey=quote.pubkey,
+        amount_paid=quote.amount_paid,
+        amount_issued=quote.amount_issued,
+        updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -204,9 +207,12 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         request=mint_quote.request,
         amount=mint_quote.amount,
         unit=mint_quote.unit,
-        state=mint_quote.state.value,
+        state=str(mint_quote.state.value),
         expiry=mint_quote.expiry,
         pubkey=mint_quote.pubkey,
+        amount_paid=mint_quote.amount_paid,
+        amount_issued=mint_quote.amount_issued,
+        updated_at=mint_quote.updated_at,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
@@ -231,9 +237,12 @@ async def mint_quote_check(
             request=quote.request,
             amount=quote.amount,
             unit=quote.unit,
-            state=quote.state.value,
+            state=str(quote.state.value),
             expiry=quote.expiry,
             pubkey=quote.pubkey,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
         )
         for quote in quotes
     ]
@@ -262,7 +271,7 @@ async def mint_batch(
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
-    disconnected = False
+    client = None
     try:
         client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
     except Exception as e:
@@ -275,13 +284,12 @@ async def websocket_endpoint(websocket: WebSocket):
         await client.start()
     except WebSocketDisconnect as e:
         logger.debug(f"Websocket disconnected: {e}")
-        disconnected = True
-        return
     except Exception as e:
         logger.debug(f"Exception: {e}")
-        ledger.events.remove_client(client)
     finally:
-        if not disconnected:
+        if client and client in ledger.events.clients:
+            ledger.events.remove_client(client)
+        if websocket.client_state.name != "DISCONNECTED":
             await asyncio.wait_for(websocket.close(), timeout=1)
 
 

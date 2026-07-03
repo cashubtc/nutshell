@@ -51,6 +51,8 @@ class LedgerEventClientManager:
                 self.websocket.receive(),
                 timeout=settings.mint_websocket_read_timeout,
             )
+            if message.get("type") == "websocket.disconnect":
+                raise WebSocketDisconnect(code=message.get("code", 1000))
             message_text = message.get("text")
 
             # Check the rate limit
@@ -192,16 +194,17 @@ class LedgerEventClientManager:
         asyncio.create_task(self._init_subscriptions(subId, filters, kind))
 
     def remove_subscription(self, subId: str) -> None:
+        removed = False
         for kind, sub_filters in self.subscriptions.items():
             for filter, subs in sub_filters.items():
-                for sub in subs:
-                    if sub == subId:
-                        logger.debug(
-                            f"Removing subscription {subId} for filter {filter}"
-                        )
-                        self.subscriptions[kind][filter].remove(sub)
-                        return
-        raise ValueError(f"Subscription not found: {subId}")
+                while subId in subs:
+                    logger.debug(
+                        f"Removing subscription {subId} for filter {filter}"
+                    )
+                    subs.remove(subId)
+                    removed = True
+        if not removed:
+            raise ValueError(f"Subscription not found: {subId}")
 
     def serialize_event(self, event: LedgerEvent) -> dict:
         if isinstance(event, MintQuote):
