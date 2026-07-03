@@ -599,25 +599,40 @@ class Wallet(
         """
         mint_quote_response = await super().get_mint_quote(quote_id)
         mint_quote_local = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
-        mint_quote = MintQuote.from_resp_wallet(
-            mint_quote_response,
+
+        mint_quote = MintQuote.check_stale_and_from_resp_wallet(
+            mint_quote_resp=mint_quote_response,
             mint=self.url,
-            amount=(
-                mint_quote_response.amount or mint_quote_local.amount
-                if mint_quote_local
-                else 0  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
-            unit=(
-                mint_quote_response.unit or mint_quote_local.unit
-                if mint_quote_local
-                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
+            mint_quote_local=mint_quote_local,
+            default_amount=0,
+            default_unit=self.unit.name,
         )
+
         if mint_quote_local and mint_quote_local.privkey:
             mint_quote.privkey = mint_quote_local.privkey
 
         if not mint_quote_local:
             await store_bolt11_mint_quote(db=self.db, quote=mint_quote)
+        elif (
+            mint_quote_local.state != mint_quote.state
+            or mint_quote_local.amount_paid != mint_quote.amount_paid
+            or mint_quote_local.amount_issued != mint_quote.amount_issued
+            or mint_quote_local.updated_at != mint_quote.updated_at
+        ):
+            await update_bolt11_mint_quote(
+                db=self.db,
+                quote=mint_quote.quote,
+                state=mint_quote.state,
+                paid_time=mint_quote.paid_time
+                or (
+                    int(time.time())
+                    if mint_quote.state in [MintQuoteState.paid, MintQuoteState.issued]
+                    else None
+                ),
+                amount_paid=mint_quote.amount_paid,
+                amount_issued=mint_quote.amount_issued,
+                updated_at=mint_quote.updated_at,
+            )
 
         return mint_quote
 
@@ -687,6 +702,9 @@ class Wallet(
             quote=quote_id,
             state=MintQuoteState.issued,
             paid_time=int(time.time()),
+            amount_paid=quote.amount,
+            amount_issued=quote.amount,
+            updated_at=int(time.time()),
         )
         # store the mint_id in proofs
         async with self.db.connect() as conn:
