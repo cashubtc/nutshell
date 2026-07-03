@@ -1,16 +1,17 @@
-VERSION := $(shell poetry version -s)
+UV := uv --project .
+VERSION := $(shell $(UV) version --short)
 
 ruff:
-	poetry run ruff check . --fix
+	$(UV) run ruff check . --fix
 
 ruff-check:
-	poetry run ruff check .
+	$(UV) run ruff check .
 
 fuzz:
-	poetry run pytest tests/fuzz
+	$(UV) run pytest tests/fuzz
 
 mypy:
-	poetry run mypy cashu --check-untyped-defs
+	$(UV) run mypy cashu --check-untyped-defs
 
 format: ruff
 
@@ -24,24 +25,24 @@ clean:
 	rm -rf docker-build || true
 
 package:
-	poetry export -f requirements.txt --without-hashes --output requirements.txt
+	$(UV) export --format requirements.txt --no-dev --no-hashes --no-emit-project --output-file requirements.txt
 	make clean
-	python setup.py sdist bdist_wheel
+	$(UV) build
 
 test:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests --cov-report xml --cov cashu
+	$(UV) run pytest tests --cov-report xml --cov cashu
 
 test-wallet:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests/wallet --cov-report xml --cov cashu
+	$(UV) run pytest tests/wallet --cov-report xml --cov cashu
 
 test-mint:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests/mint --cov-report xml --cov cashu
+	$(UV) run pytest tests/mint --cov-report xml --cov cashu
 
 test-lndrest:
 	PYTHONUNBUFFERED=1 \
@@ -50,25 +51,25 @@ test-lndrest:
 	MINT_LND_REST_ENDPOINT=https://localhost:8081/ \
 	MINT_LND_REST_CERT=../cashu-regtest-enviroment/data/lnd-3/tls.cert \
 	MINT_LND_REST_MACAROON=../cashu-regtest-enviroment/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon \
-	poetry run pytest tests/test_cli.py --cov-report xml --cov cashu
+	$(UV) run pytest tests/test_cli.py --cov-report xml --cov cashu
 
 install:
 	make clean
-	python setup.py sdist bdist_wheel
-	pip install --upgrade dist/*
+	$(UV) build
+	$(UV) pip install --upgrade dist/*
 
 upload:
 	make clean
-	python setup.py sdist bdist_wheel
-	twine upload --repository pypi dist/*
+	$(UV) build
+	$(UV) publish
 
 install-pre-commit-hook:
 	@echo "Installing pre-commit hook to git"
-	@echo "Uninstall the hook with poetry run pre-commit uninstall"
-	poetry run pre-commit install
+	@echo "Uninstall the hook with uv run pre-commit uninstall"
+	$(UV) run pre-commit install
 
 pre-commit:
-	poetry run pre-commit run --all-files
+	$(UV) run pre-commit run --all-files
 
 .PHONY: docker-build
 docker-build:

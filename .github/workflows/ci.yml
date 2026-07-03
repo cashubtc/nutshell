@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.11.14"]
         # Wallet v0 / deprecated mint API support was removed in https://github.com/cashubtc/nutshell/pull/814; deprecated-only CI runs are no longer valid.
         # mint-only-deprecated: ["false", "true"]
         mint-only-deprecated: ["false"]
@@ -28,7 +28,7 @@ jobs:
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
       mint-database: ${{ matrix.mint-database }}
 
@@ -38,13 +38,13 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.11.14"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_redis_cache.yml
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       mint-database: ${{ matrix.mint-database }}
 
   tests_keycloak_auth:
@@ -53,13 +53,13 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.11.14"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_keycloak_auth.yml
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       mint-database: ${{ matrix.mint-database }}
 
   regtest-mint:
@@ -68,13 +68,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.11.14"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
+      uv-version: ${{ matrix.uv-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}
 
@@ -84,12 +85,13 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.11.14"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
+      uv-version: ${{ matrix.uv-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}

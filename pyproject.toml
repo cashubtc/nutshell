@@ -1,77 +1,89 @@
-[tool.poetry]
+[project]
 name = "cashu"
 version = "0.20.2"
 description = "Ecash wallet and mint"
-authors = ["calle <callebtc@protonmail.com>"]
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+authors = [{ name = "calle", email = "callebtc@protonmail.com" }]
 license = "MIT"
+dependencies = [
+    "SQLAlchemy[asyncio]>=2.0.35,<2.0.38",
+    "greenlet>=3.0.0",
+    "click>=8.1.7,<8.2.0",
+    "pydantic>=2.5.3,<2.12.0",
+    "pydantic-settings>=2.1.0,<3.0.0",
+    "bech32>=1.2.0,<2.0.0",
+    "fastapi>=0.115.0,<0.115.7",
+    "environs>=9.5.0,<10.0.0",
+    "marshmallow>=3.0.0,<4.0.0",
+    "uvicorn>=0.31.0,<0.32.0",
+    "loguru>=0.7.0,<0.8.0",
+    "ecdsa>=0.19.0,<0.20.0",
+    "bitstring>=3.1.9,<4.0.0",
+    "h11>=0.14.0,<0.15.0",
+    "cryptography>=43.0.1,<44.0.0",
+    "websocket-client>=1.3.3,<2.0.0",
+    "pycryptodomex>=3.16.0,<4.0.0",
+    "setuptools>=75.1.0,<76.0.0",
+    "wheel>=0.41.1,<0.42.0",
+    "importlib-metadata>=6.8.0,<7.0.0",
+    "httpx[socks]>=0.25.1,<0.26.0",
+    "bip32>=4.0,<5.0",
+    "mnemonic>=0.20,<0.21.0",
+    "bolt11>=2.0.5,<3.0.0",
+    "websockets>=12.0,<13.0",
+    "slowapi>=0.1.9,<0.2.0",
+    "limits>=4.0.1,<5.0.0",
+    "cbor2>=5.6.2,<6.0.0",
+    "asyncpg>=0.30.0,<0.31.0",
+    "aiosqlite>=0.20.0,<0.21.0",
+    "grpcio>=1.65.1,<2.0.0",
+    "googleapis-common-protos>=1.63.2,<2.0.0",
+    "mypy-protobuf>=3.6.0,<4.0.0",
+    "types-protobuf>=5.27.0.20240626,<6.0.0",
+    "grpcio-tools>=1.65.1,<2.0.0",
+    "pyjwt>=2.9.0,<3.0.0",
+    "redis>=5.1.1,<6.0.0",
+    "brotli>=1.1.0,<2.0.0",
+    "zstandard>=0.23.0,<0.24.0",
+    "jinja2>=3.1.5,<4.0.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-SQLAlchemy = {version = "^2.0.35", extras = ["asyncio"]}
-greenlet = ">=3.0.0"
-click = "^8.1.7"
-pydantic = "^2.5.3"
-pydantic-settings = "^2.1.0"
-bech32 = "^1.2.0"
-fastapi = "^0.115.0"
-environs = "^9.5.0"
-uvicorn = "^0.31.0"
-loguru = "^0.7.0"
-ecdsa = "^0.19.0"
-bitstring = "^3.1.9"
-h11 = "^0.14.0"
-cryptography = "^43.0.1"
-websocket-client = "^1.3.3"
-pycryptodomex = "^3.16.0"
-setuptools = "^75.1.0"
-wheel = "^0.41.1"
-importlib-metadata = "^6.8.0"
-httpx = {extras = ["socks"], version = "^0.25.1"}
-bip32 = "^4.0"
-mnemonic = "^0.20"
-bolt11 = "^2.0.5"
-websockets = "^12.0"
-slowapi = "^0.1.9"
-cbor2 = "^5.6.2"
-asyncpg = "^0.30.0"
-aiosqlite = "^0.20.0"
-grpcio = "^1.65.1"
-googleapis-common-protos = "^1.63.2"
-mypy-protobuf = "^3.6.0"
-types-protobuf = "^5.27.0.20240626"
-grpcio-tools = "^1.65.1"
-pyjwt = "^2.9.0"
-redis = "^5.1.1"
-brotli = "^1.1.0"
-zstandard = "^0.23.0"
-jinja2 = "^3.1.5"
-
-[tool.poetry.group.dev.dependencies]
-pytest-asyncio = "^0.24.0"
-pytest-cov = "^6.0.0"
-pytest = "^8.3.3"
-fastapi-profiler = "^1.4.1"
-respx = "^0.21.1"
-ruff = "^0.7.1"
-mypy = "^1.13.0"
-pre-commit = "^4.0.1"
-types-redis = "^4.6.0"
-hypothesis = "^6.150.0"
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=0.24.0,<0.25.0",
+    "pytest-cov>=6.0.0,<7.0.0",
+    "pytest>=8.3.3,<9.0.0",
+    "fastapi-profiler>=1.4.1,<2.0.0",
+    "respx>=0.21.1,<0.22.0",
+    "ruff>=0.7.1,<0.8.0",
+    "mypy>=1.13.0,<1.15.0",
+    "pre-commit>=4.0.1,<5.0.0",
+    "types-redis>=4.6.0,<5.0.0",
+    "hypothesis>=6.150.0,<7.0.0",
+    "tomli>=2.0.0,<3.0.0; python_version < '3.11'",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=75.1.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 addopts = "--junitxml=junit.xml -o junit_family=legacy"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 
-[tool.poetry.scripts]
+[project.scripts]
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
 mint-cli = "cashu.mint.management_rpc.cli.cli:cli"
 wallet-test = "tests.test_wallet:test"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["cashu*"]
 
 [tool.ruff]
 line-length = 88

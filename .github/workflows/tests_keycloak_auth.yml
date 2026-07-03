@@ -6,8 +6,8 @@ on:
       python-version:
         default: "3.12"
         type: string
-      poetry-version:
-        default: "2.3.2"
+      uv-version:
+        default: "0.11.14"
         type: string
       mint-database:
         default: ""
@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  poetry:
+  uv:
     name: Auth tests with Keycloak (db ${{ inputs.mint-database }})
     runs-on: ${{ inputs.os }}
     steps:
@@ -31,7 +31,7 @@ jobs:
         uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
+          uv-version: ${{ inputs.uv-version }}
 
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')
@@ -64,7 +64,7 @@ jobs:
           MINT_AUTH_OICD_DISCOVERY_URL: http://localhost:8080/realms/nutshell/.well-known/openid-configuration
           MINT_AUTH_OICD_CLIENT_ID: cashu-client
         run: |
-          poetry run pytest tests/wallet/test_wallet_auth.py -v --cov=mint --cov-report=xml
+          uv run pytest tests/wallet/test_wallet_auth.py -v --cov=mint --cov-report=xml
 
       - name: Stop and clean up Docker Compose
         run: |

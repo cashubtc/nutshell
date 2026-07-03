@@ -15,7 +15,7 @@ services:
       - MINT_REDIS_CACHE_URL=redis://redis:6379
     depends_on:
       - redis
-    command: ["poetry", "run", "mint"]
+    command: ["mint"]
 
   redis:
     image: redis:latest

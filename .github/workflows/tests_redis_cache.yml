@@ -6,8 +6,8 @@ on:
       python-version:
         default: "3.12"
         type: string
-      poetry-version:
-        default: "2.3.2"
+      uv-version:
+        default: "0.11.14"
         type: string
       mint-database:
         default: ""
@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 jobs:
-  poetry:
+  uv:
     name: Run (db ${{ inputs.mint-database }}, deprecated api ${{ inputs.mint-only-deprecated }})
     runs-on: ${{ inputs.os }}
     steps:
@@ -39,7 +39,7 @@ jobs:
         uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
+          uv-version: ${{ inputs.uv-version }}
 
       - name: Start Redis service
         run: |
@@ -56,7 +56,7 @@ jobs:
           MINT_REDIS_CACHE_ENABLED: true
           MINT_REDIS_CACHE_URL: redis://localhost:6379
         run: |
-          poetry run pytest tests/mint/test_mint_api_cache.py -v --cov=mint --cov-report=xml
+          uv run pytest tests/mint/test_mint_api_cache.py -v --cov=mint --cov-report=xml
 
       - name: Stop and clean up Docker Compose
         run: |

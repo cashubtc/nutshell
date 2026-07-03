@@ -15,7 +15,7 @@ else
 fi
 
 echo "Installing pip packages..."
-poetry add grpcio grpcio-tools googleapis-common-protos mypy-protobuf types-protobuf
+uv add grpcio grpcio-tools googleapis-common-protos mypy-protobuf types-protobuf
 
 echo "curl-ing protos"
 curl -o $BASE_DIR/lightning.proto -s https://raw.githubusercontent.com/lightningnetwork/lnd/master/lnrpc/lightning.proto
@@ -33,4 +33,3 @@ for file in $BASE_DIR/*.{py,pyi}; do
 done
 
 echo "Done!"
-
