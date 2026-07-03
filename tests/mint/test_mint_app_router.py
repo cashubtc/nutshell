@@ -332,6 +332,7 @@ def test_router_quote_routes_and_swap(monkeypatch):
     )
     assert mint_quote.status_code == 200
     assert mint_quote.json()["quote"] == "quote-1"
+    assert mint_quote.json()["method"] == "bolt11"
 
     melt_quote = client.post(
         "/v1/melt/quote/bolt11",
@@ -339,10 +340,12 @@ def test_router_quote_routes_and_swap(monkeypatch):
     )
     assert melt_quote.status_code == 200
     assert melt_quote.json()["quote"] == "melt-1"
+    assert melt_quote.json()["method"] == "bolt11"
 
     melt_get = client.get("/v1/melt/quote/bolt11/melt-1")
     assert melt_get.status_code == 200
     assert melt_get.json()["quote"] == "melt-1"
+    assert melt_get.json()["method"] == "bolt11"
 
     swap = client.post(
         "/v1/swap",
