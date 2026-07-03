@@ -38,6 +38,9 @@ class PostMintQuoteResponse(BaseModel):
     unit: Optional[
         str
     ]  # output unit (optional for BACKWARDS COMPAT mint response <  0.17.0)
+    method: Optional[str] = (
+        None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
+    )
     amount_paid: Optional[int] = None
     amount_issued: Optional[int] = None
     updated_at: Optional[int] = None
