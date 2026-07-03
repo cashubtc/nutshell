@@ -229,6 +229,7 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.state == MintQuoteState.unpaid.value
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
+    assert resp_quote.method == "bolt11"
     assert resp_quote.request == result["request"]
     assert resp_quote.amount_paid == 0
     assert resp_quote.amount_issued == 0
@@ -260,6 +261,7 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.state == MintQuoteState.paid.value
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
+    assert resp_quote.method == "bolt11"
     assert resp_quote.request == result["request"]
     assert resp_quote.amount_paid == 100
     assert resp_quote.amount_issued == 0
@@ -375,6 +377,7 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.state == MeltQuoteState.unpaid.value
     assert resp_quote.amount == 64
     assert resp_quote.unit == "sat"
+    assert resp_quote.method == "bolt11"
     assert resp_quote.request == request
 
     invoice_obj = bolt11.decode(request)
@@ -461,6 +464,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.state == MeltQuoteState.paid.value
     assert resp_quote.amount == 64
     assert resp_quote.unit == "sat"
+    assert resp_quote.method == "bolt11"
     assert resp_quote.request == invoice_payment_request
 
 
@@ -595,9 +599,11 @@ async def test_mint_quote_check(ledger: Ledger, wallet: Wallet):
     assert len(result) == 2
     assert result[0]["quote"] == mint_quote1.quote
     assert result[0]["amount"] == 64
+    assert result[0]["method"] == "bolt11"
     assert result[0]["state"] in ["UNPAID", "PAID"]
     assert result[1]["quote"] == mint_quote2.quote
     assert result[1]["amount"] == 32
+    assert result[1]["method"] == "bolt11"
     assert result[1]["state"] in ["UNPAID", "PAID"]
 
 
