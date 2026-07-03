@@ -397,6 +397,36 @@ async def build_trees_for_keyset_at_timestamp(
     return issued_tree, spent_tree
 
 
+async def get_global_digest_for_epoch(ledger: Ledger, epoch_index: int) -> bytes:
+    if epoch_index <= 0:
+        return b"\x00" * 32
+
+    # Fetch all entries for this epoch index
+    rows = await ledger.db.fetchall(
+        f"SELECT keyset_id, root_issued_hash, root_spent_hash, previous_global_digest FROM {ledger.db.table_with_schema('pol_epochs')} WHERE epoch_index = :epoch_index",
+        {"epoch_index": epoch_index}
+    )
+    if not rows:
+        return b"\x00" * 32
+
+    # Reconstruct the commitment
+    # Sort them by keyset_id
+    sorted_rows = sorted(rows, key=lambda r: r["keyset_id"].lower())
+
+    # Since all rows in the same epoch share the same previous_global_digest, we take it from the first one
+    prev_digest_hex = sorted_rows[0]["previous_global_digest"]
+    prev_digest_bytes = bytes.fromhex(prev_digest_hex)
+
+    global_commitment_data = prev_digest_bytes
+    for row in sorted_rows:
+        kid = row["keyset_id"]
+        ri_hash = bytes.fromhex(row["root_issued_hash"])
+        rs_hash = bytes.fromhex(row["root_spent_hash"])
+        global_commitment_data += kid.encode("utf-8") + ri_hash + rs_hash
+
+    return hashlib.sha256(global_commitment_data).digest()
+
+
 async def update_pol_manifests(ledger: Ledger) -> None:
     """
     Periodically checks all active and inactive (but not yet expired) keysets.
@@ -465,7 +495,11 @@ async def update_pol_manifests(ledger: Ledger) -> None:
 
     # 3. Create a single aggregated global digest in deterministic order
     sorted_keyset_ids = sorted(keyset_results.keys())
-    global_commitment_data = b""
+    previous_epoch_index = next_epoch_index - 1
+    previous_global_digest = await get_global_digest_for_epoch(ledger, previous_epoch_index)
+    previous_global_digest_hex = previous_global_digest.hex()
+
+    global_commitment_data = previous_global_digest
     for kid in sorted_keyset_ids:
         ri_hash, _, rs_hash, _, _ = keyset_results[kid]
         # Hash commitment binds keyset_id, Root_Issued, and Root_Spent together
@@ -496,9 +530,11 @@ async def update_pol_manifests(ledger: Ledger) -> None:
 
         signing_key, pub_key_hex = get_mint_signing_key(ledger)
 
-        timestamp_str = current_time.isoformat()
-        # Formatted details to sign
-        data_to_sign = f"{kid}:{next_epoch_index}:{timestamp_str}:{ri_hash.hex()}:{ri_sum}:{rs_hash.hex()}:{rs_sum}:{outstanding_balance}:{ots_receipt_hex}"
+        current_time_utc = current_time.astimezone(datetime.timezone.utc)
+        timestamp_str = current_time_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Formatted details to sign (excludes ots_receipt)
+        data_to_sign = f"{kid}:{next_epoch_index}:{timestamp_str}:{previous_global_digest_hex}:{ri_hash.hex()}:{ri_sum}:{rs_hash.hex()}:{rs_sum}:{outstanding_balance}"
         signature = signing_key.sign_schnorr(
             hashlib.sha256(data_to_sign.encode("utf-8")).digest()
         ).hex()
@@ -507,12 +543,12 @@ async def update_pol_manifests(ledger: Ledger) -> None:
         await ledger.db.execute(
             f"""
             INSERT INTO {ledger.db.table_with_schema("pol_epochs")} (
-                keyset_id, epoch_index, timestamp,
+                keyset_id, epoch_index, timestamp, previous_global_digest,
                 root_issued_hash, root_issued_sum,
                 root_spent_hash, root_spent_sum,
                 outstanding_balance, ots_receipt, signature
             ) VALUES (
-                :keyset_id, :epoch_index, :timestamp,
+                :keyset_id, :epoch_index, :timestamp, :previous_global_digest,
                 :root_issued_hash, :root_issued_sum,
                 :root_spent_hash, :root_spent_sum,
                 :outstanding_balance, :ots_receipt, :signature
@@ -522,6 +558,7 @@ async def update_pol_manifests(ledger: Ledger) -> None:
                 "keyset_id": kid,
                 "epoch_index": next_epoch_index,
                 "timestamp": current_time,
+                "previous_global_digest": previous_global_digest_hex,
                 "root_issued_hash": ri_hash.hex(),
                 "root_issued_sum": ri_sum,
                 "root_spent_hash": rs_hash.hex(),

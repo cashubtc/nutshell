@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from coincurve import PrivateKey
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, StreamingResponse
@@ -40,6 +41,7 @@ def _dummy_keyset(keyset_id: str, active: bool = True):
         active=active,
         input_fee_ppk=1,
         public_keys_hex={1: "aa"},
+        private_keys={1: PrivateKey(b"\x01" * 32)},
         final_expiry=123,
     )
 
@@ -149,6 +151,7 @@ def _dummy_ledger():
         swap=swap,
         restore=restore,
         db_read=db_read,
+        db=None,
     )
 
 

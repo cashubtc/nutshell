@@ -1738,9 +1738,10 @@ class Wallet(
                 
                 ts_raw = manifest["timestamp"]
                 ts_iso = ts_raw.replace(" ", "T") if isinstance(ts_raw, str) else ts_raw
+                prev_digest = manifest.get("previous_global_digest", "00" * 32)
                 
-                msg1 = f"{manifest['keyset_id']}:{manifest['epoch_index']}:{ts_raw}:{manifest['root_issued']['hash']}:{manifest['root_issued']['sum']}:{manifest['root_spent']['hash']}:{manifest['root_spent']['sum']}:{manifest['outstanding_balance']}:{manifest['ots_receipt']}"
-                msg2 = f"{manifest['keyset_id']}:{manifest['epoch_index']}:{ts_iso}:{manifest['root_issued']['hash']}:{manifest['root_issued']['sum']}:{manifest['root_spent']['hash']}:{manifest['root_spent']['sum']}:{manifest['outstanding_balance']}:{manifest['ots_receipt']}"
+                msg1 = f"{manifest['keyset_id']}:{manifest['epoch_index']}:{ts_raw}:{prev_digest}:{manifest['root_issued']['hash']}:{manifest['root_issued']['sum']}:{manifest['root_spent']['hash']}:{manifest['root_spent']['sum']}:{manifest['outstanding_balance']}"
+                msg2 = f"{manifest['keyset_id']}:{manifest['epoch_index']}:{ts_iso}:{prev_digest}:{manifest['root_issued']['hash']}:{manifest['root_issued']['sum']}:{manifest['root_spent']['hash']}:{manifest['root_spent']['sum']}:{manifest['outstanding_balance']}"
                 
                 verified = False
                 for msg in (msg1, msg2):

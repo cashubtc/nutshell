@@ -254,6 +254,7 @@ def test_pol_endpoints_and_mock_ledger(monkeypatch):
                 "keyset_id": keyset_id,
                 "epoch_index": 1,
                 "timestamp": epoch_timestamp,
+                "previous_global_digest": "00" * 32,
                 "root_issued_hash": hashlib.sha256(b"issued").hexdigest(),
                 "root_issued_sum": 300,
                 "root_spent_hash": hashlib.sha256(b"spent").hexdigest(),
@@ -1078,6 +1079,7 @@ def test_pol_endpoints_rate_limiting(monkeypatch):
                 "keyset_id": keyset_id,
                 "epoch_index": 1,
                 "timestamp": epoch_timestamp,
+                "previous_global_digest": "00" * 32,
                 "root_issued_hash": hashlib.sha256(b"issued").hexdigest(),
                 "root_issued_sum": 300,
                 "root_spent_hash": hashlib.sha256(b"spent").hexdigest(),
@@ -1158,9 +1160,10 @@ async def test_pol_endpoints_signature_verification_failure(monkeypatch):
                 "keyset_id": keyset_id,
                 "epoch_index": 1,
                 "timestamp": epoch_timestamp,
-                "root_issued_hash": "00" * 32,
-                "root_spent_hash": "00" * 32,
+                "previous_global_digest": "00" * 32,
+                "root_issued_hash": hashlib.sha256(b"issued").hexdigest(),
                 "root_issued_sum": 300,
+                "root_spent_hash": hashlib.sha256(b"spent").hexdigest(),
                 "root_spent_sum": 200,
                 "outstanding_balance": 100,
                 "ots_receipt": "010203",
@@ -1287,8 +1290,9 @@ async def test_pol_manifest_schnorr_signature_verification_success_and_failure(m
     root_spent_sum = 200
     outstanding_balance = 100
     ots_receipt = "010203"
+    previous_global_digest = "00" * 32
 
-    msg = f"{keyset_id}:{epoch_index}:{timestamp_str}:{root_issued_hash}:{root_issued_sum}:{root_spent_hash}:{root_spent_sum}:{outstanding_balance}:{ots_receipt}"
+    msg = f"{keyset_id}:{epoch_index}:{timestamp_str}:{previous_global_digest}:{root_issued_hash}:{root_issued_sum}:{root_spent_hash}:{root_spent_sum}:{outstanding_balance}"
     valid_sig = priv_key.sign_schnorr(hashlib.sha256(msg.encode("utf-8")).digest()).hex()
 
     # Mock wallet setup
@@ -1377,6 +1381,7 @@ async def test_pol_manifest_schnorr_signature_verification_success_and_failure(m
                 "keyset_id": keyset_id,
                 "epoch_index": epoch_index,
                 "timestamp": timestamp_str,
+                "previous_global_digest": previous_global_digest,
                 "signing_pubkey": pub_key_hex,
                 "root_issued": {"hash": root_issued_hash, "sum": root_issued_sum},
                 "root_spent": {"hash": root_spent_hash, "sum": root_spent_sum},
@@ -1399,6 +1404,7 @@ async def test_pol_manifest_schnorr_signature_verification_success_and_failure(m
                 "keyset_id": keyset_id,
                 "epoch_index": epoch_index,
                 "timestamp": timestamp_str,
+                "previous_global_digest": previous_global_digest,
                 "signing_pubkey": pub_key_hex,
                 "root_issued": {"hash": root_issued_hash, "sum": root_issued_sum},
                 "root_spent": {"hash": root_spent_hash, "sum": root_spent_sum},

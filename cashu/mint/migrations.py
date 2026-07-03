@@ -1274,6 +1274,7 @@ async def m036_pol_epochs(db: Database):
                     keyset_id TEXT NOT NULL,
                     epoch_index INTEGER NOT NULL,
                     timestamp TIMESTAMP NOT NULL,
+                    previous_global_digest TEXT NOT NULL,
                     root_issued_hash TEXT NOT NULL,
                     root_issued_sum {db.big_int} NOT NULL,
                     root_spent_hash TEXT NOT NULL,

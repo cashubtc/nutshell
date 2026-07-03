@@ -13,6 +13,7 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MeltQuoteState,
+    PolReceipt,
     Proof,
     ProofSpentState,
     ProofState,
@@ -569,7 +570,7 @@ class LedgerAPI(SupportsAuth):
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
-    ) -> List[BlindedSignature]:
+    ) -> Tuple[List[BlindedSignature], Optional[List[PolReceipt]]]:
         """Consume proofs and create new promises based on amount split."""
         logger.debug(f"Calling split. POST {self.api_prefix}/swap")
         split_payload = PostSwapRequest(inputs=proofs, outputs=outputs)
@@ -604,7 +605,7 @@ class LedgerAPI(SupportsAuth):
         if len(promises) == 0:
             raise Exception("received no splits.")
 
-        return promises
+        return promises, mint_response.spent_receipts
 
     @async_set_httpx_client
     @async_ensure_mint_loaded

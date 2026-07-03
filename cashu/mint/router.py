@@ -550,6 +550,7 @@ class PolManifestResponse(BaseModel):
     keyset_id: str
     epoch_index: int
     timestamp: str
+    previous_global_digest: str
     signing_pubkey: str
     root_issued: ManifestRoot
     root_spent: ManifestRoot
@@ -587,9 +588,14 @@ async def pol_manifest(
         )
 
     ts_val = epoch["timestamp"]
-    ts_str = (
-        ts_val.isoformat() if isinstance(ts_val, datetime.datetime) else str(ts_val)
-    )
+    if isinstance(ts_val, datetime.datetime):
+        if ts_val.tzinfo is None:
+            ts_val = ts_val.replace(tzinfo=datetime.timezone.utc)
+        else:
+            ts_val = ts_val.astimezone(datetime.timezone.utc)
+        ts_str = ts_val.strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        ts_str = str(ts_val)
 
     _, pub_key_hex = get_mint_signing_key(ledger)
 
@@ -597,6 +603,7 @@ async def pol_manifest(
         keyset_id=epoch["keyset_id"],
         epoch_index=epoch["epoch_index"],
         timestamp=ts_str,
+        previous_global_digest=epoch["previous_global_digest"],
         signing_pubkey=pub_key_hex,
         root_issued=ManifestRoot(
             hash=epoch["root_issued_hash"], sum=epoch["root_issued_sum"]
