@@ -51,6 +51,7 @@ async def test_info(ledger: Ledger):
     assert info.nuts[MINT_NUT]["disabled"] is False
     setting = MintMethodSetting.model_validate(info.nuts[MINT_NUT]["methods"][0])
     assert setting.method == "bolt11"
+    assert setting.method_name == "bolt11"
     assert setting.unit == "sat"
     assert setting.options
     assert setting.options.description is True
@@ -218,6 +219,10 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
+    assert resp_quote.amount_paid == 0
+    assert resp_quote.amount_issued == 0
+    assert resp_quote.updated_at is not None
+    assert resp_quote.updated_at > 0
 
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
@@ -245,6 +250,10 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.amount == 100
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
+    assert resp_quote.amount_paid == 100
+    assert resp_quote.amount_issued == 0
+    assert resp_quote.updated_at is not None
+    assert resp_quote.updated_at >= result["updated_at"]
 
     assert resp_quote.pubkey == "02" + "00" * 32
 

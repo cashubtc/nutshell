@@ -191,16 +191,28 @@ class Ledger(
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
-        logger.debug("Disconnecting from database")
-        await self.db.engine.dispose()
         logger.debug("Shutting down invoice listeners")
         for task in self.invoice_listener_tasks:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         for task in self.watchdog_tasks:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         logger.debug("Shutting down regular tasks")
         for task in self.regular_tasks:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        logger.debug("Disconnecting from database")
+        await self.db.engine.dispose()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
@@ -434,6 +446,7 @@ class Ledger(
                         quote.state = MintQuoteState.paid
                         quote.paid_time = now
                         quote.last_checked = now
+                        quote.updated_at = now
                         await self.crud.update_mint_quote(
                             quote=quote, db=self.db, conn=conn
                         )
@@ -984,6 +997,7 @@ class Ledger(
 
         mint_quote.state = MintQuoteState.paid
         mint_quote.paid_time = melt_quote.paid_time
+        mint_quote.updated_at = melt_quote.paid_time
 
         async with self.db.get_connection() as conn:
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
@@ -1019,7 +1033,13 @@ class Ledger(
             raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
 
         # Launch actual melt task
-        asyncio.create_task(self.melt(proofs=proofs, quote=quote, outputs=outputs))
+        async def melt_task():
+            try:
+                await self.melt(proofs=proofs, quote=quote, outputs=outputs)
+            except Exception as e:
+                logger.error(f"Error in background melt task: {e}")
+
+        asyncio.create_task(melt_task())
 
         melt_quote.state = MeltQuoteState.pending
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)

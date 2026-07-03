@@ -179,9 +179,12 @@ async def mint_quote(
         amount=quote.amount,
         unit=quote.unit,
         method=quote.method,
-        state=quote.state.value,
+        state=str(quote.state.value),
         expiry=quote.expiry,
         pubkey=quote.pubkey,
+        amount_paid=quote.amount_paid,
+        amount_issued=quote.amount_issued,
+        updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -206,9 +209,12 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         amount=mint_quote.amount,
         unit=mint_quote.unit,
         method=mint_quote.method,
-        state=mint_quote.state.value,
+        state=str(mint_quote.state.value),
         expiry=mint_quote.expiry,
         pubkey=mint_quote.pubkey,
+        amount_paid=mint_quote.amount_paid,
+        amount_issued=mint_quote.amount_issued,
+        updated_at=mint_quote.updated_at,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
@@ -234,9 +240,12 @@ async def mint_quote_check(
             amount=quote.amount,
             unit=quote.unit,
             method=quote.method,
-            state=quote.state.value,
+            state=str(quote.state.value),
             expiry=quote.expiry,
             pubkey=quote.pubkey,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
         )
         for quote in quotes
     ]

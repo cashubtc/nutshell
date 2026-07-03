@@ -38,11 +38,14 @@ class PostMintQuoteResponse(BaseModel):
     unit: Optional[
         str
     ]  # output unit (optional for BACKWARDS COMPAT mint response <  0.17.0)
-    method: Optional[
-        str
-    ] = None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
-    state: Optional[str]  # state of the quote (optional for backwards compat)
-    expiry: Optional[int]  # expiry of the quote
+    method: Optional[str] = (
+        None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
+    )
+    amount_paid: Optional[int] = None
+    amount_issued: Optional[int] = None
+    updated_at: Optional[int] = None
+    state: Optional[str] = None  # state of the quote (optional for backwards compat)
+    expiry: Optional[int] = None  # expiry of the quote
     pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
 
     @classmethod
@@ -50,4 +53,7 @@ class PostMintQuoteResponse(BaseModel):
         to_dict = mint_quote.model_dump()
         # turn state into string
         to_dict["state"] = mint_quote.state.value
+        to_dict["amount_paid"] = mint_quote.amount_paid
+        to_dict["amount_issued"] = mint_quote.amount_issued
+        to_dict["updated_at"] = mint_quote.updated_at
         return cls.model_validate(to_dict)
