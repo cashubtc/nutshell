@@ -821,7 +821,6 @@ class Ledger(
             method=quote.method,
             request=quote.request,
             fee_reserve=quote.fee_reserve,
-            paid=quote.paid,  # deprecated
             state=quote.state.value,
             expiry=quote.expiry,
         )
@@ -962,7 +961,7 @@ class Ledger(
             return melt_quote
 
         # we settle the transaction internally
-        if melt_quote.paid:
+        if melt_quote.state == MeltQuoteState.paid:
             raise TransactionError("melt quote already paid")
 
         # verify amounts from bolt11 invoice
@@ -1136,7 +1135,7 @@ class Ledger(
             raise e
 
         # quote not paid yet (not internal), pay it with the backend
-        if not melt_quote.paid:
+        if melt_quote.state == MeltQuoteState.pending:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
             try:
                 fee_limit_msat = (

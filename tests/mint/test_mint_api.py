@@ -388,26 +388,6 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
 
     assert result["expiry"] == expiry
 
-    # # get melt quote again from api
-    # response = httpx.get(
-    #     f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}",
-    # )
-    # assert response.status_code == 200, f"{response.url} {response.status_code}"
-    # result2 = response.json()
-    # assert result2["quote"] == result["quote"]
-
-    # # deserialize the response
-    # resp_quote = PostMeltQuoteResponse(**result2)
-    # assert resp_quote.quote == result["quote"]
-    # assert resp_quote.payment_preimage is not None
-    # assert len(resp_quote.payment_preimage) == 64
-    # assert resp_quote.change is not None
-    # assert resp_quote.state == MeltQuoteState.paid.value
-
-    # # check if DEPRECATED paid flag is also returned
-    # assert result2["paid"] is True
-    # assert resp_quote.paid is True
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -561,10 +541,10 @@ async def test_api_check_state(ledger: Ledger):
         json=payload.model_dump(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostCheckStateResponse.model_validate(response.json())
-    assert response
-    assert len(response.states) == 2
-    assert response.states[0].state.unspent
+    check_state_response = PostCheckStateResponse.model_validate(response.json())
+    assert check_state_response
+    assert len(check_state_response.states) == 2
+    assert check_state_response.states[0].state.unspent
 
 
 @pytest.mark.asyncio
@@ -594,12 +574,11 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert "signatures" in data
     assert "outputs" in data
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostRestoreResponse.model_validate(response.json())
-    assert response
-    assert response
-    assert len(response.signatures) == 1
-    assert len(response.outputs) == 1
-    assert response.outputs == outputs
+    restore_response = PostRestoreResponse.model_validate(response.json())
+    assert restore_response
+    assert len(restore_response.signatures) == 1
+    assert len(restore_response.outputs) == 1
+    assert restore_response.outputs == outputs
 
 
 @pytest.mark.asyncio
@@ -664,9 +643,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert response.status_code == 200, (
-        f"{response.url} {response.status_code} {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"{response.url} {response.status_code} {response.text}"
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64
@@ -708,7 +687,7 @@ async def test_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
 
     outputs_payload = [o.model_dump() for o in outputs]
-    assert mint_quote1.privkey
+    assert mint_quote1.privkey is not None
     sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
 
     response = httpx.post(
