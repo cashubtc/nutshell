@@ -619,7 +619,7 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     real_keyset_id = list(wallet1.keysets.keys())[0]
 
     # Seed a second fake keyset in the DB so we have 2 keysets
-    fake_keyset_id = "01" + "f" * 62
+    fake_keyset_id = real_keyset_id[:2] + "f" * (len(real_keyset_id) - 2)
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,
@@ -675,7 +675,7 @@ async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
     """
 
     real_keyset_id = list(wallet1.keysets.keys())[0]
-    fake_keyset_id = "01" + "e" * 62
+    fake_keyset_id = real_keyset_id[:2] + "e" * (len(real_keyset_id) - 2)
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,
