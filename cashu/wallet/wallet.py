@@ -23,7 +23,12 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
-from ..core.crypto.keys import PrivateKey, PublicKey, is_bls_keyset, is_supported_keyset_version
+from ..core.crypto.keys import (
+    PrivateKey,
+    PublicKey,
+    is_bls_keyset,
+    is_supported_keyset_version,
+)
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
