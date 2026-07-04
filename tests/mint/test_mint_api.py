@@ -37,6 +37,14 @@ async def wallet(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_landing_page():
+    response = httpx.get(f"{BASE_URL}/")
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "Cashu Mint" in response.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
