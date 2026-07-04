@@ -22,12 +22,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.bls import PublicKey as BlsPublicKey
-from ..core.crypto.keys import (
-    PublicKey,
-    derive_pubkey,
-    generate_uuid_v7,
-    is_bls_keyset,
-)
+from ..core.crypto.keys import PublicKey, derive_pubkey, generate_uuid_v7, is_bls_keyset
 from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -1395,7 +1390,6 @@ class Ledger(
     # ------- BLIND SIGNATURES -------
 
     def _generate_dleq(self, output: BlindedMessage, promise: BlindedSignature) -> DLEQ:
-        B_ = PublicKey(bytes.fromhex(output.B_))
         if promise.id not in self.keysets:
             raise TransactionError(f"keyset {promise.id} not found")
         keyset = self.keysets[promise.id]
@@ -1404,10 +1398,20 @@ class Ledger(
                 f"keyset {promise.id} does not support amount {promise.amount}"
             )
         private_key_amount = keyset.private_keys[promise.amount]
-        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-        if C_.format().hex() != promise.C_:
+        if is_bls_keyset(promise.id):
+            B_ = BlsPublicKey(bytes.fromhex(output.B_))
+            C_, e, s = bls_dhke.step2_bob(B_, private_key_amount)  # type: ignore[arg-type]
+            if C_.format().hex() != promise.C_:
+                raise TransactionError("restored signature does not match promise")
+            return DLEQ(e=e.to_hex(), s=s.to_hex())
+        else:
+            secp_B_ = SecpPublicKey(bytes.fromhex(output.B_))
+            secp_C_, secp_e, secp_s = b_dhke.step2_bob(
+                secp_B_, private_key_amount  # type: ignore[arg-type]
+            )
+        if secp_C_.format().hex() != promise.C_:
             raise TransactionError("restored signature does not match promise")
-        return DLEQ(e=e.to_hex(), s=s.to_hex())
+        return DLEQ(e=secp_e.to_hex(), s=secp_s.to_hex())
 
     async def _store_blinded_messages(
         self,

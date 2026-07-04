@@ -572,7 +572,7 @@ async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch
                 {
                     "keysets": [
                         {"id": "01abcd", "unit": "sat", "active": True},
-                        {"id": "02efgh", "unit": "sat", "active": True},  # Unsupported
+                        {"id": "03efgh", "unit": "sat", "active": True},  # Unsupported
                         {"id": "00ijkl", "unit": "sat", "active": True},
                     ]
                 },
@@ -590,7 +590,7 @@ async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch
                             "keys": {"1": pubkey_hex},
                         },
                         {
-                            "id": "02efgh",  # Unsupported
+                            "id": "03efgh",  # Unsupported
                             "unit": "sat",
                             "active": True,
                             "keys": {"1": "invalid-hex-unsupported"},
@@ -602,12 +602,12 @@ async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch
 
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
 
-    # Test _get_keysets filters out 02efgh
+    # Test _get_keysets filters out 03efgh
     keysets = await api._get_keysets()
     assert len(keysets) == 2
     assert [k.id for k in keysets] == ["01abcd", "00ijkl"]
 
-    # Test _get_keys filters out 02efgh
+    # Test _get_keys filters out 03efgh
     wallet_keysets = await api._get_keys()
     assert len(wallet_keysets) == 1
     assert wallet_keysets[0].id == "01abcd"

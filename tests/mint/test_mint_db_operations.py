@@ -419,11 +419,14 @@ async def test_generate_dleq_rejects_unavailable_key(
     ledger: Ledger, keyset_id: Optional[str], amount: int, error: str
 ):
     from cashu.core.base import BlindedMessage, BlindedSignature
-    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
     from cashu.core.errors import TransactionError
 
-    B_, _ = step1_alice("unavailable-key")
-    C_, _, _ = step2_bob(B_, ledger.keyset.private_keys[1])
+    if is_bls_keyset(ledger.keyset.id):
+        B_, _ = bls_dhke.step1_alice("unavailable-key")
+        C_, _, _ = bls_dhke.step2_bob(B_, ledger.keyset.private_keys[1])  # type: ignore[arg-type]
+    else:
+        B_, _ = b_dhke.step1_alice("unavailable-key")
+        C_, _, _ = b_dhke.step2_bob(B_, ledger.keyset.private_keys[1])  # type: ignore[arg-type]
     output = BlindedMessage(
         amount=amount, id=keyset_id or ledger.keyset.id, B_=B_.format().hex()
     )

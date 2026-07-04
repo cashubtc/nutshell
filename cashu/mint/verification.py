@@ -324,8 +324,9 @@ class LedgerVerification(
     def _verify_blinded_message(self, output: BlindedMessage) -> bool:
         """Verifies that a blinded message is a valid curve point."""
         try:
-            PublicKey(bytes.fromhex(output.B_))
-        except ValueError:
+            public_key_cls = BlsPublicKey if is_bls_keyset(output.id) else SecpPublicKey
+            public_key_cls(bytes.fromhex(output.B_))
+        except (TypeError, ValueError):
             return False
         return True
 
