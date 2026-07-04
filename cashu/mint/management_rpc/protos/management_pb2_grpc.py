@@ -5,7 +5,7 @@ import grpc
 
 import cashu.mint.management_rpc.protos.management_pb2 as management__pb2
 
-GRPC_GENERATED_VERSION = '1.69.0'
+GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -141,6 +141,16 @@ class MintStub(object):
                 '/cashu.Mint/UpdateAuthLimits',
                 request_serializer=management__pb2.UpdateAuthLimitsRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
+                _registered_method=True)
+        self.GetKeyset = channel.unary_unary(
+                '/cashu.Mint/GetKeyset',
+                request_serializer=management__pb2.GetKeysetRequest.SerializeToString,
+                response_deserializer=management__pb2.GetKeysetResponse.FromString,
+                _registered_method=True)
+        self.GetKeysets = channel.unary_unary(
+                '/cashu.Mint/GetKeysets',
+                request_serializer=management__pb2.GetKeysetsRequest.SerializeToString,
+                response_deserializer=management__pb2.GetKeysetsResponse.FromString,
                 _registered_method=True)
 
 
@@ -297,6 +307,20 @@ class MintServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetKeyset(self, request, context):
+        """GetKeyset retrieves details and liability information for a keyset by its ID.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetKeysets(self, request, context):
+        """GetKeysets retrieves details and liability information for all keysets.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MintServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -404,6 +428,16 @@ def add_MintServicer_to_server(servicer, server):
                     servicer.UpdateAuthLimits,
                     request_deserializer=management__pb2.UpdateAuthLimitsRequest.FromString,
                     response_serializer=management__pb2.UpdateResponse.SerializeToString,
+            ),
+            'GetKeyset': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetKeyset,
+                    request_deserializer=management__pb2.GetKeysetRequest.FromString,
+                    response_serializer=management__pb2.GetKeysetResponse.SerializeToString,
+            ),
+            'GetKeysets': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetKeysets,
+                    request_deserializer=management__pb2.GetKeysetsRequest.FromString,
+                    response_serializer=management__pb2.GetKeysetsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -976,6 +1010,60 @@ class Mint(object):
             '/cashu.Mint/UpdateAuthLimits',
             management__pb2.UpdateAuthLimitsRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetKeyset(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/GetKeyset',
+            management__pb2.GetKeysetRequest.SerializeToString,
+            management__pb2.GetKeysetResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetKeysets(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/GetKeysets',
+            management__pb2.GetKeysetsRequest.SerializeToString,
+            management__pb2.GetKeysetsResponse.FromString,
             options,
             channel_credentials,
             insecure,

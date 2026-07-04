@@ -5,11 +5,17 @@ isort:skip_file
 
 import builtins
 import collections.abc
+import sys
 import typing
 
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+
+if sys.version_info >= (3, 10):
+    import typing as typing_extensions
+else:
+    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -23,7 +29,7 @@ class GetInfoRequest(google.protobuf.message.Message):
         self,
     ) -> None: ...
 
-global___GetInfoRequest = GetInfoRequest
+Global___GetInfoRequest: typing_extensions.TypeAlias = GetInfoRequest
 
 @typing.final
 class InfoContact(google.protobuf.message.Message):
@@ -45,7 +51,7 @@ class InfoContact(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["info", b"info", "method", b"method"]) -> None: ...
 
-global___InfoContact = InfoContact
+Global___InfoContact: typing_extensions.TypeAlias = InfoContact
 
 @typing.final
 class GetInfoResponse(google.protobuf.message.Message):
@@ -83,7 +89,7 @@ class GetInfoResponse(google.protobuf.message.Message):
     tos_url: builtins.str
     """The URL to the mint's Terms of Service."""
     @property
-    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___InfoContact]:
+    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___InfoContact]:
         """A list of contact methods for the mint."""
 
     @property
@@ -98,7 +104,7 @@ class GetInfoResponse(google.protobuf.message.Message):
         version: builtins.str | None = ...,
         description: builtins.str | None = ...,
         long_description: builtins.str | None = ...,
-        contact: collections.abc.Iterable[global___InfoContact] | None = ...,
+        contact: collections.abc.Iterable[Global___InfoContact] | None = ...,
         motd: builtins.str | None = ...,
         icon_url: builtins.str | None = ...,
         urls: collections.abc.Iterable[builtins.str] | None = ...,
@@ -126,7 +132,7 @@ class GetInfoResponse(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_version", b"_version"]) -> typing.Literal["version"] | None: ...
 
-global___GetInfoResponse = GetInfoResponse
+Global___GetInfoResponse: typing_extensions.TypeAlias = GetInfoResponse
 
 @typing.final
 class UpdateResponse(google.protobuf.message.Message):
@@ -138,7 +144,7 @@ class UpdateResponse(google.protobuf.message.Message):
         self,
     ) -> None: ...
 
-global___UpdateResponse = UpdateResponse
+Global___UpdateResponse: typing_extensions.TypeAlias = UpdateResponse
 
 @typing.final
 class UpdateMotdRequest(google.protobuf.message.Message):
@@ -156,7 +162,7 @@ class UpdateMotdRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["motd", b"motd"]) -> None: ...
 
-global___UpdateMotdRequest = UpdateMotdRequest
+Global___UpdateMotdRequest: typing_extensions.TypeAlias = UpdateMotdRequest
 
 @typing.final
 class UpdateDescriptionRequest(google.protobuf.message.Message):
@@ -174,7 +180,7 @@ class UpdateDescriptionRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["description", b"description"]) -> None: ...
 
-global___UpdateDescriptionRequest = UpdateDescriptionRequest
+Global___UpdateDescriptionRequest: typing_extensions.TypeAlias = UpdateDescriptionRequest
 
 @typing.final
 class UpdateIconUrlRequest(google.protobuf.message.Message):
@@ -192,7 +198,7 @@ class UpdateIconUrlRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["icon_url", b"icon_url"]) -> None: ...
 
-global___UpdateIconUrlRequest = UpdateIconUrlRequest
+Global___UpdateIconUrlRequest: typing_extensions.TypeAlias = UpdateIconUrlRequest
 
 @typing.final
 class UpdateNameRequest(google.protobuf.message.Message):
@@ -210,7 +216,7 @@ class UpdateNameRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["name", b"name"]) -> None: ...
 
-global___UpdateNameRequest = UpdateNameRequest
+Global___UpdateNameRequest: typing_extensions.TypeAlias = UpdateNameRequest
 
 @typing.final
 class UpdateUrlRequest(google.protobuf.message.Message):
@@ -228,7 +234,7 @@ class UpdateUrlRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["url", b"url"]) -> None: ...
 
-global___UpdateUrlRequest = UpdateUrlRequest
+Global___UpdateUrlRequest: typing_extensions.TypeAlias = UpdateUrlRequest
 
 @typing.final
 class UpdateContactRequest(google.protobuf.message.Message):
@@ -250,7 +256,7 @@ class UpdateContactRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["info", b"info", "method", b"method"]) -> None: ...
 
-global___UpdateContactRequest = UpdateContactRequest
+Global___UpdateContactRequest: typing_extensions.TypeAlias = UpdateContactRequest
 
 @typing.final
 class MintMethodOptions(google.protobuf.message.Message):
@@ -270,7 +276,7 @@ class MintMethodOptions(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["description", b"description"]) -> None: ...
 
-global___MintMethodOptions = MintMethodOptions
+Global___MintMethodOptions: typing_extensions.TypeAlias = MintMethodOptions
 
 @typing.final
 class UpdateNut04Request(google.protobuf.message.Message):
@@ -295,7 +301,7 @@ class UpdateNut04Request(google.protobuf.message.Message):
     max_amount: builtins.int
     """Optional: The maximum amount allowed for this method."""
     @property
-    def options(self) -> global___MintMethodOptions:
+    def options(self) -> Global___MintMethodOptions:
         """Optional: Specific options for this minting method."""
 
     def __init__(
@@ -306,7 +312,7 @@ class UpdateNut04Request(google.protobuf.message.Message):
         disabled: builtins.bool | None = ...,
         min_amount: builtins.int | None = ...,
         max_amount: builtins.int | None = ...,
-        options: global___MintMethodOptions | None = ...,
+        options: Global___MintMethodOptions | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "min_amount", b"min_amount", "options", b"options"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "method", b"method", "min_amount", b"min_amount", "options", b"options", "unit", b"unit"]) -> None: ...
@@ -319,7 +325,7 @@ class UpdateNut04Request(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_options", b"_options"]) -> typing.Literal["options"] | None: ...
 
-global___UpdateNut04Request = UpdateNut04Request
+Global___UpdateNut04Request: typing_extensions.TypeAlias = UpdateNut04Request
 
 @typing.final
 class MeltMethodOptions(google.protobuf.message.Message):
@@ -339,7 +345,7 @@ class MeltMethodOptions(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["amountless", b"amountless"]) -> None: ...
 
-global___MeltMethodOptions = MeltMethodOptions
+Global___MeltMethodOptions: typing_extensions.TypeAlias = MeltMethodOptions
 
 @typing.final
 class UpdateNut05Request(google.protobuf.message.Message):
@@ -364,7 +370,7 @@ class UpdateNut05Request(google.protobuf.message.Message):
     max_amount: builtins.int
     """Optional: The maximum amount allowed for this method."""
     @property
-    def options(self) -> global___MeltMethodOptions:
+    def options(self) -> Global___MeltMethodOptions:
         """Optional: Specific options for this melting method."""
 
     def __init__(
@@ -375,7 +381,7 @@ class UpdateNut05Request(google.protobuf.message.Message):
         disabled: builtins.bool | None = ...,
         min_amount: builtins.int | None = ...,
         max_amount: builtins.int | None = ...,
-        options: global___MeltMethodOptions | None = ...,
+        options: Global___MeltMethodOptions | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "min_amount", b"min_amount", "options", b"options"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "method", b"method", "min_amount", b"min_amount", "options", b"options", "unit", b"unit"]) -> None: ...
@@ -388,7 +394,7 @@ class UpdateNut05Request(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_options", b"_options"]) -> typing.Literal["options"] | None: ...
 
-global___UpdateNut05Request = UpdateNut05Request
+Global___UpdateNut05Request: typing_extensions.TypeAlias = UpdateNut05Request
 
 @typing.final
 class UpdateQuoteTtlRequest(google.protobuf.message.Message):
@@ -415,7 +421,7 @@ class UpdateQuoteTtlRequest(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_mint_ttl", b"_mint_ttl"]) -> typing.Literal["mint_ttl"] | None: ...
 
-global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
+Global___UpdateQuoteTtlRequest: typing_extensions.TypeAlias = UpdateQuoteTtlRequest
 
 @typing.final
 class GetQuoteTtlRequest(google.protobuf.message.Message):
@@ -433,7 +439,7 @@ class GetQuoteTtlRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
 
-global___GetQuoteTtlRequest = GetQuoteTtlRequest
+Global___GetQuoteTtlRequest: typing_extensions.TypeAlias = GetQuoteTtlRequest
 
 @typing.final
 class GetQuoteTtlResponse(google.protobuf.message.Message):
@@ -451,7 +457,7 @@ class GetQuoteTtlResponse(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["expiry", b"expiry"]) -> None: ...
 
-global___GetQuoteTtlResponse = GetQuoteTtlResponse
+Global___GetQuoteTtlResponse: typing_extensions.TypeAlias = GetQuoteTtlResponse
 
 @typing.final
 class Nut04Quote(google.protobuf.message.Message):
@@ -550,7 +556,7 @@ class Nut04Quote(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_updated_at", b"_updated_at"]) -> typing.Literal["updated_at"] | None: ...
 
-global___Nut04Quote = Nut04Quote
+Global___Nut04Quote: typing_extensions.TypeAlias = Nut04Quote
 
 @typing.final
 class BlindedMessage(google.protobuf.message.Message):
@@ -582,7 +588,7 @@ class BlindedMessage(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["B_", b"B_", "_witness", b"_witness", "amount", b"amount", "id", b"id", "witness", b"witness"]) -> None: ...
     def WhichOneof(self, oneof_group: typing.Literal["_witness", b"_witness"]) -> typing.Literal["witness"] | None: ...
 
-global___BlindedMessage = BlindedMessage
+Global___BlindedMessage: typing_extensions.TypeAlias = BlindedMessage
 
 @typing.final
 class DLEQ(google.protobuf.message.Message):
@@ -604,7 +610,7 @@ class DLEQ(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["e", b"e", "s", b"s"]) -> None: ...
 
-global___DLEQ = DLEQ
+Global___DLEQ: typing_extensions.TypeAlias = DLEQ
 
 @typing.final
 class BlindedSignature(google.protobuf.message.Message):
@@ -623,7 +629,7 @@ class BlindedSignature(google.protobuf.message.Message):
     C_: builtins.str
     """The blinded signature C_."""
     @property
-    def dleq(self) -> global___DLEQ:
+    def dleq(self) -> Global___DLEQ:
         """Optional: The DLEQ proof for the signature."""
 
     def __init__(
@@ -632,13 +638,13 @@ class BlindedSignature(google.protobuf.message.Message):
         id: builtins.str = ...,
         amount: builtins.int = ...,
         C_: builtins.str = ...,
-        dleq: global___DLEQ | None = ...,
+        dleq: Global___DLEQ | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["_dleq", b"_dleq", "dleq", b"dleq"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["C_", b"C_", "_dleq", b"_dleq", "amount", b"amount", "dleq", b"dleq", "id", b"id"]) -> None: ...
     def WhichOneof(self, oneof_group: typing.Literal["_dleq", b"_dleq"]) -> typing.Literal["dleq"] | None: ...
 
-global___BlindedSignature = BlindedSignature
+Global___BlindedSignature: typing_extensions.TypeAlias = BlindedSignature
 
 @typing.final
 class Nut05Quote(google.protobuf.message.Message):
@@ -688,11 +694,11 @@ class Nut05Quote(google.protobuf.message.Message):
     expiry: builtins.int
     """Optional: The Unix timestamp when the quote expires."""
     @property
-    def outputs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedMessage]:
+    def outputs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___BlindedMessage]:
         """A list of blinded messages representing the outputs (e.g., change)."""
 
     @property
-    def change(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedSignature]:
+    def change(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___BlindedSignature]:
         """A list of blinded signatures representing the change."""
 
     def __init__(
@@ -711,8 +717,8 @@ class Nut05Quote(google.protobuf.message.Message):
         fee_paid: builtins.int = ...,
         payment_preimage: builtins.str | None = ...,
         expiry: builtins.int | None = ...,
-        outputs: collections.abc.Iterable[global___BlindedMessage] | None = ...,
-        change: collections.abc.Iterable[global___BlindedSignature] | None = ...,
+        outputs: collections.abc.Iterable[Global___BlindedMessage] | None = ...,
+        change: collections.abc.Iterable[Global___BlindedSignature] | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_payment_preimage", b"_payment_preimage", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "payment_preimage", b"payment_preimage"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_payment_preimage", b"_payment_preimage", "amount", b"amount", "change", b"change", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "fee_paid", b"fee_paid", "fee_reserve", b"fee_reserve", "method", b"method", "outputs", b"outputs", "paid_time", b"paid_time", "payment_preimage", b"payment_preimage", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
@@ -725,7 +731,7 @@ class Nut05Quote(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_payment_preimage", b"_payment_preimage"]) -> typing.Literal["payment_preimage"] | None: ...
 
-global___Nut05Quote = Nut05Quote
+Global___Nut05Quote: typing_extensions.TypeAlias = Nut05Quote
 
 @typing.final
 class GetNut04QuoteRequest(google.protobuf.message.Message):
@@ -743,7 +749,7 @@ class GetNut04QuoteRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
 
-global___GetNut04QuoteRequest = GetNut04QuoteRequest
+Global___GetNut04QuoteRequest: typing_extensions.TypeAlias = GetNut04QuoteRequest
 
 @typing.final
 class GetNut04QuoteResponse(google.protobuf.message.Message):
@@ -753,18 +759,18 @@ class GetNut04QuoteResponse(google.protobuf.message.Message):
 
     QUOTE_FIELD_NUMBER: builtins.int
     @property
-    def quote(self) -> global___Nut04Quote:
+    def quote(self) -> Global___Nut04Quote:
         """The NUT-04 quote object."""
 
     def __init__(
         self,
         *,
-        quote: global___Nut04Quote | None = ...,
+        quote: Global___Nut04Quote | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["quote", b"quote"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["quote", b"quote"]) -> None: ...
 
-global___GetNut04QuoteResponse = GetNut04QuoteResponse
+Global___GetNut04QuoteResponse: typing_extensions.TypeAlias = GetNut04QuoteResponse
 
 @typing.final
 class GetNut05QuoteRequest(google.protobuf.message.Message):
@@ -782,7 +788,7 @@ class GetNut05QuoteRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
 
-global___GetNut05QuoteRequest = GetNut05QuoteRequest
+Global___GetNut05QuoteRequest: typing_extensions.TypeAlias = GetNut05QuoteRequest
 
 @typing.final
 class GetNut05QuoteResponse(google.protobuf.message.Message):
@@ -792,18 +798,18 @@ class GetNut05QuoteResponse(google.protobuf.message.Message):
 
     QUOTE_FIELD_NUMBER: builtins.int
     @property
-    def quote(self) -> global___Nut05Quote:
+    def quote(self) -> Global___Nut05Quote:
         """The NUT-05 quote object."""
 
     def __init__(
         self,
         *,
-        quote: global___Nut05Quote | None = ...,
+        quote: Global___Nut05Quote | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["quote", b"quote"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["quote", b"quote"]) -> None: ...
 
-global___GetNut05QuoteResponse = GetNut05QuoteResponse
+Global___GetNut05QuoteResponse: typing_extensions.TypeAlias = GetNut05QuoteResponse
 
 @typing.final
 class UpdateQuoteRequest(google.protobuf.message.Message):
@@ -825,7 +831,7 @@ class UpdateQuoteRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id", "state", b"state"]) -> None: ...
 
-global___UpdateQuoteRequest = UpdateQuoteRequest
+Global___UpdateQuoteRequest: typing_extensions.TypeAlias = UpdateQuoteRequest
 
 @typing.final
 class RotateNextKeysetRequest(google.protobuf.message.Message):
@@ -862,7 +868,7 @@ class RotateNextKeysetRequest(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_max_order", b"_max_order"]) -> typing.Literal["max_order"] | None: ...
 
-global___RotateNextKeysetRequest = RotateNextKeysetRequest
+Global___RotateNextKeysetRequest: typing_extensions.TypeAlias = RotateNextKeysetRequest
 
 @typing.final
 class RotateNextKeysetResponse(google.protobuf.message.Message):
@@ -898,7 +904,7 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry", "id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
     def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
 
-global___RotateNextKeysetResponse = RotateNextKeysetResponse
+Global___RotateNextKeysetResponse: typing_extensions.TypeAlias = RotateNextKeysetResponse
 
 @typing.final
 class UpdateLightningFeeRequest(google.protobuf.message.Message):
@@ -925,7 +931,7 @@ class UpdateLightningFeeRequest(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_fee_percent", b"_fee_percent"]) -> typing.Literal["fee_percent"] | None: ...
 
-global___UpdateLightningFeeRequest = UpdateLightningFeeRequest
+Global___UpdateLightningFeeRequest: typing_extensions.TypeAlias = UpdateLightningFeeRequest
 
 @typing.final
 class UpdateAuthLimitsRequest(google.protobuf.message.Message):
@@ -952,4 +958,131 @@ class UpdateAuthLimitsRequest(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute"]) -> typing.Literal["auth_rate_limit_per_minute"] | None: ...
 
-global___UpdateAuthLimitsRequest = UpdateAuthLimitsRequest
+Global___UpdateAuthLimitsRequest: typing_extensions.TypeAlias = UpdateAuthLimitsRequest
+
+@typing.final
+class GetKeysetRequest(google.protobuf.message.Message):
+    """GetKeysetRequest is used to request details for a specific keyset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    """The ID of the keyset to retrieve."""
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["id", b"id"]) -> None: ...
+
+Global___GetKeysetRequest: typing_extensions.TypeAlias = GetKeysetRequest
+
+@typing.final
+class GetKeysetResponse(google.protobuf.message.Message):
+    """GetKeysetResponse contains details and liability information for a keyset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    UNIT_FIELD_NUMBER: builtins.int
+    ACTIVE_FIELD_NUMBER: builtins.int
+    DERIVATION_PATH_FIELD_NUMBER: builtins.int
+    INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
+    VALID_FROM_FIELD_NUMBER: builtins.int
+    VALID_TO_FIELD_NUMBER: builtins.int
+    FIRST_SEEN_FIELD_NUMBER: builtins.int
+    VERSION_FIELD_NUMBER: builtins.int
+    AMOUNTS_FIELD_NUMBER: builtins.int
+    BALANCE_FIELD_NUMBER: builtins.int
+    FEES_PAID_FIELD_NUMBER: builtins.int
+    FINAL_EXPIRY_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    """The ID of the keyset."""
+    unit: builtins.str
+    """The unit of the keyset."""
+    active: builtins.bool
+    """Indicates if the keyset is currently active."""
+    derivation_path: builtins.str
+    """The derivation path used for the keyset."""
+    input_fee_ppk: builtins.int
+    """The input fee per kilobyte."""
+    valid_from: builtins.str
+    """Optional: The timestamp when the keyset became valid."""
+    valid_to: builtins.str
+    """Optional: The timestamp when the keyset stops being valid."""
+    first_seen: builtins.str
+    """Optional: The timestamp when the keyset was first seen."""
+    version: builtins.str
+    """Optional: The version of the keyset."""
+    balance: builtins.int
+    """The current liability balance of the keyset (outstanding tokens)."""
+    fees_paid: builtins.int
+    """The total fees paid for this keyset."""
+    final_expiry: builtins.int
+    """Optional: The final expiry of the keyset."""
+    @property
+    def amounts(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """The list of supported amounts."""
+
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+        unit: builtins.str = ...,
+        active: builtins.bool = ...,
+        derivation_path: builtins.str = ...,
+        input_fee_ppk: builtins.int = ...,
+        valid_from: builtins.str | None = ...,
+        valid_to: builtins.str | None = ...,
+        first_seen: builtins.str | None = ...,
+        version: builtins.str | None = ...,
+        amounts: collections.abc.Iterable[builtins.int] | None = ...,
+        balance: builtins.int = ...,
+        fees_paid: builtins.int = ...,
+        final_expiry: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_first_seen", b"_first_seen", "_valid_from", b"_valid_from", "_valid_to", b"_valid_to", "_version", b"_version", "final_expiry", b"final_expiry", "first_seen", b"first_seen", "valid_from", b"valid_from", "valid_to", b"valid_to", "version", b"version"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_first_seen", b"_first_seen", "_valid_from", b"_valid_from", "_valid_to", b"_valid_to", "_version", b"_version", "active", b"active", "amounts", b"amounts", "balance", b"balance", "derivation_path", b"derivation_path", "fees_paid", b"fees_paid", "final_expiry", b"final_expiry", "first_seen", b"first_seen", "id", b"id", "input_fee_ppk", b"input_fee_ppk", "unit", b"unit", "valid_from", b"valid_from", "valid_to", b"valid_to", "version", b"version"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_first_seen", b"_first_seen"]) -> typing.Literal["first_seen"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_valid_from", b"_valid_from"]) -> typing.Literal["valid_from"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_valid_to", b"_valid_to"]) -> typing.Literal["valid_to"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_version", b"_version"]) -> typing.Literal["version"] | None: ...
+
+Global___GetKeysetResponse: typing_extensions.TypeAlias = GetKeysetResponse
+
+@typing.final
+class GetKeysetsRequest(google.protobuf.message.Message):
+    """GetKeysetsRequest is used to request details for all keysets."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+Global___GetKeysetsRequest: typing_extensions.TypeAlias = GetKeysetsRequest
+
+@typing.final
+class GetKeysetsResponse(google.protobuf.message.Message):
+    """GetKeysetsResponse contains details and liability information for all keysets."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYSETS_FIELD_NUMBER: builtins.int
+    @property
+    def keysets(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[Global___GetKeysetResponse]: ...
+    def __init__(
+        self,
+        *,
+        keysets: collections.abc.Iterable[Global___GetKeysetResponse] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keysets", b"keysets"]) -> None: ...
+
+Global___GetKeysetsResponse: typing_extensions.TypeAlias = GetKeysetsResponse
