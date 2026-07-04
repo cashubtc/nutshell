@@ -165,6 +165,8 @@ def derive_dleq_nonce(
 def step2_bob_dleq(
     B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""
 ) -> Tuple[PrivateKey, PrivateKey]:
+    if not isinstance(a, PrivateKey):
+        raise TypeError(f"Expected SecpPrivateKey, got {type(a)}")
     C_: PublicKey = B_ * a  # type: ignore
     A = a.public_key
     assert A
