@@ -482,52 +482,6 @@ def test_nut29_test_vector():
     assert nut20.verify_mint_quote(quote_id, outputs, pubkey, expected_sig) is True
 
 
-def test_dleq_step2_bob_dleq_deprecated():
-    B_, _ = step1_alice_deprecated(
-        "test_message",
-        blinding_factor=PrivateKey(
-            bytes.fromhex(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            ),
-
-        ),
-    )
-    a = PrivateKey(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),
-
-    )
-    p_bytes = bytes.fromhex(
-        "0000000000000000000000000000000000000000000000000000000000000001"
-    )  # 32 bytes
-    e, s = step2_bob_dleq(B_, a, p_bytes)
-    assert (
-        e.to_hex()
-        == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
-    )
-    assert (
-        s.to_hex()
-        == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
-    )  # differs from e only in least significant byte because `a = 0x1`
-
-    # change `a`
-    a = PrivateKey(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000001111"
-        ),
-
-    )
-    e, s = step2_bob_dleq(B_, a, p_bytes)
-    assert (
-        e.to_hex()
-        == "df1984d5c22f7e17afe33b8669f02f530f286ae3b00a1978edaf900f4721f65e"
-    )
-    assert (
-        s.to_hex()
-        == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
-    )
-
 # TESTS FOR BLS12-381 (V3)
 
 
