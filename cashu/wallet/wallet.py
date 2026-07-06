@@ -46,6 +46,7 @@ from . import migrations
 from .compat import WalletCompat
 from .crud import (
     bump_secret_derivation,
+    delete_keyset,
     get_bolt11_melt_quote,
     get_bolt11_mint_quote,
     get_keysets,
@@ -282,7 +283,9 @@ class Wallet(
             logger.debug("Updating mint info in db.")
             await update_mint(
                 db=self.db,
-                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.model_dump())),
+                mint=WalletMint(
+                    url=self.url, info=json.dumps(self.mint_info.model_dump())
+                ),
             )
             return self.mint_info
         else:
@@ -292,14 +295,33 @@ class Wallet(
 
     async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.
-
         Then loads all keysets from the database for the active mint and active unit into self.keysets.
         """
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-        # load all keysets of thisd mint from the db
-        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+
+        keysets_in_db = await get_keysets(
+            mint_url=self.url, db=self.db, exclude_deleted=False
+        )
+
+        # mark keysets that disappeared from mint as deleted
+        active_ids = set(mint_keysets_dict.keys())
+        local_ids = {key.id for key in keysets_in_db}
+
+        for key_id in local_ids - active_ids:
+            # do not mark as deleted if there are still unspent proofs for this keyset
+            unspent = await get_proofs(db=self.db, id=key_id)
+            if unspent:
+                logger.warning(
+                    f"Keyset {key_id} no longer reported by mint but has unspent proofs."
+                    " Not marking as deleted."
+                )
+                continue
+            logger.debug(
+                f"Keyset {key_id} no longer reported by mint, marking as deleted"
+            )
+            await delete_keyset(keyset_id=key_id, mint_url=self.url, db=self.db)
 
         # db is empty, get all keys from the mint and store them
         if not keysets_in_db:
@@ -309,7 +331,9 @@ class Wallet(
                 keyset.input_fee_ppk = mint_keysets_dict[keyset.id].input_fee_ppk or 0
                 await store_keyset(keyset=keyset, db=self.db)
 
-        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+        keysets_in_db = await get_keysets(
+            mint_url=self.url, db=self.db, exclude_deleted=False
+        )
         keysets_in_db_dict = {k.id: k for k in keysets_in_db}
 
         # get all new keysets that are not in memory yet and store them in the database
@@ -332,6 +356,11 @@ class Wallet(
             # or the fee attributes have changed, update them in the database
             if mint_keyset.id in keysets_in_db_dict:
                 changed = False
+                # if a previously deleted keyset reappears, reactivate the row
+                # instead of inserting a duplicate id/mint_url pair.
+                if keysets_in_db_dict[mint_keyset.id].deleted_at is not None:
+                    keysets_in_db_dict[mint_keyset.id].deleted_at = None
+                    changed = True
                 if (
                     not mint_keyset.active
                     and mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active
@@ -441,15 +470,16 @@ class Wallet(
     async def load_keysets_from_db(
         self, url: Union[str, None] = "", unit: Union[str, None] = ""
     ):
-        """Load all keysets of the selected mint and unit from the database into self.keysets."""
+        """Load all keysets of the selected mint and unit from the database into self.keysets.
+        Excludes keysets that have been marked as deleted (no longer reported by the mint).
+        """
         # so that the caller can set unit = None, otherwise use defaults
         if unit == "":
             unit = self.unit.name
         if url == "":
             url = self.url
         keysets = await get_keysets(mint_url=url, unit=unit, db=self.db)
-        for keyset in keysets:
-            self.keysets[keyset.id] = keyset
+        self.keysets = {k.id: k for k in keysets}
         logger.trace(
             f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
         )
@@ -569,25 +599,40 @@ class Wallet(
         """
         mint_quote_response = await super().get_mint_quote(quote_id)
         mint_quote_local = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
-        mint_quote = MintQuote.from_resp_wallet(
-            mint_quote_response,
+
+        mint_quote = MintQuote.check_stale_and_from_resp_wallet(
+            mint_quote_resp=mint_quote_response,
             mint=self.url,
-            amount=(
-                mint_quote_response.amount or mint_quote_local.amount
-                if mint_quote_local
-                else 0  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
-            unit=(
-                mint_quote_response.unit or mint_quote_local.unit
-                if mint_quote_local
-                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
+            mint_quote_local=mint_quote_local,
+            default_amount=0,
+            default_unit=self.unit.name,
         )
+
         if mint_quote_local and mint_quote_local.privkey:
             mint_quote.privkey = mint_quote_local.privkey
 
         if not mint_quote_local:
             await store_bolt11_mint_quote(db=self.db, quote=mint_quote)
+        elif (
+            mint_quote_local.state != mint_quote.state
+            or mint_quote_local.amount_paid != mint_quote.amount_paid
+            or mint_quote_local.amount_issued != mint_quote.amount_issued
+            or mint_quote_local.updated_at != mint_quote.updated_at
+        ):
+            await update_bolt11_mint_quote(
+                db=self.db,
+                quote=mint_quote.quote,
+                state=mint_quote.state,
+                paid_time=mint_quote.paid_time
+                or (
+                    int(time.time())
+                    if mint_quote.state in [MintQuoteState.paid, MintQuoteState.issued]
+                    else None
+                ),
+                amount_paid=mint_quote.amount_paid,
+                amount_issued=mint_quote.amount_issued,
+                updated_at=mint_quote.updated_at,
+            )
 
         return mint_quote
 
@@ -657,6 +702,9 @@ class Wallet(
             quote=quote_id,
             state=MintQuoteState.issued,
             paid_time=int(time.time()),
+            amount_paid=quote.amount,
+            amount_issued=quote.amount,
+            updated_at=int(time.time()),
         )
         # store the mint_id in proofs
         async with self.db.connect() as conn:
@@ -731,9 +779,9 @@ class Wallet(
                 send_outputs, keep_outputs, secret_lock
             )
 
-        assert len(secrets) == len(
-            amounts
-        ), "number of secrets does not match number of outputs"
+        assert len(secrets) == len(amounts), (
+            "number of secrets does not match number of outputs"
+        )
         # verify that we didn't accidentally reuse a secret
         await self._check_used_secrets(secrets)
 
@@ -978,9 +1026,9 @@ class Wallet(
                 return
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
-            assert (
-                proof.id in self.keysets
-            ), f"Keyset {proof.id} not known, can not verify DLEQ."
+            assert proof.id in self.keysets, (
+                f"Keyset {proof.id} not known, can not verify DLEQ."
+            )
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C)),
@@ -1091,9 +1139,9 @@ class Wallet(
         Raises:
             AssertionError: if len(amounts) != len(secrets)
         """
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        assert len(amounts) == len(secrets), (
+            f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        )
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
@@ -1108,9 +1156,7 @@ class Wallet(
 
             assert r
             rs_return.append(r)
-            output = BlindedMessage(
-                amount=amount, B_=B_.format().hex(), id=keyset_id
-            )
+            output = BlindedMessage(amount=amount, B_=B_.format().hex(), id=keyset_id)
             outputs.append(output)
             logger.trace(f"Constructing output: {output}, r: {r.to_hex()}")
 

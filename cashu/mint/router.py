@@ -178,9 +178,13 @@ async def mint_quote(
         request=quote.request,
         amount=quote.amount,
         unit=quote.unit,
-        state=quote.state.value,
+        method=quote.method,
+        state=str(quote.state.value),
         expiry=quote.expiry,
         pubkey=quote.pubkey,
+        amount_paid=quote.amount_paid,
+        amount_issued=quote.amount_issued,
+        updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -204,9 +208,13 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         request=mint_quote.request,
         amount=mint_quote.amount,
         unit=mint_quote.unit,
-        state=mint_quote.state.value,
+        method=mint_quote.method,
+        state=str(mint_quote.state.value),
         expiry=mint_quote.expiry,
         pubkey=mint_quote.pubkey,
+        amount_paid=mint_quote.amount_paid,
+        amount_issued=mint_quote.amount_issued,
+        updated_at=mint_quote.updated_at,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
@@ -231,9 +239,13 @@ async def mint_quote_check(
             request=quote.request,
             amount=quote.amount,
             unit=quote.unit,
-            state=quote.state.value,
+            method=quote.method,
+            state=str(quote.state.value),
             expiry=quote.expiry,
             pubkey=quote.pubkey,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
         )
         for quote in quotes
     ]
@@ -350,9 +362,9 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         quote=melt_quote.quote,
         amount=melt_quote.amount,
         unit=melt_quote.unit,
+        method=melt_quote.method,
         request=melt_quote.request,
         fee_reserve=melt_quote.fee_reserve,
-        paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
         payment_preimage=melt_quote.payment_preimage,

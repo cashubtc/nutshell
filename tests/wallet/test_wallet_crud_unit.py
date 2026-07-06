@@ -16,9 +16,11 @@ from cashu.core.base import (
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
+from cashu.core.models.mint_quote import PostMintQuoteResponse
 from cashu.wallet import migrations as wallet_migrations
 from cashu.wallet.crud import (
     bump_secret_derivation,
+    delete_keyset,
     get_bolt11_melt_quote,
     get_bolt11_melt_quotes,
     get_bolt11_mint_quote,
@@ -70,12 +72,12 @@ def _proof(
     )
 
 
-def _keyset(keyset_id: str = "keyset-1"):
+def _keyset(keyset_id: str = "keyset-1", mint_url: str = "https://mint.test"):
     return WalletKeyset(
         id=keyset_id,
         unit="sat",
         public_keys={1: PrivateKey().public_key},
-        mint_url="https://mint.test",
+        mint_url=mint_url,
         active=True,
         input_fee_ppk=1,
     )
@@ -201,6 +203,67 @@ async def test_keyset_and_derivation_counter_flow(wallet_db: Database):
 
 
 @pytest.mark.asyncio
+async def test_delete_keyset_excludes_keyset(wallet_db: Database):
+    keyset = _keyset("keyset-delete")
+    await store_keyset(keyset, db=wallet_db)
+
+    await delete_keyset(keyset_id="keyset-delete", db=wallet_db)
+
+    assert await get_keysets(id="keyset-delete", db=wallet_db) == []
+    deleted_keysets = await get_keysets(
+        id="keyset-delete", db=wallet_db, exclude_deleted=False
+    )
+    assert len(deleted_keysets) == 1
+    row = await wallet_db.fetchone(
+        "SELECT deleted_at FROM keysets WHERE id = :id",
+        {"id": "keyset-delete"},
+    )
+    assert row is not None
+    assert row["deleted_at"] is not None
+
+    deleted_keysets[0].deleted_at = None
+    await update_keyset(deleted_keysets[0], db=wallet_db)
+    restored_keysets = await get_keysets(id="keyset-delete", db=wallet_db)
+    assert len(restored_keysets) == 1
+
+
+@pytest.mark.asyncio
+async def test_keyset_updates_are_scoped_by_mint_url(wallet_db: Database):
+    keyset_a = _keyset("shared-keyset", mint_url="https://mint-a.test")
+    keyset_b = _keyset("shared-keyset", mint_url="https://mint-b.test")
+    await store_keyset(keyset_a, db=wallet_db)
+    await store_keyset(keyset_b, db=wallet_db)
+
+    await delete_keyset(
+        keyset_id="shared-keyset", mint_url="https://mint-a.test", db=wallet_db
+    )
+
+    visible_keysets = await get_keysets(id="shared-keyset", db=wallet_db)
+    assert len(visible_keysets) == 1
+    assert visible_keysets[0].mint_url == "https://mint-b.test"
+
+    all_keysets = await get_keysets(
+        id="shared-keyset", db=wallet_db, exclude_deleted=False
+    )
+    keysets_by_mint = {keyset.mint_url: keyset for keyset in all_keysets}
+    assert keysets_by_mint["https://mint-a.test"].deleted_at is not None
+    assert keysets_by_mint["https://mint-b.test"].deleted_at is None
+
+    keyset_b.active = False
+    keyset_b.input_fee_ppk = 9
+    await update_keyset(keyset_b, db=wallet_db)
+
+    all_keysets = await get_keysets(
+        id="shared-keyset", db=wallet_db, exclude_deleted=False
+    )
+    keysets_by_mint = {keyset.mint_url: keyset for keyset in all_keysets}
+    assert keysets_by_mint["https://mint-a.test"].active is True
+    assert keysets_by_mint["https://mint-a.test"].input_fee_ppk == 1
+    assert keysets_by_mint["https://mint-b.test"].active is False
+    assert keysets_by_mint["https://mint-b.test"].input_fee_ppk == 9
+
+
+@pytest.mark.asyncio
 async def test_mint_quote_crud_lifecycle(wallet_db: Database):
     quote_1 = _mint_quote("quote-1", MintQuoteState.unpaid)
     quote_2 = _mint_quote("quote-2", MintQuoteState.pending)
@@ -231,6 +294,124 @@ async def test_mint_quote_crud_lifecycle(wallet_db: Database):
 
     with pytest.raises(ValueError, match="quote or request must be provided"):
         await get_bolt11_mint_quote(db=wallet_db)
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_accounting_fields_lifecycle(wallet_db: Database):
+    # Test fallback validation
+    quote_1 = _mint_quote("quote-acc-1", MintQuoteState.unpaid)
+    assert quote_1.amount_paid == 0
+    assert quote_1.amount_issued == 0
+    assert quote_1.updated_at == quote_1.created_time
+
+    # Explicit fields
+    quote_2 = MintQuote(
+        quote="quote-acc-2",
+        method="bolt11",
+        request="req-quote-acc-2",
+        checking_id="chk-quote-acc-2",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.paid,
+        mint="https://mint.test",
+        created_time=1000,
+        paid_time=2000,
+        amount_paid=40,
+        amount_issued=20,
+        updated_at=1500,
+    )
+    assert quote_2.amount_paid == 40
+    assert quote_2.amount_issued == 20
+    assert quote_2.updated_at == 1500
+
+    # Store
+    await store_bolt11_mint_quote(db=wallet_db, quote=quote_2)
+
+    # Fetch and verify
+    fetched = await get_bolt11_mint_quote(db=wallet_db, quote="quote-acc-2")
+    assert fetched is not None
+    assert fetched.amount_paid == 40
+    assert fetched.amount_issued == 20
+    assert fetched.updated_at == 1500
+
+    # Update
+    await update_bolt11_mint_quote(
+        db=wallet_db,
+        quote="quote-acc-2",
+        state=MintQuoteState.issued,
+        paid_time=3000,
+        amount_paid=100,
+        amount_issued=100,
+        updated_at=3000,
+    )
+
+    # Fetch again and verify
+    fetched_updated = await get_bolt11_mint_quote(db=wallet_db, quote="quote-acc-2")
+    assert fetched_updated is not None
+    assert fetched_updated.state == MintQuoteState.issued
+    assert fetched_updated.amount_paid == 100
+    assert fetched_updated.amount_issued == 100
+    assert fetched_updated.updated_at == 3000
+
+
+def test_mint_quote_stale_check_handles_missing_local_accounting_fields():
+    local_quote = MintQuote(
+        quote="quote-migrated",
+        method="bolt11",
+        request="req-migrated",
+        checking_id="chk-migrated",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.unpaid,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=None,
+        amount_issued=None,
+    )
+    mint_response = PostMintQuoteResponse(
+        quote="quote-migrated",
+        request="req-migrated",
+        amount=100,
+        unit="sat",
+        state=MintQuoteState.unpaid.value,
+        amount_paid=0,
+        amount_issued=0,
+        updated_at=1500,
+    )
+
+    quote = MintQuote.check_stale_and_from_resp_wallet(
+        mint_response,
+        mint="https://mint.test",
+        mint_quote_local=local_quote,
+    )
+
+    assert quote.state == MintQuoteState.unpaid
+    assert quote.amount_paid == 0
+    assert quote.amount_issued == 0
+
+
+def test_mint_quote_from_resp_wallet_prioritizes_pending():
+    mint_response = PostMintQuoteResponse(
+        quote="quote-pending-test",
+        request="req-pending-test",
+        amount=100,
+        unit="sat",
+        state="PENDING",
+        amount_paid=100,
+        amount_issued=0,
+        updated_at=1500,
+    )
+
+    quote = MintQuote.from_resp_wallet(
+        mint_response,
+        mint="https://mint.test",
+        amount=100,
+        unit="sat",
+    )
+
+    assert quote.state == MintQuoteState.pending
+    assert quote.amount_paid == 100
+    assert quote.amount_issued == 0
 
 
 @pytest.mark.asyncio
@@ -297,3 +478,93 @@ async def test_seed_and_mint_roundtrip(wallet_db: Database):
 @pytest.mark.asyncio
 async def test_get_mint_by_url_returns_none_when_missing(wallet_db: Database):
     assert await get_mint_by_url(db=wallet_db, url="https://missing.test") is None
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_unpaid_update_does_not_set_paid_time(wallet_db: Database):
+    quote = MintQuote(
+        quote="quote-unpaid",
+        method="bolt11",
+        request="req-unpaid",
+        checking_id="chk-unpaid",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.unpaid,
+        mint="https://mint.test",
+        created_time=1000,
+        paid_time=None,
+    )
+    await store_bolt11_mint_quote(db=wallet_db, quote=quote)
+
+    await update_bolt11_mint_quote(
+        db=wallet_db,
+        quote="quote-unpaid",
+        state=MintQuoteState.unpaid,
+        paid_time=None,
+        updated_at=1500,
+    )
+
+    fetched = await get_bolt11_mint_quote(db=wallet_db, quote="quote-unpaid")
+    assert fetched is not None
+    assert fetched.state == MintQuoteState.unpaid
+    assert fetched.paid_time is None or fetched.paid_time == 0
+    assert fetched.updated_at == 1500
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_pending_not_overridden_by_accounting(wallet_db: Database):
+    quote = MintQuote(
+        quote="quote-pending-test",
+        method="bolt11",
+        request="req-pending",
+        checking_id="chk-pending",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.pending,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=100,
+        amount_issued=0,
+    )
+    assert quote.state == MintQuoteState.pending
+
+    quote2 = MintQuote(
+        quote="quote-pending-test2",
+        method="bolt11",
+        request="req-pending2",
+        checking_id="chk-pending2",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.pending,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=100,
+        amount_issued=100,
+    )
+    assert quote2.state == MintQuoteState.pending
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_pending_state_setter_keeps_accounting_fields(
+    wallet_db: Database,
+):
+    quote = MintQuote(
+        quote="quote-setter-test",
+        method="bolt11",
+        request="req-setter",
+        checking_id="chk-setter",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.paid,
+        mint="https://mint.test",
+        created_time=1000,
+        amount_paid=40,
+        amount_issued=20,
+    )
+    assert quote.amount_paid == 40
+    assert quote.amount_issued == 20
+
+    quote.state = MintQuoteState.pending
+    assert quote.state == MintQuoteState.pending
+    assert quote.amount_paid == 40
+    assert quote.amount_issued == 20

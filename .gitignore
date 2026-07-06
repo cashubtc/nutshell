@@ -145,3 +145,4 @@ tor-data
 *.pem
 
 junit.xml
+googleapis/

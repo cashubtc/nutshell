@@ -51,11 +51,17 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 """
 
 import hashlib
+import hmac
 from typing import Optional, Tuple
 
 from .secp import PrivateKey, PublicKey
 
 DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_Cashu_"
+
+# Domain separation tag for deterministic DLEQ nonce derivation (NUT-12).
+DLEQ_NONCE_DST = b"Cashu_DLEQ_R_v1"
+# Order of the secp256k1 group.
+SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
 
 def hash_to_curve(message: bytes) -> PublicKey:
@@ -125,22 +131,53 @@ def hash_e(*publickeys: PublicKey) -> bytes:
     return e
 
 
+def derive_dleq_nonce(
+    a: PrivateKey, A: PublicKey, B_: PublicKey, C_: PublicKey
+) -> PrivateKey:
+    """Derives the DLEQ nonce `r` deterministically from the private key and proof context.
+
+    Per NUT-12:
+        r = HMAC-SHA256(key=a, "Cashu_DLEQ_R_v1" || A || B' || C' || ctr)
+
+    `a` is the 32-byte secp256k1 private key scalar (big-endian). `A`, `B_` and `C_`
+    are encoded as uncompressed SEC1 points (65 bytes each). `ctr` is a single byte
+    starting at 0x00, incremented if the reduced value is 0 or >= n (max 256 attempts).
+
+    This removes any dependency on RNG quality: reusing `r` across two proofs with
+    different challenges would leak the private key.
+    """
+    base = (
+        DLEQ_NONCE_DST
+        + A.format(compressed=False)
+        + B_.format(compressed=False)
+        + C_.format(compressed=False)
+    )
+    for ctr in range(256):
+        h = hmac.new(a.secret, base + bytes([ctr]), hashlib.sha256).digest()
+        r = int.from_bytes(h, "big")
+        # Rejection sampling: accept r only if it is a valid scalar in [1, n-1].
+        # Reducing mod n instead would bias the nonce toward small values.
+        if 0 < r < SECP256K1_N:
+            return PrivateKey(r.to_bytes(32, "big"))
+    raise ValueError("DLEQ nonce derivation failed")  # pragma: no cover
+
+
 def step2_bob_dleq(
     B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""
 ) -> Tuple[PrivateKey, PrivateKey]:
+    C_: PublicKey = B_ * a  # type: ignore
+    A = a.public_key
+    assert A
     if p_bytes:
         # deterministic p for testing
         p = PrivateKey(p_bytes)
     else:
-        # normally, we generate a random p
-        p = PrivateKey()
+        # derive the nonce deterministically from the private key and proof context
+        p = derive_dleq_nonce(a, A, B_, C_)
 
     R1 = p.public_key  # R1 = pG
     assert R1
     R2: PublicKey = B_ * p  # type: ignore
-    C_: PublicKey = B_ * a  # type: ignore
-    A = a.public_key
-    assert A
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
     s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
     spk = PrivateKey(bytes.fromhex(s.to_hex()))
