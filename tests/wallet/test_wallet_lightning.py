@@ -10,7 +10,6 @@ from cashu.wallet.lightning import LightningWallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
-    is_deprecated_api_only,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -66,7 +65,6 @@ async def test_create_invoice(wallet: LightningWallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_deprecated_api_only, reason="only works with v1 API")
 async def test_create_invoice_with_description(wallet: LightningWallet):
     invoice = await wallet.create_invoice(64, "test description")
     assert invoice.payment_request
