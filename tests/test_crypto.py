@@ -1,4 +1,7 @@
+import pytest
+
 from cashu.core.base import Proof
+from cashu.core.crypto import bls, bls_dhke
 from cashu.core.crypto.b_dhke import (
     alice_verify_dleq,
     carol_verify_dleq,
@@ -550,3 +553,96 @@ def test_dleq_step2_bob_dleq_deprecated():
         s.to_hex()
         == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
     )
+
+# TESTS FOR BLS12-381 (V3)
+
+
+
+def test_bls_step1():
+    secret_msg = "test_message"
+    B_, blinding_factor = bls_dhke.step1_alice(
+        secret_msg,
+        blinding_factor=bls.PrivateKey(
+            bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000003"
+            )
+        ),
+    )
+    Y = bls_dhke.hash_to_curve(secret_msg.encode("utf-8"))
+    assert Y.format().hex() == "860d58e5aeda1376185436ed96412313424cc079e056d1dab595e6db4c2c9685fec7da052c8db68d88985b75a42388ad"
+    assert (
+        B_.format().hex()
+        == "8e88c5f6a93f653784a66b033a00e52128499e18b095c2a56f080d1c2a937ffc9ef4600804a48d087bbd1f662f6b068f"
+    )
+    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000003"
+
+def test_bls_step2():
+    B_, _ = bls_dhke.step1_alice(
+        "test_message",
+        blinding_factor=bls.PrivateKey(
+            bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000003"
+            )
+        ),
+    )
+    a = bls.PrivateKey(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+    )
+    C_, _, _ = bls_dhke.step2_bob(B_, a)
+    assert (
+        C_.format().hex()
+        == "8d52d7a6cbe5e99858d5c15c092d11a0c387c78917471211082a6e5afc2a79680dfa188fafe5d4a51c5398ce160e7a16"
+    )
+
+def test_bls_step3():
+    C_ = bls.PublicKey(
+        bytes.fromhex(
+            "8d52d7a6cbe5e99858d5c15c092d11a0c387c78917471211082a6e5afc2a79680dfa188fafe5d4a51c5398ce160e7a16"
+        ), group="G1"
+    )
+    r = bls.PrivateKey(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000003"
+        )
+    )
+    a = bls.PrivateKey(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+    )
+    A = a.public_key
+    C = bls_dhke.step3_alice(C_, r, A)
+    assert (
+        C.format().hex()
+        == "b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69"
+    )
+
+def test_bls_batch_verification_vector():
+    K = bls.PublicKey(bytes.fromhex("aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"), group="G2")
+    secret_1 = "batch_proof_1"
+    C_1 = bls.PublicKey(bytes.fromhex("acebf797506a7031cef3189904715cb22792528f1ea0e6ab25341401d245539438ed97122f00e38ee6185cc20b09ba11"), group="G1")
+    secret_2 = "batch_proof_2"
+    C_2 = bls.PublicKey(bytes.fromhex("9776497ad47a00f8a56233fb88f939b0572cf174a4c6d2446c0b1060434e305fae6845fd1f68b70376ba53ffe67f0414"), group="G1")
+
+    # verify batch verification passes
+    assert bls_dhke.batch_pairing_verification(
+        [K, K], [C_1, C_2], [secret_1, secret_2]
+    )
+
+    # verify scalars match test vector
+    scalars = bls_dhke.derive_batch_random_scalars([K, K], [C_1, C_2], [secret_1, secret_2])
+    assert hex(scalars[0])[2:].zfill(64) == "0e7ff8be2ccb756d4ef390991bdd77eb65e8db624a2729fa1657c3cf8d7d4b55"
+    assert hex(scalars[1])[2:].zfill(64) == "6d026a181a6215b233e73b121d01908a1a1eb6911955bea5130bbf2f2966554d"
+
+
+def test_dleq_step2_bob_dleq_invalid_key_type():
+    B_ = PublicKey(
+        bytes.fromhex(
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+        )
+    )
+    bls_key = bls.PrivateKey()
+    with pytest.raises(TypeError, match="Expected SecpPrivateKey"):
+        step2_bob_dleq(B_, bls_key)  # type: ignore

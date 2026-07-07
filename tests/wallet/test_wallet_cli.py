@@ -542,7 +542,7 @@ def test_pending(cli_prefix):
     assert result.exit_code == 0
 
 
-def test_selfpay(cli_prefix):
+def test_selfpay(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
