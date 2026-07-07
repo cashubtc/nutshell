@@ -79,7 +79,7 @@ class SparkL2Wallet(LightningBackend):
             mnemonic=settings.mint_spark_mnemonic, passphrase=None
         )
 
-        network_str = getattr(settings, "mint_spark_network", "TESTNET").upper()
+        network_str = settings.mint_spark_network.upper()
         if network_str == "MAINNET":
             network = breez_sdk_spark.Network.MAINNET
         elif network_str == "REGTEST":
