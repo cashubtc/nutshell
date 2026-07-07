@@ -19,6 +19,8 @@ from cashu.lightning.base import (
     StatusResponse,
 )
 
+SPARK_SEND_PAYMENT_COMPLETION_TIMEOUT_SECONDS = 60
+
 
 class _SdkEventListener(breez_sdk_spark.EventListener):
     def __init__(self, wallet: "SparkL2Wallet"):
@@ -59,6 +61,7 @@ class SparkL2Wallet(LightningBackend):
         self.assert_unit_supported(unit)
         self.unit = unit
         self.sdk: Optional[breez_sdk_spark.BreezSdk] = None
+        self.prefer_spark_over_lightning = False
         self.payment_queue: asyncio.Queue[str] = asyncio.Queue()
         self.listener: Optional[_SdkEventListener] = None
 
@@ -89,6 +92,7 @@ class SparkL2Wallet(LightningBackend):
         config = breez_sdk_spark.default_config(network)
         if settings.mint_spark_api_key:
             config.api_key = settings.mint_spark_api_key
+        self.prefer_spark_over_lightning = config.prefer_spark_over_lightning
 
         # Use a safe storage directory specific to this mint
         storage_dir = os.path.join(settings.cashu_dir, "sparkl2_data")
@@ -222,7 +226,14 @@ class SparkL2Wallet(LightningBackend):
             )
 
         try:
-            send_req = breez_sdk_spark.SendPaymentRequest(prepare_response=prepare_res)
+            send_options = breez_sdk_spark.SendPaymentOptions.BOLT11_INVOICE(
+                prefer_spark=self.prefer_spark_over_lightning,
+                completion_timeout_secs=SPARK_SEND_PAYMENT_COMPLETION_TIMEOUT_SECONDS,
+            )
+            send_req = breez_sdk_spark.SendPaymentRequest(
+                prepare_response=prepare_res,
+                options=send_options,
+            )
         except Exception as e:
             return PaymentResponse(
                 result=PaymentResult.FAILED,

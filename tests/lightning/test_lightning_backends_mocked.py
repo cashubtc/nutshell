@@ -719,11 +719,19 @@ async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
 
     wallet = object.__new__(sparkl2.SparkL2Wallet)
     wallet.unit = Unit.sat
+    wallet.prefer_spark_over_lightning = True
 
     async def mock_ensure_sdk():
         pass
 
     cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+    send_request = None
+
+    def mock_send_payment_request(**kwargs):
+        nonlocal send_request
+        send_request = SimpleNamespace(**kwargs)
+        return send_request
+
     monkeypatch.setattr(
         sparkl2.breez_sdk_spark,
         "PrepareSendPaymentRequest",
@@ -732,7 +740,7 @@ async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
     monkeypatch.setattr(
         sparkl2.breez_sdk_spark,
         "SendPaymentRequest",
-        lambda **kwargs: SimpleNamespace(**kwargs),
+        mock_send_payment_request,
     )
 
     class MockMethod:
@@ -758,6 +766,12 @@ async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
     assert res.result == PaymentResult.UNKNOWN
     assert res.checking_id == "checking-1"
     assert "Payment failed or unknown" in str(res.error_message)
+    assert send_request
+    assert send_request.options.prefer_spark is True
+    assert (
+        send_request.options.completion_timeout_secs
+        == sparkl2.SPARK_SEND_PAYMENT_COMPLETION_TIMEOUT_SECONDS
+    )
 
 
 @pytest.mark.asyncio
