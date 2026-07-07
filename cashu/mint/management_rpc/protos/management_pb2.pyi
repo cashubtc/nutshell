@@ -953,3 +953,130 @@ class UpdateAuthLimitsRequest(google.protobuf.message.Message):
     def WhichOneof(self, oneof_group: typing.Literal["_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute"]) -> typing.Literal["auth_rate_limit_per_minute"] | None: ...
 
 global___UpdateAuthLimitsRequest = UpdateAuthLimitsRequest
+
+@typing.final
+class GetKeysetRequest(google.protobuf.message.Message):
+    """GetKeysetRequest is used to request details for a specific keyset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    """The ID of the keyset to retrieve."""
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["id", b"id"]) -> None: ...
+
+global___GetKeysetRequest = GetKeysetRequest
+
+@typing.final
+class GetKeysetResponse(google.protobuf.message.Message):
+    """GetKeysetResponse contains details and liability information for a keyset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    UNIT_FIELD_NUMBER: builtins.int
+    ACTIVE_FIELD_NUMBER: builtins.int
+    DERIVATION_PATH_FIELD_NUMBER: builtins.int
+    INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
+    VALID_FROM_FIELD_NUMBER: builtins.int
+    VALID_TO_FIELD_NUMBER: builtins.int
+    FIRST_SEEN_FIELD_NUMBER: builtins.int
+    VERSION_FIELD_NUMBER: builtins.int
+    AMOUNTS_FIELD_NUMBER: builtins.int
+    BALANCE_FIELD_NUMBER: builtins.int
+    FEES_PAID_FIELD_NUMBER: builtins.int
+    FINAL_EXPIRY_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    """The ID of the keyset."""
+    unit: builtins.str
+    """The unit of the keyset."""
+    active: builtins.bool
+    """Indicates if the keyset is currently active."""
+    derivation_path: builtins.str
+    """The derivation path used for the keyset."""
+    input_fee_ppk: builtins.int
+    """The input fee per kilobyte."""
+    valid_from: builtins.str
+    """Optional: The timestamp when the keyset became valid."""
+    valid_to: builtins.str
+    """Optional: The timestamp when the keyset stops being valid."""
+    first_seen: builtins.str
+    """Optional: The timestamp when the keyset was first seen."""
+    version: builtins.str
+    """Optional: The version of the keyset."""
+    balance: builtins.int
+    """The current liability balance of the keyset (outstanding tokens)."""
+    fees_paid: builtins.int
+    """The total fees paid for this keyset."""
+    final_expiry: builtins.int
+    """Optional: The final expiry of the keyset."""
+    @property
+    def amounts(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """The list of supported amounts."""
+
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+        unit: builtins.str = ...,
+        active: builtins.bool = ...,
+        derivation_path: builtins.str = ...,
+        input_fee_ppk: builtins.int = ...,
+        valid_from: builtins.str | None = ...,
+        valid_to: builtins.str | None = ...,
+        first_seen: builtins.str | None = ...,
+        version: builtins.str | None = ...,
+        amounts: collections.abc.Iterable[builtins.int] | None = ...,
+        balance: builtins.int = ...,
+        fees_paid: builtins.int = ...,
+        final_expiry: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_first_seen", b"_first_seen", "_valid_from", b"_valid_from", "_valid_to", b"_valid_to", "_version", b"_version", "final_expiry", b"final_expiry", "first_seen", b"first_seen", "valid_from", b"valid_from", "valid_to", b"valid_to", "version", b"version"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_first_seen", b"_first_seen", "_valid_from", b"_valid_from", "_valid_to", b"_valid_to", "_version", b"_version", "active", b"active", "amounts", b"amounts", "balance", b"balance", "derivation_path", b"derivation_path", "fees_paid", b"fees_paid", "final_expiry", b"final_expiry", "first_seen", b"first_seen", "id", b"id", "input_fee_ppk", b"input_fee_ppk", "unit", b"unit", "valid_from", b"valid_from", "valid_to", b"valid_to", "version", b"version"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_first_seen", b"_first_seen"]) -> typing.Literal["first_seen"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_valid_from", b"_valid_from"]) -> typing.Literal["valid_from"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_valid_to", b"_valid_to"]) -> typing.Literal["valid_to"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_version", b"_version"]) -> typing.Literal["version"] | None: ...
+
+global___GetKeysetResponse = GetKeysetResponse
+
+@typing.final
+class GetKeysetsRequest(google.protobuf.message.Message):
+    """GetKeysetsRequest is used to request details for all keysets."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___GetKeysetsRequest = GetKeysetsRequest
+
+@typing.final
+class GetKeysetsResponse(google.protobuf.message.Message):
+    """GetKeysetsResponse contains details and liability information for all keysets."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEYSETS_FIELD_NUMBER: builtins.int
+    @property
+    def keysets(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___GetKeysetResponse]: ...
+    def __init__(
+        self,
+        *,
+        keysets: collections.abc.Iterable[global___GetKeysetResponse] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["keysets", b"keysets"]) -> None: ...
+
+global___GetKeysetsResponse = GetKeysetsResponse
