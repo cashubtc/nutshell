@@ -405,6 +405,7 @@ async def test_lndrest_pay_invoice_settled_reads_stream_result(monkeypatch):
         def stream(self, method, url, json=None, timeout=None):
             assert method == "POST"
             assert url == "/v2/router/send"
+            assert json is not None
             assert json["payment_request"] == "lnbc1fake"
             assert json["fee_limit_msat"] == "1000"
             return _StreamResponse(lines)
