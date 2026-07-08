@@ -109,7 +109,7 @@ async def index(request: Request) -> HTMLResponse:
     mint_methods = []
     melt_methods = []
     backends_methods = sorted(
-        list(set(getattr(m, "name", str(m)).upper() for m in ledger.backends.keys()))
+        list(set(m.name.upper() for m in ledger.backends.keys()))
     )
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
@@ -174,15 +174,11 @@ async def index(request: Request) -> HTMLResponse:
 
     clean_contacts = []
     for c in contact:
-        if isinstance(c, dict):
-            c_method = c.get("method")
-            c_info = c.get("info")
-        else:
-            c_method = getattr(c, "method", None)
-            c_info = getattr(c, "info", None)
+        c_method = c.method
+        c_info = c.info
         if c_method and c_info:
             c_method_lower = c_method.lower()
-            c_info_str = str(c_info).strip()
+            c_info_str = c_info.strip()
             url = c_info_str
             if c_method_lower == "email":
                 url = (
