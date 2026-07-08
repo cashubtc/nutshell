@@ -37,9 +37,9 @@ async def test_swap_outputs_are_sorted(wallet1: Wallet):
     mock_blind_signature = BlindedSignature(
         id=wallet1.keyset_id,
         amount=8,
-        C_=key.serialize().hex(),
+        C_=key.format().hex(),
     )
-    mock_response_data = {"signatures": [mock_blind_signature.dict()]}
+    mock_response_data = {"signatures": [mock_blind_signature.model_dump()]}
     with respx.mock() as mock:
         route = mock.post(test_url).mock(
             return_value=Response(200, json=mock_response_data)

@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from loguru import logger
 from websocket._app import WebSocketApp
 
-from ..core.crypto.keys import random_hash
+from ..core.crypto.keys import generate_uuid_v7
 from ..core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
@@ -40,19 +40,19 @@ class SubscriptionManager:
         logger.trace(f"Received message: {message}")
         try:
             # return if message is a response
-            JSONRPCResponse.parse_raw(message)
+            JSONRPCResponse.model_validate_json(message)
             return
         except Exception:
             pass
 
         try:
-            msg = JSONRPCNotification.parse_raw(message)
+            msg = JSONRPCNotification.model_validate_json(message)
             logger.trace(f"Received notification: {msg}")
         except Exception as e:
             logger.error(f"Error parsing notification: {e}")
             return
         try:
-            params = JSONRPCNotficationParams.parse_obj(msg.params)
+            params = JSONRPCNotficationParams.model_validate(msg.params)
             logger.trace(f"Notification params: {params}")
         except Exception as e:
             logger.error(f"Error parsing notification params: {e}")
@@ -69,11 +69,11 @@ class SubscriptionManager:
         for subId in self.callback_map.keys():
             req = JSONRPCRequest(
                 method=JSONRPCMethods.UNSUBSCRIBE.value,
-                params=JSONRPCUnsubscribeParams(subId=subId).dict(),
+                params=JSONRPCUnsubscribeParams(subId=subId).model_dump(),
                 id=self.id_counter,
             )
-            logger.trace(f"Unsubscribing: {req.json()}")
-            self.websocket.send(req.json())
+            logger.trace(f"Unsubscribing: {req.model_dump_json()}")
+            self.websocket.send(req.model_dump_json())
             self.id_counter += 1
 
         self.websocket.keep_running = False
@@ -87,15 +87,15 @@ class SubscriptionManager:
         self, kind: JSONRPCSubscriptionKinds, filters: List[str], callback: Callable
     ):
         self.wait_until_connected()
-        subId = random_hash()
+        subId = generate_uuid_v7()
         req = JSONRPCRequest(
             method=JSONRPCMethods.SUBSCRIBE.value,
             params=JSONRPCSubscribeParams(
                 kind=kind, filters=filters, subId=subId
-            ).dict(),
+            ).model_dump(),
             id=self.id_counter,
         )
-        logger.trace(f"Subscribing: {req.json()}")
-        self.websocket.send(req.json())
+        logger.trace(f"Subscribing: {req.model_dump_json()}")
+        self.websocket.send(req.model_dump_json())
         self.id_counter += 1
         self.callback_map[subId] = callback

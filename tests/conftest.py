@@ -39,9 +39,9 @@ settings.fakewallet_delay_incoming_payment = 1
 settings.fakewallet_stochastic_invoice = False
 settings.lightning_fee_percent = 2.0
 settings.lightning_reserve_fee_min = 2000  # msat
-assert (
-    settings.mint_test_database != settings.mint_database
-), "Test database is the same as the main database"
+assert settings.mint_test_database != settings.mint_database, (
+    "Test database is the same as the main database"
+)
 settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = ["m/0'/2'/0'"]  # USD
@@ -114,6 +114,7 @@ async def ledger():
             Unit.usd: lightning_backend_usd,
         },
     }
+    assert settings.mint_private_key is not None
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
         seed=settings.mint_private_key,
@@ -141,6 +142,7 @@ def mint():
     server.start()
 
     # Wait until the server has bound to the localhost socket. Max out after 10s.
+    assert settings.mint_url is not None
     tries = 0
     while tries < 100:
         try:

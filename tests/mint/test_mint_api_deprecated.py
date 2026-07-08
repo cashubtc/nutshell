@@ -7,13 +7,12 @@ from cashu.core.models import (
     CheckSpendableRequest_deprecated,
     CheckSpendableResponse_deprecated,
     GetMintResponse_deprecated,
-    PostRestoreRequest,
-    PostRestoreResponse,
 )
 from cashu.mint.ledger import Ledger
-from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+
+pytestmark = pytest.mark.skip(reason="Wallet v0 / deprecated mint API removed in https://github.com/cashubtc/nutshell/pull/814")
 
 BASE_URL = "http://localhost:3337"
 
@@ -34,7 +33,7 @@ async def test_info(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
-    assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
+    assert response.json()["pubkey"] == ledger.pubkey.format().hex()
 
 
 @pytest.mark.asyncio
@@ -43,7 +42,7 @@ async def test_api_keys(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     assert response.json() == {
-        str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
+        str(k): v.format().hex() for k, v in ledger.keyset.public_keys.items()
     }
 
 
@@ -58,11 +57,11 @@ async def test_api_keysets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/keys/009a1f293253e41e")
+    response = httpx.get(f"{BASE_URL}/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     assert response.json() == {
-        str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
+        str(k): v.format().hex() for k, v in ledger.keyset.public_keys.items()
     }
 
 
@@ -76,7 +75,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
     # strip "id" from outputs_payload, which is not used in the deprecated split endpoint
     for o in outputs_payload:
         o.pop("id")
@@ -97,7 +96,7 @@ async def test_split_deprecated_with_amount(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
     # strip "id" from outputs_payload, which is not used in the deprecated split endpoint
     for o in outputs_payload:
         o.pop("id")
@@ -130,11 +129,11 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
         params={"amount": 64},
         timeout=None,
     )
-    mint_quote = GetMintResponse_deprecated.parse_obj(quote_response.json())
+    mint_quote = GetMintResponse_deprecated.model_validate(quote_response.json())
     await pay_if_regtest(mint_quote.pr)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/mint",
         json={"outputs": outputs_payload},
@@ -146,7 +145,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["promises"]) == 2
     assert result["promises"][0]["amount"] == 32
     assert result["promises"][1]["amount"] == 32
-    assert result["promises"][0]["id"] == "009a1f293253e41e"
+    assert result["promises"][0]["id"] == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
     assert result["promises"][0]["dleq"]
     assert "e" in result["promises"][0]["dleq"]
     assert "s" in result["promises"][0]["dleq"]
@@ -174,7 +173,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
         f"{BASE_URL}/melt",
@@ -188,8 +187,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is None
-    assert result["paid"] is True
-
 
 @pytest.mark.asyncio
 async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
@@ -224,8 +221,6 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is None
-    assert result["paid"] is True
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -253,7 +248,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
         f"{BASE_URL}/melt",
@@ -267,11 +262,9 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("preimage") is not None
-    assert result["paid"] is True
     assert result["change"]
     # we get back 2 sats because Lightning was free to pay on regtest
     assert result["change"][0]["amount"] == 2
-
 
 @pytest.mark.asyncio
 async def test_checkfees(ledger: Ledger, wallet: Wallet):
@@ -316,42 +309,12 @@ async def test_api_check_state(ledger: Ledger):
     payload = CheckSpendableRequest_deprecated(proofs=proofs)
     response = httpx.post(
         f"{BASE_URL}/check",
-        json=payload.dict(),
+        json=payload.model_dump(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    states = CheckSpendableResponse_deprecated.parse_obj(response.json())
+    states = CheckSpendableResponse_deprecated.model_validate(response.json())
     assert states.spendable
     assert len(states.spendable) == 2
     assert states.pending
     assert len(states.pending) == 2
 
-
-@pytest.mark.asyncio
-async def test_api_restore(ledger: Ledger, wallet: Wallet):
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
-    secret_counter = await bump_secret_derivation(
-        db=wallet.db, keyset_id=wallet.keyset_id, by=0, skip=True
-    )
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(
-        secret_counter - 1, secret_counter - 1
-    )
-    outputs, rs = wallet._construct_outputs([64], secrets, rs)
-
-    payload = PostRestoreRequest(outputs=outputs)
-    response = httpx.post(
-        f"{BASE_URL}/restore",
-        json=payload.dict(),
-    )
-    data = response.json()
-    assert "promises" in data
-    assert "outputs" in data
-    assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostRestoreResponse.parse_obj(response.json())
-    assert response
-    assert response.promises
-    assert len(response.promises) == 1
-    assert len(response.outputs) == 1
-    assert response.outputs == outputs

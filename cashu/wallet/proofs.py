@@ -17,6 +17,7 @@ from ..core.db import Database
 from ..wallet.crud import (
     get_keysets,
 )
+from .keyset_manager import KeysetManager
 from .protocols import SupportsDb, SupportsKeysets
 
 
@@ -71,6 +72,28 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         """
         keysets: List[str] = [proof.id for proof in proofs]
         return keysets
+
+    async def _expand_short_keyset_ids(self, proofs: List[Proof]) -> None:
+        """
+        Expands v2 short keyset IDs (16 chars) to full keyset IDs (66 chars) in-place.
+        
+        This is necessary when receiving TokenV3 tokens that may contain v2 short IDs.
+        The wallet must expand these to full IDs before sending them to the mint.
+        
+        Args:
+            proofs (List[Proof]): List of proofs whose keyset IDs may need expansion
+        """        
+        manager = KeysetManager()
+        
+        # Build a dictionary of all available keysets for this mint
+        keysets_dict = {k.id: k for k in self.keysets.values()}
+        
+        for proof in proofs:
+            # Check if this is a v2 short ID (16 chars starting with '01')
+            if proof.id.startswith("01") and len(proof.id) == 16:
+                full_id = manager.get_full_keyset_id(proof.id, keysets_dict)
+                logger.trace(f"Expanded short keyset ID {proof.id} -> {full_id}")
+                proof.id = full_id
 
     async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
         """Retrieves the mint URLs for a list of keyset id's from the wallet's database.
@@ -230,12 +253,17 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         unit_str = keysets[0].unit.name
 
         tokens: List[TokenV4Token] = []
+        manager = KeysetManager()
         for keyset_id in keyset_ids:
             proofs_keyset = [p for p in proofs if p.id == keyset_id]
             tokenv4_proofs = []
             for proof in proofs_keyset:
                 tokenv4_proofs.append(TokenV4Proof.from_proof(proof, include_dleq))
-            tokenv4_token = TokenV4Token(i=bytes.fromhex(keyset_id), p=tokenv4_proofs)
+            
+            # convert to short id for token serialization
+            short_id = manager.get_short_keyset_id(keyset_id)
+                
+            tokenv4_token = TokenV4Token(i=bytes.fromhex(short_id), p=tokenv4_proofs)
             tokens.append(tokenv4_token)
 
         return TokenV4(m=mint_url, u=unit_str, t=tokens, d=memo)

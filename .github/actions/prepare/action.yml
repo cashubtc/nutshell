@@ -7,20 +7,19 @@ inputs:
     default: "3.10"
   poetry-version:
     description: "Poetry Version"
-    default: "1.8.5"
+    default: "2.3.2"
 
 runs:
   using: "composite"
   steps:
-    - name: Set up Poetry ${{ inputs.poetry-version }}
-      uses: abatilo/actions-poetry@v2
-      with:
-        poetry-version: ${{ inputs.poetry-version }}
     - name: Set up Python ${{ inputs.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
-        cache: "poetry"
+    - name: Install Poetry ${{ inputs.poetry-version }}
+      run: |
+        python -m pip install --upgrade "poetry==${{ inputs.poetry-version }}"
+      shell: bash
     - name: Install dependencies
       run: |
         poetry install

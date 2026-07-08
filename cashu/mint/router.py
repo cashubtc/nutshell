@@ -16,6 +16,9 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMintBatchRequest,
+    PostMintBatchResponse,
+    PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -80,7 +83,10 @@ async def keys():
                 KeysResponseKeyset(
                     id=keyset.id,
                     unit=keyset.unit.name,
+                    active=keyset.active,
+                    input_fee_ppk=keyset.input_fee_ppk,
                     keys={k: v for k, v in keyset.public_keys_hex.items()},
+                    final_expiry=keyset.final_expiry,  # NEW: Include final expiry to align with NUT-02 PR #182
                 )
             )
     return KeysResponse(keysets=keyset_for_response)
@@ -116,7 +122,10 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
         unit=keyset.unit.name,
+        active=keyset.active,
+        input_fee_ppk=keyset.input_fee_ppk,
         keys={k: v for k, v in keyset.public_keys_hex.items()},
+        final_expiry=keyset.final_expiry,
     )
     return KeysResponse(keysets=[keyset_for_response])
 
@@ -139,6 +148,7 @@ async def keysets() -> KeysetsResponse:
                 unit=keyset.unit.name,
                 active=keyset.active,
                 input_fee_ppk=keyset.input_fee_ppk,
+                final_expiry=keyset.final_expiry,
             )
         )
     return KeysetsResponse(keysets=keysets)
@@ -168,10 +178,13 @@ async def mint_quote(
         request=quote.request,
         amount=quote.amount,
         unit=quote.unit,
-        paid=quote.paid,  # deprecated
-        state=quote.state.value,
+        method=quote.method,
+        state=str(quote.state.value),
         expiry=quote.expiry,
         pubkey=quote.pubkey,
+        amount_paid=quote.amount_paid,
+        amount_issued=quote.amount_issued,
+        updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -195,19 +208,73 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         request=mint_quote.request,
         amount=mint_quote.amount,
         unit=mint_quote.unit,
-        paid=mint_quote.paid,  # deprecated
-        state=mint_quote.state.value,
+        method=mint_quote.method,
+        state=str(mint_quote.state.value),
         expiry=mint_quote.expiry,
         pubkey=mint_quote.pubkey,
+        amount_paid=mint_quote.amount_paid,
+        amount_issued=mint_quote.amount_issued,
+        updated_at=mint_quote.updated_at,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/quote/bolt11/check",
+    name="Batch check mint quotes",
+    summary="Batch check mint quotes",
+    response_model=list[PostMintQuoteResponse],
+    response_description="A list of mint quotes",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_quote_check(
+    request: Request, payload: PostMintQuoteCheckRequest
+) -> list[PostMintQuoteResponse]:
+    logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
+    quotes = await ledger.mint_quote_check(payload)
+    resp = [
+        PostMintQuoteResponse(
+            quote=quote.quote,
+            request=quote.request,
+            amount=quote.amount,
+            unit=quote.unit,
+            method=quote.method,
+            state=str(quote.state.value),
+            expiry=quote.expiry,
+            pubkey=quote.pubkey,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
+        )
+        for quote in quotes
+    ]
+    logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/bolt11/batch",
+    name="Batch mint tokens",
+    summary="Batch mint tokens",
+    response_model=PostMintBatchResponse,
+    response_description="A list of blinded signatures that can be used to create proofs.",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_batch(
+    request: Request, payload: PostMintBatchRequest
+) -> PostMintBatchResponse:
+    logger.trace(f"> POST /v1/mint/bolt11/batch: payload={payload}")
+    signatures = await ledger.mint_batch(payload)
+    resp = PostMintBatchResponse(signatures=signatures)
+    logger.trace(f"< POST /v1/mint/bolt11/batch: {resp}")
     return resp
 
 
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
-    disconnected = False
+    client = None
     try:
         client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
     except Exception as e:
@@ -220,13 +287,12 @@ async def websocket_endpoint(websocket: WebSocket):
         await client.start()
     except WebSocketDisconnect as e:
         logger.debug(f"Websocket disconnected: {e}")
-        disconnected = True
-        return
     except Exception as e:
         logger.debug(f"Exception: {e}")
-        ledger.events.remove_client(client)
     finally:
-        if not disconnected:
+        if client and client in ledger.events.clients:
+            ledger.events.remove_client(client)
+        if websocket.client_state.name != "DISCONNECTED":
             await asyncio.wait_for(websocket.close(), timeout=1)
 
 
@@ -296,9 +362,9 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         quote=melt_quote.quote,
         amount=melt_quote.amount,
         unit=melt_quote.unit,
+        method=melt_quote.method,
         request=melt_quote.request,
         fee_reserve=melt_quote.fee_reserve,
-        paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
         payment_preimage=melt_quote.payment_preimage,
@@ -328,9 +394,14 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
-    resp = await ledger.melt(
-        proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
-    )
+    if payload.prefer_async:
+        resp = await ledger.async_melt(
+            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+        )
+    else:
+        resp = await ledger.melt(
+            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+        )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
 

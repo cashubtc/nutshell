@@ -43,6 +43,7 @@ INVOICE_RESULT_MAP = {
 
 MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
+PAYMENT_TIMEOUT_SECONDS = 60
 
 
 class LndRestWallet(LightningBackend):
@@ -100,7 +101,10 @@ class LndRestWallet(LightningBackend):
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
-            base_url=self.endpoint, headers=self.auth, verify=self.cert
+            base_url=self.endpoint,
+            headers=self.auth,
+            verify=self.cert,
+            timeout=None,
         )
         if self.supports_mpp:
             logger.info("LNDRestWallet enabling MPP feature")
@@ -191,36 +195,88 @@ class LndRestWallet(LightningBackend):
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+            quote_amount = Amount(Unit[quote.unit], quote.amount)
+            if amount_msat != quote_amount.to(Unit.msat).amount and self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    quote, quote_amount, fee_limit_msat
                 )
 
-        # set the fee limit for the payment
-        lnrpcFeeLimit = dict()
-        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
+        # pay the invoice with routerrpc.SendPaymentV2 (POST /v2/router/send),
+        # a streaming endpoint that sends payment updates until a terminal
+        # status is reached. The previously used lnrpc.SendPaymentSync
+        # (POST /v1/channels/transactions) was removed in lnd v0.21.0.
+        data = {
+            "payment_request": quote.request,
+            "fee_limit_msat": str(fee_limit_msat),
+            "timeout_seconds": PAYMENT_TIMEOUT_SECONDS,
+            "no_inflight_updates": True,
+        }
 
-        r = await self.client.post(
-            url="/v1/channels/transactions",
-            json={"payment_request": quote.request, "fee_limit": lnrpcFeeLimit},
-            timeout=None,
-        )
+        async with self.client.stream(
+            "POST", "/v2/router/send", json=data, timeout=None
+        ) as r:
+            async for json_line in r.aiter_lines():
+                try:
+                    line = json.loads(json_line)
+                except json.JSONDecodeError:
+                    continue
 
-        if r.is_error or r.json().get("payment_error"):
-            error_message = r.json().get("payment_error") or r.text
-            return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=error_message
-            )
+                # streaming errors from the REST proxy: the stream errored
+                # after the request was accepted (e.g. gRPC AlreadyExists when
+                # the payment is already in flight). We don't know whether the
+                # payment is live, so report UNKNOWN (never FAILED) and let the
+                # ledger re-check the real state with TrackPaymentV2.
+                if line.get("error"):
+                    error = line["error"]
+                    message = (
+                        error["message"] if "message" in error else str(error)
+                    )
+                    return PaymentResponse(
+                        result=PaymentResult.UNKNOWN, error_message=message
+                    )
 
-        data = r.json()
-        checking_id = base64.b64decode(data["payment_hash"]).hex()
-        fee_msat = int(data["payment_route"]["total_fees_msat"])
-        preimage = base64.b64decode(data["payment_preimage"]).hex()
+                # immediate (non-streaming) errors from the REST proxy reject
+                # the request before any payment is initiated, e.g.
+                # {"code": 5, "message": "Not Found", "details": []} when the
+                # route is unavailable. No payment was created, so this is an
+                # explicit FAILED.
+                if line.get("message") and "result" not in line:
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=line["message"]
+                    )
+
+                payment = line.get("result")
+                if payment is None or not payment.get("status"):
+                    continue
+
+                result = PAYMENT_RESULT_MAP.get(
+                    payment["status"], PaymentResult.UNKNOWN
+                )
+                if result == PaymentResult.PENDING:
+                    # non-terminal in-flight update, wait for the next one
+                    continue
+
+                if result == PaymentResult.SETTLED:
+                    fee_msat = int(payment.get("fee_msat") or 0)
+                    return PaymentResponse(
+                        result=PaymentResult.SETTLED,
+                        checking_id=payment.get("payment_hash"),
+                        fee=Amount(unit=Unit.msat, amount=fee_msat)
+                        if fee_msat
+                        else None,
+                        preimage=payment.get("payment_preimage"),
+                    )
+
+                return PaymentResponse(
+                    result=result,
+                    error_message=payment.get("failure_reason"),
+                )
+
+        # stream ended without a terminal status, get_payment_status will
+        # check the payment state with TrackPaymentV2
         return PaymentResponse(
-            result=PaymentResult.SETTLED,
-            checking_id=checking_id,
-            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
-            preimage=preimage,
+            result=PaymentResult.UNKNOWN,
+            error_message="SendPaymentV2 stream ended without a terminal payment status",
         )
 
     async def pay_partial_invoice(
@@ -307,7 +363,7 @@ class LndRestWallet(LightningBackend):
                         "pub_key"
                     ]
                     logger.debug(
-                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
+                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index - 1} of the route"
                     )
                     continue
             break
@@ -395,13 +451,12 @@ class LndRestWallet(LightningBackend):
                             if payment.get("payment_preimage") != "0" * 64
                             else None
                         )
+                        fee_msat = int(payment.get("fee_msat") or 0)
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment["status"]],
-                            fee=(
-                                Amount(unit=Unit.msat, amount=payment.get("fee_msat"))
-                                if payment.get("fee_msat")
-                                else None
-                            ),
+                            fee=Amount(unit=Unit.msat, amount=fee_msat)
+                            if fee_msat
+                            else None,
                             preimage=preimage,
                         )
                     else:
@@ -417,7 +472,7 @@ class LndRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 url = "/v1/invoices/subscribe"
@@ -440,9 +495,12 @@ class LndRestWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff with jitter
-                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
+                retry_delay = max(
+                    settings.mint_retry_exponential_backoff_base_delay,
+                    min(retry_delay * 2, max_retry_delay),
+                )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

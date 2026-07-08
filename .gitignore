@@ -11,6 +11,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+docker-build/
 downloads/
 eggs/
 .eggs/
@@ -130,6 +131,7 @@ dmypy.json
 
 # Tor PID
 tor.pid
+tor-data
 
 # Default data directory
 /data
@@ -141,3 +143,6 @@ tor.pid
 
 # PEM certs
 *.pem
+
+junit.xml
+googleapis/

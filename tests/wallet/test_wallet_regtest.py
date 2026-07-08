@@ -4,6 +4,7 @@ import bolt11
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import MeltQuoteState
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import get_proofs
 from cashu.wallet.wallet import Wallet
@@ -219,7 +220,7 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
     # get the melt quote, this should restore the state of the proofs
     melt_quote = await wallet.get_melt_quote(quote.quote)
     assert melt_quote
-    assert melt_quote.unpaid
+    assert melt_quote.state == MeltQuoteState.unpaid
 
     # verify that get_melt_quote unset all proofs as not pending anymore
     proofs_db_later = await get_proofs(db=wallet.db, melt_id=quote.quote)
@@ -286,7 +287,7 @@ async def test_regtest_wallet_crash_melt_succeed_restore_pending_batch_check(
     # get the melt quote
     melt_quote = await wallet.get_melt_quote(quote.quote)
     assert melt_quote
-    assert melt_quote.paid
+    assert melt_quote.state == MeltQuoteState.paid
 
     # verify that get_melt_quote unset all proofs as not pending anymore
     proofs_db_later = await get_proofs(db=wallet.db, melt_id=quote.quote)

@@ -80,7 +80,7 @@ class CLNRestWallet(LightningBackend):
 
         self.cert = settings.mint_clnrest_cert or False
         self.client = httpx.AsyncClient(
-            base_url=self.url, verify=self.cert, headers=self.auth
+            base_url=self.url, verify=self.cert, headers=self.auth, timeout=None,
         )
         self.last_pay_index = 0
 
@@ -273,7 +273,7 @@ class CLNRestWallet(LightningBackend):
 
         fee_msat, preimage = None, None
         if PAYMENT_RESULT_MAP[pay["status"]] == PaymentResult.SETTLED:
-            fee_msat = -int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
+            fee_msat = int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
             preimage = pay["preimage"]
 
         return PaymentStatus(

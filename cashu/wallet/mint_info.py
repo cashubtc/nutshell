@@ -36,7 +36,7 @@ class MintInfo(BaseModel):
             return False
 
         for entry in nut_15["methods"]:
-            entry_obj = Nut15MppSupport.parse_obj(entry)
+            entry_obj = Nut15MppSupport.model_validate(entry)
             if entry_obj.method == method and entry_obj.unit == unit.name:
                 return True
 

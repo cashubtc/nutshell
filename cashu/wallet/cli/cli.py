@@ -15,6 +15,7 @@ from typing import Optional, Union
 
 import bolt11
 import click
+import httpx
 from click import Context
 from loguru import logger
 
@@ -31,8 +32,8 @@ from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
+from ...core.nuts.nut18 import deserialize as deserialize_payment_request
 from ...core.settings import settings
-from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
     get_bolt11_melt_quotes,
@@ -59,7 +60,8 @@ from ..helpers import (
     receive,
     send,
 )
-from ..nostr import receive_nostr, send_nostr
+from ..lnurl import handle_lnurl
+from ..npc import NpubCash
 from ..subscriptions import SubscriptionManager
 
 
@@ -149,6 +151,13 @@ def init_auth_wallet(func):
     help="Run in test mode (don't ask for CLI inputs)",
 )
 @click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip user confirmation and inputs.",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -157,7 +166,15 @@ def init_auth_wallet(func):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
+async def cli(
+    ctx: Context,
+    host: str,
+    walletname: str,
+    unit: str,
+    tests: bool,
+    yes: bool,
+    verbose: bool,
+):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
@@ -190,6 +207,7 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, 
     ctx.obj["UNIT"] = unit or settings.wallet_unit
     unit = ctx.obj["UNIT"]
     ctx.obj["WALLET_NAME"] = walletname
+    ctx.obj["YES"] = yes
     settings.wallet_name = walletname
     settings.wallet_verbose_requests = verbose
     ctx.obj["VERBOSE"] = verbose
@@ -243,15 +261,150 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, 
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--async",
+    "-a",
+    "prefer_async",
+    default=False,
+    is_flag=True,
+    help="Pay asynchronously.",
+    type=bool,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
 async def pay(
-    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int] = None,
+    yes: bool = False,
+    prefer_async: bool = False,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
+
+    # NUT-18 / NUT-26 Payment Request support
+    if invoice.startswith("creqA") or invoice.lower().startswith("creqb1"):
+        try:
+            pr = deserialize_payment_request(invoice)
+        except Exception as e:
+            print(f"Error decoding payment request: {e}")
+            return
+
+        print(f"Payment Request: {pr.d or 'No description'}")
+        if pr.a:
+            print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
+
+        if pr.m and wallet.url not in pr.m:
+            print(
+                f"Error: Current mint {wallet.url} is not accepted by the receiver.")
+            print(f"Accepted mints: {pr.m}")
+            return
+
+        amount_to_pay = pr.a
+        if not amount_to_pay:
+            # TODO: Handle amounts not specified in request (ask user)
+            print("Error: Amount not specified in payment request.")
+            return
+
+        if not yes and not ctx.obj.get("YES"):
+            message = f"Pay {wallet.unit.str(amount_to_pay)}?"
+            click.confirm(
+                message,
+                abort=True,
+                default=True,
+            )
+
+        lock = ""
+        if pr.nut10:
+            # Robust check for lock kind
+            if pr.nut10.k == "P2PK":
+                # check if there are any tags
+                if pr.nut10.t:
+                    print(
+                        f"Error: Unsupported lock tags '{pr.nut10.t}' requested. Aborting"
+                        " for safety."
+                    )
+                    return
+                # check if the data is a valid pubkey (33 bytes hex)
+                if len(pr.nut10.d) != 66:
+                    print(
+                        f"Error: Unsupported lock data length '{len(pr.nut10.d)}' requested."
+                        " Aborting for safety."
+                    )
+                    return
+
+                lock = f"P2PK:{pr.nut10.d}"
+                print(f"Applying P2PK lock: {lock}")
+            else:
+                print(
+                    f"Error: Unsupported lock kind '{pr.nut10.k}' requested. Aborting"
+                    " for safety."
+                )
+                return
+
+        # Send token
+        # This will print the token to stdout
+        _, token = await send(
+            wallet,
+            amount=amount_to_pay,
+            lock=lock,
+            legacy=False,
+            offline=False,
+            include_dleq=True,
+            include_fees=True,
+            memo=pr.d,  # Use description as memo
+        )
+
+        # Handle Transport
+        if pr.t:
+            # Sort/select transport. We prefer POST.
+            # Just grab the first POST one for now.
+            post_transports = [t for t in pr.t if t.t == "post"]
+            if post_transports:
+                transport = post_transports[0]
+                url = transport.a
+                print(
+                    f"Sending token via POST to {url}...", end="", flush=True)
+
+                token_obj = deserialize_token_from_string(token)
+                assert isinstance(
+                    token_obj, TokenV4
+                ), "Only TokenV4 supported for POST transport"
+
+                proofs = token_obj.proofs
+
+                payload = {
+                    "id": pr.i,
+                    "memo": pr.d,
+                    "mint": token_obj.mint,
+                    "unit": token_obj.unit,
+                    "proofs": [p.to_dict() for p in proofs],
+                }
+
+                try:
+                    async with httpx.AsyncClient() as client:
+                        r = await client.post(url, json=payload, timeout=10)
+                        r.raise_for_status()
+                    print(f" Done (Status: {r.status_code}).")
+                except Exception as e:
+                    print(f" Failed: {e}")
+                    print(f"Manual Token: {token}")
+
+        await print_balance(ctx)
+        return
+
+    if invoice.lower().startswith("lnurl") or "@" in invoice:
+        print(f"Resolving LNURL {invoice}...", end="", flush=True)
+        resolved_invoice = await handle_lnurl(invoice, amount)
+        if not resolved_invoice:
+            return
+        print(" Resolved.")
+        invoice = resolved_invoice
+        # we used the amount to resolve the LNURL, so we don't need to pass it to the mint
+        amount = None
+
     payment_hash = bolt11.decode(invoice).payment_hash
     # we assume `amount` to be in sats
     amount_mpp_msat = amount * 1000 if amount else None
@@ -260,7 +413,7 @@ async def pay(
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs
     ecash_fees = wallet.coinselect_fee(wallet.proofs, total_amount)
-    if not yes:
+    if not yes and not ctx.obj.get("YES"):
         potential = (
             f" ({wallet.unit.str(total_amount + ecash_fees)} with potential fees)"
             if quote.fee_reserve or ecash_fees
@@ -292,7 +445,11 @@ async def pay(
 
     try:
         melt_response = await wallet.melt(
-            send_proofs, invoice, quote.fee_reserve, quote.quote
+            send_proofs,
+            invoice,
+            quote.fee_reserve,
+            quote.quote,
+            prefer_async=prefer_async,
         )
     except Exception as e:
         print(f" Error paying invoice: {e}")
@@ -354,12 +511,13 @@ async def invoice(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(
+        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
-        assert amount % split == 0, "split must be divisor or amount"
+        assert amount % split == 0, "split must be divisor of amount"
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
         optional_split = [split] * n_splits
@@ -384,7 +542,7 @@ async def invoice(
         if paid:
             return
         try:
-            ws_quote_resp = PostMintQuoteResponse.parse_obj(msg.payload)
+            ws_quote_resp = PostMintQuoteResponse.model_validate(msg.payload)
         except Exception:
             return
         logger.debug(
@@ -517,7 +675,8 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
+    amount = int(
+        input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -576,7 +735,8 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+            print(
+                f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -613,14 +773,15 @@ async def balance(ctx: Context, verbose):
     help="Memo for the token.",
     type=str,
 )
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
 @click.option(
-    "--nostr",
-    "-n",
+    "--refund",
+    "-r",
     default=None,
-    help="Send to nostr pubkey.",
+    multiple=True,
+    help="Refund public key (can be specified multiple times).",
     type=str,
 )
-@click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
 @click.option(
     "--dleq",
     "-d",
@@ -631,22 +792,10 @@ async def balance(ctx: Context, verbose):
 )
 @click.option(
     "--legacy",
-    "-l",
     default=False,
     is_flag=True,
     help="Print legacy TokenV3 format.",
     type=bool,
-)
-@click.option(
-    "--verbose",
-    "-v",
-    default=False,
-    is_flag=True,
-    help="Show more information.",
-    type=bool,
-)
-@click.option(
-    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.option(
     "--offline",
@@ -679,44 +828,34 @@ async def send_command(
     ctx: Context,
     amount: int,
     memo: str,
-    nostr: str,
     lock: str,
+    refund: tuple,
     dleq: bool,
     legacy: bool,
-    verbose: bool,
-    yes: bool,
     offline: bool,
     include_fees: bool,
     force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
-    if not nostr:
-        await send(
-            wallet,
-            amount=amount,
-            lock=lock,
-            legacy=legacy,
-            offline=offline,
-            include_dleq=dleq,
-            include_fees=include_fees,
-            memo=memo,
-            force_swap=force_swap,
-        )
-    else:
-        await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
+    amount = int(
+        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    await send(
+        wallet,
+        amount=amount,
+        lock=lock,
+        legacy=legacy,
+        offline=offline,
+        include_dleq=dleq,
+        include_fees=include_fees,
+        memo=memo,
+        force_swap=force_swap,
+        refund_pubkeys=list(refund) if refund else None,
+    )
     await print_balance(ctx)
 
 
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str, default="")
-@click.option(
-    "--nostr",
-    "-n",
-    default=False,
-    is_flag=True,
-    help="Receive tokens via nostr.receive",
-)
 @click.option(
     "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
 )
@@ -726,7 +865,6 @@ async def send_command(
 async def receive_cli(
     ctx: Context,
     token: str,
-    nostr: bool,
     all: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
@@ -743,21 +881,14 @@ async def receive_cli(
             auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
         )
-        await verify_mint(mint_wallet, mint_url)
+        await verify_mint(ctx, mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
-    # receive tokens via nostr
-    elif nostr:
-        await receive_nostr(wallet)
-        # exit on keypress
-        input("Enter any text to exit.")
-        print("Exiting.")
-        os._exit(0)
     # receive all pending outgoing tokens back to the wallet
     elif all:
         await receive_all_pending(ctx, wallet)
     else:
-        print("Error: enter token or use either flag --nostr or --all.")
+        print("Error: enter token or use flag --all.")
         return
     await print_balance(ctx)
 
@@ -777,6 +908,16 @@ async def receive_cli(
 def decode_to_json(token: str, no_dleq: bool, indent: int):
     include_dleq = not no_dleq
     if token:
+        if token.startswith("creqA") or token.lower().startswith("creqb1"):
+            pr = deserialize_payment_request(token)
+            print(
+                json.dumps(
+                    pr.model_dump(exclude_none=True),
+                    indent=indent,
+                )
+            )
+            return
+
         token_obj = deserialize_token_from_string(token)
         token_json = json.dumps(
             token_obj.serialize_to_dict(include_dleq),
@@ -868,7 +1009,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"), reverse=True)  # type: ignore
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter(
+            "send_id"), reverse=True)  # type: ignore
         if number:
             number += offset
         for i, (key, value) in islice(
@@ -910,10 +1052,130 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         print("To receive all pending tokens use: cashu receive -a")
 
 
-@cli.command("lock", help="Generate receiving lock.")
+@cli.command("proofs", help="List raw proofs in wallet.")
+@click.option(
+    "--all", "-a", default=False, is_flag=True, help="Include reserved proofs."
+)
+@click.option(
+    "--no-dleq", default=False, is_flag=True, help="Do not include DLEQ proofs."
+)
+@click.option(
+    "--indent",
+    "-i",
+    default=2,
+    help="Number of spaces to indent JSON with.",
+    type=int,
+)
+@click.option(
+    "--keyset",
+    "-k",
+    default=None,
+    help="Filter by keyset ID.",
+    type=str,
+)
+@click.option(
+    "--order",
+    "-o",
+    default=None,
+    help="Sort the proofs by amount in ascending (asc) or descending (desc) order.",
+    type=str,
+)
 @click.pass_context
 @coro
-async def lock(ctx: Context):
+async def proofs(
+    ctx: Context, all: bool, no_dleq: bool, indent: int, keyset: str, order: str
+):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs()
+
+    # Get proofs based on --all flag
+    if all:
+        # Include both available and reserved proofs
+        proofs = wallet.proofs
+    else:
+        # Only include available (non-reserved) proofs
+        proofs = [p for p in wallet.proofs if not p.reserved]
+
+    # Filter by keyset if specified
+    if keyset:
+        proofs = [p for p in proofs if p.id == keyset]
+
+    if not proofs:
+        if keyset:
+            print(f"No proofs found for keyset: {keyset}")
+        else:
+            print("No proofs found.")
+        return
+
+    # Sort the proofs if ordering is specified.
+    if order is not None:
+        if order == "asc":
+            proofs = sorted(proofs, key=lambda p: p.amount)
+        elif order == "desc":
+            proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+        else:
+            print(
+                f"Unidentified order argument: {order}. Valid arguments are 'asc' and 'desc'."
+            )
+            return
+
+    # Convert proofs to dictionary format
+    include_dleq = not no_dleq
+
+    proofs_dict = []
+    for proof in proofs:
+        proof_dict = {
+            "id": proof.id,
+            "amount": proof.amount,
+            "secret": proof.secret,
+            "C": proof.C,
+        }
+
+        if include_dleq and proof.dleq:
+            proof_dict["dleq"] = {
+                "e": proof.dleq.e,
+                "s": proof.dleq.s,
+                "r": proof.dleq.r,
+            }
+
+        if proof.witness:
+            proof_dict["witness"] = proof.witness
+
+        proofs_dict.append(proof_dict)
+
+    # Print as JSON
+    proofs_json = json.dumps(
+        proofs_dict,
+        indent=indent,
+    )
+    print(proofs_json)
+
+
+@cli.group(cls=NaturalOrderGroup)
+def lock():
+    """Generate receiving locks."""
+    pass
+
+
+@lock.command("p2pk", help="Generate a P2PK lock with optional timelock and refund.")
+@click.option(
+    "--timelock",
+    "-t",
+    default=None,
+    help="Locktime in seconds after which the refund pubkey can claim the tokens.",
+    type=int,
+)
+@click.option(
+    "--refund",
+    "-r",
+    default=None,
+    multiple=True,
+    help="Refund public key (can be specified multiple times).",
+    type=str,
+)
+@click.pass_context
+@coro
+async def lock_p2pk(ctx: Context, timelock: Optional[int], refund: tuple):
     wallet: Wallet = ctx.obj["WALLET"]
 
     pubkey = await wallet.create_p2pk_pubkey()
@@ -924,9 +1186,21 @@ async def lock(ctx: Context):
     print("")
     print(f"Public receiving lock: {lock_str}")
     print("")
-    print(
-        f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock {lock_str}"
-    )
+
+    if timelock:
+        print(f"Timelock: {timelock} seconds")
+    if refund:
+        for r in refund:
+            print(f"Refund pubkey: {r}")
+    if timelock or refund:
+        print("")
+
+    send_cmd = f"cashu send <amount> --lock {lock_str}"
+    if refund:
+        for r in refund:
+            send_cmd += f" --refund {r}"
+
+    print(f"Anyone can send tokens to this lock:\n\n{send_cmd}")
     print("")
     print("Only you can receive tokens from this lock: cashu receive <token>")
 
@@ -1145,11 +1419,12 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                 if not mint_info_obj:
                     print("        - Mint information not available.")
                     continue
-                mint_info = mint_info_obj.dict()
+                mint_info = mint_info_obj.model_dump()
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
-                        print(f"        - Description: {mint_info['description']}")
+                        print(
+                            f"        - Description: {mint_info['description']}")
                     if mint_info.get("description_long"):
                         print(
                             f"        - Long description: {mint_info['description_long']}"
@@ -1161,7 +1436,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                     if mint_info.get("version"):
                         print(f"        - Version: {mint_info['version']}")
                     if mint_info.get("motd"):
-                        print(f"        - Message of the day: {mint_info['motd']}")
+                        print(
+                            f"        - Message of the day: {mint_info['motd']}")
                     if mint_info.get("time"):
                         print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
@@ -1182,14 +1458,6 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
         print(f"    - File: {settings.env_file}")
     if settings.tor:
         print(f"Tor enabled: {settings.tor}")
-    if settings.nostr_private_key:
-        try:
-            client = NostrClient(private_key=settings.nostr_private_key, connect=False)
-            print("Nostr:")
-            print(f"    - Public key: {client.public_key.bech32()}")
-            print(f"    - Relays: {', '.join(settings.nostr_relays)}")
-        except Exception:
-            print("Nostr: Error. Invalid key.")
     if settings.socks_proxy:
         print(f"Socks proxy: {settings.socks_proxy}")
     if settings.http_proxy:
@@ -1313,6 +1581,96 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
 
     if mint:
         new_proofs = await auth_wallet.mint_blind_auth()
-        print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
+        print(
+            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
-    print(f"Auth balance: {auth_wallet.available_balance}")
+
+@cli.group(cls=NaturalOrderGroup)
+def lnurl():
+    """LNURL commands."""
+    pass
+
+
+@lnurl.command("create", help="Create LNURL.")
+@click.option("--mint", "-m", default=None, help="Mint URL to use.")
+@click.pass_context
+@coro
+async def lnurl_create(ctx: Context, mint: Optional[str]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        lnurl_addr = await npc.create_lnurl(mint_url=mint)
+        print(f"Created LNURL: {lnurl_addr}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@lnurl.command("set-mint", help="Update the mint URL for the LNURL.")
+@click.option("--mint", "-m", default=None, help="Mint URL to use.")
+@click.pass_context
+@coro
+async def lnurl_set_mint(ctx: Context, mint: Optional[str]):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        lnurl_addr = await npc.update_mint_url(mint_url=mint)
+        print(f"Updated mint URL for LNURL: {lnurl_addr}")
+        print(f"New mint: {mint or wallet.url}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+@lnurl.command("get", help="Get LNURL.")
+@click.pass_context
+@coro
+async def lnurl_get(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    print(f"LNURL: {await npc.get_lnurl()}")
+
+
+@lnurl.command("check", help="Check for paid quotes.")
+@click.pass_context
+@coro
+async def lnurl_check(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    npc = NpubCash(wallet)
+    try:
+        quotes = await npc.check_quotes()
+        if not quotes:
+            print("No paid quotes found.")
+            return
+
+        print(f"Found {len(quotes)} paid quotes:")
+        for q in quotes:
+            print(
+                f"- Amount: {q.get('amount')} sats, ID: {q.get('id')}, Mint:"
+                f" {q.get('mint')}"
+            )
+    except Exception as e:
+        print(f"Error checking quotes: {e}")
+
+
+@lnurl.command("mint", help="Mint paid quotes.")
+@click.pass_context
+@coro
+async def lnurl_mint(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    npc = NpubCash(wallet)
+    try:
+        print("Checking for paid quotes...")
+        quotes = await npc.check_quotes()
+        if not quotes:
+            print("No paid quotes found.")
+            return
+
+        print(f"Found {len(quotes)} paid quotes. Minting...")
+        proofs = await npc.mint_quotes()
+        if proofs:
+            print(f"Successfully minted {len(proofs)} tokens.")
+            await print_balance(ctx)
+        else:
+            print("No tokens minted.")
+    except Exception as e:
+        print(f"Error minting quotes: {e}")

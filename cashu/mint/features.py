@@ -10,6 +10,7 @@ from ..core.models import (
     MintMethodSetting,
 )
 from ..core.nuts.nuts import (
+    BATCH_MINT_NUT,
     BLIND_AUTH_NUT,
     CACHE_NUT,
     CLEAR_AUTH_NUT,
@@ -55,7 +56,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         ]
         return MintInfo(
             name=settings.mint_info_name,
-            pubkey=self.pubkey.serialize().hex() if self.pubkey else None,
+            pubkey=self.pubkey.format().hex() if self.pubkey else None,
             version=f"{_VERSION_PREFIX}/{settings.version}",
             description=settings.mint_info_description,
             description_long=settings.mint_info_description_long,
@@ -75,6 +76,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features = self.add_mpp_features(mint_features)
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
+        mint_features = self.add_batch_features(mint_features)
 
         return mint_features
 
@@ -82,7 +84,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                mint_setting = MintMethodSetting(method=method.name, unit=unit.name)
+                mint_setting = MintMethodSetting(
+                    method=method.name, unit=unit.name, method_name=method.name
+                )
                 if settings.mint_max_mint_bolt11_sat:
                     mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
                     mint_setting.min_amount = 0
@@ -93,7 +97,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         melt_method_settings: List[MeltMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                melt_setting = MeltMethodSetting(method=method.name, unit=unit.name)
+                melt_setting = MeltMethodSetting(
+                    method=method.name, unit=unit.name, method_name=method.name
+                )
                 if settings.mint_max_melt_bolt11_sat:
                     melt_setting.max_amount = settings.mint_max_melt_bolt11_sat
                     melt_setting.min_amount = 0
@@ -123,6 +129,16 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
+        return mint_features
+
+    def add_batch_features(
+        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+    ):
+        mint_features[BATCH_MINT_NUT] = {
+            "supported": True,
+            "max_batch_size": settings.mint_max_request_length,
+            "methods": list(set([m.name for m in self.backends.keys()])),
+        }
         return mint_features
 
     def add_mpp_features(

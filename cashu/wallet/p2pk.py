@@ -29,13 +29,10 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
 
     async def create_p2pk_pubkey(self):
         """Create a P2PK public key from the private key."""
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        public_key = self.private_key.pubkey
-        # logger.debug(f"Private key: {self.private_key.bech32()}")
+        assert self.private_key, "No private key set in settings or .env"
+        public_key = self.private_key.public_key
         assert public_key
-        return public_key.serialize().hex()
+        return public_key.format().hex()
 
     async def create_p2pk_lock(
         self,
@@ -88,10 +85,10 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             List[str]: List of signatures for each proof
         """
         private_key = self.private_key
-        assert private_key.pubkey
+        assert private_key.public_key
         logger.trace(
-            f"Signing with private key: {private_key.serialize()} public key:"
-            f" {private_key.pubkey.serialize().hex()}"
+            f"Signing with private key: {private_key.to_hex()} public key:"
+            f" {private_key.public_key.format().hex()}"
         )
         for proof in proofs:
             logger.trace(f"Signing proof: {proof}")
@@ -110,7 +107,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     def schnorr_sign_message(self, message: str) -> str:
         """Sign a message with the private key of the wallet."""
         private_key = self.private_key
-        assert private_key.pubkey
+        assert private_key.public_key
         return schnorr_sign(
             message=message.encode("utf-8"),
             private_key=private_key,
@@ -215,33 +212,37 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # attach unlock signatures to proofs
         assert len(proofs) == len(signatures), "wrong number of signatures"
         for p, s in zip(proofs, signatures):
+            s_lower = s.lower()
             if Secret.deserialize(p.secret).kind == SecretKind.P2PK.value:
                 # if there are already signatures, append
                 if p.witness and P2PKWitness.from_witness(p.witness).signatures:
                     proof_signatures = P2PKWitness.from_witness(p.witness).signatures
-                    if proof_signatures and s not in proof_signatures:
+                    proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                    if proof_signatures and s_lower not in proof_signatures_lower:
                         p.witness = P2PKWitness(
                             signatures=proof_signatures + [s]
-                        ).json()
+                        ).model_dump_json()
                 else:
-                    p.witness = P2PKWitness(signatures=[s]).json()
+                    p.witness = P2PKWitness(signatures=[s]).model_dump_json()
             elif Secret.deserialize(p.secret).kind == SecretKind.HTLC.value:
                 # if there are already signatures, append
                 if p.witness and HTLCWitness.from_witness(p.witness).signatures:
                     witness = HTLCWitness.from_witness(p.witness)
                     proof_signatures = witness.signatures
-                    if proof_signatures and s not in proof_signatures:
-                        p.witness = HTLCWitness(
-                            preimage=witness.preimage, signatures=proof_signatures + [s]
-                        ).json()
+                    if proof_signatures:
+                        proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                        if s_lower not in proof_signatures_lower:
+                            p.witness = HTLCWitness(
+                                preimage=witness.preimage, signatures=proof_signatures + [s]
+                            ).model_dump_json()
                 else:
                     if p.witness:
                         witness = HTLCWitness.from_witness(p.witness)
                         p.witness = HTLCWitness(
                             preimage=witness.preimage, signatures=[s]
-                        ).json()
+                        ).model_dump_json()
                     else:
-                        p.witness = HTLCWitness(signatures=[s]).json()
+                        p.witness = HTLCWitness(signatures=[s]).model_dump_json()
             else:
                 raise Exception("Secret kind not supported")
 
@@ -250,8 +251,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     def filter_proofs_locked_to_our_pubkey(self, proofs: List[Proof]) -> List[Proof]:
         """This method assumes that secrets are all P2PK!"""
         # filter proofs that require our pubkey
-        assert self.private_key.pubkey
-        our_pubkey = self.private_key.pubkey.serialize().hex()
+        assert self.private_key.public_key
+        our_pubkey = self.private_key.public_key.format().hex().lower()
         our_pubkey_proofs = []
         for p in proofs:
             secret = P2PKSecret.deserialize(p.secret)
@@ -260,7 +261,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 + secret.tags.get_tag_all("pubkeys")
                 + secret.tags.get_tag_all("refund")
             )
-            if our_pubkey in pubkeys:
+            pubkeys_lower = [pk.lower() for pk in pubkeys]
+            if our_pubkey in pubkeys_lower:
                 # we are one of the signers
                 our_pubkey_proofs.append(p)
         logger.debug(
@@ -331,7 +333,5 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 proofs[proofs.index(p)] = signed_proofs[
                     signed_proofs_secrets.index(p.secret)
                 ]
-
-        # TODO: Sign HTLCs that require signatures as well
 
         return proofs

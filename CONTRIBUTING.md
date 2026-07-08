@@ -3,16 +3,19 @@
 Please contribute to Nutshell! You can open issues if you find bugs and pull requests for improvements.
 
 ## Contributing
+
 Pick an issue you would like to work on. Those with the tag `good first issue` are great for getting started. When you open a pull request, make sure that you've run tests and formatting locally before you push code.
 
 ## Formatting
+
 We use [Ruff](https://docs.astral.sh/ruff/formatter/) for formatting. To make sure that your tests succeed, please run `make format` before you push code. You can find the Ruff parameters in `pyproject.toml`.
 
 ## Setting up your environment
 
-We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10.4` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, you can activate the shell with `poetry shell`. Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
+We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, activate the environment with `poetry env activate` (or install the optional poetry-plugin-shell if you prefer `poetry shell`). Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
 
 ### Precommit hook
+
 To run the formatter and mypy (linter) before you push code, you can install the very useful pre-commit hook which will check your code every time you push with git.
 
 ```bash
@@ -50,12 +53,21 @@ FAKEWALLET_DELAY_INCOMING_PAYMENT=3
 
 ### Lightning regtest
 
-There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.
+There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest-enviroment) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.
+
+Quick setup checklist:
+
+- Prereqs: Docker with compose plugin, `jq`, and your user in the `docker` group.
+- Keep the regtest repo as a sibling of `nutshell` (e.g. `../cashu-regtest-enviroment`).
+- Start regtest: `cd ../cashu-regtest-enviroment && ./start.sh` (runs health checks; give it a minute).
+- In `nutshell`: `cp .env.example .env`, then fill the variables below; use absolute paths if you run the mint from elsewhere.
+- If `./start.sh` fails on `jq` or Docker permissions, install `jq` or re-login after adding yourself to the `docker` group.
 
 You can choose one of the nodes as a backend for nutshell using the `.env` variable:
+
 ```
 # Choose one from:
-# LndRestWallet, CLNRestWallet, CoreLightningRestWallet, LNbitsWallet
+# LndRPCWallet, LndRestWallet, CLNRestWallet, CoreLightningRestWallet, LNbitsWallet
 
 MINT_BACKEND_BOLT11_SAT=LndRestWallet
 ```

@@ -40,6 +40,7 @@ class LNbitsWallet(LightningBackend):
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
             headers={"X-Api-Key": settings.mint_lnbits_key},
+            timeout=None,
         )
         self.ws_url = f"{self.endpoint.replace('http', 'ws', 1)}/api/v1/ws/{settings.mint_lnbits_key}"
         self.old_api = True
@@ -172,7 +173,7 @@ class LNbitsWallet(LightningBackend):
         return PaymentStatus(
             result=result,
             fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
-            preimage=data["preimage"],
+            preimage=data.get("preimage"),
         )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:

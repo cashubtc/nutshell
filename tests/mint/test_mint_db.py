@@ -6,13 +6,14 @@ import pytest_asyncio
 from fastapi import WebSocket
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.errors import ProofsArePendingError
 from cashu.core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
     JSONRPCNotification,
     JSONRPCSubscriptionKinds,
 )
-from cashu.core.models import PostMeltQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMeltQuoteResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -52,7 +53,7 @@ async def test_mint_proofs_pending(wallet: Wallet, ledger: Ledger):
 
     proof_states = await wallet.check_proof_state(proofs)
     assert all([s.pending for s in proof_states.states])
-    await assert_err(wallet.split(wallet.proofs, 20), "proofs are pending.")
+    await assert_err(wallet.split(wallet.proofs, 20), ProofsArePendingError.detail)
 
     await ledger.db_write._unset_proofs_pending(proofs, ledger.keysets)
 
@@ -69,7 +70,7 @@ async def test_mint_quote(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.amount == 128
     assert quote.unit == "sat"
-    assert not quote.paid
+    assert quote.state != MintQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
 
@@ -79,7 +80,7 @@ async def test_mint_quote_state_transitions(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(128)
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
-    assert quote.unpaid
+    assert quote.state == MintQuoteState.unpaid
 
     # set pending again
     async def set_state(quote, state):
@@ -132,7 +133,7 @@ async def test_get_mint_quote_by_request(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.amount == 128
     assert quote.unit == "sat"
-    assert not quote.paid
+    assert quote.state != MintQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
 
@@ -148,7 +149,7 @@ async def test_melt_quote(wallet: Wallet, ledger: Ledger):
     assert quote.quote == melt_quote.quote
     assert quote.amount == 128
     assert quote.unit == "sat"
-    assert not quote.paid
+    assert quote.state != MeltQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
 
@@ -164,7 +165,7 @@ async def test_melt_quote_set_pending(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.quote == melt_quote.quote
-    assert quote.unpaid
+    assert quote.state == MeltQuoteState.unpaid
     previous_state = quote.state
     await ledger.db_write._set_melt_quote_pending(quote)
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
@@ -187,7 +188,7 @@ async def test_melt_quote_state_transitions(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.quote == melt_quote.quote
-    assert quote.unpaid
+    assert quote.state == MeltQuoteState.unpaid
 
     # set pending
     quote.state = MeltQuoteState.pending
@@ -215,7 +216,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
         quote_id=mint_quote.quote, db=ledger.db
     )
     assert mint_quote is not None
-    assert mint_quote.unpaid
+    assert mint_quote.state == MintQuoteState.unpaid
 
     # pay_if_regtest pays on regtest, get_mint_quote pays on FakeWallet
     await pay_if_regtest(mint_quote.request)
@@ -223,7 +224,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
 
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
-    assert quote.paid
+    assert quote.state == MintQuoteState.paid
 
     previous_state = MintQuoteState.paid
     await ledger.db_write._set_mint_quote_pending(quote.quote)
@@ -242,7 +243,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.state == previous_state
-    assert quote.paid
+    assert quote.state == MintQuoteState.paid
 
     # # set paid and mint again
     # quote.state = MintQuoteState.paid
@@ -267,12 +268,13 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.quote == melt_quote.quote
-    assert quote.unpaid
+    assert quote.state == MeltQuoteState.unpaid
 
     # add event client
     websocket_mock = AsyncMock(spec=WebSocket)
+    websocket_mock.receive.return_value = {"type": "websocket.disconnect"}
     client = ledger.events.add_client(websocket_mock, ledger.db, ledger.crud)
-    asyncio.create_task(client.start())
+    task = asyncio.create_task(client.start())
     await asyncio.sleep(0.1)
     websocket_mock.accept.assert_called_once()
 
@@ -280,18 +282,27 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     client.add_subscription(
         JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE, [quote.quote], "subId"
     )
+    await asyncio.sleep(0.1)
     quote_pending = await ledger.db_write._set_melt_quote_pending(quote)
     await asyncio.sleep(0.1)
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId", payload=quote_pending.dict()
-        ).dict(),
+            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump()
+        ).model_dump(),
     )
-    websocket_mock.send_text.assert_called_with(notification.json())
+
+    websocket_mock.send_text.assert_called_with(notification.model_dump_json())
 
     # remove subscription
     client.remove_subscription("subId")
+    task.cancel()
+    try:
+        await task
+    except Exception:
+        pass
+    except asyncio.CancelledError:
+        pass
 
 
 @pytest.mark.asyncio
@@ -341,3 +352,166 @@ async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
         ),
         "Cannot change state of a paid melt quote.",
     )
+
+
+# Tests for get_melt_quotes_by_checking_id CRUD method
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_empty(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id returns empty list for non-existent checking_id."""
+
+    quotes = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id="non_existent_id", db=ledger.db
+    )
+    assert quotes == []
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_single(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id returns a single quote when only one exists."""
+    from cashu.core.base import MeltQuote
+
+    checking_id = "test_checking_id_single"
+    quote = MeltQuote(
+        quote="quote_id_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+
+    quotes = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id, db=ledger.db
+    )
+
+    assert len(quotes) == 1
+    assert quotes[0].quote == "quote_id_1"
+    assert quotes[0].checking_id == checking_id
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_multiple(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id returns all quotes with the same checking_id."""
+    from cashu.core.base import MeltQuote
+
+    checking_id = "test_checking_id_multiple"
+
+    quote1 = MeltQuote(
+        quote="quote_id_m1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_m2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.paid,
+    )
+    quote3 = MeltQuote(
+        quote="quote_id_m3",
+        method="bolt11",
+        request="lnbc789",
+        checking_id=checking_id,
+        unit="sat",
+        amount=300,
+        fee_reserve=3,
+        state=MeltQuoteState.unpaid,
+    )
+
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote3, db=ledger.db)
+
+    quotes = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id, db=ledger.db
+    )
+
+    assert len(quotes) == 3
+    quote_ids = {q.quote for q in quotes}
+    assert quote_ids == {"quote_id_m1", "quote_id_m2", "quote_id_m3"}
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id only returns quotes with the specified checking_id."""
+    from cashu.core.base import MeltQuote
+
+    checking_id_1 = "test_checking_id_diff_1"
+    checking_id_2 = "test_checking_id_diff_2"
+
+    quote1 = MeltQuote(
+        quote="quote_id_diff_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id_1,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_diff_2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id_2,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+
+    quotes_1 = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id_1, db=ledger.db
+    )
+    assert len(quotes_1) == 1
+    assert quotes_1[0].quote == "quote_id_diff_1"
+
+    quotes_2 = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id_2, db=ledger.db
+    )
+    assert len(quotes_2) == 1
+    assert quotes_2[0].quote == "quote_id_diff_2"
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
+    import time
+    # Create a mint quote
+    mint_quote = await wallet.request_mint(128)
+    
+    # Check that paid_time is None initially
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote is not None
+    assert quote.unpaid
+    assert quote.paid_time is None
+    assert quote.created_time is not None
+
+    # Simulate payment
+    await pay_if_regtest(mint_quote.request)
+    
+    # Trigger check at mint (this updates the state in DB)
+    _ = await ledger.get_mint_quote(mint_quote.quote)
+    # Check that paid_time is now set
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote is not None
+    assert quote.paid
+    assert quote.paid_time is not None
+    assert isinstance(quote.paid_time, int)
+    assert quote.paid_time >= quote.created_time
+    # Ensure it's recent (within last minute)
+    assert quote.paid_time > int(time.time()) - 60

@@ -418,6 +418,42 @@ class UpdateQuoteTtlRequest(google.protobuf.message.Message):
 global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
 
 @typing.final
+class GetQuoteTtlRequest(google.protobuf.message.Message):
+    """GetQuoteTtlRequest is used to retrieve the expiry time of a specific quote."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_ID_FIELD_NUMBER: builtins.int
+    quote_id: builtins.str
+    """The ID of the quote to retrieve the expiry for."""
+    def __init__(
+        self,
+        *,
+        quote_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+
+global___GetQuoteTtlRequest = GetQuoteTtlRequest
+
+@typing.final
+class GetQuoteTtlResponse(google.protobuf.message.Message):
+    """GetQuoteTtlResponse contains the expiry time for a specific quote."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    EXPIRY_FIELD_NUMBER: builtins.int
+    expiry: builtins.int
+    """The Unix timestamp when the quote expires."""
+    def __init__(
+        self,
+        *,
+        expiry: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["expiry", b"expiry"]) -> None: ...
+
+global___GetQuoteTtlResponse = GetQuoteTtlResponse
+
+@typing.final
 class Nut04Quote(google.protobuf.message.Message):
     """Nut04Quote represents a quote for minting (NUT-04)."""
 
@@ -433,7 +469,12 @@ class Nut04Quote(google.protobuf.message.Message):
     CREATED_TIME_FIELD_NUMBER: builtins.int
     PAID_TIME_FIELD_NUMBER: builtins.int
     EXPIRY_FIELD_NUMBER: builtins.int
+    LAST_CHECKED_FIELD_NUMBER: builtins.int
     PUBKEY_FIELD_NUMBER: builtins.int
+    ISSUED_TIME_FIELD_NUMBER: builtins.int
+    AMOUNT_PAID_FIELD_NUMBER: builtins.int
+    AMOUNT_ISSUED_FIELD_NUMBER: builtins.int
+    UPDATED_AT_FIELD_NUMBER: builtins.int
     quote: builtins.str
     """The unique identifier for the quote."""
     method: builtins.str
@@ -454,8 +495,18 @@ class Nut04Quote(google.protobuf.message.Message):
     """Optional: The Unix timestamp when the quote was paid."""
     expiry: builtins.int
     """Optional: The Unix timestamp when the quote expires."""
+    last_checked: builtins.int
+    """Optional: The Unix timestamp when the quote was last checked."""
     pubkey: builtins.str
     """Optional: The public key associated with the quote, if applicable."""
+    issued_time: builtins.int
+    """Optional: The Unix timestamp when the ecash has been issued."""
+    amount_paid: builtins.int
+    """Optional: The amount paid in the quote."""
+    amount_issued: builtins.int
+    """Optional: The amount of tokens issued."""
+    updated_at: builtins.int
+    """Optional: The Unix timestamp when the quote was updated."""
     def __init__(
         self,
         *,
@@ -469,20 +520,35 @@ class Nut04Quote(google.protobuf.message.Message):
         created_time: builtins.int | None = ...,
         paid_time: builtins.int | None = ...,
         expiry: builtins.int | None = ...,
+        last_checked: builtins.int | None = ...,
         pubkey: builtins.str | None = ...,
+        issued_time: builtins.int | None = ...,
+        amount_paid: builtins.int | None = ...,
+        amount_issued: builtins.int | None = ...,
+        updated_at: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "pubkey", b"pubkey", "state", b"state"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "amount", b"amount", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "method", b"method", "paid_time", b"paid_time", "pubkey", b"pubkey", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_amount_issued", b"_amount_issued", "_amount_paid", b"_amount_paid", "_created_time", b"_created_time", "_expiry", b"_expiry", "_issued_time", b"_issued_time", "_last_checked", b"_last_checked", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "_updated_at", b"_updated_at", "amount_issued", b"amount_issued", "amount_paid", b"amount_paid", "created_time", b"created_time", "expiry", b"expiry", "issued_time", b"issued_time", "last_checked", b"last_checked", "paid_time", b"paid_time", "pubkey", b"pubkey", "state", b"state", "updated_at", b"updated_at"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_amount_issued", b"_amount_issued", "_amount_paid", b"_amount_paid", "_created_time", b"_created_time", "_expiry", b"_expiry", "_issued_time", b"_issued_time", "_last_checked", b"_last_checked", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "_updated_at", b"_updated_at", "amount", b"amount", "amount_issued", b"amount_issued", "amount_paid", b"amount_paid", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "issued_time", b"issued_time", "last_checked", b"last_checked", "method", b"method", "paid_time", b"paid_time", "pubkey", b"pubkey", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit", "updated_at", b"updated_at"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_amount_issued", b"_amount_issued"]) -> typing.Literal["amount_issued"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_amount_paid", b"_amount_paid"]) -> typing.Literal["amount_paid"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_created_time", b"_created_time"]) -> typing.Literal["created_time"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_expiry", b"_expiry"]) -> typing.Literal["expiry"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_issued_time", b"_issued_time"]) -> typing.Literal["issued_time"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_last_checked", b"_last_checked"]) -> typing.Literal["last_checked"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]) -> typing.Literal["paid_time"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]) -> typing.Literal["pubkey"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_state", b"_state"]) -> typing.Literal["state"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_updated_at", b"_updated_at"]) -> typing.Literal["updated_at"] | None: ...
 
 global___Nut04Quote = Nut04Quote
 
@@ -770,21 +836,27 @@ class RotateNextKeysetRequest(google.protobuf.message.Message):
     UNIT_FIELD_NUMBER: builtins.int
     MAX_ORDER_FIELD_NUMBER: builtins.int
     INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
+    FINAL_EXPIRY_FIELD_NUMBER: builtins.int
     unit: builtins.str
     """The unit for which to rotate the keyset (e.g., "sat")."""
     max_order: builtins.int
     """Optional: The maximum order of the new keyset."""
     input_fee_ppk: builtins.int
     """Optional: The input fee per kilobyte for the new keyset."""
+    final_expiry: builtins.int
+    """Optional: The final expiry of the keyset, as a unix epoch in seconds"""
     def __init__(
         self,
         *,
         unit: builtins.str = ...,
         max_order: builtins.int | None = ...,
         input_fee_ppk: builtins.int | None = ...,
+        final_expiry: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "final_expiry", b"final_expiry", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "final_expiry", b"final_expiry", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_input_fee_ppk", b"_input_fee_ppk"]) -> typing.Literal["input_fee_ppk"] | None: ...
     @typing.overload
@@ -802,6 +874,7 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     UNIT_FIELD_NUMBER: builtins.int
     MAX_ORDER_FIELD_NUMBER: builtins.int
     INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
+    FINAL_EXPIRY_FIELD_NUMBER: builtins.int
     id: builtins.str
     """The ID of the new keyset."""
     unit: builtins.str
@@ -810,6 +883,8 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     """The maximum order of the new keyset."""
     input_fee_ppk: builtins.int
     """The input fee per kilobyte for the new keyset."""
+    final_expiry: builtins.int
+    """Optional: The final expiry of the keyset, as a unix epoch in seconds"""
     def __init__(
         self,
         *,
@@ -817,8 +892,11 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
         unit: builtins.str = ...,
         max_order: builtins.int = ...,
         input_fee_ppk: builtins.int = ...,
+        final_expiry: builtins.int | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry", "id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
 
 global___RotateNextKeysetResponse = RotateNextKeysetResponse
 

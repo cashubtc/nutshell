@@ -51,6 +51,8 @@ class LedgerEventClientManager:
                 self.websocket.receive(),
                 timeout=settings.mint_websocket_read_timeout,
             )
+            if message.get("type") == "websocket.disconnect":
+                raise WebSocketDisconnect(code=message.get("code", 1000))
             message_text = message.get("text")
 
             # Check the rate limit
@@ -89,7 +91,7 @@ class LedgerEventClientManager:
 
             # Parse the JSONRPCRequest
             try:
-                req = JSONRPCRequest.parse_obj(data)
+                req = JSONRPCRequest.model_validate(data)
             except Exception as e:
                 err = JSONRPCErrorResponse(
                     error=JSONRPCError(
@@ -118,7 +120,7 @@ class LedgerEventClientManager:
 
             # Handle the request
             try:
-                logger.debug(f"Request: {req.json()}")
+                logger.debug(f"Request: {req.model_dump_json()}")
                 resp = await self._handle_request(req)
                 # Send the response
                 await self._send_msg(resp)
@@ -139,7 +141,7 @@ class LedgerEventClientManager:
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
         logger.debug(f"Received websocket message: {data}")
         if data.method == JSONRPCMethods.SUBSCRIBE.value:
-            subscribe_params = JSONRPCSubscribeParams.parse_obj(data.params)
+            subscribe_params = JSONRPCSubscribeParams.model_validate(data.params)
             self.add_subscription(
                 subscribe_params.kind, subscribe_params.filters, subscribe_params.subId
             )
@@ -147,30 +149,30 @@ class LedgerEventClientManager:
                 status=JSONRPCStatus.OK,
                 subId=subscribe_params.subId,
             )
-            return JSONRPCResponse(result=result.dict(), id=data.id)
+            return JSONRPCResponse(result=result.model_dump(), id=data.id)
         elif data.method == JSONRPCMethods.UNSUBSCRIBE.value:
-            unsubscribe_params = JSONRPCUnsubscribeParams.parse_obj(data.params)
+            unsubscribe_params = JSONRPCUnsubscribeParams.model_validate(data.params)
             self.remove_subscription(unsubscribe_params.subId)
             result = JSONRRPCSubscribeResponse(
                 status=JSONRPCStatus.OK,
                 subId=unsubscribe_params.subId,
             )
-            return JSONRPCResponse(result=result.dict(), id=data.id)
+            return JSONRPCResponse(result=result.model_dump(), id=data.id)
         else:
             raise ValueError(f"Invalid method: {data.method}")
 
     async def _send_obj(self, data: dict, subId: str):
         resp = JSONRPCNotification(
             method=JSONRPCMethods.SUBSCRIBE.value,
-            params=JSONRPCNotficationParams(subId=subId, payload=data).dict(),
+            params=JSONRPCNotficationParams(subId=subId, payload=data).model_dump(),
         )
         await self._send_msg(resp)
 
     async def _send_msg(
         self, data: Union[JSONRPCResponse, JSONRPCNotification, JSONRPCErrorResponse]
     ):
-        logger.debug(f"Sending websocket message: {data.json()}")
-        await self.websocket.send_text(data.json())
+        logger.debug(f"Sending websocket message: {data.model_dump_json()}")
+        await self.websocket.send_text(data.model_dump_json())
 
     def add_subscription(
         self,
@@ -187,46 +189,55 @@ class LedgerEventClientManager:
         for f in filters:
             logger.debug(f"Adding subscription {subId} for filter {f}")
             self.subscriptions[kind].setdefault(f, []).append(subId)
-            # Initialize the subscription
-            asyncio.create_task(self._init_subscription(subId, f, kind))
+            
+        # Initialize the subscriptions in batch
+        asyncio.create_task(self._init_subscriptions(subId, filters, kind))
 
     def remove_subscription(self, subId: str) -> None:
+        removed = False
         for kind, sub_filters in self.subscriptions.items():
             for filter, subs in sub_filters.items():
-                for sub in subs:
-                    if sub == subId:
-                        logger.debug(
-                            f"Removing subscription {subId} for filter {filter}"
-                        )
-                        self.subscriptions[kind][filter].remove(sub)
-                        return
-        raise ValueError(f"Subscription not found: {subId}")
+                while subId in subs:
+                    logger.debug(
+                        f"Removing subscription {subId} for filter {filter}"
+                    )
+                    subs.remove(subId)
+                    removed = True
+        if not removed:
+            raise ValueError(f"Subscription not found: {subId}")
 
     def serialize_event(self, event: LedgerEvent) -> dict:
         if isinstance(event, MintQuote):
-            return_dict = PostMintQuoteResponse.parse_obj(event.dict()).dict()
+            return_dict = PostMintQuoteResponse.from_mint_quote(event).model_dump()
         elif isinstance(event, MeltQuote):
-            return_dict = PostMeltQuoteResponse.parse_obj(event.dict()).dict()
+            return_dict = PostMeltQuoteResponse.from_melt_quote(event).model_dump()
         elif isinstance(event, ProofState):
-            return_dict = event.dict(exclude_unset=True, exclude_none=True)
+            return_dict = event.model_dump(exclude_unset=True, exclude_none=True)
         return return_dict
 
-    async def _init_subscription(
-        self, subId: str, filter: str, kind: JSONRPCSubscriptionKinds
+    async def _init_subscriptions(
+        self, subId: str, filters: List[str], kind: JSONRPCSubscriptionKinds
     ):
-        if kind == JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE:
-            mint_quote = await self.db_read.crud.get_mint_quote(
-                quote_id=filter, db=self.db_read.db
-            )
-            if mint_quote:
-                await self._send_obj(mint_quote.dict(), subId)
-        elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
-            melt_quote = await self.db_read.crud.get_melt_quote(
-                quote_id=filter, db=self.db_read.db
-            )
-            if melt_quote:
-                await self._send_obj(melt_quote.dict(), subId)
-        elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
-            proofs = await self.db_read.get_proofs_states(Ys=[filter])
-            if len(proofs):
-                await self._send_obj(proofs[0].dict(), subId)
+        results = []
+        async with self.db_read.db.connect() as conn:
+            if kind == JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE:
+                for filter in filters:
+                    mint_quote = await self.db_read.crud.get_mint_quote(
+                        quote_id=filter, db=self.db_read.db, conn=conn
+                    )
+                    if mint_quote:
+                        results.append(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump())
+            elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
+                for filter in filters:
+                    melt_quote = await self.db_read.crud.get_melt_quote(
+                        quote_id=filter, db=self.db_read.db, conn=conn
+                    )
+                    if melt_quote:
+                        results.append(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump())
+            elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
+                proofs = await self.db_read.get_proofs_states(Ys=filters, conn=conn)
+                for proof in proofs:
+                    results.append(proof.model_dump())
+        
+        for result in results:
+            await self._send_obj(result, subId)

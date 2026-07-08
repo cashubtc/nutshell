@@ -19,17 +19,9 @@ class NotAllowedError(CashuError):
         super().__init__(detail or self.detail, code=code or self.code)
 
 
-class OutputsAlreadySignedError(CashuError):
-    detail = "outputs have already been signed before."
-    code = 10002
-
-    def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
-        super().__init__(detail or self.detail, code=code or self.code)
-
-
 class InvalidProofsError(CashuError):
     detail = "proofs could not be verified"
-    code = 10003
+    code = 10001
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
         super().__init__(detail or self.detail, code=code or self.code)
@@ -43,16 +35,40 @@ class TransactionError(CashuError):
         super().__init__(detail or self.detail, code=code or self.code)
 
 
-class TokenAlreadySpentError(TransactionError):
-    detail = "Token already spent."
+class ProofsAlreadySpentError(TransactionError):
+    detail = "proofs already spent"
     code = 11001
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
 
 
-class TransactionNotBalancedError(TransactionError):
+class ProofsArePendingError(TransactionError):
+    detail = "proofs are pending"
     code = 11002
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class OutputsAlreadySignedError(TransactionError):
+    detail = "outputs already signed"
+    code = 11003
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class OutputsArePendingError(TransactionError):
+    detail = "outputs are pending"
+    code = 11004
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class TransactionNotBalancedError(TransactionError):
+    code = 11005
 
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
@@ -65,16 +81,23 @@ class SecretTooLongError(TransactionError):
         super().__init__(detail, code=self.code)
 
 
+class WitnessTooLongError(TransactionError):
+    code = 11004
+
+    def __init__(self, detail="witness too long"):
+        super().__init__(detail, code=self.code)
+
+
 class NoSecretInProofsError(TransactionError):
     detail = "no secret in proofs"
-    code = 11004
+    code = 10001
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
 
 
 class TransactionUnitError(TransactionError):
-    code = 11005
+    code = 11009
 
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
@@ -119,6 +142,22 @@ class TransactionUnitMismatchError(TransactionError):
         super().__init__(detail, code=self.code)
 
 
+class BatchDuplicateQuotesError(TransactionError):
+    detail = "Duplicate quote IDs provided"
+    code = 11016
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class BatchSizeExceededError(TransactionError):
+    detail = "Max batch size exceeded"
+    code = 11017
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
 class KeysetError(CashuError):
     detail = "keyset error"
     code = 12000
@@ -148,6 +187,14 @@ class LightningError(CashuError):
 class QuoteNotPaidError(CashuError):
     detail = "quote not paid"
     code = 20001
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class QuoteAlreadyIssuedError(CashuError):
+    detail = "quote already issued"
+    code = 20002
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)

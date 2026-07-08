@@ -1,5 +1,4 @@
 import json
-import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -7,6 +6,25 @@ from pydantic import BaseModel
 from .base import Method, Unit
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
 from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+
+
+def _match_protected_endpoint(endpoint_path: str, request_path: str) -> bool:
+    """
+    Match a request path against a protected endpoint path using wildcard rules.
+
+    Rules (per NUT-21/NUT-22):
+    1. Exact match: no trailing '*' -> request path MUST equal endpoint_path
+    2. Prefix match: ends with '*' -> request path MUST start with the prefix ('*' removed)
+
+    The '*' wildcard, if present, MUST be the final character only.
+    """
+    if endpoint_path.endswith("*"):
+        # Prefix match: path must start with the prefix (excluding the trailing '*')
+        prefix = endpoint_path[:-1]  # Remove the trailing '*'
+        return request_path.startswith(prefix)
+    else:
+        # Exact match
+        return request_path == endpoint_path
 
 
 class MintInfo(BaseModel):
@@ -28,7 +46,7 @@ class MintInfo(BaseModel):
 
     @classmethod
     def from_json_str(cls, json_str: str):
-        return cls.parse_obj(json.loads(json_str))
+        return cls.model_validate(json.loads(json_str))
 
     def supports_nut(self, nut: int) -> bool:
         if self.nuts is None:
@@ -43,7 +61,7 @@ class MintInfo(BaseModel):
             return False
 
         for entry in nut_15["methods"]:
-            entry_obj = Nut15MppSupport.parse_obj(entry)
+            entry_obj = Nut15MppSupport.model_validate(entry)
             if entry_obj.method == method and entry_obj.unit == unit.name:
                 return True
 
@@ -83,7 +101,7 @@ class MintInfo(BaseModel):
         if not self.requires_clear_auth():
             return []
         return [
-            MintInfoProtectedEndpoint.parse_obj(e)
+            MintInfoProtectedEndpoint.model_validate(e)
             for e in self.nuts[CLEAR_AUTH_NUT]["protected_endpoints"]
         ]
 
@@ -92,7 +110,9 @@ class MintInfo(BaseModel):
             return False
         path = "/" + path if not path.startswith("/") else path
         for endpoint in self.required_clear_auth_endpoints():
-            if method == endpoint.method and re.match(endpoint.path, path):
+            if method == endpoint.method and _match_protected_endpoint(
+                endpoint.path, path
+            ):
                 return True
         return False
 
@@ -113,7 +133,7 @@ class MintInfo(BaseModel):
         if not self.requires_blind_auth():
             return []
         return [
-            MintInfoProtectedEndpoint.parse_obj(e)
+            MintInfoProtectedEndpoint.model_validate(e)
             for e in self.nuts[BLIND_AUTH_NUT]["protected_endpoints"]
         ]
 
@@ -122,6 +142,8 @@ class MintInfo(BaseModel):
             return False
         path = "/" + path if not path.startswith("/") else path
         for endpoint in self.required_blind_auth_paths():
-            if method == endpoint.method and re.match(endpoint.path, path):
+            if method == endpoint.method and _match_protected_endpoint(
+                endpoint.path, path
+            ):
                 return True
         return False

@@ -1,0 +1,2 @@
+HiddenServiceDir /var/lib/tor/mint
+HiddenServicePort 80 mint:3338

@@ -322,3 +322,41 @@ async def m015_add_mints_table(db: Database):
                 );
             """
         )
+
+
+async def m016_remove_nostr_table(db: Database):
+    """
+    Removes the nostr table as nostr functionality has been removed.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            DROP TABLE IF EXISTS nostr;
+            """
+        )
+
+
+async def m017_add_mint_quote_accounting_fields(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            "ALTER TABLE bolt11_mint_quotes "
+            "ADD COLUMN amount_paid INTEGER DEFAULT NULL;"
+        )
+        await conn.execute(
+            "ALTER TABLE bolt11_mint_quotes "
+            "ADD COLUMN amount_issued INTEGER DEFAULT NULL;"
+        )
+        await conn.execute(
+            "ALTER TABLE bolt11_mint_quotes ADD COLUMN updated_at INTEGER DEFAULT NULL;"
+        )
+
+
+async def m018_add_deleted_at_column_to_keysets(db: Database):
+    """
+    Add a deleted_at column to keysets. A deleted keyset is one that disappeared
+    from the mint and must no longer be loaded or used.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            "ALTER TABLE keysets ADD COLUMN deleted_at TIMESTAMP DEFAULT NULL"
+        )

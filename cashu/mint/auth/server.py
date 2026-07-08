@@ -5,7 +5,7 @@ import httpx
 import jwt
 from loguru import logger
 
-from ...core.base import AuthProof
+from ...core.base import AuthProof, BlindedMessage, BlindedSignature
 from ...core.db import Database
 from ...core.errors import (
     BlindAuthAmountExceededError,
@@ -13,7 +13,6 @@ from ...core.errors import (
     BlindAuthRateLimitExceededError,
     ClearAuthFailedError,
 )
-from ...core.models import BlindedMessage, BlindedSignature
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
@@ -110,10 +109,19 @@ class AuthLedger(Ledger):
                 clear_auth_token,
                 signing_key.key,
                 algorithms=["RS256", "ES256"],
-                options={"verify_aud": False},
                 issuer=self.issuer,
+                options={"verify_aud": False},
             )
             logger.trace(f"Decoded JWT: {decoded}")
+            # Bind the token to this mint's OIDC client. Keycloak puts the client
+            # id in `azp` (authorized party) for access tokens; reject tokens
+            # issued to a different client in the same realm.
+            azp = decoded.get("azp")
+            if azp is not None and azp != settings.mint_auth_oicd_client_id:
+                raise jwt.InvalidTokenError(
+                    f"token azp '{azp}' does not match mint client"
+                    f" '{settings.mint_auth_oicd_client_id}'"
+                )
         except jwt.ExpiredSignatureError as e:
             logger.error("Token has expired")
             raise e
@@ -168,7 +176,7 @@ class AuthLedger(Ledger):
 
         logger.info(f"User authenticated: {user.id}")
         try:
-            assert_limit(user.id)
+            assert_limit(user.id, settings.mint_auth_rate_limit_per_minute)
         except Exception:
             raise BlindAuthRateLimitExceededError()
 
@@ -233,7 +241,8 @@ class AuthLedger(Ledger):
 
         try:
             yield
-            await self._invalidate_proofs(proofs=[proof])
+            # We do not calculate fees for auth keysets
+            await self.db_write.invalidate_proofs(proofs=[proof], keysets=self.keysets)
         except Exception as e:
             logger.error(f"Blind auth error: {e}")
             raise BlindAuthFailedError()

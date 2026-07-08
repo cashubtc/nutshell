@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import List
 
 from loguru import logger
@@ -43,7 +44,8 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
         async with self.db.get_connection(
             lock_table="mint_quotes",
-            lock_select_statement=f"checking_id='{checking_id}'",
+            lock_select_statement="checking_id = :checking_id",
+            lock_parameters={"checking_id": checking_id},
             lock_timeout=5,
         ) as conn:
             quote = await self.crud.get_mint_quote(
@@ -59,6 +61,8 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
             # set the quote as paid
             if quote.unpaid:
                 quote.state = MintQuoteState.paid
+                quote.paid_time = int(time.time())
+                quote.updated_at = int(time.time())
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 logger.trace(
                     f"Quote {quote.quote} with {MintQuoteState.unpaid} set as {quote.state.value}"

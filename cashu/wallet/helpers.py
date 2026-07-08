@@ -1,6 +1,6 @@
 import hashlib
 import os
-from typing import Optional
+from typing import List, Optional
 
 from loguru import logger
 
@@ -8,6 +8,7 @@ from ..core.base import Token, TokenV3, TokenV4
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
+from ..core.secret import Tags
 from ..core.settings import settings
 from ..wallet import migrations
 from ..wallet.crud import get_keysets
@@ -42,7 +43,12 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
     """
     if not token.unit:
         # load unit from wallet keyset db
-        keysets = await get_keysets(id=token.token[0].proofs[0].id, db=wallet.db)
+        proof_keyset_id = token.token[0].proofs[0].id
+        keysets = await get_keysets(id=proof_keyset_id, db=wallet.db)
+        if not keysets and proof_keyset_id.startswith("01") and len(proof_keyset_id) == 16:
+            # This might be a v2 short ID, try to find a matching full ID
+            all_keysets = await get_keysets(db=wallet.db)
+            keysets = [k for k in all_keysets if k.id.startswith(proof_keyset_id)]
         if keysets:
             token.unit = keysets[0].unit.name
 
@@ -58,6 +64,11 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
         keyset_ids = mint_wallet._get_proofs_keyset_ids(t.proofs)
         logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
         await mint_wallet.load_mint()
+        
+        # Expand short keyset IDs to full IDs
+        # This is a no-op in the case of base64 keysets and v1 keysets
+        await mint_wallet._expand_short_keyset_ids(t.proofs)
+        
         proofs_to_keep, _ = await mint_wallet.redeem(t.proofs)
         print(f"Received {mint_wallet.unit.str(sum_proofs(proofs_to_keep))}")
 
@@ -70,7 +81,15 @@ async def redeem_TokenV4(wallet: Wallet, token: TokenV4) -> Wallet:
     Redeem a token with a single mint.
     """
     await wallet.load_mint()
-    proofs_to_keep, _ = await wallet.redeem(token.proofs)
+    
+    # Get proofs from token (these will have short keyset IDs)
+    proofs = token.proofs
+    
+    # Expand v2 short keyset IDs to full IDs in-place
+    await wallet._expand_short_keyset_ids(proofs)
+    
+    # Use the expanded proofs for redemption
+    proofs_to_keep, _ = await wallet.redeem(proofs)
     print(f"Received {wallet.unit.str(sum_proofs(proofs_to_keep))}")
     return wallet
 
@@ -121,6 +140,7 @@ async def send(
     include_fees: bool = False,
     memo: Optional[str] = None,
     force_swap: bool = False,
+    refund_pubkeys: Optional[List[str]] = None,
 ):
     """
     Prints token to send to stdout.
@@ -137,11 +157,16 @@ async def send(
             logger.debug(
                 f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
             )
+            tags = None
+            if refund_pubkeys:
+                tags = Tags()
+                tags["refund"] = refund_pubkeys
             secret_lock = await wallet.create_p2pk_lock(
                 lock.split(":")[1],
                 locktime_seconds=settings.locktime_delta_seconds,
                 sig_all=sigall,
                 n_sigs=1,
+                tags=tags,
             )
             logger.debug(f"Secret lock: {secret_lock}")
         else:

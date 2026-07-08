@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from ...core.base import (
+    BlindedMessage,
     BlindedSignature,
     MeltQuote,
     MintKeyset,
@@ -129,7 +130,7 @@ class AuthLedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def get_promise(
+    async def get_blind_signature(
         self,
         *,
         db: Database,
@@ -138,13 +139,13 @@ class AuthLedgerCrud(ABC):
     ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
-    async def get_promises(
+    async def get_outputs(
         self,
         *,
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]: ...
+    ) -> List[BlindedMessage]: ...
 
 
 class AuthLedgerCrudSqlite(AuthLedgerCrud):
@@ -234,7 +235,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             },
         )
 
-    async def get_promise(
+    async def get_blind_signature(
         self,
         *,
         db: Database,
@@ -248,15 +249,15 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             {"b_": str(b_)},
         )
-        return BlindedSignature.from_row(row) if row else None
+        return BlindedSignature.from_row(row) if row else None  # type: ignore
 
-    async def get_promises(
+    async def get_outputs(
         self,
         *,
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]:
+    ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
@@ -264,7 +265,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
-        return [BlindedSignature.from_row(r) for r in rows] if rows else []
+        return [BlindedMessage.from_row(r) for r in rows] if rows else []
 
     async def invalidate_proof(
         self,
@@ -303,7 +304,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             SELECT * from {db.table_with_schema('melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema('proofs_pending')})
             """
         )
-        return [MeltQuote.from_row(r) for r in rows]
+        return [MeltQuote.from_row(r) for r in rows] if rows else []  # type: ignore
 
     async def get_pending_proofs_for_quote(
         self,
@@ -387,8 +388,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, paid, state, created_time, paid_time)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :issued, :paid, :state, :created_time, :paid_time)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, amount_paid, amount_issued, updated_at)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :amount_paid, :amount_issued, :updated_at)
             """,
             {
                 "quote": quote.quote,
@@ -397,15 +398,27 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "checking_id": quote.checking_id,
                 "unit": quote.unit,
                 "amount": quote.amount,
-                "issued": quote.issued,
-                "paid": quote.paid,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
+                "issued_time": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.issued_time) or ""
+                )
+                if quote.issued_time
+                else None,
+                "amount_paid": quote.amount_paid,
+                "amount_issued": quote.amount_issued,
+                "updated_at": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.updated_at) or ""
+                )
+                if quote.updated_at
+                else None,
             },
         )
 
@@ -441,7 +454,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         )
         if row is None:
             return None
-        return MintQuote.from_row(row) if row else None
+        return MintQuote.from_row(row) if row else None  # type: ignore
 
     async def get_mint_quote_by_request(
         self,
@@ -457,7 +470,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             {"request": request},
         )
-        return MintQuote.from_row(row) if row else None
+        return MintQuote.from_row(row) if row else None  # type: ignore
 
     async def update_mint_quote(
         self,
@@ -467,14 +480,26 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET issued = :issued, paid = :paid, state = :state, paid_time = :paid_time WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time, amount_paid = :amount_paid, amount_issued = :amount_issued, updated_at = :updated_at WHERE quote = :quote",
             {
-                "issued": quote.issued,
-                "paid": quote.paid,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
-                ),
+                )
+                if quote.paid_time
+                else None,
+                "issued_time": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.issued_time) or ""
+                )
+                if quote.issued_time
+                else None,
+                "amount_paid": quote.amount_paid,
+                "amount_issued": quote.amount_issued,
+                "updated_at": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.updated_at) or ""
+                )
+                if quote.updated_at
+                else None,
                 "quote": quote.quote,
             },
         )
@@ -489,8 +514,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :paid, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, created_time, paid_time, fee_paid, proof, change, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -500,8 +525,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "unit": quote.unit,
                 "amount": quote.amount,
                 "fee_reserve": quote.fee_reserve or 0,
-                "paid": quote.paid,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
@@ -549,7 +573,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         )
         if row is None:
             return None
-        return MeltQuote.from_row(row) if row else None
+        return MeltQuote.from_row(row) if row else None  # type: ignore
 
     async def update_melt_quote(
         self,
@@ -560,11 +584,10 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET paid = :paid, state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
             """,
             {
-                "paid": quote.paid,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "fee_paid": quote.fee_paid,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""

@@ -104,21 +104,51 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
 
     async def UpdateQuoteTtl(self, request, context):
         logger.debug("gRPC UpdateQuoteTtl has been called")
-        if request.mint_ttl:
-            settings.mint_redis_cache_ttl = request.mint_ttl
-        elif request.melt_ttl:
-            settings.mint_redis_cache_ttl = request.melt_ttl
-        else:
+        if not request.mint_ttl and not request.melt_ttl:
             raise Exception("No quote ttl was specified")
+        if request.mint_ttl:
+            settings.mint_quote_ttl = request.mint_ttl
+        if request.melt_ttl:
+            settings.melt_quote_ttl = request.melt_ttl
         return management_pb2.UpdateResponse()
+    
+    async def GetQuoteTtl(self, request, context):
+        logger.debug(
+            f"gRPC GetQuoteTtl has been called for quote_id: {request.quote_id}"
+        )
+
+        mint_quote = await self.ledger.crud.get_mint_quote(
+            quote_id=request.quote_id, db=self.ledger.db
+        )
+        if mint_quote and mint_quote.expiry is not None:
+            return management_pb2.GetQuoteTtlResponse(expiry=mint_quote.expiry)
+
+        melt_quote = await self.ledger.crud.get_melt_quote(
+            quote_id=request.quote_id, db=self.ledger.db
+        )
+        if melt_quote and melt_quote.expiry is not None:
+            return management_pb2.GetQuoteTtlResponse(expiry=melt_quote.expiry)
+
+        logger.warning(f"Quote {request.quote_id} not found or has no expiry")
+        await context.abort(
+            grpc.StatusCode.NOT_FOUND,
+            "Quote not found or has no expiry",
+        )
+        raise Exception("Quote not found or has no expiry")
+
 
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
         mint_quote_dict = mint_quote.dict()
-        mint_quote_dict['state'] = str(mint_quote_dict['state'])
+        mint_quote_dict['state'] = str(mint_quote.state)
+        mint_quote_dict.pop('state_val', None)
         del mint_quote_dict['mint'] # unused
         del mint_quote_dict['privkey'] # unused
+        # Remove any None values to prevent protobuf type validation errors
+        for key in list(mint_quote_dict.keys()):
+            if mint_quote_dict[key] is None:
+                del mint_quote_dict[key]
         return management_pb2.GetNut04QuoteResponse(
             quote=management_pb2.Nut04Quote(**mint_quote_dict)
         )
@@ -152,12 +182,18 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         # upon a restar (it will activate a new keyset with the standard max order)
         if request.max_order:
             logger.warning(f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted.")
-        new_keyset = await self.ledger.rotate_next_keyset(Unit[request.unit], input_fee_ppk=request.input_fee_ppk)
+        logger.debug(f"{request.final_expiry = }")
+        new_keyset = await self.ledger.rotate_next_keyset(
+            Unit[request.unit],
+            input_fee_ppk=request.input_fee_ppk,
+            final_expiry=request.final_expiry
+        )
         return management_pb2.RotateNextKeysetResponse(
             id=new_keyset.id,
             unit=str(new_keyset.unit),
             max_order=new_keyset.amounts[-1].bit_length(), # Neat trick to get log_2(last_amount) + 1
-            input_fee_ppk=new_keyset.input_fee_ppk
+            input_fee_ppk=new_keyset.input_fee_ppk,
+            final_expiry=new_keyset.final_expiry,
         )
 
     async def UpdateLightningFee(self, request, _):
@@ -205,8 +241,8 @@ async def serve(ledger: Ledger):
         logger.info(f"Starting mTLS Management RPC service on {host}:{port}")
         # Load server credentials
         server_credentials = grpc.ssl_server_credentials(
-            ((open(mint_rpc_key_path, 'rb').read(), open(mint_rpc_cert_path, 'rb').read()),),
-            root_certificates=open(mint_rpc_ca_path, 'rb').read(),
+            ((open(mint_rpc_key_path, 'rb').read(), open(mint_rpc_cert_path, 'rb').read()),), # type: ignore
+            root_certificates=open(mint_rpc_ca_path, 'rb').read(), # type: ignore
             require_client_auth=True,
         )
         server.add_secure_port(f"{host}:{port}", server_credentials)

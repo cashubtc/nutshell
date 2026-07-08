@@ -6,9 +6,9 @@ RUN apt-get install -y libpq-dev
 # Deps for building secp256k1-py
 RUN apt-get install -y build-essential automake pkg-config libtool libffi-dev
 
-RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.5
+RUN curl -sSL https://install.python-poetry.org | python3 - --version 2.3.2
 ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
 COPY . .
 RUN poetry config virtualenvs.create false
-RUN poetry install --no-dev --no-root
+RUN poetry install --without dev --no-root

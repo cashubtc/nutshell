@@ -7,6 +7,3 @@ coverage:
         # adjust accordingly based on how flaky your tests are
         # this allows a 10% drop from the previous base commit coverage
         threshold: 10%
-        # ignore any files in cashu/nostr
-        ignore:
-          - "cashu/nostr"
