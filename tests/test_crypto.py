@@ -550,3 +550,87 @@ def test_dleq_step2_bob_dleq_deprecated():
         s.to_hex()
         == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
     )
+
+
+def test_nut20_test_vector():
+    from hashlib import sha256
+
+    from cashu.core.base import BlindedMessage
+    from cashu.core.nuts import nut20
+
+    quote_id = "0192d3c0-7e8a-7c3d-8e9f-1a2b3c4d5e6f"
+    outputs = [
+        BlindedMessage(
+            amount=1,
+            id="009a1f293253e41e",
+            B_="036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2",
+        ),
+        BlindedMessage(
+            amount=1,
+            id="009a1f293253e41e",
+            B_="021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59",
+        ),
+    ]
+    pubkey = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    privkey_hex = "0000000000000000000000000000000000000000000000000000000000000001"
+    expected_msg_to_sign = bytes.fromhex(
+        "43617368755f4d696e7451756f74655369675f7631"
+        "0000002430313932643363302d376538612d376333642d386539662d316132623363346435653666"
+        "000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2"
+        "000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59"
+    )
+    expected_hash = "c164fd384879f74ab6ea2e7cf13d90ed42e6df9d5de607eeb5c9cc7d36fb1c21"
+    expected_sig = "4881093a332ff7c79f3e598ce5b249d64978b47165a0b19c18adf0ced0246228e61e702f0abaf1bf27b92be4336bdbabacfbe4c914076386b3c66fdcd0b3480e"
+
+    msg_hash = nut20.construct_message(quote_id, outputs)
+    assert sha256(expected_msg_to_sign).hexdigest() == expected_hash
+    assert msg_hash.hex() == expected_hash
+
+    # Verify signature generation and verification
+    sig = nut20.sign_mint_quote(quote_id, outputs, privkey_hex)
+    assert nut20.verify_mint_quote(quote_id, outputs, pubkey, sig) is True
+
+    # Verify signature verification on test vector's expected signature
+    assert nut20.verify_mint_quote(quote_id, outputs, pubkey, expected_sig) is True
+
+
+def test_nut29_test_vector():
+    from hashlib import sha256
+
+    from cashu.core.base import BlindedMessage
+    from cashu.core.nuts import nut20
+
+    quote_id = "locked-quote"
+    outputs = [
+        BlindedMessage(
+            amount=1,
+            id="009a1f293253e41e",
+            B_="036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2",
+        ),
+        BlindedMessage(
+            amount=1,
+            id="009a1f293253e41e",
+            B_="021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59",
+        ),
+    ]
+    pubkey = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    privkey_hex = "0000000000000000000000000000000000000000000000000000000000000001"
+    expected_msg_to_sign = bytes.fromhex(
+        "43617368755f4d696e7451756f74655369675f7631"
+        "0000000c6c6f636b65642d71756f7465"
+        "000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2"
+        "000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59"
+    )
+    expected_hash = "03dc68d6617bba502d8648efd0965bf393841082cf04fd03e5de4bcb5777cdfc"
+    expected_sig = "a913e48177027d87e0e38c6f2021763c46997ff4866a4b63ebca800b0776b28519eab37377cf9bc1869e489d7b25747b7a998eaa1c33c2cac7fa168449d8267a"
+
+    msg_hash = nut20.construct_message(quote_id, outputs)
+    assert sha256(expected_msg_to_sign).hexdigest() == expected_hash
+    assert msg_hash.hex() == expected_hash
+
+    # Verify signature generation and verification
+    sig = nut20.sign_mint_quote(quote_id, outputs, privkey_hex)
+    assert nut20.verify_mint_quote(quote_id, outputs, pubkey, sig) is True
+
+    # Verify signature verification on test vector's expected signature
+    assert nut20.verify_mint_quote(quote_id, outputs, pubkey, expected_sig) is True
