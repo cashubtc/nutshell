@@ -7,6 +7,7 @@ import pytest
 from cashu.core.base import BlindedMessage, HTLCWitness, P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import InvalidProofsError, TransactionError
+from cashu.core.nuts import nut11
 from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.mint.conditions import LedgerSpendingConditions
@@ -189,7 +190,7 @@ def test_verify_sigall_spending_conditions_valid():
         kind=SecretKind.P2PK, data=signer_pub, sigflag=SigFlags.SIG_ALL
     )
     proofs = [_proof(fixed_secret), _proof(fixed_secret)]
-    message_to_sign = "".join([p.secret for p in proofs] + [o.B_ for o in outputs])
+    message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
     signature = schnorr_sign(message_to_sign.encode("utf-8"), signer).hex()
     proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
 
@@ -217,7 +218,7 @@ def test_verify_sigall_spending_conditions_rejects_duplicate_witness_signatures(
     secret_str = _secret(kind=SecretKind.P2PK, data=pub, sigflag=SigFlags.SIG_ALL)
     proofs = [_proof(secret_str), _proof(secret_str)]
     outputs = [BlindedMessage(id="ks", amount=1, B_="a2")]
-    message_to_sign = "".join([p.secret for p in proofs] + [o.B_ for o in outputs])
+    message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
     sig = schnorr_sign(message_to_sign.encode("utf-8"), signer).hex()
     proofs[0].witness = P2PKWitness(signatures=[sig, sig]).model_dump_json()
 
@@ -288,14 +289,15 @@ async def test_verify_inputs_and_outputs_htlc_custom_sigflag_fails_without_outpu
             InvalidProofsError(),
         )
 
+
 def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
     cond = LedgerSpendingConditions()
     message = "msg-1"
-    
+
     # Generate one private key
     priv = PrivateKey()
     pubkey = priv.public_key.format().hex()
-    
+
     # Generate the 02 and 03 version of the same pubkey
     if pubkey.startswith("02"):
         pub1 = pubkey
@@ -303,25 +305,27 @@ def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
     else:
         pub1 = pubkey
         pub2 = "02" + pubkey[2:]
-        
+
     # Generate two different signatures for the same message using different nonces
-    sig1 = priv.sign_schnorr(sha256(message.encode()).digest(), b"1"*32).hex()
-    sig2 = priv.sign_schnorr(sha256(message.encode()).digest(), b"2"*32).hex()
-    
-    with pytest.raises(TransactionError, match="pubkeys must have unique x-coordinates"):
+    sig1 = priv.sign_schnorr(sha256(message.encode()).digest(), b"1" * 32).hex()
+    sig2 = priv.sign_schnorr(sha256(message.encode()).digest(), b"2" * 32).hex()
+
+    with pytest.raises(
+        TransactionError, match="pubkeys must have unique x-coordinates"
+    ):
         cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
 
 
 def test_verify_p2pk_sig_inputs_handles_duplicate_pubkeys_gracefully():
     cond = LedgerSpendingConditions()
-    
+
     sk = PrivateKey()
     pk = sk.public_key.format().hex()
-    
+
     tags = [["pubkeys", pk], ["sigflag", "SIG_INPUTS"]]
     secret_str = _secret(kind=SecretKind.P2PK, data=pk, extra_tags=tags)
-    
+
     sig = schnorr_sign(secret_str.encode("utf-8"), sk).hex()
     proof = _proof(secret_str, signatures=[sig])
-    
+
     assert cond._verify_input_spending_conditions(proof)

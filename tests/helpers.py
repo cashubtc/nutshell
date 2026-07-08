@@ -11,6 +11,7 @@ from typing import List, Tuple, Union
 
 from loguru import logger
 
+from cashu.core.base import Unit
 from cashu.core.errors import CashuError
 from cashu.core.settings import settings
 
@@ -62,7 +63,7 @@ async def get_random_invoice_data():
 
 wallets_module = importlib.import_module("cashu.lightning")
 wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
-WALLET = wallet_class()
+WALLET = wallet_class(unit=Unit.sat)
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake
 is_deprecated_api_only = settings.debug_mint_only_deprecated
@@ -179,14 +180,19 @@ def pay_real_invoice(invoice: str) -> str:
 
 def partial_pay_real_invoice(invoice: str, amount: int, node: int) -> str:
     cmd = docker_clightning_cli(node)
-    cmd.extend(["pay", f"bolt11={invoice}", f"partial_msat={amount*1000}"])
+    cmd.extend(["pay", f"bolt11={invoice}", f"partial_msat={amount * 1000}"])
     return run_cmd(cmd)
 
 
 def get_real_invoice_cln(sats: int) -> str:
     cmd = docker_clightning_cli(1)
     cmd.extend(
-        ["invoice", f"{sats*1000}", hashlib.sha256(os.urandom(32)).hexdigest(), "test"]
+        [
+            "invoice",
+            f"{sats * 1000}",
+            hashlib.sha256(os.urandom(32)).hexdigest(),
+            "test",
+        ]
     )
     result = run_cmd_json(cmd)
     return result["bolt11"]
