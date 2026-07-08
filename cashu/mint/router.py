@@ -32,6 +32,22 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts.nuts import (
+    BATCH_MINT_NUT,
+    BLIND_AUTH_NUT,
+    CACHE_NUT,
+    CLEAR_AUTH_NUT,
+    DLEQ_NUT,
+    FEE_RETURN_NUT,
+    HTLC_NUT,
+    MINT_QUOTE_SIGNATURE_NUT,
+    MPP_NUT,
+    P2PK_NUT,
+    RESTORE_NUT,
+    SCRIPT_NUT,
+    STATE_NUT,
+    WEBSOCKETS_NUT,
+)
 from ..core.settings import settings
 from ..mint.startup import ledger
 from .cache import RedisCache
@@ -48,9 +64,11 @@ templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
 
 def format_limit(amount: int, unit: str) -> str:
     if amount >= 1_000_000:
-        return f"{amount // 1_000_000}M {unit}"
+        val = amount / 1_000_000
+        return f"{int(val) if val.is_integer() else round(val, 2)}M {unit}"
     elif amount >= 1_000:
-        return f"{amount // 1_000}K {unit}"
+        val = amount / 1_000
+        return f"{int(val) if val.is_integer() else round(val, 2)}K {unit}"
     else:
         return f"{amount} {unit}"
 
@@ -77,12 +95,22 @@ async def index(request: Request) -> HTMLResponse:
     urls = settings.mint_info_urls or [str(request.base_url).rstrip("/")]
 
     # Active Units
-    units = sorted(list(set(keyset.unit.name.upper() for keyset in ledger.keysets.values() if keyset.active)))
+    units = sorted(
+        list(
+            set(
+                keyset.unit.name.upper()
+                for keyset in ledger.keysets.values()
+                if keyset.active
+            )
+        )
+    )
 
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(list(set(getattr(m, "name", str(m)).upper() for m in ledger.backends.keys())))
+    backends_methods = sorted(
+        list(set(getattr(m, "name", str(m)).upper() for m in ledger.backends.keys()))
+    )
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -111,34 +139,34 @@ async def index(request: Request) -> HTMLResponse:
             return nut_val.get("supported", True) is True
         return True
 
-    if is_nut_supported(7):
-        supported_features.append((7, "Token state check"))
-    if is_nut_supported(8):
-        supported_features.append((8, "Lightning fee returns"))
-    if is_nut_supported(9):
-        supported_features.append((9, "Signature restore"))
-    if is_nut_supported(10):
-        supported_features.append((10, "Spending conditions"))
-    if is_nut_supported(11):
-        supported_features.append((11, "Pay-to-Pubkey"))
-    if is_nut_supported(12):
-        supported_features.append((12, "DLEQ proofs"))
-    if is_nut_supported(14):
-        supported_features.append((14, "HTLCs"))
-    if is_nut_supported(15):
-        supported_features.append((15, "Multi-path payments"))
-    if is_nut_supported(17):
-        supported_features.append((17, "WebSocket subscriptions"))
-    if is_nut_supported(19):
-        supported_features.append((19, "Cached responses"))
-    if is_nut_supported(20):
-        supported_features.append((20, "Signed mint quotes"))
-    if is_nut_supported(21):
-        supported_features.append((21, "Clear auth"))
-    if is_nut_supported(22):
-        supported_features.append((22, "Blind auth"))
-    if is_nut_supported(29):
-        supported_features.append((29, "Batched minting"))
+    if is_nut_supported(STATE_NUT):
+        supported_features.append((STATE_NUT, "Token state check"))
+    if is_nut_supported(FEE_RETURN_NUT):
+        supported_features.append((FEE_RETURN_NUT, "Lightning fee returns"))
+    if is_nut_supported(RESTORE_NUT):
+        supported_features.append((RESTORE_NUT, "Signature restore"))
+    if is_nut_supported(SCRIPT_NUT):
+        supported_features.append((SCRIPT_NUT, "Spending conditions"))
+    if is_nut_supported(P2PK_NUT):
+        supported_features.append((P2PK_NUT, "Pay-to-Pubkey"))
+    if is_nut_supported(DLEQ_NUT):
+        supported_features.append((DLEQ_NUT, "DLEQ proofs"))
+    if is_nut_supported(HTLC_NUT):
+        supported_features.append((HTLC_NUT, "HTLCs"))
+    if is_nut_supported(MPP_NUT):
+        supported_features.append((MPP_NUT, "Multi-path payments"))
+    if is_nut_supported(WEBSOCKETS_NUT):
+        supported_features.append((WEBSOCKETS_NUT, "WebSocket subscriptions"))
+    if is_nut_supported(CACHE_NUT):
+        supported_features.append((CACHE_NUT, "Cached responses"))
+    if is_nut_supported(MINT_QUOTE_SIGNATURE_NUT):
+        supported_features.append((MINT_QUOTE_SIGNATURE_NUT, "Signed mint quotes"))
+    if is_nut_supported(CLEAR_AUTH_NUT):
+        supported_features.append((CLEAR_AUTH_NUT, "Clear auth"))
+    if is_nut_supported(BLIND_AUTH_NUT):
+        supported_features.append((BLIND_AUTH_NUT, "Blind auth"))
+    if is_nut_supported(BATCH_MINT_NUT):
+        supported_features.append((BATCH_MINT_NUT, "Batched minting"))
 
     # Escape and prepare elements
     name_escaped = html.escape(name)
@@ -153,12 +181,35 @@ async def index(request: Request) -> HTMLResponse:
             c_method = getattr(c, "method", None)
             c_info = getattr(c, "info", None)
         if c_method and c_info:
-            clean_contacts.append({
-                "method": c_method,
-                "info": c_info,
-                "method_lower": c_method.lower(),
-                "info_clean_twitter": c_info.lstrip("@")
-            })
+            c_method_lower = c_method.lower()
+            c_info_str = str(c_info).strip()
+            url = c_info_str
+            if c_method_lower == "email":
+                url = (
+                    c_info_str
+                    if c_info_str.lower().startswith("mailto:")
+                    else f"mailto:{c_info_str}"
+                )
+            elif c_method_lower == "twitter":
+                url = (
+                    c_info_str
+                    if c_info_str.lower().startswith(("http://", "https://"))
+                    else f"https://x.com/{c_info_str.lstrip('@')}"
+                )
+            elif c_method_lower == "nostr":
+                nostr_val = c_info_str
+                if nostr_val.lower().startswith("nostr:"):
+                    nostr_val = nostr_val[6:]
+                url = f"https://njump.me/{nostr_val}"
+
+            clean_contacts.append(
+                {
+                    "method": c_method,
+                    "info": c_info_str,
+                    "method_lower": c_method_lower,
+                    "url": url,
+                }
+            )
 
     context = {
         "request": request,

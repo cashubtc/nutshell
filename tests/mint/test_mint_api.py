@@ -710,3 +710,13 @@ async def test_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
 
     assert response.status_code == 400
     assert "does not match quote" in response.text
+
+
+def test_format_limit():
+    from cashu.mint.router import format_limit
+
+    assert format_limit(1_500_000, "sat") == "1.5M sat"
+    assert format_limit(1_000_000, "sat") == "1M sat"
+    assert format_limit(1_500, "sat") == "1.5K sat"
+    assert format_limit(1_000, "sat") == "1K sat"
+    assert format_limit(500, "sat") == "500 sat"
