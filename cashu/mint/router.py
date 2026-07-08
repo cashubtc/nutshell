@@ -1,7 +1,11 @@
 import asyncio
+import html
+import os
 import time
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
@@ -28,6 +32,22 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts.nuts import (
+    BATCH_MINT_NUT,
+    BLIND_AUTH_NUT,
+    CACHE_NUT,
+    CLEAR_AUTH_NUT,
+    DLEQ_NUT,
+    FEE_RETURN_NUT,
+    HTLC_NUT,
+    MINT_QUOTE_SIGNATURE_NUT,
+    MPP_NUT,
+    P2PK_NUT,
+    RESTORE_NUT,
+    SCRIPT_NUT,
+    STATE_NUT,
+    WEBSOCKETS_NUT,
+)
 from ..core.settings import settings
 from ..mint.startup import ledger
 from .cache import RedisCache
@@ -35,6 +55,181 @@ from .limit import limit_websocket, limiter
 
 router = APIRouter()
 redis = RedisCache()
+
+
+# Resolve templates directory relative to this file
+current_dir = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
+
+
+def format_limit(amount: int, unit: str) -> str:
+    if amount >= 1_000_000:
+        val = amount / 1_000_000
+        return f"{int(val) if val.is_integer() else round(val, 2)}M {unit}"
+    elif amount >= 1_000:
+        val = amount / 1_000
+        return f"{int(val) if val.is_integer() else round(val, 2)}K {unit}"
+    else:
+        return f"{amount} {unit}"
+
+
+@router.get(
+    "/",
+    name="Mint Landing Page",
+    summary="Landing page showing mint information and supported features.",
+    response_class=HTMLResponse,
+)
+async def index(request: Request) -> HTMLResponse:
+    mint_info = ledger.mint_info
+
+    name = mint_info.name or "Nutshell Mint"
+    description = mint_info.description or ""
+    description_long = mint_info.description_long or ""
+    motd = mint_info.motd or ""
+    pubkey = mint_info.pubkey or ""
+    version = mint_info.version or ""
+    contact = mint_info.contact or []
+    icon_url = mint_info.icon_url or ""
+
+    # Base URL / Onion / Alt URLs
+    urls = settings.mint_info_urls or [str(request.base_url).rstrip("/")]
+
+    # Active Units
+    units = sorted(
+        list(
+            set(
+                keyset.unit.name.upper()
+                for keyset in ledger.keysets.values()
+                if keyset.active
+            )
+        )
+    )
+
+    # Methods (Minting / Melting)
+    mint_methods = []
+    melt_methods = []
+    backends_methods = sorted(
+        list(set(m.name.upper() for m in ledger.backends.keys()))
+    )
+    if not settings.mint_bolt11_disable_mint:
+        mint_methods = backends_methods
+    if not settings.mint_bolt11_disable_melt:
+        melt_methods = backends_methods
+
+    # Limits
+    mint_limits = []
+    if settings.mint_max_mint_bolt11_sat:
+        mint_limits.append(format_limit(settings.mint_max_mint_bolt11_sat, "sat"))
+
+    melt_limits = []
+    if settings.mint_max_melt_bolt11_sat:
+        melt_limits.append(format_limit(settings.mint_max_melt_bolt11_sat, "sat"))
+
+    # Features (NUTs)
+    supported_features = []
+    nuts = mint_info.nuts or {}
+
+    def is_nut_supported(nut_num: int) -> bool:
+        if nut_num not in nuts:
+            return False
+        nut_val = nuts[nut_num]
+        if isinstance(nut_val, dict):
+            if nut_val.get("disabled", False) is True:
+                return False
+            return nut_val.get("supported", True) is True
+        return True
+
+    if is_nut_supported(STATE_NUT):
+        supported_features.append((STATE_NUT, "Token state check"))
+    if is_nut_supported(FEE_RETURN_NUT):
+        supported_features.append((FEE_RETURN_NUT, "Lightning fee returns"))
+    if is_nut_supported(RESTORE_NUT):
+        supported_features.append((RESTORE_NUT, "Signature restore"))
+    if is_nut_supported(SCRIPT_NUT):
+        supported_features.append((SCRIPT_NUT, "Spending conditions"))
+    if is_nut_supported(P2PK_NUT):
+        supported_features.append((P2PK_NUT, "Pay-to-Pubkey"))
+    if is_nut_supported(DLEQ_NUT):
+        supported_features.append((DLEQ_NUT, "DLEQ proofs"))
+    if is_nut_supported(HTLC_NUT):
+        supported_features.append((HTLC_NUT, "HTLCs"))
+    if is_nut_supported(MPP_NUT):
+        supported_features.append((MPP_NUT, "Multi-path payments"))
+    if is_nut_supported(WEBSOCKETS_NUT):
+        supported_features.append((WEBSOCKETS_NUT, "WebSocket subscriptions"))
+    if is_nut_supported(CACHE_NUT):
+        supported_features.append((CACHE_NUT, "Cached responses"))
+    if is_nut_supported(MINT_QUOTE_SIGNATURE_NUT):
+        supported_features.append((MINT_QUOTE_SIGNATURE_NUT, "Signed mint quotes"))
+    if is_nut_supported(CLEAR_AUTH_NUT):
+        supported_features.append((CLEAR_AUTH_NUT, "Clear auth"))
+    if is_nut_supported(BLIND_AUTH_NUT):
+        supported_features.append((BLIND_AUTH_NUT, "Blind auth"))
+    if is_nut_supported(BATCH_MINT_NUT):
+        supported_features.append((BATCH_MINT_NUT, "Batched minting"))
+
+    # Escape and prepare elements
+    name_escaped = html.escape(name)
+    avatar_letter = (name_escaped[0] if name_escaped else "M").upper()
+
+    clean_contacts = []
+    for c in contact:
+        c_method = c.method
+        c_info = c.info
+        if c_method and c_info:
+            c_method_lower = c_method.lower()
+            c_info_str = c_info.strip()
+            url = c_info_str
+            if c_method_lower == "email":
+                url = (
+                    c_info_str
+                    if c_info_str.lower().startswith("mailto:")
+                    else f"mailto:{c_info_str}"
+                )
+            elif c_method_lower == "twitter":
+                url = (
+                    c_info_str
+                    if c_info_str.lower().startswith(("http://", "https://"))
+                    else f"https://x.com/{c_info_str.lstrip('@')}"
+                )
+            elif c_method_lower == "nostr":
+                nostr_val = c_info_str
+                if nostr_val.lower().startswith("nostr:"):
+                    nostr_val = nostr_val[6:]
+                url = f"https://njump.me/{nostr_val}"
+
+            clean_contacts.append(
+                {
+                    "method": c_method,
+                    "info": c_info_str,
+                    "method_lower": c_method_lower,
+                    "url": url,
+                }
+            )
+
+    context = {
+        "request": request,
+        "name": name,
+        "description": description,
+        "description_long": description_long,
+        "motd": motd,
+        "pubkey": pubkey,
+        "version": version,
+        "contact": clean_contacts,
+        "icon_url": icon_url,
+        "urls": urls,
+        "units": units,
+        "mint_methods": mint_methods,
+        "melt_methods": melt_methods,
+        "mint_limits": mint_limits,
+        "melt_limits": melt_limits,
+        "mint_disabled": settings.mint_bolt11_disable_mint,
+        "melt_disabled": settings.mint_bolt11_disable_melt,
+        "supported_features": supported_features,
+        "avatar_letter": avatar_letter,
+    }
+
+    return templates.TemplateResponse("index.html", context)
 
 
 @router.get(
