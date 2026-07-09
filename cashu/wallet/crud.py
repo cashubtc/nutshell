@@ -110,8 +110,8 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id)
-        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id)
+          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id, p2pk_e)
+        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id, :p2pk_e)
         """,
         {
             "amount": proof.amount,
@@ -122,6 +122,7 @@ async def invalidate_proof(
             "derivation_path": proof.derivation_path,
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "p2pk_e": proof.p2pk_e,
         },
     )
 
