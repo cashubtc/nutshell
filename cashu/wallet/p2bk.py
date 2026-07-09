@@ -101,28 +101,32 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
         Returns all derivable keys across [data, ...pubkeys, ...refund] slots.
         A wallet may legitimately hold keys in multiple slots (e.g. co-signer
         and refund holder), and each slot requires a distinct signature.
+
+        Slot 0 is the `data` tag (NUT-28). For HTLC secrets that slot holds
+        the preimage hash, not a pubkey, so it is never blinded and is
+        excluded here; pubkeys/refund keys still start at slot index 1.
         """
         if not proof.p2pk_e:
             return []
         secret = P2PKSecret.deserialize(proof.secret)
 
-        all_blinded_pubkeys = (
-            [secret.data]
-            + secret.tags.get_tag_all("pubkeys")
-            + secret.tags.get_tag_all("refund")
-        )
+        slots: List[Tuple[int, str]] = []
+        if SecretKind(secret.kind) != SecretKind.HTLC:
+            slots.append((0, secret.data))
+        for i, pk in enumerate(secret.tags.get_tag_all("pubkeys"), start=1):
+            slots.append((i, pk))
+        offset = 1 + len(secret.tags.get_tag_all("pubkeys"))
+        for i, pk in enumerate(secret.tags.get_tag_all("refund")):
+            slots.append((offset + i, pk))
+
         keys: List[PrivateKey] = []
-        for i, blinded_pk in enumerate(all_blinded_pubkeys):
-            try:
-                derived = derive_blinded_private_key(
-                    privkey=self.private_key,
-                    ephemeral_pubkey_hex=proof.p2pk_e,
-                    blinded_pubkey_hex=blinded_pk,
-                    slot_index=i,
-                )
-            except Exception:
-                # Slot value is not a valid pubkey (e.g. HTLC preimage hash)
-                continue
+        for slot_index, blinded_pk in slots:
+            derived = derive_blinded_private_key(
+                privkey=self.private_key,
+                ephemeral_pubkey_hex=proof.p2pk_e,
+                blinded_pubkey_hex=blinded_pk,
+                slot_index=slot_index,
+            )
             if derived is not None:
                 keys.append(derived)
         return keys

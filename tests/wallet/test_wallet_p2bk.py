@@ -2,7 +2,7 @@
 
 import copy
 import secrets
-from typing import List
+from typing import List, Optional, Tuple
 
 import pytest
 import pytest_asyncio
@@ -25,6 +25,39 @@ from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import pay_if_regtest
+
+
+def blind_pubkeys_from_slot(
+    pubkeys: List[str],
+    start_slot: int,
+    ephemeral_privkey: Optional[PrivateKey] = None,
+) -> Tuple[List[str], str]:
+    """Blind pubkeys starting at an explicit slot index.
+
+    NUT-28 numbers slots positionally over [data, ...pubkeys, ...refund];
+    for HTLC secrets slot 0 (`data`) is a preimage hash and is never
+    blinded, so pubkeys/refund naturally start at slot 1. This mirrors
+    blind_pubkeys()'s per-key ECDH math without needing a throwaway slot-0
+    pubkey, letting HTLC+P2BK secrets be built the way a sender actually
+    would (no dummy data pubkey to discard).
+    """
+    if ephemeral_privkey is None:
+        ephemeral_privkey = PrivateKey(secrets.token_bytes(32))
+    assert ephemeral_privkey.public_key
+    ephemeral_pubkey_hex = ephemeral_privkey.public_key.format(compressed=True).hex()
+
+    blinded = []
+    for offset, pk_hex in enumerate(pubkeys):
+        slot_index = start_slot + offset
+        pk_hex = _compressed_pubkey(pk_hex)
+        pk = PublicKey(bytes.fromhex(pk_hex))
+        zx = ecdh_shared_secret(pk, ephemeral_privkey)
+        r = derive_blinding_scalar(zx, slot_index)
+        blinding_point = PrivateKey(r.to_bytes(32, "big")).public_key
+        assert blinding_point
+        blinded_pk = pk + blinding_point  # type: ignore[operator]
+        blinded.append(blinded_pk.format(compressed=True).hex())
+    return blinded, ephemeral_pubkey_hex
 
 
 async def assert_err(f, msg):
@@ -702,7 +735,12 @@ def test_p2bk_non_sigall_outputs_have_distinct_ephemeral_keys():
 
 @pytest.mark.asyncio
 async def test_p2bk_htlc_inheritance(wallet1: Wallet, wallet2: Wallet):
-    """HTLC proof with P2BK: blinded pubkey, preimage spend works."""
+    """HTLC proof with P2BK: blinded pubkey, preimage spend works.
+
+    Built via the natural HTLC+P2BK slot layout (data = raw preimage hash
+    at slot 0, unblinded; pubkeys tag blinded starting at slot 1) rather
+    than a throwaway slot-0 pubkey.
+    """
     import hashlib as hl
 
     from cashu.core.base import HTLCWitness
@@ -716,17 +754,13 @@ async def test_p2bk_htlc_inheritance(wallet1: Wallet, wallet2: Wallet):
     preimage = "00" * 32
     preimage_hash = hl.sha256(bytes.fromhex(preimage)).hexdigest()
 
-    # Blind wallet2's pubkey at slot 1 (HTLC: slot 0 = data = preimage_hash)
-    dummy_pub = PrivateKey().public_key.format(compressed=True).hex()
-    _, blinded_hashlock, _, ephemeral_pub = blind_pubkeys(
-        data_pubkey=dummy_pub,
-        additional_pubkeys=[pubkey_wallet2],
-        refund_pubkeys=[],
+    # HTLC: slot 0 = data = preimage_hash (never blinded), pubkeys start at slot 1
+    blinded_pubkeys, ephemeral_pub = blind_pubkeys_from_slot(
+        [pubkey_wallet2], start_slot=1
     )
 
-    # Build HTLC secret with the P2BK-blinded hashlock pubkey
     tags = Tags()
-    tags["pubkeys"] = [blinded_hashlock[0]]
+    tags["pubkeys"] = blinded_pubkeys
     htlc_secret = HTLCSecret(
         kind=SecretKind.HTLC.value,
         data=preimage_hash,
@@ -747,6 +781,73 @@ async def test_p2bk_htlc_inheritance(wallet1: Wallet, wallet2: Wallet):
 
     # Redeem — sign_proofs_inplace_swap adds P2BK-derived signature alongside preimage
     await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_p2bk_htlc_refund_slot_offset(wallet1: Wallet, wallet2: Wallet):
+    """HTLC+P2BK refund key derives at the correct offset (1 + len(pubkeys))."""
+    import hashlib as hl
+
+    from cashu.core.htlc import HTLCSecret
+
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    preimage_hash = hl.sha256(b"\x00" * 32).hexdigest()
+
+    # HTLC slots: 0 = data (hash, unblinded), 1 = pubkeys[0] (wallet1), 2 = refund[0] (wallet2)
+    blinded, ephemeral_pub = blind_pubkeys_from_slot(
+        [pubkey_wallet1, pubkey_wallet2], start_slot=1
+    )
+    blinded_pubkey, blinded_refund = blinded[0], blinded[1]
+
+    tags = Tags()
+    tags["pubkeys"] = [blinded_pubkey]
+    tags["refund"] = [blinded_refund]
+    htlc_secret = HTLCSecret(
+        kind=SecretKind.HTLC.value,
+        data=preimage_hash,
+        tags=tags,
+    )
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 8, secret_lock=htlc_secret, p2pk_e=ephemeral_pub
+    )
+
+    for p in send_proofs:
+        # wallet1 holds the pubkeys-tag key (slot 1)
+        wallet1_keys = wallet1._derive_p2bk_signing_keys(p)
+        assert len(wallet1_keys) == 1
+        # wallet2 holds the refund-tag key (slot 2)
+        wallet2_keys = wallet2._derive_p2bk_signing_keys(p)
+        assert len(wallet2_keys) == 1
+        assert wallet1_keys[0].to_hex() != wallet2_keys[0].to_hex()
+
+
+@pytest.mark.asyncio
+async def test_p2bk_derive_signing_keys_raises_on_corrupted_ephemeral_key(
+    wallet1: Wallet, wallet2: Wallet
+):
+    """A genuine derivation error (corrupted p2pk_e) must propagate, not be
+    silently swallowed as an HTLC slot-0 skip would be."""
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    blinded_data, _, _, ephemeral_pub = blind_pubkeys(
+        data_pubkey=pubkey_wallet2,
+        additional_pubkeys=[],
+        refund_pubkeys=[],
+    )
+    secret = P2PKSecret(kind=SecretKind.P2PK.value, data=blinded_data, tags=Tags())
+    proof = Proof(
+        id="009a1f293253e41e",
+        amount=8,
+        secret=secret.serialize(),
+        C="02" + "00" * 32,
+        p2pk_e="not-a-valid-pubkey",
+    )
+    with pytest.raises(Exception):
+        wallet2._derive_p2bk_signing_keys(proof)
 
 
 @pytest.mark.asyncio
