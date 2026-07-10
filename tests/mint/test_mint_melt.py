@@ -871,7 +871,6 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wallet):
     """
     Test that when an internal melt quote settlement fails, the pending state of the proofs
@@ -944,7 +943,6 @@ async def test_melt_early_return_leaves_no_orphan_blank_outputs(
         of the routing fee)
     """
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
-    # Clear the FakeWallet pay_invoice override so our monkeypatch is what runs.
     settings.fakewallet_pay_invoice_state = ""
 
     invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"

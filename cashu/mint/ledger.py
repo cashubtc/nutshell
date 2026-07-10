@@ -270,10 +270,6 @@ class Ledger(
                     f"No change to return: backend fee {fee_paid} exceeds wallet's "
                     f"fee reserve {fee_provided} by {-overpaid_fee}."
                 )
-            # Clean up the blank outputs the wallet sent for fee return; otherwise
-            # they remain in `promises` with c_ IS NULL and collide with later
-            # operations that re-derive the same B_ (e.g. NUT-13 seed restore).
-            # Skip when outputs is None — nothing was stored in the first place.
             if melt_id and outputs is not None:
                 await self.crud.delete_blinded_messages_melt_id(
                     melt_id=melt_id, db=self.db
