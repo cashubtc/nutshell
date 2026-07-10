@@ -351,8 +351,8 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     remaining_unsigned = await ledger.crud.get_blinded_messages_melt_id(
         db=ledger.db, melt_id=melt_id
     )
-    # With zero fee nothing is signed or deleted; blanks stay pending.
-    assert len(remaining_unsigned) == n_blank
+    # Staged blank outputs should be cleaned up
+    assert len(remaining_unsigned) == 0
 
     async with ledger.db.connect() as conn:
         rows = await conn.fetchall(
@@ -362,8 +362,7 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
             """,
             {"melt_id": melt_id},
         )
-    assert len(rows) == n_blank
-    assert all(row["c_"] is None for row in rows)
+    assert rows == []
 
 
 @pytest.mark.asyncio
