@@ -1,7 +1,7 @@
 import pytest
 from click.testing import CliRunner
 
-from cashu.core.base import NUT10Option, PaymentRequest
+from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod
 from cashu.core.nuts.nut18 import deserialize, serialize
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
@@ -83,13 +83,77 @@ def test_pay_nut18_wrong_mint(mint, cli_prefix):
     assert "cashuB" not in result.output
 
 
+# ─── Method-fee quadrants ────────────────────────────────────────────
+# The method fee applies only when paying from a mint outside the mint
+# list, or when no mint list is set at all; when it applies, the payer
+# owes the lowest `mf` among the listed methods their mint melts.
+
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
-def test_pay_nut18_preferred_mint_with_fee_reserve(mint, cli_prefix):
-    """A preferred (mp=True) mint list is accepted and adds the fee reserve."""
+def test_pay_nut18_mint_in_list_zero_fee_method(mint, cli_prefix):
+    """Mint is in the (strict) list; a zero-fee method adds nothing."""
     runner = CliRunner()
 
     pr = PaymentRequest(
-        a=10, u="sat", m=["https://other.mint/"], mp=True, fr=5
+        a=10, u="sat", m=[settings.mint_url], sm=[SupportedMethod(mn="bolt11")]
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_in_list_priced_method_no_fee_applied(mint, cli_prefix):
+    """Mint is in the list; a priced method's fee does NOT apply (mint ∈ m ⇒ no fee)."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=[settings.mint_url],
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_outside_preferred_list_zero_fee_method(mint, cli_prefix):
+    """Mint outside a preferred list with a zero-fee method: accepted, nothing added."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=["https://other.mint/"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11")],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_outside_preferred_list_with_method_fee(mint, cli_prefix):
+    """Mint outside a preferred list with a priced method: fee is added."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=["https://other.mint/"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
     )
     creq = serialize(pr)
 
@@ -97,16 +161,17 @@ def test_pay_nut18_preferred_mint_with_fee_reserve(mint, cli_prefix):
 
     # The mint outside the preferred list is not rejected ...
     assert "not accepted" not in result.output
-    # ... and the fee reserve is added on top of the requested amount.
-    assert "Adding fee reserve of 5 sat" in result.output
+    # ... and the method fee is added on top of the requested amount.
+    assert "Adding method fee of 5 sat" in result.output
 
 
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
 def test_pay_nut18_unsupported_method(mint, cli_prefix):
-    """A request whose supported methods exclude bolt11 is rejected."""
+    """A request whose supported methods exclude bolt11 is hard-rejected,
+    regardless of the mint list."""
     runner = CliRunner()
 
-    pr = PaymentRequest(a=10, u="sat", sm=["bolt12"])
+    pr = PaymentRequest(a=10, u="sat", sm=[SupportedMethod(mn="bolt12")])
     creq = serialize(pr)
 
     result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
@@ -135,7 +200,6 @@ def test_request_creates_payment_request(mint, cli_prefix):
             "-d", "Coffee",
             "-m", "https://mint.example.com",
             "--preferred",
-            "-f", "2",
             "--method", "bolt11",
             "-s",
         ],
@@ -148,6 +212,5 @@ def test_request_creates_payment_request(mint, cli_prefix):
     assert pr.d == "Coffee"
     assert pr.m == ["https://mint.example.com"]
     assert pr.mp is True
-    assert pr.fr == 2
-    assert pr.sm == ["bolt11"]
+    assert pr.sm == [SupportedMethod(mn="bolt11")]
     assert pr.s is True
