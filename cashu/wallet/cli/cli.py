@@ -500,6 +500,21 @@ async def pay(
     await print_balance(ctx)
 
 
+def _parse_supported_method(spec: str) -> Optional[SupportedMethod]:
+    """Parse a `--method` value of the form `name` or `name:fee` into a
+    SupportedMethod, or return None if `fee` isn't a non-negative int."""
+    mn, sep, fee_str = spec.partition(":")
+    if not sep:
+        return SupportedMethod(mn=mn)
+    try:
+        fee = int(fee_str)
+    except ValueError:
+        return None
+    if fee < 0:
+        return None
+    return SupportedMethod(mn=mn, mf=fee)
+
+
 @cli.command("request", help="Create a NUT-18 payment request.")
 @click.argument("amount", type=int)
 @click.option("--description", "-d", default=None, help="Human-readable description.")
@@ -520,7 +535,11 @@ async def pay(
     "--method",
     "methods",
     multiple=True,
-    help="Required supported method, e.g. bolt11 (repeatable).",
+    help=(
+        "Required supported method as name or name:fee, e.g. bolt11 or"
+        " onchain:50 (repeatable). The fee applies only when the payer's"
+        " mint is outside a preferred mint list."
+    ),
 )
 @click.option(
     "--single-use", "-s", default=False, is_flag=True, help="Mark the request single use."
@@ -543,12 +562,21 @@ async def request(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
+
+    supported_methods = []
+    for spec in methods:
+        parsed = _parse_supported_method(spec)
+        if parsed is None:
+            print(f"Error: Invalid --method '{spec}', fee must be a non-negative int.")
+            return
+        supported_methods.append(parsed)
+
     pr = PaymentRequest(
         a=amount,
         u=wallet.unit.name,
         m=list(mints) or [wallet.url],
         mp=True if preferred else None,
-        sm=[SupportedMethod(mn=m) for m in methods] or None,
+        sm=supported_methods or None,
         s=True if single_use else None,
         d=description,
     )
