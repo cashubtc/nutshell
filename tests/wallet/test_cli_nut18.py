@@ -214,3 +214,43 @@ def test_request_creates_payment_request(mint, cli_prefix):
     assert pr.mp is True
     assert pr.sm == [SupportedMethod(mn="bolt11")]
     assert pr.s is True
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_request_method_with_fee_syntax(mint, cli_prefix):
+    """--method name:fee builds a SupportedMethod with a per-method fee."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        [
+            *cli_prefix, "request", "100",
+            "--method", "bolt11",
+            "--method", "onchain:50",
+        ],
+    )
+    assert result.exception is None, f"Exception: {result.exception}"
+
+    pr = deserialize(_extract_creq(result.output))
+    assert pr.sm == [
+        SupportedMethod(mn="bolt11"),
+        SupportedMethod(mn="onchain", mf=50),
+    ]
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_request_rejects_invalid_method_fee(mint, cli_prefix):
+    """--method name:fee with a non-integer or negative fee is rejected."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli, [*cli_prefix, "request", "100", "--method", "onchain:-5"]
+    )
+    assert "Invalid --method" in result.output
+    assert "creqA" not in result.output
+
+    result = runner.invoke(
+        cli, [*cli_prefix, "request", "100", "--method", "onchain:abc"]
+    )
+    assert "Invalid --method" in result.output
+    assert "creqA" not in result.output
