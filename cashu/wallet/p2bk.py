@@ -111,7 +111,7 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
         secret = P2PKSecret.deserialize(proof.secret)
 
         slots: List[Tuple[int, str]] = []
-        if SecretKind(secret.kind) != SecretKind.HTLC:
+        if secret.kind != SecretKind.HTLC.value:
             slots.append((0, secret.data))
         for i, pk in enumerate(secret.tags.get_tag_all("pubkeys"), start=1):
             slots.append((i, pk))
