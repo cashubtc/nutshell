@@ -26,6 +26,7 @@ from ...core.base import (
     MintQuote,
     MintQuoteState,
     PaymentRequest,
+    SupportedMethod,
     TokenV4,
     Unit,
 )
@@ -307,8 +308,9 @@ async def pay(
             print(f"Accepted mints: {pr.m}")
             return
 
-        # The sending mint must support one of the requested methods
-        if pr.sm is not None and Method.bolt11.name not in pr.sm:
+        # The sending mint must support (melt via) one of the requested methods
+        method_fee = wallet.mint_info.payment_request_method_fee(pr.sm, wallet.unit)
+        if method_fee is None:
             print(f"Error: Current mint does not support a requested method: {pr.sm}")
             return
 
@@ -318,11 +320,13 @@ async def pay(
             print("Error: Amount not specified in payment request.")
             return
 
-        # Add the fee reserve when paying from a mint outside a non-strict list
-        if mint_outside_list and pr.fr:
-            amount_to_pay += pr.fr
+        # The method fee applies only when paying from a mint outside the mint
+        # list, or when no mint list is set at all
+        fee_applies = pr.m is None or mint_outside_list
+        if fee_applies and method_fee:
+            amount_to_pay += method_fee
             print(
-                f"Adding fee reserve of {wallet.unit.str(pr.fr)} "
+                f"Adding method fee of {wallet.unit.str(method_fee)} "
                 "(paying from a mint outside the preferred list)."
             )
 
@@ -513,14 +517,6 @@ async def pay(
     help="Treat the mint list as preferred rather than strict.",
 )
 @click.option(
-    "--fee-reserve",
-    "-f",
-    "fee_reserve",
-    default=None,
-    type=int,
-    help="Fee reserve a payer adds when paying from a mint outside a preferred list.",
-)
-@click.option(
     "--method",
     "methods",
     multiple=True,
@@ -541,7 +537,6 @@ async def request(
     description: Optional[str],
     mints: tuple,
     preferred: bool,
-    fee_reserve: Optional[int],
     methods: tuple,
     single_use: bool,
     bech32: bool,
@@ -553,8 +548,7 @@ async def request(
         u=wallet.unit.name,
         m=list(mints) or [wallet.url],
         mp=True if preferred else None,
-        fr=fee_reserve,
-        sm=list(methods) or None,
+        sm=[SupportedMethod(mn=m) for m in methods] or None,
         s=True if single_use else None,
         d=description,
     )
