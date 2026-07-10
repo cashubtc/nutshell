@@ -4,14 +4,14 @@ import time
 
 import pytest
 
+from cashu.core.base import MintKeyset, Unit
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
+from cashu.mint.startup import ledger as global_ledger
 
 
 @pytest.fixture(autouse=True)
 def disable_global_ledger_rotation():
-    from cashu.mint.startup import ledger as global_ledger
-
     original_method = global_ledger.rotate_keysets_if_needed
 
     async def noop_rotate(*args, **kwargs):
@@ -277,9 +277,9 @@ async def test_automatic_keyset_rotation_background(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_regression_claim_1_non_atomic_rotation(ledger: Ledger):
+async def test_regression_non_atomic_rotation(ledger: Ledger):
     """
-    Regression test for Claim 1: rotation is not atomic.
+    Regression test: rotation is not atomic.
     Verifies that if update_keyset fails, the entire transaction is rolled back.
     The new keyset is not saved, and only the old active keyset remains in DB.
     """
@@ -328,9 +328,9 @@ async def test_regression_claim_1_non_atomic_rotation(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_regression_claim_2_concurrent_rotation_race(ledger: Ledger):
+async def test_regression_concurrent_rotation_race(ledger: Ledger):
     """
-    Regression test for Claim 2: concurrent instances/manual rotation can race.
+    Regression test: concurrent instances/manual rotation can race.
     Verifies that with locks and deactivation status checks, concurrent rotation requests
     safely serialize. The second request detects that the keyset was already rotated and skips gracefully,
     raising no exceptions.
@@ -373,14 +373,12 @@ async def test_regression_claim_2_concurrent_rotation_race(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_regression_claim_3_highest_counter_selection_incomplete(ledger: Ledger):
+async def test_regression_highest_counter_selection_incomplete(ledger: Ledger):
     """
-    Regression test for Claim 3: highest-counter selection is incomplete.
+    Regression test: highest-counter selection is incomplete.
     Verifies that selected_keyset_counter is updated properly and the keyset with the
     absolute highest counter is selected for rotation.
     """
-    from cashu.core.base import MintKeyset, Unit
-
     # Create dummy active keysets with different counters
     keyset_high = MintKeyset(
         derivation_path="m/0/0/0/5'",
