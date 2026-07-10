@@ -1678,6 +1678,11 @@ class NUT10Option(BaseModel):
     t: Optional[List[List[str]]] = None  # tags
 
 
+class SupportedMethod(BaseModel):
+    mn: str  # method name
+    mf: Optional[int] = None  # per-method fee, absent = 0
+
+
 class PaymentRequest(BaseModel):
     i: Optional[str] = None  # payment id
     a: Optional[int] = None  # amount
@@ -1685,8 +1690,7 @@ class PaymentRequest(BaseModel):
     s: Optional[bool] = None  # single use
     m: Optional[List[str]] = None  # mints
     mp: Optional[bool] = None  # mint list preferred
-    fr: Optional[int] = None  # fee reserve
-    sm: Optional[List[str]] = None  # supported methods
+    sm: Optional[List[SupportedMethod]] = None  # supported methods
     d: Optional[str] = None  # description
     t: Optional[List[Transport]] = None  # transports
     nut10: Optional[NUT10Option] = None

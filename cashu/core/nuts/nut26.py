@@ -12,7 +12,7 @@ from bech32 import (
     bech32_encode as _bech32_encode,
 )
 
-from ..base import NUT10Option, PaymentRequest, Transport
+from ..base import NUT10Option, PaymentRequest, SupportedMethod, Transport
 
 BECH32M_CONST = 0x2BC830A3
 HRP = "creqb"
@@ -248,6 +248,32 @@ def _decode_nut10(data: bytes) -> NUT10Option:
         t=tags if tags else None,
     )
 
+# ─── Supported method encode/decode ─────────────────────────────────
+
+def _encode_supported_method(sm: SupportedMethod) -> bytes:
+    inner = _tlv_entry(0x01, sm.mn.encode())
+    if sm.mf is not None:
+        inner += _tlv_entry(0x02, struct.pack(">Q", sm.mf))
+    return inner
+
+def _decode_supported_method(data: bytes) -> SupportedMethod:
+    entries = _tlv_parse(data)
+    mn: Optional[str] = None
+    mf: Optional[int] = None
+
+    for tag, val in entries:
+        if tag == 0x01:
+            mn = val.decode()
+        elif tag == 0x02:
+            if len(val) != 8:
+                raise ValueError("Invalid method fee length")
+            mf = struct.unpack(">Q", val)[0]
+
+    if mn is None:
+        raise ValueError("Missing method name in supported method")
+
+    return SupportedMethod(mn=mn, mf=mf)
+
 # ─── PaymentRequest <-> TLV bytes ───────────────────────────────────
 
 def _pr_to_tlv(pr: PaymentRequest) -> bytes:
@@ -275,11 +301,9 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
         out += _tlv_entry(0x08, _encode_nut10(pr.nut10))
     if pr.mp is not None:
         out += _tlv_entry(0x09, bytes([1 if pr.mp else 0]))
-    if pr.fr is not None:
-        out += _tlv_entry(0x0A, struct.pack(">Q", pr.fr))
     if pr.sm:
         for method in pr.sm:
-            out += _tlv_entry(0x0B, method.encode())
+            out += _tlv_entry(0x0A, _encode_supported_method(method))
     return out
 
 def _tlv_to_pr(data: bytes) -> PaymentRequest:
@@ -287,11 +311,11 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
     kwargs: dict = {}
     mints: List[str] = []
     transports: List[Transport] = []
-    supported_methods: List[str] = []
+    supported_methods: List[SupportedMethod] = []
 
     for tag, val in entries:
         if len(val) == 0 and tag in (0x01,):
-            raise ValueError("Empty value for transport tag")
+            raise ValueError("Empty value for id tag")
         if tag == 0x01:
             kwargs["i"] = val.decode()
         elif tag == 0x02:
@@ -318,9 +342,7 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
         elif tag == 0x09:
             kwargs["mp"] = val[0] == 1
         elif tag == 0x0A:
-            kwargs["fr"] = struct.unpack(">Q", val)[0]
-        elif tag == 0x0B:
-            supported_methods.append(val.decode())
+            supported_methods.append(_decode_supported_method(val))
 
     if mints:
         kwargs["m"] = mints
