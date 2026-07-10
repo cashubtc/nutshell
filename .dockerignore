@@ -1,0 +1,15 @@
+.git
+.venv
+.uv-cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+junit.xml
+test_data/
+dist/
+build/
+cashu.egg-info/

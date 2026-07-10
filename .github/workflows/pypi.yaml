@@ -14,7 +14,7 @@ jobs:
     strategy:
         matrix:
           python-version: ["3.11"]
-          poetry-version: ["2.3.2"]
+          uv-version: ["0.11.14"]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -22,7 +22,7 @@ jobs:
       - uses: ./.github/actions/prepare
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-version: ${{ matrix.poetry-version }}
+          uv-version: ${{ matrix.uv-version }}
 
       - name: Verify Versions
         if: github.event_name == 'release'
@@ -31,13 +31,13 @@ jobs:
 
       - name: Build package
         run: |
-          poetry build
+          uv build
 
       - name: Install package
         run: |
-          pip install --upgrade dist/*.whl
+          uv pip install dist/*.whl
 
       - name: Upload to PyPI on release
         if: github.event_name == 'release' && github.event.action == 'released'
         run: |
-          poetry publish -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
+          uv publish --token "${{ secrets.PYPI_API_TOKEN }}"

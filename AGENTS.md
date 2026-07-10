@@ -7,21 +7,21 @@
 
 | Task | Command |
 |---|---|
-| Install dependencies | `poetry install` |
-| Activate virtual env | `poetry env activate` |
+| Install dependencies | `uv sync` |
+| Activate virtual env | `source .venv/bin/activate` |
 | Run the wallet CLI | `cashu --help` |
-| Run the mint server | `poetry run mint` |
+| Run the mint server | `uv run mint` |
 | Run all tests | `make test` (or `pytest tests`) |
 | Run wallet tests only | `make test-wallet` |
 | Run mint tests only | `make test-mint` |
 | Lint + type-check | `make check` (Ruff + mypy) |
 | Auto-format code | `make format` |
-| Install pre-commit hook | `poetry run pre-commit install` |
+| Install pre-commit hook | `uv run pre-commit install` |
 
 ### Environment setup
 
 - Python **3.10.4** (install via `pyenv install 3.10.4 && pyenv local 3.10.4`)
-- [Poetry](https://python-poetry.org/) for dependency and environment management
+- [uv](https://docs.astral.sh/uv/) for dependency and environment management
 - Copy `.env.example` to `.env` and set `MINT_BACKEND_BOLT11_SAT=FakeWallet` for local testing
 
 ## Repo Conventions
