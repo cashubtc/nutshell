@@ -424,17 +424,14 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
         resp = await ledger.melt(
             proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
         )
-    try:
-        spent_receipts = []
-        for p in payload.inputs:
-            y_hex = hash_to_curve(p.secret.encode("utf-8")).format().hex()
-            r_spent = await generate_spent_receipt(
-                ledger, keyset_id=p.id, amount=p.amount, y_hex=y_hex
-            )
-            spent_receipts.append(r_spent)
-        resp.spent_receipts = spent_receipts
-    except Exception as e:
-        logger.error(f"Failed to generate spent PoL receipts for melt: {e}")
+    spent_receipts = []
+    for p in payload.inputs:
+        y_hex = hash_to_curve(p.secret.encode("utf-8")).format().hex()
+        r_spent = await generate_spent_receipt(
+            ledger, keyset_id=p.id, amount=p.amount, y_hex=y_hex
+        )
+        spent_receipts.append(r_spent)
+    resp.spent_receipts = spent_receipts
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
 
@@ -524,26 +521,25 @@ class PolSpentRequest(BaseModel):
     ys: List[str]
 
 
-class SiblingInfo(BaseModel):
+class NodeInfo(BaseModel):
     hash: str
     sum: int
+
+
+class SiblingInfo(NodeInfo):
+    is_left: bool
 
 
 class PolProofItem(BaseModel):
     item: str
-    index: str
+    leaf_index: int
     value: int
-    compact_mask: str
-    siblings: List[SiblingInfo]
+    sibling_path: List[SiblingInfo]
+    peaks: List[NodeInfo]
 
 
 class PolProofsResponse(BaseModel):
     proofs: List[PolProofItem]
-
-
-class ManifestRoot(BaseModel):
-    hash: str
-    sum: int
 
 
 class PolManifestResponse(BaseModel):
@@ -552,8 +548,12 @@ class PolManifestResponse(BaseModel):
     timestamp: str
     previous_global_digest: str
     signing_pubkey: str
-    root_issued: ManifestRoot
-    root_spent: ManifestRoot
+    issued_mmr_size: int
+    issued_mmr_root_hash: str
+    issued_mmr_root_sum: int
+    spent_mmr_size: int
+    spent_mmr_root_hash: str
+    spent_mmr_root_sum: int
     outstanding_balance: int
     ots_receipt: str
     mint_signature: str
@@ -562,7 +562,7 @@ class PolManifestResponse(BaseModel):
 @router.get(
     "/v1/pol/{keyset_id}/manifest",
     name="Proof of Liabilities Manifest",
-    summary="Get the PoL manifest including MS-SMT roots, OTS receipt, and signature for a specific epoch (defaults to latest).",
+    summary="Get the PoL manifest including sum-MMR roots, OTS receipt, and signature for a specific epoch (defaults to latest).",
     response_model=PolManifestResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -605,12 +605,12 @@ async def pol_manifest(
         timestamp=ts_str,
         previous_global_digest=epoch["previous_global_digest"],
         signing_pubkey=pub_key_hex,
-        root_issued=ManifestRoot(
-            hash=epoch["root_issued_hash"], sum=epoch["root_issued_sum"]
-        ),
-        root_spent=ManifestRoot(
-            hash=epoch["root_spent_hash"], sum=epoch["root_spent_sum"]
-        ),
+        issued_mmr_size=epoch["issued_mmr_size"],
+        issued_mmr_root_hash=epoch["root_issued_hash"],
+        issued_mmr_root_sum=epoch["root_issued_sum"],
+        spent_mmr_size=epoch["spent_mmr_size"],
+        spent_mmr_root_hash=epoch["root_spent_hash"],
+        spent_mmr_root_sum=epoch["root_spent_sum"],
         outstanding_balance=epoch["outstanding_balance"],
         ots_receipt=epoch["ots_receipt"],
         mint_signature=epoch["signature"],
@@ -620,7 +620,7 @@ async def pol_manifest(
 @router.post(
     "/v1/pol/{keyset_id}/proofs/issued",
     name="Batch Issued Proofs",
-    summary="Get MS-SMT inclusion proofs for a list of blinded messages relative to the last-tree.",
+    summary="Get sum-MMR inclusion proofs for a list of blinded messages.",
     response_model=PolProofsResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -654,22 +654,19 @@ async def pol_proofs_issued(
     proof_items = []
     for b_hex in payload.blinded_messages:
         h_b = hashlib.sha256(bytes.fromhex(b_hex)).digest()
-        idx_int = int.from_bytes(h_b, "big")
-
-        # Check if active leaf
-        level_nodes = issued_tree.tree_levels[0]
-        leaf_node = level_nodes.get(idx_int) if level_nodes is not None else None
-        value = leaf_node[1] if leaf_node else 0
-
-        compact_mask, siblings = issued_tree.get_proof(idx_int)
+        leaf_index = issued_tree.find_leaf(h_b)
+        if leaf_index is None:
+            continue
+        value = issued_tree.leaves[leaf_index][1]
+        sibling_path, peaks = issued_tree.get_proof(leaf_index)
 
         proof_items.append(
             PolProofItem(
                 item=b_hex,
-                index=h_b.hex(),
+                leaf_index=leaf_index,
                 value=value,
-                compact_mask=compact_mask,
-                siblings=[SiblingInfo(**s) for s in siblings],
+                sibling_path=[SiblingInfo(**s) for s in sibling_path],
+                peaks=[NodeInfo(**p) for p in peaks],
             )
         )
 
@@ -679,7 +676,7 @@ async def pol_proofs_issued(
 @router.post(
     "/v1/pol/{keyset_id}/proofs/spent",
     name="Batch Spent Proofs",
-    summary="Get MS-SMT inclusion proofs for a list of spent secrets relative to the last-tree.",
+    summary="Get sum-MMR inclusion proofs for a list of spent secrets.",
     response_model=PolProofsResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -713,22 +710,19 @@ async def pol_proofs_spent(
     proof_items = []
     for y_hex in payload.ys:
         h_y = hashlib.sha256(bytes.fromhex(y_hex)).digest()
-        idx_int = int.from_bytes(h_y, "big")
-
-        # Check if active leaf
-        level_nodes = spent_tree.tree_levels[0]
-        leaf_node = level_nodes.get(idx_int) if level_nodes is not None else None
-        value = leaf_node[1] if leaf_node else 0
-
-        compact_mask, siblings = spent_tree.get_proof(idx_int)
+        leaf_index = spent_tree.find_leaf(h_y)
+        if leaf_index is None:
+            continue
+        value = spent_tree.leaves[leaf_index][1]
+        sibling_path, peaks = spent_tree.get_proof(leaf_index)
 
         proof_items.append(
             PolProofItem(
                 item=y_hex,
-                index=h_y.hex(),
+                leaf_index=leaf_index,
                 value=value,
-                compact_mask=compact_mask,
-                siblings=[SiblingInfo(**s) for s in siblings],
+                sibling_path=[SiblingInfo(**s) for s in sibling_path],
+                peaks=[NodeInfo(**p) for p in peaks],
             )
         )
 

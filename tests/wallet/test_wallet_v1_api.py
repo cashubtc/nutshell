@@ -460,8 +460,9 @@ async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: Ledg
     promises = await api.mint(outputs=[output], quote="q", signature="sig")
     assert len(promises) == 1
 
-    split_promises = await api.split([proof], [output])
+    split_promises, spent_receipts = await api.split([proof], [output])
     assert len(split_promises) == 1
+    assert spent_receipts is None
 
     states = await api.check_proof_state([proof])
     assert states.states[0].unspent
@@ -564,7 +565,9 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(
+    monkeypatch, api: LedgerAPI
+):
     async def fake_request(self, method, path, **kwargs):
         if path == "keysets":
             return _response(

@@ -298,8 +298,7 @@ async def pay(
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
         if pr.m and wallet.url not in pr.m:
-            print(
-                f"Error: Current mint {wallet.url} is not accepted by the receiver.")
+            print(f"Error: Current mint {wallet.url} is not accepted by the receiver.")
             print(f"Accepted mints: {pr.m}")
             return
 
@@ -366,8 +365,7 @@ async def pay(
             if post_transports:
                 transport = post_transports[0]
                 url = transport.a
-                print(
-                    f"Sending token via POST to {url}...", end="", flush=True)
+                print(f"Sending token via POST to {url}...", end="", flush=True)
 
                 token_obj = deserialize_token_from_string(token)
                 assert isinstance(
@@ -512,8 +510,7 @@ async def invoice(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    amount = int(
-        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
@@ -676,8 +673,7 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(
-        input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
+    amount = int(input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -736,8 +732,7 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(
-                f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -838,8 +833,7 @@ async def send_command(
     force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    amount = int(
-        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     await send(
         wallet,
         amount=amount,
@@ -1010,8 +1004,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter(
-            "send_id"), reverse=True)  # type: ignore
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"), reverse=True)  # type: ignore
         if number:
             number += offset
         for i, (key, value) in islice(
@@ -1424,8 +1417,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
-                        print(
-                            f"        - Description: {mint_info['description']}")
+                        print(f"        - Description: {mint_info['description']}")
                     if mint_info.get("description_long"):
                         print(
                             f"        - Long description: {mint_info['description_long']}"
@@ -1437,8 +1429,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                     if mint_info.get("version"):
                         print(f"        - Version: {mint_info['version']}")
                     if mint_info.get("motd"):
-                        print(
-                            f"        - Message of the day: {mint_info['motd']}")
+                        print(f"        - Message of the day: {mint_info['motd']}")
                     if mint_info.get("time"):
                         print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
@@ -1582,8 +1573,7 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
 
     if mint:
         new_proofs = await auth_wallet.mint_blind_auth()
-        print(
-            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
+        print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
 
 @cli.group(cls=NaturalOrderGroup)
@@ -1723,8 +1713,8 @@ async def pol_manifest_cmd(
         manifest = resp.json()
 
         # Verify outstanding balance sum consistency
-        root_issued_sum = manifest["root_issued"]["sum"]
-        root_spent_sum = manifest["root_spent"]["sum"]
+        root_issued_sum = manifest["issued_mmr_root_sum"]
+        root_spent_sum = manifest["spent_mmr_root_sum"]
         outstanding_balance = manifest["outstanding_balance"]
         sum_check_str = (
             "✓ Match"
@@ -1737,10 +1727,12 @@ async def pol_manifest_cmd(
         print(f"Epoch Index:        {manifest['epoch_index']}")
         print(f"Timestamp:          {manifest['timestamp']}")
         print(f"Signing Pubkey:     {manifest['signing_pubkey']}")
-        print(f"Root Issued Hash:   {manifest['root_issued']['hash']}")
-        print(f"Root Issued Sum:    {manifest['root_issued']['sum']}")
-        print(f"Root Spent Hash:    {manifest['root_spent']['hash']}")
-        print(f"Root Spent Sum:     {manifest['root_spent']['sum']}")
+        print(f"Issued MMR Size:    {manifest['issued_mmr_size']}")
+        print(f"Issued MMR Root:    {manifest['issued_mmr_root_hash']}")
+        print(f"Issued MMR Sum:     {manifest['issued_mmr_root_sum']}")
+        print(f"Spent MMR Size:     {manifest['spent_mmr_size']}")
+        print(f"Spent MMR Root:     {manifest['spent_mmr_root_hash']}")
+        print(f"Spent MMR Sum:      {manifest['spent_mmr_root_sum']}")
         print(
             f"Outstanding Balance: {manifest['outstanding_balance']} ({sum_check_str})"
         )

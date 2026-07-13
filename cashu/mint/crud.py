@@ -1,4 +1,5 @@
 import json
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -352,8 +353,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("promises")}
-            (amount, b_, id, created, mint_quote, melt_quote, swap_id, order_index)
-            VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id, :order_index)
+            (amount, b_, id, created, mint_quote, melt_quote, swap_id, order_index, pol_sequence)
+            VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id, :order_index, :pol_sequence)
             """,
             {
                 "amount": amount,
@@ -364,6 +365,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "melt_quote": melt_id,
                 "swap_id": swap_id,
                 "order_index": order_index,
+                "pol_sequence": time.time_ns(),
             },
         )
 
@@ -500,8 +502,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("proofs_used")}
-            (amount, c, secret, y, id, witness, created, melt_quote)
-            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
+            (amount, c, secret, y, id, witness, created, melt_quote, pol_sequence)
+            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote, :pol_sequence)
             """,
             {
                 "amount": proof.amount,
@@ -512,6 +514,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "witness": proof.witness,
                 "created": db.to_timestamp(db.timestamp_now_str()),
                 "melt_quote": quote_id,
+                "pol_sequence": time.time_ns(),
             },
         )
 

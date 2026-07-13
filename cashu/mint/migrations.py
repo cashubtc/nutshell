@@ -1265,7 +1265,7 @@ async def m035_add_last_checked_to_mint_quotes(db: Database):
 
 async def m036_pol_epochs(db: Database):
     """
-    Create pol_epochs table to store historical Sparse Merkle Sum Tree roots and OTS receipts per epoch.
+    Create pol_epochs table to store historical PoL roots and OTS receipts.
     """
     async with db.connect() as conn:
         await conn.execute(
@@ -1275,8 +1275,10 @@ async def m036_pol_epochs(db: Database):
                     epoch_index INTEGER NOT NULL,
                     timestamp TIMESTAMP NOT NULL,
                     previous_global_digest TEXT NOT NULL,
+                    issued_mmr_size {db.big_int} NOT NULL,
                     root_issued_hash TEXT NOT NULL,
                     root_issued_sum {db.big_int} NOT NULL,
+                    spent_mmr_size {db.big_int} NOT NULL,
                     root_spent_hash TEXT NOT NULL,
                     root_spent_sum {db.big_int} NOT NULL,
                     outstanding_balance {db.big_int} NOT NULL,
@@ -1285,4 +1287,12 @@ async def m036_pol_epochs(db: Database):
                     PRIMARY KEY (keyset_id, epoch_index)
                 );
             """
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} "
+            f"ADD COLUMN pol_sequence {db.big_int}"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('proofs_used')} "
+            f"ADD COLUMN pol_sequence {db.big_int}"
         )
