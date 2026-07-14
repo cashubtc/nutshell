@@ -443,7 +443,7 @@ class LedgerAPI(SupportsAuth):
             return res
 
         payload = outputs_payload.model_dump(
-            include=_mintrequest_include_fields(outputs)
+            include=_mintrequest_include_fields(outputs), exclude_none=True
         )  # type: ignore
         resp = await self._request(
             POST,
@@ -536,12 +536,17 @@ class LedgerAPI(SupportsAuth):
                 include["outputs"] = {i: outputs_include for i in range(len(outputs))}
             return include
 
+        melt_payload = payload.model_dump(
+            include=_meltrequest_include_fields(proofs, outputs)
+        )
+        for output in melt_payload.get("outputs", []):
+            if output.get("d_gap") is None:
+                output.pop("d_gap", None)
+
         resp = await self._request(
             POST,
             "melt/bolt11",
-            json=payload.model_dump(
-                include=_meltrequest_include_fields(proofs, outputs)
-            ),  # type: ignore
+            json=melt_payload,  # type: ignore
             timeout=None,
         )
         try:
@@ -601,10 +606,17 @@ class LedgerAPI(SupportsAuth):
                 "inputs": {i: proofs_include for i in range(len(proofs))},
             }
 
+        serialized_split_payload = split_payload.model_dump(
+            include=_splitrequest_include_fields(proofs)
+        )
+        for output in serialized_split_payload["outputs"]:
+            if output.get("d_gap") is None:
+                output.pop("d_gap", None)
+
         resp = await self._request(
             POST,
             "swap",
-            json=split_payload.model_dump(include=_splitrequest_include_fields(proofs)),  # type: ignore
+            json=serialized_split_payload,  # type: ignore
         )
 
         # if mint doesn't support v1 swap endpoint, fail explicitly

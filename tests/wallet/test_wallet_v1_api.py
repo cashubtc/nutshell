@@ -477,6 +477,13 @@ async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: Ledg
     assert set(mint_payload.keys()) == {"quote", "outputs", "signature"}
     assert set(mint_payload["outputs"][0].keys()) == {"id", "amount", "B_"}
 
+    output.d_gap = "encrypted-gap"
+    await api.mint(outputs=[output], quote="q")
+    mint_payload_with_gap = [c for c in requests if c[1] == "mint/bolt11"][-1][2][
+        "json"
+    ]
+    assert mint_payload_with_gap["outputs"][0]["d_gap"] == "encrypted-gap"
+
 
 @pytest.mark.asyncio
 async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
@@ -564,7 +571,9 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(
+    monkeypatch, api: LedgerAPI
+):
     async def fake_request(self, method, path, **kwargs):
         if path == "keysets":
             return _response(
