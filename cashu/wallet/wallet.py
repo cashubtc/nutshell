@@ -1083,14 +1083,7 @@ class Wallet(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
 
-            if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
-            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
-            else:
-                B_, r = b_dhke.step1_alice_deprecated(
-                    secret, r
-                )  # recompute B_ for dleq proofs
-            # END: BACKWARDS COMPATIBILITY < 0.15.1
+            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
 
             proof = Proof(
                 id=promise.id,
@@ -1154,12 +1147,7 @@ class Wallet(
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         for secret, amount, r in zip(secrets, amounts, rs_):
-            if not settings.wallet_use_deprecated_h2c:
-                B_, r = b_dhke.step1_alice(secret, r or None)
-            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
-            else:
-                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
-            # END: BACKWARDS COMPATIBILITY < 0.15.1
+            B_, r = b_dhke.step1_alice(secret, r or None)
 
             assert r
             rs_return.append(r)
