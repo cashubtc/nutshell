@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple, Union
 
 import bolt11
 from loguru import logger
@@ -1381,6 +1381,7 @@ class Ledger(
                     melt_id=melt_id,
                     swap_id=swap_id,
                     order_index=i,
+                    d_gap=output.d_gap,
                     db=self.db,
                     conn=conn,
                 )
@@ -1407,7 +1408,15 @@ class Ledger(
             list[BlindedSignature]: Generated BlindedSignatures.
         """
         promises: List[
-            Tuple[str, PublicKey, int, PublicKey, PrivateKey, PrivateKey]
+            Tuple[
+                str,
+                PublicKey,
+                int,
+                PublicKey,
+                PrivateKey,
+                PrivateKey,
+                Optional[Union[int, str]],
+            ]
         ] = []
         for output in outputs:
             B_ = PublicKey(bytes.fromhex(output.B_))
@@ -1422,14 +1431,14 @@ class Ledger(
             logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
             C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-            promises.append((keyset_id, B_, output.amount, C_, e, s))
+            promises.append((keyset_id, B_, output.amount, C_, e, s, output.d_gap))
 
         keyset = keyset or self.keyset
 
         signatures = []
         async with self.db.get_connection(conn) as conn:
             for promise in promises:
-                keyset_id, B_, amount, C_, e, s = promise
+                keyset_id, B_, amount, C_, e, s, d_gap = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
                 await self.crud.update_blinded_message_signature(
                     amount=amount,
@@ -1446,6 +1455,7 @@ class Ledger(
                     amount=amount,
                     C_=C_.format().hex(),
                     dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
+                    d_gap=d_gap,
                 )
                 signatures.append(signature)
 

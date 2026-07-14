@@ -15,6 +15,7 @@ from ..core.nuts.nuts import (
     CACHE_NUT,
     CLEAR_AUTH_NUT,
     DLEQ_NUT,
+    EFFICIENT_RECOVERY_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,
     MELT_NUT,
@@ -129,6 +130,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
+        mint_features[EFFICIENT_RECOVERY_NUT] = supported_dict
         return mint_features
 
     def add_batch_features(

@@ -39,7 +39,8 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
-from ..core.nuts import nut20
+from ..core.nuts import nut20, nut342
+from ..core.nuts.nuts import EFFICIENT_RECOVERY_NUT
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from . import migrations
@@ -680,6 +681,7 @@ class Wallet(
         )
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
+        self._add_recovery_gaps(outputs, rs, derivation_paths)
 
         quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
         if not quote:
@@ -788,6 +790,7 @@ class Wallet(
 
         # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets, rs, self.keyset_id)
+        self._add_recovery_gaps(outputs, rs, derivation_paths)
 
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         proofs = self.sign_proofs_inplace_swap(proofs, outputs)
@@ -945,6 +948,7 @@ class Wallet(
         change_outputs, change_rs = self._construct_outputs(
             n_change_outputs * [1], change_secrets, change_rs
         )
+        self._add_recovery_gaps(change_outputs, change_rs, change_derivation_paths)
 
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
@@ -1168,6 +1172,50 @@ class Wallet(
             logger.trace(f"Constructing output: {output}, r: {r.to_hex()}")
 
         return outputs, rs_return
+
+    @staticmethod
+    def _derivation_counter(derivation_path: Optional[str]) -> Optional[int]:
+        if not derivation_path:
+            return None
+        try:
+            if derivation_path.startswith("HMAC-SHA256:"):
+                return int(derivation_path.rsplit(":", 1)[1])
+            return int(derivation_path.split("/")[-1].rstrip("'"))
+        except (ValueError, IndexError):
+            return None
+
+    def _supports_efficient_recovery(self) -> bool:
+        nuts = self.mint_info.nuts if getattr(self, "mint_info", None) else None
+        if not nuts:
+            return False
+        setting = nuts.get(EFFICIENT_RECOVERY_NUT)
+        return isinstance(setting, dict) and setting.get("supported") is True
+
+    def _add_recovery_gaps(
+        self,
+        outputs: List[BlindedMessage],
+        rs: List[PrivateKey],
+        derivation_paths: List[str],
+    ) -> None:
+        """Attach encrypted NUT-342 gaps to deterministic wallet outputs."""
+        if not outputs or not self._supports_efficient_recovery():
+            return
+        existing = [
+            counter
+            for proof in self.proofs
+            if proof.id == outputs[0].id
+            and (counter := self._derivation_counter(proof.derivation_path)) is not None
+        ]
+        generated = [self._derivation_counter(path) for path in derivation_paths]
+        deterministic = [counter for counter in generated if counter is not None]
+        if not deterministic:
+            return
+        first_unspent = min(existing + deterministic)
+        for output, r, counter in zip(outputs, rs, generated):
+            if counter is not None:
+                output.d_gap = nut342.encrypt_d_gap(
+                    counter - first_unspent, bytes.fromhex(r.to_hex())
+                )
 
     async def construct_outputs(self, amounts: List[int]) -> List[BlindedMessage]:
         """Constructs outputs for a list of amounts.
@@ -1449,6 +1497,16 @@ class Wallet(
             to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
+        if self._supports_efficient_recovery():
+            try:
+                if await self._restore_tokens_for_keyset_efficient(keyset_id, batch):
+                    return
+            except Exception as exc:
+                logger.warning(
+                    f"Efficient recovery failed for keyset {keyset_id}; "
+                    f"falling back to NUT-13: {exc}"
+                )
+
         empty_batches = 0
         # we get the current secret counter and restore from there on
         spendable_proofs = []
@@ -1496,6 +1554,82 @@ class Wallet(
         if last_restore_count == 0:
             print(f"No tokens restored for keyset {keyset_id}.")
             return
+
+    async def _restore_signatures_from_to(
+        self, keyset_id: str, from_counter: int, to_counter: int
+    ) -> List[Tuple[int, BlindedSignature, PrivateKey]]:
+        secrets, rs, _ = await self.generate_secrets_from_to(
+            from_counter, to_counter, keyset_id=keyset_id
+        )
+        outputs, _ = self._construct_outputs(
+            [1] * len(secrets), secrets, rs, keyset_id=keyset_id
+        )
+        restored_outputs, signatures = await super().restore_promises(outputs)
+        signature_by_b = {
+            output.B_: signature
+            for output, signature in zip(restored_outputs, signatures)
+        }
+        return [
+            (from_counter + index, signature_by_b[output.B_], rs[index])
+            for index, output in enumerate(outputs)
+            if output.B_ in signature_by_b
+        ]
+
+    async def _restore_tokens_for_keyset_efficient(
+        self, keyset_id: str, probe_size: int
+    ) -> bool:
+        """Restore a NUT-342 wallet; return False when NUT-13 fallback is needed."""
+        if probe_size < 1:
+            raise ValueError("efficient recovery probe size must be positive")
+        max_counter = 2**32 - 1
+        first_window = await self._restore_signatures_from_to(
+            keyset_id, 0, min(probe_size - 1, max_counter)
+        )
+        if not first_window:
+            return False
+
+        lo, hi = 0, max_counter // probe_size
+        while lo < hi:
+            midpoint_window = (lo + hi + 1) // 2
+            start = midpoint_window * probe_size
+            matches = await self._restore_signatures_from_to(
+                keyset_id, start, min(start + probe_size - 1, max_counter)
+            )
+            if matches:
+                lo = midpoint_window
+            else:
+                hi = midpoint_window - 1
+
+        terminal_start = lo * probe_size
+        terminal_window = await self._restore_signatures_from_to(
+            keyset_id,
+            terminal_start,
+            min(terminal_start + probe_size - 1, max_counter),
+        )
+        if not terminal_window:
+            return False
+        t, terminal_signature, terminal_r = terminal_window[-1]
+        if terminal_signature.d_gap is None:
+            return False
+        if isinstance(terminal_signature.d_gap, int):
+            d_gap = terminal_signature.d_gap
+        else:
+            d_gap = nut342.decrypt_d_gap(
+                terminal_signature.d_gap, bytes.fromhex(terminal_r.to_hex())
+            )
+        if d_gap < 0 or d_gap > t:
+            raise ValueError("mint returned an invalid d_gap")
+
+        start = t - d_gap
+        _, restored_proofs = await self.restore_promises_from_to(keyset_id, start, t)
+        spendable_proofs = await self.invalidate(restored_proofs, check_spendable=True)
+        if spendable_proofs:
+            print(
+                f"Restored {sum_proofs(spendable_proofs)} sat for keyset {keyset_id}."
+            )
+        else:
+            print(f"No spendable tokens restored for keyset {keyset_id}.")
+        return True
 
     async def restore_wallet_from_mnemonic(
         self, mnemonic: Optional[str], to: int = 2, batch: int = 25

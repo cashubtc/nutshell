@@ -3,7 +3,14 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    MeltQuoteState,
+    MintQuoteState,
+    Proof,
+)
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -14,7 +21,7 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
-from cashu.core.nuts import nut20
+from cashu.core.nuts import nut20, nut342
 from cashu.core.nuts.nuts import MINT_NUT
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -23,6 +30,109 @@ from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
+
+
+@pytest.mark.asyncio
+async def test_recovery_gap_uses_same_keyset_unspent_and_pending_proofs(
+    wallet: Wallet,
+):
+    keyset_id = wallet.keyset_id
+    wallet.proofs = [
+        Proof(
+            id=keyset_id,
+            amount=1,
+            secret="old-unspent",
+            C="02" * 33,
+            derivation_path=f"HMAC-SHA256:{keyset_id}:3",
+        ),
+        Proof(
+            id=keyset_id,
+            amount=1,
+            secret="old-pending",
+            C="02" * 33,
+            derivation_path=f"HMAC-SHA256:{keyset_id}:5",
+            reserved=True,
+        ),
+        Proof(
+            id="other-keyset",
+            amount=1,
+            secret="other-keyset-proof",
+            C="02" * 33,
+            derivation_path="HMAC-SHA256:other-keyset:1",
+        ),
+    ]
+    outputs = [BlindedMessage(amount=1, id=keyset_id, B_="02" * 33)]
+    rs = [PrivateKey(bytes.fromhex("06" * 32))]
+
+    wallet._add_recovery_gaps(outputs, rs, [f"HMAC-SHA256:{keyset_id}:10"])
+
+    assert isinstance(outputs[0].d_gap, str)
+    assert nut342.decrypt_d_gap(outputs[0].d_gap, bytes.fromhex(rs[0].to_hex())) == 7
+
+
+@pytest.mark.asyncio
+async def test_recovery_gap_includes_earlier_outputs_in_same_batch(wallet: Wallet):
+    keyset_id = wallet.keyset_id
+    wallet.proofs = []
+    outputs = [
+        BlindedMessage(amount=1, id=keyset_id, B_="02" * 33),
+        BlindedMessage(amount=2, id=keyset_id, B_="03" * 33),
+    ]
+    rs = [
+        PrivateKey(bytes.fromhex("07" * 32)),
+        PrivateKey(bytes.fromhex("08" * 32)),
+    ]
+
+    wallet._add_recovery_gaps(
+        outputs,
+        rs,
+        [f"HMAC-SHA256:{keyset_id}:10", f"HMAC-SHA256:{keyset_id}:11"],
+    )
+
+    assert isinstance(outputs[1].d_gap, str)
+    assert nut342.decrypt_d_gap(outputs[1].d_gap, bytes.fromhex(rs[1].to_hex())) == 1
+
+
+@pytest.mark.asyncio
+async def test_efficient_recovery_binary_search_tolerates_spurious_gap(
+    wallet: Wallet, monkeypatch: pytest.MonkeyPatch
+):
+    issued_counters = {0, 1, 3}
+    probe_ranges = []
+    recovered_ranges = []
+    r = PrivateKey(bytes.fromhex("09" * 32))
+
+    async def restore_window(keyset_id: str, start: int, end: int):
+        probe_ranges.append((start, end))
+        return [
+            (
+                counter,
+                BlindedSignature(
+                    id=keyset_id,
+                    amount=1,
+                    C_="02" * 33,
+                    d_gap=3 if counter == 3 else 0,
+                ),
+                r,
+            )
+            for counter in range(start, end + 1)
+            if counter in issued_counters
+        ]
+
+    async def restore_range(keyset_id: str, start: int, end: int):
+        recovered_ranges.append((start, end))
+        return 0, []
+
+    async def invalidate(proofs, check_spendable=False):
+        return []
+
+    monkeypatch.setattr(wallet, "_restore_signatures_from_to", restore_window)
+    monkeypatch.setattr(wallet, "restore_promises_from_to", restore_range)
+    monkeypatch.setattr(wallet, "invalidate", invalidate)
+
+    assert await wallet._restore_tokens_for_keyset_efficient(wallet.keyset_id, 2)
+    assert (2, 3) in probe_ranges
+    assert recovered_ranges == [(0, 3)]
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -561,9 +671,10 @@ async def test_api_check_state(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
+    assert 342 in wallet.mint_info.nuts
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
-    await wallet.mint(64, quote_id=mint_quote.quote)
+    minted_proofs = await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
     secret_counter = await bump_secret_derivation(
         db=wallet.db, keyset_id=wallet.keyset_id, by=0, skip=True
@@ -587,6 +698,14 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert len(restore_response.signatures) == 1
     assert len(restore_response.outputs) == 1
     assert restore_response.outputs == outputs
+    assert isinstance(restore_response.signatures[0].d_gap, str)
+    assert (
+        nut342.decrypt_d_gap(
+            restore_response.signatures[0].d_gap,
+            bytes.fromhex(rs[0].to_hex()),
+        )
+        == len(minted_proofs) - 1
+    )
 
 
 @pytest.mark.asyncio

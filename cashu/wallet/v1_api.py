@@ -433,7 +433,7 @@ class LedgerAPI(SupportsAuth):
 
         def _mintrequest_include_fields(outputs: List[BlindedMessage]):
             """strips away fields from the model that aren't necessary for the /mint"""
-            outputs_include = {"id", "amount", "B_"}
+            outputs_include = {"id", "amount", "B_", "d_gap"}
             res = {
                 "quote": ...,
                 "outputs": {i: outputs_include for i in range(len(outputs))},
@@ -527,7 +527,7 @@ class LedgerAPI(SupportsAuth):
         ):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "witness"}
-            outputs_include = {"id", "amount", "B_"}
+            outputs_include = {"id", "amount", "B_", "d_gap"}
             include = {
                 "quote": ...,
                 "inputs": {i: proofs_include for i in range(len(proofs))},

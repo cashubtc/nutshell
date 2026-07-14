@@ -235,10 +235,17 @@ class BlindedMessage(BaseModel):
     id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
     C_: Optional[str] = None  # Hex-encoded signature, None if not signed yet
+    d_gap: Optional[Union[int, str]] = None  # NUT-342 recovery window metadata
 
     @classmethod
     def from_row(cls, row: RowMapping):
-        return cls(amount=row["amount"], B_=row["b_"], id=row["id"], C_=row.get("c_"))
+        return cls(
+            amount=row["amount"],
+            B_=row["b_"],
+            id=row["id"],
+            C_=row.get("c_"),
+            d_gap=row.get("d_gap"),
+        )
 
 
 class BlindedMessage_Deprecated(BaseModel):
@@ -267,6 +274,7 @@ class BlindedSignature(BaseModel):
     amount: int
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
+    d_gap: Optional[Union[int, str]] = None  # NUT-342 recovery window metadata
 
     @classmethod
     def from_row(cls, row: Row):
@@ -275,6 +283,7 @@ class BlindedSignature(BaseModel):
             amount=row["amount"],
             C_=row["c_"],
             dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
+            d_gap=row["d_gap"] if "d_gap" in row.keys() else None,
         )
 
 
