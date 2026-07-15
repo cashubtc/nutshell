@@ -93,7 +93,3 @@ MINT_CORELIGHTNING_REST_CERT=../cashu-regtest-enviroment/data/clightning-2-rest/
 ### Profiling
 
 If you'd like to profile your code (measure how long steps take to execute), run the mint using `DEBUG_PROFILING=TRUE`. Make sure to turn this off again, as your application will be significantly slower with profiling enabled.
-
-### V0 API only
-
-To run the mint with only V0 API support (deprecated), use `DEBUG_MINT_ONLY_DEPRECATED=TRUE`

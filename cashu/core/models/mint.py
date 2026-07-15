@@ -2,7 +2,7 @@ from typing import Annotated, List, Optional
 
 from pydantic import BaseModel, Field
 
-from cashu.core.base import BlindedMessage, BlindedMessage_Deprecated, BlindedSignature
+from cashu.core.base import BlindedMessage, BlindedSignature
 from cashu.core.constants import MAX_QUOTE_ID_LEN, MAX_SIG_LEN
 from cashu.core.settings import settings
 
@@ -34,19 +34,3 @@ class PostMintBatchRequest(BaseModel):
 
 class PostMintBatchResponse(BaseModel):
     signatures: List[BlindedSignature] = []
-
-
-
-class GetMintResponse_deprecated(BaseModel):
-    pr: str
-    hash: str
-
-
-class PostMintRequest_deprecated(BaseModel):
-    outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
-
-
-class PostMintResponse_deprecated(BaseModel):
-    promises: List[BlindedSignature] = []

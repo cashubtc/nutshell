@@ -55,15 +55,3 @@ class GetInfoResponse(BaseModel):
 class Nut15MppSupport(BaseModel):
     method: str
     unit: str
-
-
-class GetInfoResponse_deprecated(BaseModel):
-    name: Optional[str] = None
-    pubkey: Optional[str] = None
-    version: Optional[str] = None
-    description: Optional[str] = None
-    description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
-    nuts: Optional[List[str]] = None
-    motd: Optional[str] = None
-    parameter: Optional[dict] = None

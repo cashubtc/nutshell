@@ -58,27 +58,26 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert melt_quote.amount == 64
     assert melt_quote.fee_reserve == 0
 
-    if not settings.debug_mint_only_deprecated:
-        melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
-        assert melt_quote_response_pre_payment
-        assert not melt_quote_response_pre_payment.state == MeltQuoteState.paid, (
-            "melt quote should not be paid"
-        )
-        assert melt_quote_response_pre_payment.amount == 64
+    melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
+    assert melt_quote_response_pre_payment
+    assert (
+        not melt_quote_response_pre_payment.state == MeltQuoteState.paid
+    ), "melt quote should not be paid"
+    assert melt_quote_response_pre_payment.amount == 64
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
-        "melt quote should not be paid"
-    )
+    assert (
+        melt_quote_pre_payment.state != MeltQuoteState.paid
+    ), "melt quote should not be paid"
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
-        "melt quote should be paid"
-    )
+    assert (
+        melt_quote_post_payment.state == MeltQuoteState.paid
+    ), "melt quote should be paid"
     assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
@@ -104,27 +103,26 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
 
-    if not settings.debug_mint_only_deprecated:
-        melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
-        assert melt_quote_response_pre_payment
-        assert melt_quote_response_pre_payment.state == MeltQuoteState.unpaid, (
-            "melt quote should not be paid"
-        )
-        assert melt_quote_response_pre_payment.amount == melt_quote.amount
+    melt_quote_response_pre_payment = await wallet1.get_melt_quote(melt_quote.quote)
+    assert melt_quote_response_pre_payment
+    assert (
+        melt_quote_response_pre_payment.state == MeltQuoteState.unpaid
+    ), "melt quote should not be paid"
+    assert melt_quote_response_pre_payment.amount == melt_quote.amount
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_pre_payment.state != MeltQuoteState.paid, (
-        "melt quote should not be paid"
-    )
+    assert (
+        melt_quote_pre_payment.state != MeltQuoteState.paid
+    ), "melt quote should not be paid"
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.state == MeltQuoteState.paid, (
-        "melt quote should be paid"
-    )
+    assert (
+        melt_quote_post_payment.state == MeltQuoteState.paid
+    ), "melt quote should be paid"
     assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
@@ -137,9 +135,8 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
 
     assert mint_quote.state == MintQuoteState.paid, "mint quote should be paid"
 
-    if not settings.debug_mint_only_deprecated:
-        mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
-        assert mint_quote.state == MintQuoteState.paid, "mint quote should be paid"
+    mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
+    assert mint_quote.state == MintQuoteState.paid, "mint quote should be paid"
 
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -171,9 +168,8 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     assert mint_quote.state != MintQuoteState.paid, "mint quote already paid"
     assert mint_quote.state == MintQuoteState.unpaid
 
-    if not settings.debug_mint_only_deprecated:
-        mint_quote = await wallet1.get_mint_quote(quote.quote)
-        assert mint_quote.state != MintQuoteState.paid, "mint quote should not be paid"
+    mint_quote = await wallet1.get_mint_quote(quote.quote)
+    assert mint_quote.state != MintQuoteState.paid, "mint quote should not be paid"
 
     await assert_err(
         wallet1.mint(128, quote_id=quote.quote),

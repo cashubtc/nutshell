@@ -50,7 +50,7 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 | 0 | Baseline, scope, and guardrails | Complete |
 | 1 | Remove pre-0.16 wallet v1 fallbacks | Complete |
 | 2 | Remove old quote and mint-info response fallbacks | Complete |
-| 3 | Remove the mint v0 API | Not started |
+| 3 | Remove the mint v0 API | Complete |
 | 4 | Remove dead runtime/database compatibility artifacts | Not started |
 | 5 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
 | 6 | Remove old LNbits API support | Deferred — external backend compatibility decision |
@@ -175,7 +175,7 @@ Remove compatibility with incomplete pre-0.17/pre-0.20.1 quote responses and the
 
 ## Milestone 3: Remove the mint v0 API
 
-**Status:** Not started
+**Status:** Complete
 
 ### Scope
 
@@ -197,22 +197,22 @@ Remove the server-side v0 API as one coherent API-breaking milestone. Wallet-sid
 
 ### Checklist
 
-- [ ] Remove `cashu/mint/router_deprecated.py` and its import.
-- [ ] Stop mounting deprecated routes in `cashu/mint/app.py`.
-- [ ] Remove `debug_mint_only_deprecated`.
-- [ ] Remove all test branches conditioned on `debug_mint_only_deprecated`.
-- [ ] Remove deprecated-only CI inputs and workflow labels.
-- [ ] Remove the deprecated-only instructions from `CONTRIBUTING.md`.
-- [ ] Remove skipped deprecated API integration tests and deprecated API fuzz tests.
-- [ ] Remove v0-only models, imports, and exports after confirming they have no remaining users.
-- [ ] Remove `BlindedMessage_Deprecated` after confirming no remaining users.
-- [ ] Remove pre-0.12 `payment_hash` lookup compatibility contained in the v0 router.
-- [ ] Remove pre-0.13 `fst`/`snd` split responses.
-- [ ] Remove pre-0.14 and pre-0.15 output-without-keyset-ID adaptation contained in the v0 router.
-- [ ] Confirm only `/v1` mint routes remain registered.
-- [ ] Run current mint API, wallet integration, fuzz, Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
+- [x] Remove `cashu/mint/router_deprecated.py` and its import.
+- [x] Stop mounting deprecated routes in `cashu/mint/app.py`.
+- [x] Remove `debug_mint_only_deprecated`.
+- [x] Remove all test branches conditioned on `debug_mint_only_deprecated`.
+- [x] Remove deprecated-only CI inputs and workflow labels.
+- [x] Remove the deprecated-only instructions from `CONTRIBUTING.md`.
+- [x] Remove skipped deprecated API integration tests and deprecated API fuzz tests.
+- [x] Remove v0-only models, imports, and exports after confirming they have no remaining users.
+- [x] Remove `BlindedMessage_Deprecated` after confirming no remaining users.
+- [x] Remove pre-0.12 `payment_hash` lookup compatibility contained in the v0 router.
+- [x] Remove pre-0.13 `fst`/`snd` split responses.
+- [x] Remove pre-0.14 and pre-0.15 output-without-keyset-ID adaptation contained in the v0 router.
+- [x] Confirm only `/v1` mint routes remain registered.
+- [x] Run current mint API, wallet integration, fuzz, Ruff, mypy, and `git diff --check`.
+- [x] Update this milestone to **Complete** with validation results.
+- [x] Commit the milestone files and this plan using a focused Conventional Commit.
 
 ### Success criteria
 
@@ -221,6 +221,26 @@ Remove the server-side v0 API as one coherent API-breaking milestone. Wallet-sid
 - Every current `/v1` route and response remains unchanged.
 - Current mint, melt, swap, restore, key, info, and proof-state tests pass.
 - The implementation and updated plan are committed together.
+
+### Validation record
+
+- The v0 router, its dedicated integration/fuzz suites, and all v0-only request and response models were removed together.
+- A route registration regression confirms `/v1/info` is mounted and none of the 11 retired v0 paths are mounted.
+- Mint application/router tests: 13 passed.
+- Current mint API tests: 17 passed, 2 backend-dependent tests skipped.
+- Current mint API fuzz tests: 10 passed.
+- Focused wallet, mint operation, melt, and database integration tests: 12 passed.
+- Management RPC CLI tests whose v0-only skips were removed: 18 passed.
+- Total scoped regression result: 70 passed, 2 skipped.
+- Focused Ruff lint: passed.
+- Focused mypy: passed for 11 production source files.
+- Ruff format checking still reports unrelated pre-existing formatting in affected test files; those sections were not reformatted under the no-unrelated-code guardrail.
+- GitHub Actions workflow YAML parsing: passed.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed for the repository's tracked CRLF files.
+- Tracked-source search found no remaining v0 router, deprecated-only setting/CI mode, v0-only model, or v0 test-branch symbol.
+- The untracked `cashu/core/domain/` duplicate remains untouched as required by the worktree-preservation guardrail.
+- Historical keyset-ID derivation and migration compatibility remains intact because it protects persisted databases and is outside the v0 REST API.
+- Milestone commit: completed with this plan update.
 
 ## Milestone 4: Remove dead runtime/database compatibility artifacts
 

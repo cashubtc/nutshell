@@ -50,8 +50,8 @@ def assert_amt(proofs: List[Proof], expected: int):
 async def wallet(ledger: Ledger):
     wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet_mint_api_deprecated",
-        name="wallet_mint_api_deprecated",
+        db="test_data/wallet_mint_init",
+        name="wallet_mint_init",
     )
     await wallet1.load_mint()
     yield wallet1

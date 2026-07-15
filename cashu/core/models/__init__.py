@@ -1,15 +1,7 @@
 from .blind_auth import PostAuthBlindMintRequest, PostAuthBlindMintResponse
-from .check import (
-    CheckFeesRequest_deprecated,
-    CheckFeesResponse_deprecated,
-    CheckSpendableRequest_deprecated,
-    CheckSpendableResponse_deprecated,
-    PostCheckStateRequest,
-    PostCheckStateResponse,
-)
+from .check import PostCheckStateRequest, PostCheckStateResponse
 from .info import (
     GetInfoResponse,
-    GetInfoResponse_deprecated,
     MeltMethodSetting,
     MintInfoContact,
     MintInfoProtectedEndpoint,
@@ -19,17 +11,11 @@ from .info import (
 )
 from .keys import (
     KeysetsResponse,
-    KeysetsResponse_deprecated,
     KeysetsResponseKeyset,
     KeysResponse,
-    KeysResponse_deprecated,
     KeysResponseKeyset,
 )
-from .melt import (
-    PostMeltRequest,
-    PostMeltRequest_deprecated,
-    PostMeltResponse_deprecated,
-)
+from .melt import PostMeltRequest
 from .melt_quote import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
@@ -37,43 +23,25 @@ from .melt_quote import (
     PostMeltRequestOptions,
 )
 from .mint import (
-    GetMintResponse_deprecated,
     PostMintBatchRequest,
     PostMintBatchResponse,
     PostMintRequest,
-    PostMintRequest_deprecated,
     PostMintResponse,
-    PostMintResponse_deprecated,
 )
 from .mint_quote import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
 )
-from .restore import (
-    PostRestoreRequest,
-    PostRestoreRequest_Deprecated,
-    PostRestoreResponse,
-)
-from .swap import (
-    PostSwapRequest,
-    PostSwapRequest_Deprecated,
-    PostSwapResponse,
-    PostSwapResponse_Deprecated,
-    PostSwapResponse_Very_Deprecated,
-)
+from .restore import PostRestoreRequest, PostRestoreResponse
+from .swap import PostSwapRequest, PostSwapResponse
 
 __all__ = [
     "PostAuthBlindMintRequest",
     "PostAuthBlindMintResponse",
-    "CheckFeesRequest_deprecated",
-    "CheckFeesResponse_deprecated",
-    "CheckSpendableRequest_deprecated",
-    "CheckSpendableResponse_deprecated",
     "PostCheckStateRequest",
     "PostCheckStateResponse",
     "GetInfoResponse",
-    "GetInfoResponse_deprecated",
     "MeltMethodSetting",
     "MintInfoContact",
     "MintInfoProtectedEndpoint",
@@ -81,34 +49,23 @@ __all__ = [
     "MintMethodSetting",
     "Nut15MppSupport",
     "KeysResponse",
-    "KeysResponse_deprecated",
     "KeysResponseKeyset",
     "KeysetsResponse",
-    "KeysetsResponse_deprecated",
     "KeysetsResponseKeyset",
     "PostMeltRequest",
-    "PostMeltRequest_deprecated",
-    "PostMeltResponse_deprecated",
     "PostMeltQuoteRequest",
     "PostMeltQuoteResponse",
     "PostMeltRequestOptionMpp",
     "PostMeltRequestOptions",
-    "GetMintResponse_deprecated",
     "PostMintBatchRequest",
     "PostMintBatchResponse",
     "PostMintRequest",
-    "PostMintRequest_deprecated",
     "PostMintResponse",
-    "PostMintResponse_deprecated",
     "PostMintQuoteCheckRequest",
     "PostMintQuoteRequest",
     "PostMintQuoteResponse",
     "PostRestoreRequest",
-    "PostRestoreRequest_Deprecated",
     "PostRestoreResponse",
     "PostSwapRequest",
-    "PostSwapRequest_Deprecated",
     "PostSwapResponse",
-    "PostSwapResponse_Deprecated",
-    "PostSwapResponse_Very_Deprecated",
 ]

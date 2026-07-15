@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 
 class KeysResponseKeyset(BaseModel):
@@ -26,11 +26,3 @@ class KeysetsResponseKeyset(BaseModel):
 
 class KeysetsResponse(BaseModel):
     keysets: list[KeysetsResponseKeyset]
-
-
-class KeysResponse_deprecated(RootModel):
-    root: Dict[str, str]
-
-
-class KeysetsResponse_deprecated(BaseModel):
-    keysets: list[str]

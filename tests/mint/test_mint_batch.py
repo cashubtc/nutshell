@@ -26,12 +26,6 @@ async def wallet(ledger: Ledger):
     yield wallet1
 
 
-@pytest.fixture(autouse=True)
-def setup_settings():
-    settings.debug_mint_only_deprecated = False
-    yield
-
-
 @pytest.mark.asyncio
 async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
     await wallet.load_mint()
