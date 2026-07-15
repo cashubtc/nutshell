@@ -14,7 +14,7 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
-from cashu.core.crypto.b_dhke import step1_alice
+from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     InvalidProofsError,
@@ -393,6 +393,37 @@ def test_verify_proof_bdhke_rejects_invalid_token(ledger: Ledger):
         C="02" + "de" * 32,
     )
     assert ledger._verify_proof_bdhke(p) is False
+
+
+def test_verify_proof_bdhke_rejects_legacy_hash_to_curve_alias(ledger: Ledger):
+    current_secret = "alias-241138080"
+    legacy_alias = bytes.fromhex(
+        "".join(
+            [
+                "6562185f066132377f76642849e397bc001026704b1006521775301235c68f7d",
+                "01000000",
+            ]
+        )
+    ).decode("utf-8")
+    amount = 8
+    private_key = ledger.keyset.private_keys[amount]
+    C = (hash_to_curve(current_secret.encode()) * private_key).format().hex()  # type: ignore
+
+    current_proof = Proof(
+        id=ledger.keyset.id,
+        amount=amount,
+        secret=current_secret,
+        C=C,
+    )
+    alias_proof = Proof(
+        id=ledger.keyset.id,
+        amount=amount,
+        secret=legacy_alias,
+        C=C,
+    )
+
+    assert ledger._verify_proof_bdhke(current_proof) is True
+    assert ledger._verify_proof_bdhke(alias_proof) is False
 
 
 def test_verify_proof_bdhke_asserts_unknown_keyset(ledger: Ledger):

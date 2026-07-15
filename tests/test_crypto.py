@@ -5,12 +5,11 @@ from cashu.core.crypto.b_dhke import (
     derive_dleq_nonce,
     hash_e,
     hash_to_curve,
-    hash_to_curve_deprecated,
     step1_alice,
-    step1_alice_deprecated,
     step2_bob,
     step2_bob_dleq,
     step3_alice,
+    verify,
 )
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 
@@ -113,6 +112,22 @@ def test_step3():
         C.format().hex()
         == "0271bf0d702dbad86cbe0af3ab2bfba70a0338f22728e412d88a830ed0580b9de4"
     )
+
+
+def test_verify():
+    a = PrivateKey(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )
+    )
+    A = a.public_key
+    assert A
+    B_, r = step1_alice("test_message")
+    C_, _, _ = step2_bob(B_, a)
+    C = step3_alice(C_, r, A)
+
+    assert verify(a, C, "test_message")
+    assert not verify(a, C, "different_message")
 
 
 def test_dleq_hash_e():
@@ -270,13 +285,13 @@ def test_dleq_alice_verify_dleq():
     # e from test_step2_bob_dleq for a=0x1
     e = PrivateKey(
         bytes.fromhex(
-            "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
+            "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe1"
         )
     )
     # s from test_step2_bob_dleq for a=0x1
     s = PrivateKey(
         bytes.fromhex(
-            "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
+            "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe2"
         )
     )
 
@@ -296,7 +311,7 @@ def test_dleq_alice_verify_dleq():
     # )
     B_ = PublicKey(
         bytes.fromhex(
-            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+            "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
         )
     )
 
@@ -310,7 +325,7 @@ def test_dleq_alice_verify_dleq():
 
     C_ = PublicKey(
         bytes.fromhex(
-            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+            "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
         )
     )
 
@@ -394,159 +409,4 @@ def test_dleq_carol_on_proof():
         e=PrivateKey(bytes.fromhex(proof.dleq.e)),
         s=PrivateKey(bytes.fromhex(proof.dleq.s)),
         A=A,
-    )
-
-
-# TESTS FOR DEPRECATED HASH TO CURVE
-
-
-def test_hash_to_curve_deprecated():
-    result = hash_to_curve_deprecated(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000000"
-        )
-    )
-    assert (
-        result.format().hex()
-        == "0266687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
-    )
-
-    result = hash_to_curve_deprecated(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        )
-    )
-    assert (
-        result.format().hex()
-        == "02ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5"
-    )
-
-
-def test_hash_to_curve_iteration_deprecated():
-    """This input causes multiple rounds of the hash_to_curve algorithm."""
-    result = hash_to_curve_deprecated(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000002"
-        )
-    )
-    assert (
-        result.format().hex()
-        == "02076c988b353fcbb748178ecb286bc9d0b4acf474d4ba31ba62334e46c97c416a"
-    )
-
-
-def test_step1_deprecated():
-    secret_msg = "test_message"
-    B_, blinding_factor = step1_alice_deprecated(
-        secret_msg,
-        blinding_factor=PrivateKey(
-            bytes.fromhex(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            )  # 32 bytes
-        ),
-    )
-
-    assert (
-        B_.format().hex()
-        == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
-    )
-    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001"
-
-
-def test_step2_deprecated():
-    B_, _ = step1_alice_deprecated(
-        "test_message",
-        blinding_factor=PrivateKey(
-            bytes.fromhex(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            ),
-
-        ),
-    )
-    a = PrivateKey(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),
-
-    )
-    C_, e, s = step2_bob(B_, a)
-    assert (
-        C_.format().hex()
-        == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
-    )
-
-
-def test_step3_deprecated():
-    # C = C_ - A.mult(r)
-    # C_ from test_step2_deprecated
-    C_ = PublicKey(
-        bytes.fromhex(
-            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
-        )
-    )
-    r = PrivateKey(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        )
-    )
-
-    A = PublicKey(
-        b"\x02"
-        + bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001",
-        ),
-
-    )
-    C = step3_alice(C_, r, A)
-
-    assert (
-        C.format().hex()
-        == "03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd"
-    )
-
-
-def test_dleq_step2_bob_dleq_deprecated():
-    B_, _ = step1_alice_deprecated(
-        "test_message",
-        blinding_factor=PrivateKey(
-            bytes.fromhex(
-                "0000000000000000000000000000000000000000000000000000000000000001"
-            ),
-
-        ),
-    )
-    a = PrivateKey(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),
-
-    )
-    p_bytes = bytes.fromhex(
-        "0000000000000000000000000000000000000000000000000000000000000001"
-    )  # 32 bytes
-    e, s = step2_bob_dleq(B_, a, p_bytes)
-    assert (
-        e.to_hex()
-        == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
-    )
-    assert (
-        s.to_hex()
-        == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
-    )  # differs from e only in least significant byte because `a = 0x1`
-
-    # change `a`
-    a = PrivateKey(
-        bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000001111"
-        ),
-
-    )
-    e, s = step2_bob_dleq(B_, a, p_bytes)
-    assert (
-        e.to_hex()
-        == "df1984d5c22f7e17afe33b8669f02f530f286ae3b00a1978edaf900f4721f65e"
-    )
-    assert (
-        s.to_hex()
-        == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
     )
