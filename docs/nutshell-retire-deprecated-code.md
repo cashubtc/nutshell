@@ -46,17 +46,16 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 | Milestone | Scope | Status |
 |---|---|---|
 | 0 | Baseline, scope, and guardrails | Complete |
-| 1 | Remove deprecated hash-to-curve support | In progress — implementation and initial validation complete; alias regression and commit pending |
-| 2 | Remove deprecated configuration aliases | Not started |
-| 3 | Remove pre-0.16 wallet v1 fallbacks | Not started |
-| 4 | Remove old quote and mint-info response fallbacks | Not started |
-| 5 | Remove the mint v0 API | Not started |
-| 6 | Remove dead runtime/database compatibility artifacts | Not started |
-| 7 | Remove TokenV3 support | Blocked — token-format cutoff and recovery policy required |
-| 8 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
-| 9 | Remove version-`00` keyset support | Blocked — ecosystem cutoff and recovery policy required |
-| 10 | Remove old LNbits API support | Deferred — external backend compatibility decision |
-| 11 | Final compatibility sweep and full regression verification | Not started |
+| 1 | Remove deprecated configuration aliases | Not started |
+| 2 | Remove pre-0.16 wallet v1 fallbacks | Not started |
+| 3 | Remove old quote and mint-info response fallbacks | Not started |
+| 4 | Remove the mint v0 API | Not started |
+| 5 | Remove dead runtime/database compatibility artifacts | Not started |
+| 6 | Remove TokenV3 support | Blocked — token-format cutoff and recovery policy required |
+| 7 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
+| 8 | Remove version-`00` keyset support | Blocked — ecosystem cutoff and recovery policy required |
+| 9 | Remove old LNbits API support | Deferred — external backend compatibility decision |
+| 10 | Final compatibility sweep and full regression verification | Not started |
 
 ## Milestone 0: Baseline, scope, and guardrails
 
@@ -82,59 +81,11 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 ### Validation record
 
 - Repository-wide marker and call-site audit completed on 2026-07-15.
+- Deprecated hash-to-curve support was verified as already removed on `main` by PR #1082 (`61019f2b`) and is excluded from the implementation milestones.
 - No production code changed as part of the audit itself.
 - Milestone commit: completed with this plan update.
 
-## Milestone 1: Remove deprecated hash-to-curve support
-
-**Status:** In progress — implementation and initial validation complete; alias regression and commit pending
-
-### Scope
-
-Remove the pre-0.15 hash-to-curve algorithm, wallet selection flag, verification fallbacks, and tests that exist only for the deprecated mapping.
-
-### Checklist
-
-- [x] Remove `hash_to_curve_deprecated`.
-- [x] Remove `step1_alice_deprecated`.
-- [x] Remove `verify_deprecated` and the fallback from `verify`.
-- [x] Remove `carol_verify_dleq_deprecated` and the fallback from `carol_verify_dleq`.
-- [x] Remove `wallet_use_deprecated_h2c`.
-- [x] Make wallet output and proof construction always use current `step1_alice`.
-- [x] Remove deprecated hash-to-curve tests and imports.
-- [x] Retain current hash-to-curve and DLEQ coverage.
-- [x] Add positive and negative current `verify` coverage.
-- [x] Replace the stale generic DLEQ fixture with current mapping values.
-- [ ] Add the mint-level legacy hash-to-curve alias rejection regression from the PR #1082 approach.
-- [x] Confirm no deprecated H2C symbols or settings remain.
-- [x] Run focused crypto tests.
-- [x] Run a wallet integration test covering current output/proof behavior.
-- [x] Run focused Ruff and mypy checks.
-- [x] Run `git diff --check`.
-- [ ] Update this milestone to **Complete** with final validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
-
-### Success criteria
-
-- Only the current hash-to-curve mapping is callable from production code.
-- A proof valid under the current mapping remains valid.
-- A different ordinary secret and the crafted legacy alias are both rejected.
-- Current DLEQ verification remains unchanged.
-- No deprecated H2C setting, branch, import, symbol, test, or fixture remains.
-- All milestone tests and static checks pass.
-- The implementation and updated plan are committed together.
-
-### Validation record
-
-- `tests/test_crypto.py`: 14 passed.
-- Wallet integration test: 1 passed.
-- Focused Ruff: passed.
-- Focused mypy: passed.
-- `git diff --check`: passed.
-- Final alias-regression result: pending.
-- Milestone commit: pending.
-
-## Milestone 2: Remove deprecated configuration aliases
+## Milestone 1: Remove deprecated configuration aliases
 
 **Status:** Not started
 
@@ -168,7 +119,7 @@ Remove old environment setting names and their startup-time translation into cur
 - No unrelated settings or startup behavior changes.
 - The implementation and updated plan are committed together.
 
-## Milestone 3: Remove pre-0.16 wallet v1 fallbacks
+## Milestone 2: Remove pre-0.16 wallet v1 fallbacks
 
 **Status:** Not started
 
@@ -196,7 +147,7 @@ Remove wallet interoperability with pre-0.16 v1 response/request shapes while le
 - Current mint communication, error handling, and proof-state behavior remains unchanged.
 - The implementation and updated plan are committed together.
 
-## Milestone 4: Remove old quote and mint-info response fallbacks
+## Milestone 3: Remove old quote and mint-info response fallbacks
 
 **Status:** Not started
 
@@ -226,7 +177,7 @@ Remove compatibility with incomplete pre-0.17/pre-0.20.1 quote responses and the
 - No quote accounting or state-transition logic changes.
 - The implementation and updated plan are committed together.
 
-## Milestone 5: Remove the mint v0 API
+## Milestone 4: Remove the mint v0 API
 
 **Status:** Not started
 
@@ -275,7 +226,7 @@ Remove the server-side v0 API as one coherent API-breaking milestone. Wallet-sid
 - Current mint, melt, swap, restore, key, info, and proof-state tests pass.
 - The implementation and updated plan are committed together.
 
-## Milestone 6: Remove dead runtime/database compatibility artifacts
+## Milestone 5: Remove dead runtime/database compatibility artifacts
 
 **Status:** Not started
 
@@ -306,7 +257,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - No schema, migration order, or database business logic changes unintentionally.
 - The implementation and updated plan are committed together.
 
-## Milestone 7: Remove TokenV3 support
+## Milestone 6: Remove TokenV3 support
 
 **Status:** Blocked — token-format cutoff and recovery policy required
 
@@ -322,7 +273,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - [ ] Remove `TokenV3` and `TokenV3Token` models.
 - [ ] Remove `cashuA` deserialization and redemption.
 - [ ] Remove TokenV3-to-TokenV4 and TokenV4-to-TokenV3 conversion.
-- [ ] Remove automatic legacy serialization for base64 keysets, coordinated with Milestone 8.
+- [ ] Remove automatic legacy serialization for base64 keysets, coordinated with Milestone 7.
 - [ ] Remove `cashu send --legacy`.
 - [ ] Remove `cashu pending --legacy` output.
 - [ ] Remove TokenV3-only tests, imports, and documentation.
@@ -340,7 +291,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - The approved recovery/cutoff policy is documented.
 - The implementation and updated plan are committed together.
 
-## Milestone 8: Remove pre-0.15 base64 keyset support
+## Milestone 7: Remove pre-0.15 base64 keyset support
 
 **Status:** Blocked — old-token and old-mint recovery policy required
 
@@ -380,7 +331,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - The approved recovery/cutoff policy is documented.
 - The implementation and updated plan are committed together.
 
-## Milestone 9: Remove version-`00` keyset support
+## Milestone 8: Remove version-`00` keyset support
 
 **Status:** Blocked — ecosystem cutoff and recovery policy required
 
@@ -412,7 +363,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - The approved ecosystem cutoff and recovery policy is documented.
 - The implementation and updated plan are committed together.
 
-## Milestone 10: Remove old LNbits API support
+## Milestone 9: Remove old LNbits API support
 
 **Status:** Deferred — external backend compatibility decision
 
@@ -441,7 +392,7 @@ This is not old Nutshell compatibility. `cashu/lightning/lnbits.py` starts with 
 - Invoice creation, payment status, paid-invoice streaming, reconnect, and backoff behavior for the current API remain unchanged.
 - The implementation and updated plan are committed together.
 
-## Milestone 11: Final compatibility sweep and full regression verification
+## Milestone 10: Final compatibility sweep and full regression verification
 
 **Status:** Not started
 
