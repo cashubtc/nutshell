@@ -88,9 +88,20 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                         f"Keyset {active_keyset_id} was already deactivated (likely rotated by another process/task). Skipping redundant rotation."
                     )
                     active_keyset = next(
-                        (k for k in self.keysets.values() if k.active and k.unit == unit), None
+                        (
+                            k
+                            for k in self.keysets.values()
+                            if k.active and k.unit == unit
+                        ),
+                        None,
                     )
                     if active_keyset:
+                        if self.keyset and self.keyset.id == active_keyset_id:
+                            self.keyset = active_keyset
+                            self.derivation_path = active_keyset.derivation_path
+                            logger.info(
+                                f"Updated default keyset to {active_keyset.id} with derivation path {active_keyset.derivation_path}"
+                            )
                         return active_keyset
 
             # Select keyset with the greatest counter
@@ -133,7 +144,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 amounts=amounts,
                 input_fee_ppk=input_fee_ppk,
                 active=True,
-                final_expiry=final_expiry
+                final_expiry=final_expiry,
             )
 
             logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
@@ -149,7 +160,9 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             if self.keyset and self.keyset.id == selected_keyset.id:
                 self.keyset = new_keyset
                 self.derivation_path = new_keyset.derivation_path
-                logger.info(f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}")
+                logger.info(
+                    f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}"
+                )
 
             logger.debug(f"Keyset {selected_keyset.id} was de-activated")
             return new_keyset
@@ -288,7 +301,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
     def _parse_valid_from(self, keyset: MintKeyset) -> float:
         # Handles multiple types for keyset.valid_from because database drivers return
         # different types (PostgreSQL returns datetime.datetime, SQLite stores/returns
-        # stringified timestamp integers/floats), while test mocks or JSON payloads 
+        # stringified timestamp integers/floats), while test mocks or JSON payloads
         # may supply formatted datetime strings.
         if not keyset.valid_from:
             raise ValueError("keyset.valid_from is None")
@@ -308,10 +321,14 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         try:
             valid_from_ts = self._parse_valid_from(keyset)
         except Exception:
-            logger.warning(f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation.")
+            logger.warning(
+                f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation."
+            )
             return True
 
-        return (time.time() - valid_from_ts) >= settings.mint_keyset_rotation_interval_seconds
+        return (
+            time.time() - valid_from_ts
+        ) >= settings.mint_keyset_rotation_interval_seconds
 
     async def rotate_keysets_if_needed(self) -> None:
         if not settings.mint_keyset_rotation_enabled:
@@ -342,9 +359,13 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                         final_expiry=new_final_expiry,
                         active_keyset_id=keyset.id,
                     )
-                    logger.info(f"Successfully rotated keyset {keyset.id} -> {new_keyset.id} for unit {keyset.unit.name}")
+                    logger.info(
+                        f"Successfully rotated keyset {keyset.id} -> {new_keyset.id} for unit {keyset.unit.name}"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to automatically rotate keyset {keyset.id}: {e}")
+                    logger.error(
+                        f"Failed to automatically rotate keyset {keyset.id}: {e}"
+                    )
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
