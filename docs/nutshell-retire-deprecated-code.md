@@ -54,7 +54,7 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 | 4 | Remove dead runtime/database compatibility artifacts | Complete |
 | 5 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
 | 6 | Remove old LNbits API support | Deferred — external backend compatibility decision |
-| 7 | Final compatibility sweep and full regression verification | Not started |
+| 7 | Final compatibility sweep and full regression verification | Complete |
 
 ## Milestone 0: Baseline, scope, and guardrails
 
@@ -364,22 +364,22 @@ This is not old Nutshell compatibility. `cashu/lightning/lnbits.py` starts with 
 
 ## Milestone 7: Final compatibility sweep and full regression verification
 
-**Status:** Not started
+**Status:** Complete
 
 ### Checklist
 
-- [ ] Search tracked source, tests, CI, and documentation for all retired symbols, settings, routes, versions, and comments.
-- [ ] Classify every remaining `deprecated`, `legacy`, and `compatibility` marker as intentionally retained or unrelated.
-- [ ] Verify generated protobuf deprecations and third-party compatibility were not modified accidentally.
-- [ ] Verify historical migrations required by the supported minimum schema remain intact.
-- [ ] Verify no unrelated files changed across the milestone series.
-- [ ] Run `make format` only if needed and review every formatting change for scope.
-- [ ] Run `make check`.
-- [ ] Run the complete supported test suite.
-- [ ] Run `git diff --check`.
-- [ ] Record final retained compatibility and its rationale in this plan.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the final plan and any strictly scoped cleanup using a focused Conventional Commit.
+- [x] Search tracked source, tests, CI, and documentation for all retired symbols, settings, routes, versions, and comments.
+- [x] Classify every remaining `deprecated`, `legacy`, and `compatibility` marker as intentionally retained or unrelated.
+- [x] Verify generated protobuf deprecations and third-party compatibility were not modified accidentally.
+- [x] Verify historical migrations required by the supported minimum schema remain intact.
+- [x] Verify no unrelated files changed across the milestone series.
+- [x] Run `make format` only if needed and review every formatting change for scope.
+- [x] Run `make check`.
+- [x] Run the complete supported test suite.
+- [x] Run `git diff --check`.
+- [x] Record final retained compatibility and its rationale in this plan.
+- [x] Update this milestone to **Complete** with validation results.
+- [x] Commit the final plan and any strictly scoped cleanup using a focused Conventional Commit.
 
 ### Success criteria
 
@@ -388,6 +388,39 @@ This is not old Nutshell compatibility. `cashu/lightning/lnbits.py` starts with 
 - The complete supported test suite and static checks pass.
 - No non-deprecated business logic or public behavior changed.
 - The final plan update is committed.
+
+### Final retained compatibility classification
+
+- **Blocked recovery compatibility:** Pre-0.12/pre-0.15 key derivation, base64 keyset IDs, base64 token recovery, base64 keyset routing, and the related mint/wallet inactivation flags remain under Milestone 5. Removing them requires an approved cutoff, database baseline, and recovery policy.
+- **Deferred external compatibility:** The LNbits SSE listener and `old_api` state remain under Milestone 6 until a minimum supported LNbits version is approved.
+- **Target-branch-owned removal:** Deprecated hash-to-curve support is removed by `main` commit `61019f2b`. This branch's duplicate removal was reverted, so the milestone series has no net hash-to-curve diff and will not duplicate that change.
+- **Deployment configuration aliases:** Deprecated settings and their mappings remain because the plan explicitly protects existing deployments that still use the old environment variable names.
+- **Supported token and keyset formats:** TokenV3, version-`00` keysets, and their tests remain intentionally supported. References to “legacy” in these paths describe supported formats, not an approved retirement target.
+- **Protocol behavior:** Optional NUT-20 signatures when no quote public key exists and generic NUT-08 change-output handling remain unchanged.
+- **Current database interoperability:** The mint `proof`/wallet `payment_preimage` mapping and shared-loader field checks retained in Milestone 4 remain necessary for the two current schemas.
+- **Historical migrations:** Deprecated-column and keyset migrations, including wallet `m004` and mint `m018`, `m020`, `m028`, `m032`, and `m037`, remain required for fresh construction or supported upgrades.
+- **Unrelated compatibility:** Generated LND protobuf deprecations, pytest's `junit_family=legacy`, Keycloak `LEGACY` data, database abstraction compatibility, and CryptoJS-compatible AES remain outside this removal project.
+- **Negative regression tests:** Tests whose names mention deprecated quote/contact shapes remain because they verify that the removed shapes are now rejected.
+- **Dependency API warnings:** Pydantic `.dict()`, HTTPX raw-content, Hypothesis strategy, and dependency metadata warnings observed during the suite are dependency-upgrade/test-maintenance work, not old Nutshell API support.
+- **Untracked domain refactor:** `cashu/core/domain/` remains untracked, is not the active implementation, is not tracked by current `main`, and was not modified.
+
+### Validation record
+
+- Exact tracked-source searches found none of the retired v0 models/router/settings, deprecated melt response model, pre-0.16 proof-state request model, or removed quote response models.
+- Route searches found only current `/v1` endpoints; the retired unversioned mint routes are absent.
+- The remaining compatibility-marker inventory matched only the classified categories above.
+- Generated protobufs, Lightning backends, historical mint/wallet migrations, Keycloak fixtures, and `pyproject.toml` have no net changes in this milestone series.
+- All 42 tracked files changed since the branch merge base map to the implementation plan or Milestones 1–4; unrelated untracked files remain untouched.
+- `make format` was not needed because repository-wide Ruff checking was already clean and no auto-fix was required.
+- `make check`: passed; Ruff passed and mypy reported no issues in 133 source files.
+- Complete clean-snapshot regression suite, isolated by test family to avoid a cross-session async SQLite leak: 760 passed, 48 skipped.
+  - Non-wallet tests: 509 passed, 27 skipped.
+  - Wallet tests: 251 passed, 21 skipped.
+- A preliminary single-process run completed 759 tests with 48 skips and one transient `GeneratorExit` during wallet SQLite fixture setup; the exact test and the complete wallet family passed in fresh processes.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+- Synthetic integration with current `main` reports one test-only content conflict in `tests/mint/test_mint_api.py`, where `main` added a landing-page test adjacent to v0-only skip decorators removed here. No production-source conflict was found; target-branch integration is intentionally not mixed into this removal milestone.
+- No final runtime cleanup was justified, so the Milestone 7 commit changes only this plan.
+- Milestone commit: completed with this plan update.
 
 ## Cross-cutting workspace note: `cashu/core/domain/`
 
