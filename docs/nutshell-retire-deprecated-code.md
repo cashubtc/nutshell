@@ -23,6 +23,8 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 - Preserve historical database migrations unless a milestone explicitly establishes and implements a new minimum database schema. Migration squashing is not part of ordinary deprecated-code removal.
 - Do not change Cashu protocol behavior merely because a path is described as legacy. Protocol changes require a separate decision.
 - Do not touch generated Lightning protobuf code, pytest's `junit_family=legacy`, Keycloak `LEGACY` settings, or unrelated compatibility abstractions.
+- Keep deprecated configuration aliases because removing them would break existing deployments using old configuration names.
+- Keep TokenV3 and version-`00` keyset support; they are intentionally retained and are not retirement targets.
 - Treat `cashu/core/crypto/`, old key derivation, token recovery, database compatibility, NUT behavior, dependency APIs, and public API removal as requiring human review.
 - Before editing, inspect the worktree and preserve all unrelated user changes.
 - At the end of every milestone:
@@ -46,16 +48,13 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 | Milestone | Scope | Status |
 |---|---|---|
 | 0 | Baseline, scope, and guardrails | Complete |
-| 1 | Remove deprecated configuration aliases | Not started |
-| 2 | Remove pre-0.16 wallet v1 fallbacks | Not started |
-| 3 | Remove old quote and mint-info response fallbacks | Not started |
-| 4 | Remove the mint v0 API | Not started |
-| 5 | Remove dead runtime/database compatibility artifacts | Not started |
-| 6 | Remove TokenV3 support | Blocked — token-format cutoff and recovery policy required |
-| 7 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
-| 8 | Remove version-`00` keyset support | Blocked — ecosystem cutoff and recovery policy required |
-| 9 | Remove old LNbits API support | Deferred — external backend compatibility decision |
-| 10 | Final compatibility sweep and full regression verification | Not started |
+| 1 | Remove pre-0.16 wallet v1 fallbacks | Complete |
+| 2 | Remove old quote and mint-info response fallbacks | Not started |
+| 3 | Remove the mint v0 API | Not started |
+| 4 | Remove dead runtime/database compatibility artifacts | Not started |
+| 5 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
+| 6 | Remove old LNbits API support | Deferred — external backend compatibility decision |
+| 7 | Final compatibility sweep and full regression verification | Not started |
 
 ## Milestone 0: Baseline, scope, and guardrails
 
@@ -85,43 +84,9 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 - No production code changed as part of the audit itself.
 - Milestone commit: completed with this plan update.
 
-## Milestone 1: Remove deprecated configuration aliases
+## Milestone 1: Remove pre-0.16 wallet v1 fallbacks
 
-**Status:** Not started
-
-### Scope
-
-Remove old environment setting names and their startup-time translation into current settings.
-
-| Deprecated setting | Current setting |
-|---|---|
-| `SOCKS_HOST` and `SOCKS_PORT` | `SOCKS_PROXY` |
-| `MINT_LIGHTNING_BACKEND` | `MINT_BACKEND_BOLT11_SAT` |
-| `MINT_MAX_PEG_IN` | `MINT_MAX_MINT_BOLT11_SAT` |
-| `MINT_MAX_PEG_OUT` | `MINT_MAX_MELT_BOLT11_SAT` |
-| `MINT_PEG_OUT_ONLY` | `MINT_BOLT11_DISABLE_MINT` |
-
-### Checklist
-
-- [ ] Remove the deprecated fields from `cashu/core/settings.py`.
-- [ ] Remove their translation logic from `startup_settings_tasks()`.
-- [ ] Remove tests, examples, and documentation that reference the deprecated names.
-- [ ] Add or retain focused tests proving the current settings still load and behave identically.
-- [ ] Confirm no deprecated setting names remain in tracked source, tests, CI, or documentation.
-- [ ] Run focused settings tests, Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
-
-### Success criteria
-
-- Only the current setting names are accepted and used.
-- Current proxy, Lightning backend, mint limit, melt limit, and mint-disable behavior is unchanged.
-- No unrelated settings or startup behavior changes.
-- The implementation and updated plan are committed together.
-
-## Milestone 2: Remove pre-0.16 wallet v1 fallbacks
-
-**Status:** Not started
+**Status:** Complete
 
 ### Scope
 
@@ -129,16 +94,16 @@ Remove wallet interoperability with pre-0.16 v1 response/request shapes while le
 
 ### Checklist
 
-- [ ] Remove the wallet fallback that parses melt results as `{paid, preimage, change}`.
-- [ ] Remove the wallet import and usage of `PostMeltResponse_deprecated` where it exists only for the fallback.
-- [ ] Remove the `/v1/checkstate` retry that sends `secrets` after a `Ys` request returns HTTP 422.
-- [ ] Remove tests dedicated only to these old response/request shapes.
-- [ ] Retain or add focused tests for current melt and `checkstate` behavior.
-- [ ] Confirm current error propagation remains unchanged for invalid modern responses.
-- [ ] Confirm no `< 0.16` wallet compatibility markers remain outside later milestones.
-- [ ] Run focused wallet API tests, Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
+- [x] Remove the wallet fallback that parses melt results as `{paid, preimage, change}`.
+- [x] Remove the wallet import and usage of `PostMeltResponse_deprecated` where it exists only for the fallback.
+- [x] Remove the `/v1/checkstate` retry that sends `secrets` after a `Ys` request returns HTTP 422.
+- [x] Remove tests dedicated only to these old response/request shapes.
+- [x] Retain or add focused tests for current melt and `checkstate` behavior.
+- [x] Confirm current error propagation remains unchanged for invalid modern responses.
+- [x] Confirm no `< 0.16` wallet compatibility markers remain outside later milestones.
+- [x] Run focused wallet API tests, Ruff, mypy, and `git diff --check`.
+- [x] Update this milestone to **Complete** with validation results.
+- [x] Commit the milestone files and this plan using a focused Conventional Commit.
 
 ### Success criteria
 
@@ -147,7 +112,21 @@ Remove wallet interoperability with pre-0.16 v1 response/request shapes while le
 - Current mint communication, error handling, and proof-state behavior remains unchanged.
 - The implementation and updated plan are committed together.
 
-## Milestone 3: Remove old quote and mint-info response fallbacks
+### Validation record
+
+- `tests/wallet/test_wallet_v1_api.py`: 25 passed.
+- Current `/v1/checkstate` request coverage confirms only `Ys` is sent.
+- HTTP 422 regression confirms the wallet raises the current mint error after one request and does not retry with secrets.
+- Deprecated melt-response regression confirms the old `{paid, preimage, change}` shape raises `ValidationError`.
+- No dedicated legacy-only wallet tests existed; current melt and proof-state coverage was retained and expanded.
+- Focused Ruff: passed.
+- Focused mypy: passed.
+- `git diff --check`: passed.
+- Wallet search found no remaining `PostMeltResponse_deprecated` import/use or `< 0.16` compatibility marker.
+- The deprecated melt model remains only for the explicitly retained server v0 API milestone.
+- Milestone commit: completed with this plan update.
+
+## Milestone 2: Remove old quote and mint-info response fallbacks
 
 **Status:** Not started
 
@@ -177,7 +156,7 @@ Remove compatibility with incomplete pre-0.17/pre-0.20.1 quote responses and the
 - No quote accounting or state-transition logic changes.
 - The implementation and updated plan are committed together.
 
-## Milestone 4: Remove the mint v0 API
+## Milestone 3: Remove the mint v0 API
 
 **Status:** Not started
 
@@ -226,7 +205,7 @@ Remove the server-side v0 API as one coherent API-breaking milestone. Wallet-sid
 - Current mint, melt, swap, restore, key, info, and proof-state tests pass.
 - The implementation and updated plan are committed together.
 
-## Milestone 5: Remove dead runtime/database compatibility artifacts
+## Milestone 4: Remove dead runtime/database compatibility artifacts
 
 **Status:** Not started
 
@@ -257,41 +236,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - No schema, migration order, or database business logic changes unintentionally.
 - The implementation and updated plan are committed together.
 
-## Milestone 6: Remove TokenV3 support
-
-**Status:** Blocked — token-format cutoff and recovery policy required
-
-### Prerequisites
-
-- Define the oldest token format the wallet must receive.
-- Decide whether exporting TokenV3 remains necessary for interoperability.
-- Define how users recover or convert stored TokenV3 before removal.
-
-### Checklist
-
-- [ ] Record the approved TokenV3 cutoff and recovery policy in this plan.
-- [ ] Remove `TokenV3` and `TokenV3Token` models.
-- [ ] Remove `cashuA` deserialization and redemption.
-- [ ] Remove TokenV3-to-TokenV4 and TokenV4-to-TokenV3 conversion.
-- [ ] Remove automatic legacy serialization for base64 keysets, coordinated with Milestone 7.
-- [ ] Remove `cashu send --legacy`.
-- [ ] Remove `cashu pending --legacy` output.
-- [ ] Remove TokenV3-only tests, imports, and documentation.
-- [ ] Retain or add focused TokenV4 send, receive, pending, DLEQ, and memo tests.
-- [ ] Confirm no `cashuA`, `TokenV3`, or legacy CLI option remains.
-- [ ] Run wallet CLI, token, receive/redeem, Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
-
-### Success criteria
-
-- The wallet accepts and emits only current token formats.
-- TokenV4 behavior remains byte-for-byte compatible for existing test vectors.
-- Current send, receive, pending-token, DLEQ, memo, and unit behavior is unchanged.
-- The approved recovery/cutoff policy is documented.
-- The implementation and updated plan are committed together.
-
-## Milestone 7: Remove pre-0.15 base64 keyset support
+## Milestone 5: Remove pre-0.15 base64 keyset support
 
 **Status:** Blocked — old-token and old-mint recovery policy required
 
@@ -300,7 +245,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - Define whether pre-0.15 tokens must remain spendable or recoverable.
 - Define the minimum supported mint database version.
 - Define how old base64 keysets are converted, redeemed, or retired.
-- Resolve the interaction with TokenV3 removal.
+- Confirm the removal preserves intentionally retained TokenV3 and version-`00` keyset support.
 
 ### Checklist
 
@@ -331,39 +276,7 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - The approved recovery/cutoff policy is documented.
 - The implementation and updated plan are committed together.
 
-## Milestone 8: Remove version-`00` keyset support
-
-**Status:** Blocked — ecosystem cutoff and recovery policy required
-
-### Prerequisites
-
-- Define whether version-`00` tokens and mint keysets remain supported by the Cashu ecosystem.
-- Define the minimum supported Nutshell version and keyset version.
-- Provide a redemption or migration window for existing version-`00` ecash.
-
-### Checklist
-
-- [ ] Record the approved version-`00` cutoff and recovery policy in this plan.
-- [ ] Remove the `0.15` to `< 0.20` keyset-generation branch.
-- [ ] Remove version-`00` keyset ID derivation if it has no remaining current use.
-- [ ] Restrict supported keyset versions to version `01` and later approved versions.
-- [ ] Remove BIP32 deterministic-secret selection based on version `00`.
-- [ ] Remove version-`00` short-ID passthrough behavior where obsolete.
-- [ ] Remove version-`00` tests and vectors; retain version-`01` vectors unchanged.
-- [ ] Confirm current version-`01` mint and wallet behavior remains unchanged.
-- [ ] Run full keyset, deterministic-secret, mint/wallet integration, Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
-
-### Success criteria
-
-- Only approved current keyset versions are accepted or generated.
-- Version-`01` IDs, short IDs, deterministic secrets, and test vectors remain unchanged.
-- No current mint, wallet, proof, or token behavior changes.
-- The approved ecosystem cutoff and recovery policy is documented.
-- The implementation and updated plan are committed together.
-
-## Milestone 9: Remove old LNbits API support
+## Milestone 6: Remove old LNbits API support
 
 **Status:** Deferred — external backend compatibility decision
 
@@ -392,7 +305,7 @@ This is not old Nutshell compatibility. `cashu/lightning/lnbits.py` starts with 
 - Invoice creation, payment status, paid-invoice streaming, reconnect, and backoff behavior for the current API remain unchanged.
 - The implementation and updated plan are committed together.
 
-## Milestone 10: Final compatibility sweep and full regression verification
+## Milestone 7: Final compatibility sweep and full regression verification
 
 **Status:** Not started
 

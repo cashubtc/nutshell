@@ -3,6 +3,7 @@ from typing import Any, cast
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
@@ -476,6 +477,34 @@ async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: Ledg
     mint_payload = [c for c in requests if c[1] == "mint/bolt11"][0][2]["json"]
     assert set(mint_payload.keys()) == {"quote", "outputs", "signature"}
     assert set(mint_payload["outputs"][0].keys()) == {"id", "amount", "B_"}
+    checkstate_payload = [c for c in requests if c[1] == "checkstate"][0][2]["json"]
+    assert checkstate_payload == {"Ys": [proof.Y]}
+
+
+@pytest.mark.asyncio
+async def test_check_proof_state_does_not_retry_with_secrets(
+    monkeypatch, api: LedgerAPI
+):
+    proof = Proof(
+        id="kid", amount=1, C=PrivateKey().public_key.format().hex(), secret="s1"
+    )
+    cast(Any, api).keysets = {"kid": object()}
+    requests = []
+
+    async def fake_request(self, method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        return _response(422, {"detail": "invalid current request"})
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    with pytest.raises(Exception, match="invalid current request"):
+        await api.check_proof_state([proof])
+
+    assert len(requests) == 1
+    assert requests[0][2]["json"] == {"Ys": [proof.Y]}
 
 
 @pytest.mark.asyncio
@@ -561,6 +590,33 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
         "C",
         "witness",
     }
+
+
+@pytest.mark.asyncio
+async def test_melt_rejects_deprecated_response(monkeypatch, api: LedgerAPI):
+    proof = Proof(
+        id="kid", amount=1, C=PrivateKey().public_key.format().hex(), secret="s2"
+    )
+    cast(Any, api).keysets = {"kid": object()}
+
+    async def fake_request(self, method, path, **kwargs):
+        assert path == "melt/bolt11"
+        return _response(
+            200,
+            {
+                "paid": True,
+                "preimage": "11" * 32,
+                "change": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    with pytest.raises(ValidationError):
+        await api.melt("m-1", [proof], None)
 
 
 @pytest.mark.asyncio
