@@ -66,9 +66,7 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
         settings.mint_keyset_rotation_interval_seconds = 1
 
         # Keep track of active keysets before rotation
-        active_keysets_before = {
-            k.unit: k for k in ledger.keysets.values() if k.active
-        }
+        active_keysets_before = {k.unit: k for k in ledger.keysets.values() if k.active}
         assert len(active_keysets_before) > 0
 
         # Wait to exceed the 1 second interval
@@ -78,9 +76,7 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
         await ledger.rotate_keysets_if_needed()
 
         # Get active keysets after rotation
-        active_keysets_after = {
-            k.unit: k for k in ledger.keysets.values() if k.active
-        }
+        active_keysets_after = {k.unit: k for k in ledger.keysets.values() if k.active}
 
         for unit, old_keyset in active_keysets_before.items():
             new_keyset = active_keysets_after[unit]
@@ -112,8 +108,7 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
             new_path = new_keyset.derivation_path.split("/")
             assert old_path[:-1] == new_path[:-1]
             assert (
-                int(new_path[-1].replace("'", ""))
-                - int(old_path[-1].replace("'", ""))
+                int(new_path[-1].replace("'", "")) - int(old_path[-1].replace("'", ""))
                 == 1
             )
 
@@ -154,9 +149,7 @@ async def test_automatic_keyset_rotation_disabled(ledger: Ledger):
 
         # Get active keyset for the same unit
         active_keysets = [
-            k
-            for k in ledger.keysets.values()
-            if k.active and k.unit == keyset.unit
+            k for k in ledger.keysets.values() if k.active and k.unit == keyset.unit
         ]
         assert len(active_keysets) == 1
         assert active_keysets[0].id == keyset.id
@@ -196,9 +189,7 @@ async def test_automatic_keyset_rotation_preserves_grace_period(ledger: Ledger):
 
         # Retrieve the new active keyset for this unit
         new_keyset = next(
-            k
-            for k in ledger.keysets.values()
-            if k.active and k.unit == keyset.unit
+            k for k in ledger.keysets.values() if k.active and k.unit == keyset.unit
         )
 
         # Verify a rotation occurred
@@ -236,9 +227,7 @@ async def test_automatic_keyset_rotation_background(ledger: Ledger):
         ledger.regular_tasks.append(asyncio.create_task(ledger._run_regular_tasks()))
 
         # Keep track of active keysets before background rotation
-        active_keysets_before = {
-            k.unit: k for k in ledger.keysets.values() if k.active
-        }
+        active_keysets_before = {k.unit: k for k in ledger.keysets.values() if k.active}
         assert len(active_keysets_before) > 0
 
         # Wait to exceed the rotation interval and allow the background task to run
@@ -247,9 +236,7 @@ async def test_automatic_keyset_rotation_background(ledger: Ledger):
         await asyncio.sleep(2.5)
 
         # Get active keysets after background rotation
-        active_keysets_after = {
-            k.unit: k for k in ledger.keysets.values() if k.active
-        }
+        active_keysets_after = {k.unit: k for k in ledger.keysets.values() if k.active}
 
         # Verify background rotation occurred successfully
         for unit, old_keyset in active_keysets_before.items():
@@ -314,11 +301,17 @@ async def test_regression_non_atomic_rotation(ledger: Ledger):
         # Due to transactional rollback, the new keyset should NOT have been stored in the DB,
         # and the old keyset should still be active.
         db_all_keysets = await ledger.crud.get_keyset(db=ledger.db)
-        active_db_keysets = [k for k in db_all_keysets if k.active and k.unit == keyset.unit]
+        active_db_keysets = [
+            k for k in db_all_keysets if k.active and k.unit == keyset.unit
+        ]
 
         # There should be exactly ONE active keyset for this unit (the old one)
-        assert len(active_db_keysets) == 1, f"Expected exactly 1 active keyset in DB, found: {len(active_db_keysets)}"
-        assert active_db_keysets[0].id == keyset.id, "The active keyset should be the original one"
+        assert (
+            len(active_db_keysets) == 1
+        ), f"Expected exactly 1 active keyset in DB, found: {len(active_db_keysets)}"
+        assert (
+            active_db_keysets[0].id == keyset.id
+        ), "The active keyset should be the original one"
 
     finally:
         ledger.crud.update_keyset = original_update_keyset
@@ -356,7 +349,7 @@ async def test_regression_concurrent_rotation_race(ledger: Ledger):
         results = await asyncio.gather(
             ledger.rotate_next_keyset(unit=keyset.unit, active_keyset_id=keyset.id),
             ledger.rotate_next_keyset(unit=keyset.unit, active_keyset_id=keyset.id),
-            return_exceptions=True
+            return_exceptions=True,
         )
 
         # Neither of them should raise an exception (both return a valid MintKeyset)
@@ -364,12 +357,52 @@ async def test_regression_concurrent_rotation_race(ledger: Ledger):
         assert len(exceptions) == 0, f"Expected no exceptions, but got: {exceptions}"
 
         # Both results should be MintKeysets and they should be identical (the same rotated keyset)
-        assert results[0].id == results[1].id, "Expected both parallel tasks to return the same rotated keyset ID"
+        assert (
+            results[0].id == results[1].id
+        ), "Expected both parallel tasks to return the same rotated keyset ID"
 
     finally:
         keyset.valid_from = original_valid_from
         settings.mint_keyset_rotation_interval_seconds = original_interval
         settings.mint_keyset_rotation_enabled = original_enabled
+
+
+@pytest.mark.asyncio
+async def test_concurrent_rotation_updates_stale_default_keyset(ledger: Ledger):
+    """A worker that loses the rotation race adopts the winner's keyset."""
+    for task in ledger.regular_tasks:
+        task.cancel()
+    ledger.regular_tasks = []
+
+    old_keyset = ledger.keyset
+    path_parts = old_keyset.derivation_path.split("/")
+    path_parts[-1] = str(int(path_parts[-1].replace("'", "")) + 1) + "'"
+    new_keyset = MintKeyset(
+        derivation_path="/".join(path_parts),
+        seed=ledger.seed,
+        amounts=old_keyset.amounts,
+        input_fee_ppk=old_keyset.input_fee_ppk,
+        active=True,
+    )
+
+    await ledger.crud.store_keyset(keyset=new_keyset, db=ledger.db)
+    old_keyset.active = False
+    await ledger.crud.update_keyset(keyset=old_keyset, db=ledger.db)
+
+    # Simulate another worker that has not yet observed the committed rotation.
+    old_keyset.active = True
+    ledger.keysets.pop(new_keyset.id, None)
+    ledger.keyset = old_keyset
+    ledger.derivation_path = old_keyset.derivation_path
+
+    result = await ledger.rotate_next_keyset(
+        unit=old_keyset.unit,
+        active_keyset_id=old_keyset.id,
+    )
+
+    assert result.id == new_keyset.id
+    assert ledger.keyset.id == new_keyset.id
+    assert ledger.derivation_path == new_keyset.derivation_path
 
 
 @pytest.mark.asyncio
@@ -418,19 +451,23 @@ async def test_regression_highest_counter_selection_incomplete(ledger: Ledger):
         # Mock database writes so we don't pollute the DB during unit test
         original_store = ledger.crud.store_keyset
         original_update = ledger.crud.update_keyset
-        
+
         async def mock_noop(*args, **kwargs):
             pass
-            
+
         ledger.crud.store_keyset = mock_noop
         ledger.crud.update_keyset = mock_noop
 
         try:
             rotated_keyset = await ledger.rotate_next_keyset(unit=Unit.sat)
-            
+
             # Since high counter (5) is correctly selected, the new counter should be 5 + 1 = 6.
-            rotated_counter = int(rotated_keyset.derivation_path.split("/")[-1].replace("'", ""))
-            assert rotated_counter == 6, f"Expected rotated counter to be 6, got {rotated_counter}"
+            rotated_counter = int(
+                rotated_keyset.derivation_path.split("/")[-1].replace("'", "")
+            )
+            assert (
+                rotated_counter == 6
+            ), f"Expected rotated counter to be 6, got {rotated_counter}"
 
         finally:
             ledger.crud.store_keyset = original_store
@@ -438,4 +475,3 @@ async def test_regression_highest_counter_selection_incomplete(ledger: Ledger):
 
     finally:
         ledger.keysets = original_keysets
-
