@@ -114,7 +114,12 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
 
 def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    return C == Y * a  # type: ignore
+    valid = C == Y * a  # type: ignore
+    # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
+    if not valid:
+        valid = verify_deprecated(a, C, secret_msg)
+    # END: BACKWARDS COMPATIBILITY < 0.15.1
+    return valid
 
 
 def hash_e(*publickeys: PublicKey) -> bytes:
@@ -200,7 +205,60 @@ def carol_verify_dleq(
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A * r  # type: ignore
     B_: PublicKey = Y + r.public_key  # type: ignore
-    return alice_verify_dleq(B_, C_, e, s, A)
+    valid = alice_verify_dleq(B_, C_, e, s, A)
+    # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
+    if not valid:
+        return carol_verify_dleq_deprecated(secret_msg, r, C, e, s, A)
+    # END: BACKWARDS COMPATIBILITY < 0.15.1
+    return valid
+
+
+# -------- Deprecated hash_to_curve before 0.15.0 --------
+
+
+def hash_to_curve_deprecated(message: bytes) -> PublicKey:
+    """Generates a point from the message hash and checks if the point lies on the curve.
+    If it does not, iteratively tries to compute a new point from the hash."""
+    point = None
+    msg_to_hash = message
+    while point is None:
+        _hash = hashlib.sha256(msg_to_hash).digest()
+        try:
+            # will error if point does not lie on curve
+            point = PublicKey(b"\x02" + _hash)
+        except Exception:
+            msg_to_hash = _hash
+    return point
+
+
+def step1_alice_deprecated(
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
+) -> tuple[PublicKey, PrivateKey]:
+    Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
+    r = blinding_factor or PrivateKey()
+    B_: PublicKey = Y + r.public_key  # type: ignore
+    return B_, r
+
+
+def verify_deprecated(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
+    Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
+    valid = C == Y * a  # type: ignore
+    return valid
+
+
+def carol_verify_dleq_deprecated(
+    secret_msg: str,
+    r: PrivateKey,
+    C: PublicKey,
+    e: PrivateKey,
+    s: PrivateKey,
+    A: PublicKey,
+) -> bool:
+    Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
+    C_: PublicKey = C + A * r  # type: ignore
+    B_: PublicKey = Y + r.public_key  # type: ignore
+    valid = alice_verify_dleq(B_, C_, e, s, A)
+    return valid
 
 
 # Below is a test of a simple positive and negative case

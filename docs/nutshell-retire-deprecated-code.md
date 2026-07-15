@@ -46,7 +46,7 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 | Milestone | Scope | Status |
 |---|---|---|
 | 0 | Baseline, scope, and guardrails | Complete |
-| 1 | Remove deprecated hash-to-curve support | Complete |
+| 1 | Remove deprecated hash-to-curve support | In progress — implementation and initial validation complete; alias regression and commit pending |
 | 2 | Remove deprecated configuration aliases | Not started |
 | 3 | Remove pre-0.16 wallet v1 fallbacks | Not started |
 | 4 | Remove old quote and mint-info response fallbacks | Not started |
@@ -87,7 +87,7 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 
 ## Milestone 1: Remove deprecated hash-to-curve support
 
-**Status:** Complete
+**Status:** In progress — implementation and initial validation complete; alias regression and commit pending
 
 ### Scope
 
@@ -105,14 +105,14 @@ Remove the pre-0.15 hash-to-curve algorithm, wallet selection flag, verification
 - [x] Retain current hash-to-curve and DLEQ coverage.
 - [x] Add positive and negative current `verify` coverage.
 - [x] Replace the stale generic DLEQ fixture with current mapping values.
-- [x] Add the mint-level legacy hash-to-curve alias rejection regression from the PR #1082 approach.
+- [ ] Add the mint-level legacy hash-to-curve alias rejection regression from the PR #1082 approach.
 - [x] Confirm no deprecated H2C symbols or settings remain.
 - [x] Run focused crypto tests.
 - [x] Run a wallet integration test covering current output/proof behavior.
 - [x] Run focused Ruff and mypy checks.
 - [x] Run `git diff --check`.
-- [x] Update this milestone to **Complete** with final validation results.
-- [x] Commit the milestone files and this plan using a focused Conventional Commit.
+- [ ] Update this milestone to **Complete** with final validation results.
+- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
 
 ### Success criteria
 
@@ -127,13 +127,12 @@ Remove the pre-0.15 hash-to-curve algorithm, wallet selection flag, verification
 ### Validation record
 
 - `tests/test_crypto.py`: 14 passed.
-- Combined crypto and mint verification tests: 98 passed, including current-proof acceptance and legacy-alias rejection.
-- Wallet integration test: 1 passed after allowing its local test servers to bind loopback ports.
+- Wallet integration test: 1 passed.
 - Focused Ruff: passed.
 - Focused mypy: passed.
-- `git -c core.whitespace=cr-at-eol diff --check`: passed for the repository's tracked CRLF files.
-- Repository-wide deprecated H2C symbol and setting search: no matches outside this historical plan.
-- Milestone commit: completed with this plan update.
+- `git diff --check`: passed.
+- Final alias-regression result: pending.
+- Milestone commit: pending.
 
 ## Milestone 2: Remove deprecated configuration aliases
 
