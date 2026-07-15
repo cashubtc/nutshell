@@ -366,9 +366,6 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not pending.")
             # set the quote to previous state
             quote_copy.state = state
-
-            # unset outputs
-            quote_copy.outputs = None
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)
@@ -592,4 +589,3 @@ class DbWriteHelper:
         await self.events.submit(quote_copy)
 
         return quote_copy
-

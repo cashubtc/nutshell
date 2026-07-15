@@ -283,7 +283,6 @@ class MeltQuote(LedgerEvent):
     fee_paid: int = 0
     payment_preimage: Optional[str] = None
     expiry: Optional[int] = None
-    outputs: Optional[List[BlindedMessage]] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
 
@@ -302,10 +301,6 @@ class MeltQuote(LedgerEvent):
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
 
-        outputs = None
-        if "outputs" in row.keys() and row["outputs"]:
-            outputs = json.loads(row["outputs"])
-
         return cls(
             quote=row["quote"],
             method=row["method"],
@@ -318,7 +313,6 @@ class MeltQuote(LedgerEvent):
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
-            outputs=outputs,
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
@@ -430,11 +424,7 @@ class MintQuote(LedgerEvent):
                 if "last_checked" in row.keys() and row["last_checked"]
                 else None
             )
-            updated_at = (
-                int(row["updated_at"])
-                if "updated_at" in row.keys() and row["updated_at"]
-                else None
-            )
+            updated_at = int(row["updated_at"]) if row["updated_at"] else None
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -452,9 +442,7 @@ class MintQuote(LedgerEvent):
                 else None
             )
             updated_at = (
-                int(row["updated_at"].timestamp())
-                if "updated_at" in row.keys() and row["updated_at"]
-                else None
+                int(row["updated_at"].timestamp()) if row["updated_at"] else None
             )
         return cls(
             quote=row["quote"],
@@ -470,12 +458,10 @@ class MintQuote(LedgerEvent):
             last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
-            amount_paid=row["amount_paid"]
-            if "amount_paid" in row.keys() and row["amount_paid"] is not None
-            else None,
-            amount_issued=row["amount_issued"]
-            if "amount_issued" in row.keys() and row["amount_issued"] is not None
-            else None,
+            amount_paid=row["amount_paid"] if row["amount_paid"] is not None else None,
+            amount_issued=(
+                row["amount_issued"] if row["amount_issued"] is not None else None
+            ),
             updated_at=updated_at
             if updated_at is not None
             else (issued_time or paid_time or created_time or int(time.time())),
@@ -948,8 +934,6 @@ class MintKeyset:
     amounts: List[int]
     balance: int
     final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
-
-    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
     def __init__(
         self,

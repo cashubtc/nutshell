@@ -51,7 +51,7 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 | 1 | Remove pre-0.16 wallet v1 fallbacks | Complete |
 | 2 | Remove old quote and mint-info response fallbacks | Complete |
 | 3 | Remove the mint v0 API | Complete |
-| 4 | Remove dead runtime/database compatibility artifacts | Not started |
+| 4 | Remove dead runtime/database compatibility artifacts | Complete |
 | 5 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
 | 6 | Remove old LNbits API support | Deferred — external backend compatibility decision |
 | 7 | Final compatibility sweep and full regression verification | Not started |
@@ -244,7 +244,7 @@ Remove the server-side v0 API as one coherent API-breaking milestone. Wallet-sid
 
 ## Milestone 4: Remove dead runtime/database compatibility artifacts
 
-**Status:** Not started
+**Status:** Complete
 
 ### Scope
 
@@ -252,18 +252,19 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 
 ### Checklist
 
-- [ ] Prove `duplicate_keyset_id` has no runtime or serialized users, then remove it.
-- [ ] Determine whether the melt quote `payment_preimage` fallback to the old `proof` column is still reachable after migrations.
-- [ ] Determine whether runtime checks for absent `issued_time`, `last_checked`, `updated_at`, NUT-20 keys, and accounting columns are still reachable.
-- [ ] Remove only fallbacks proven unreachable under the supported schema.
-- [ ] Keep migrations required to construct or upgrade supported databases.
-- [ ] Keep `m018`, `m020`, `m028`, `m032`, and `m037` unless a separately approved schema-baseline change replaces them.
-- [ ] Keep migration numbering and ordering intact.
-- [ ] Leave `m004_p2sh_locks` intact unless removing it is proven safe for both fresh and upgraded databases.
-- [ ] Add focused current-schema loading tests for any removed fallback.
-- [ ] Run SQLite and PostgreSQL-relevant model/migration tests where available, plus Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
+- [x] Prove `duplicate_keyset_id` has no runtime or serialized users, then remove it.
+- [x] Determine whether the melt quote `payment_preimage` fallback to the old `proof` column is still reachable after migrations.
+- [x] Determine whether runtime checks for absent `issued_time`, `last_checked`, `updated_at`, NUT-20 keys, and accounting columns are still reachable.
+- [x] Remove only fallbacks proven unreachable under the supported schema.
+- [x] Remove the obsolete persisted melt-quote `outputs` field and reset after confirming the current schema and CRUD no longer use it.
+- [x] Keep migrations required to construct or upgrade supported databases.
+- [x] Keep `m018`, `m020`, `m028`, `m032`, and `m037` unless a separately approved schema-baseline change replaces them.
+- [x] Keep migration numbering and ordering intact.
+- [x] Leave `m004_p2sh_locks` intact unless removing it is proven safe for both fresh and upgraded databases.
+- [x] Add focused current-schema loading tests for any removed fallback.
+- [x] Run SQLite and PostgreSQL-relevant model/migration tests where available, plus Ruff, mypy, and `git diff --check`.
+- [x] Update this milestone to **Complete** with validation results.
+- [x] Commit the milestone files and this plan using a focused Conventional Commit.
 
 ### Success criteria
 
@@ -272,6 +273,25 @@ Remove compatibility fields and runtime fallbacks that are provably unreachable 
 - Current quote loading and persistence remain unchanged.
 - No schema, migration order, or database business logic changes unintentionally.
 - The implementation and updated plan are committed together.
+
+### Validation record
+
+- `MintKeyset.duplicate_keyset_id` was removed after a tracked-source audit found no runtime, constructor, or serialization users.
+- Current mint and wallet schemas always contain `amount_paid`, `amount_issued`, and `updated_at`; only their unreachable column-presence checks were removed. Existing null-value handling remains unchanged.
+- The obsolete persisted `MeltQuote.outputs` field, row loader, and pending-state reset were removed. Migration `m028` remains responsible for moving any historical pending outputs before dropping that column.
+- The melt `payment_preimage`/`proof` mapping remains because the current mint schema and CRUD still store the payment preimage in `proof`, while the current wallet schema uses `payment_preimage`.
+- Presence checks for `issued_time`, `last_checked`, `pubkey`, and `privkey` remain because the shared loader serves current mint and wallet schemas with different field sets.
+- All mint and wallet migrations remain unchanged, including `m004`, `m018`, `m020`, `m028`, `m032`, and `m037`; migration numbering and ordering remain intact.
+- Fresh-schema mint migration and quote persistence tests plus wallet quote CRUD tests: 19 passed.
+- Broader current mint database tests: 16 passed.
+- Total scoped regression result: 35 passed.
+- A PostgreSQL-style datetime row regression covers current accounting-field loading; no local PostgreSQL service was required.
+- Focused Ruff lint: passed.
+- Focused mypy: passed.
+- Ruff formatting reports only unrelated pre-existing formatting in `cashu/mint/db/write.py`; it was left untouched under the no-unrelated-code guardrail.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed.
+- Tracked-source search found no remaining `duplicate_keyset_id`, persisted melt-quote `outputs` reset, or removed accounting/`updated_at` column-presence check outside the preserved untracked worktree.
+- Milestone commit: completed with this plan update.
 
 ## Milestone 5: Remove pre-0.15 base64 keyset support
 
