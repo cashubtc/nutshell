@@ -49,7 +49,7 @@ The work is a pure removal project. It must not introduce replacement behavior, 
 |---|---|---|
 | 0 | Baseline, scope, and guardrails | Complete |
 | 1 | Remove pre-0.16 wallet v1 fallbacks | Complete |
-| 2 | Remove old quote and mint-info response fallbacks | Not started |
+| 2 | Remove old quote and mint-info response fallbacks | Complete |
 | 3 | Remove the mint v0 API | Not started |
 | 4 | Remove dead runtime/database compatibility artifacts | Not started |
 | 5 | Remove pre-0.15 base64 keyset support | Blocked — old-token and old-mint recovery policy required |
@@ -128,7 +128,7 @@ Remove wallet interoperability with pre-0.16 v1 response/request shapes while le
 
 ## Milestone 2: Remove old quote and mint-info response fallbacks
 
-**Status:** Not started
+**Status:** Complete
 
 ### Scope
 
@@ -136,17 +136,17 @@ Remove compatibility with incomplete pre-0.17/pre-0.20.1 quote responses and the
 
 ### Checklist
 
-- [ ] Make current mint quote response fields required where they are currently optional only for compatibility.
-- [ ] Make current melt quote response fields required where they are currently optional only for compatibility.
-- [ ] Remove wallet fallbacks to local `amount`, `unit`, and payment `request` values.
-- [ ] Remove compatibility for missing quote `method` once the minimum supported version is confirmed.
-- [ ] Remove the old list-of-lists NUT-06 contact preprocessor.
-- [ ] Remove tests dedicated only to missing legacy response fields or contact shapes.
-- [ ] Retain or add focused tests for complete current quote and mint-info responses.
-- [ ] Confirm current quote accounting, states, expiry, payment preimage, and change handling remain unchanged.
-- [ ] Run focused model and wallet tests, Ruff, mypy, and `git diff --check`.
-- [ ] Update this milestone to **Complete** with validation results.
-- [ ] Commit the milestone files and this plan using a focused Conventional Commit.
+- [x] Make current mint quote response fields required where they are currently optional only for compatibility.
+- [x] Make current melt quote response fields required where they are currently optional only for compatibility.
+- [x] Remove wallet fallbacks to local `amount`, `unit`, and payment `request` values.
+- [x] Remove compatibility for missing quote `method` once the minimum supported version is confirmed.
+- [x] Remove the old list-of-lists NUT-06 contact preprocessor.
+- [x] Remove tests dedicated only to missing legacy response fields or contact shapes.
+- [x] Retain or add focused tests for complete current quote and mint-info responses.
+- [x] Confirm current quote accounting, states, expiry, payment preimage, and change handling remain unchanged.
+- [x] Run focused model and wallet tests, Ruff, mypy, and `git diff --check`.
+- [x] Update this milestone to **Complete** with validation results.
+- [x] Commit the milestone files and this plan using a focused Conventional Commit.
 
 ### Success criteria
 
@@ -155,6 +155,23 @@ Remove compatibility with incomplete pre-0.17/pre-0.20.1 quote responses and the
 - Current mint-info contact objects parse unchanged.
 - No quote accounting or state-transition logic changes.
 - The implementation and updated plan are committed together.
+
+### Validation record
+
+- Current mint responses now require `amount`, `unit`, `method`, and `state`.
+- Current melt responses now require `unit`, `method`, `request`, and `state`.
+- Missing-field regressions reject all eight incomplete current quote shapes with `ValidationError`.
+- Current mint-info contact objects parse unchanged; the old list-of-lists shape raises `ValidationError`.
+- Wallet API, wallet CRUD, and mint router tests: 61 passed.
+- Focused wallet mint/melt integration tests: 2 passed.
+- Existing mint quote accounting and stale-response tests pass unchanged.
+- Current melt state, expiry, payment preimage, and change tests pass unchanged.
+- Focused Ruff: passed.
+- Focused mypy: passed.
+- `git -c core.whitespace=cr-at-eol diff --check`: passed for the repository's tracked CRLF files.
+- Tracked-source search found no remaining quote local-value fallback, old quote optionality marker, or current mint-info contact preprocessor.
+- V0-only quote/info models remain for the explicitly separate server v0 API milestone.
+- Milestone commit: completed with this plan update.
 
 ## Milestone 3: Remove the mint v0 API
 

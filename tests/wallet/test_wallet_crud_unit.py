@@ -373,6 +373,7 @@ def test_mint_quote_stale_check_handles_missing_local_accounting_fields():
         request="req-migrated",
         amount=100,
         unit="sat",
+        method="bolt11",
         state=MintQuoteState.unpaid.value,
         amount_paid=0,
         amount_issued=0,
@@ -396,6 +397,7 @@ def test_mint_quote_from_resp_wallet_prioritizes_pending():
         request="req-pending-test",
         amount=100,
         unit="sat",
+        method="bolt11",
         state="PENDING",
         amount_paid=100,
         amount_issued=0,
@@ -405,8 +407,6 @@ def test_mint_quote_from_resp_wallet_prioritizes_pending():
     quote = MintQuote.from_resp_wallet(
         mint_response,
         mint="https://mint.test",
-        amount=100,
-        unit="sat",
     )
 
     assert quote.state == MintQuoteState.pending

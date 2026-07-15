@@ -32,19 +32,13 @@ class PostMintQuoteCheckRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    amount: Optional[
-        int
-    ]  # output amount (optional for BACKWARDS COMPAT mint response < 0.17.0)
-    unit: Optional[
-        str
-    ]  # output unit (optional for BACKWARDS COMPAT mint response <  0.17.0)
-    method: Optional[str] = (
-        None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
-    )
+    amount: int  # output amount
+    unit: str  # output unit
+    method: str  # payment method
     amount_paid: Optional[int] = None
     amount_issued: Optional[int] = None
     updated_at: Optional[int] = None
-    state: Optional[str] = None  # state of the quote (optional for backwards compat)
+    state: str  # state of the quote
     expiry: Optional[int] = None  # expiry of the quote
     pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
 

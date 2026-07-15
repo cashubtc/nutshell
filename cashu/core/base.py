@@ -342,15 +342,13 @@ class MeltQuote(LedgerEvent):
         )
 
     @classmethod
-    def from_resp_wallet(cls, melt_quote_resp, mint: str, unit: str, request: str):
+    def from_resp_wallet(cls, melt_quote_resp, mint: str):
         return cls(
             quote=melt_quote_resp.quote,
             method="bolt11",
-            request=melt_quote_resp.request
-            or request,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            request=melt_quote_resp.request,
             checking_id="",
-            unit=melt_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            unit=melt_quote_resp.unit,
             amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
@@ -505,8 +503,6 @@ class MintQuote(LedgerEvent):
         cls,
         mint_quote_resp,
         mint: str,
-        amount: int,
-        unit: str,
         paid_time: Optional[int] = None,
         issued_time: Optional[int] = None,
     ):
@@ -529,10 +525,8 @@ class MintQuote(LedgerEvent):
                 state = MintQuoteState.issued
             else:
                 state = MintQuoteState.unpaid
-        elif mint_quote_resp.state:
-            state = MintQuoteState(mint_quote_resp.state)
         else:
-            state = MintQuoteState.unpaid
+            state = MintQuoteState(mint_quote_resp.state)
 
         if paid_time is None and mint_quote_resp.updated_at is not None:
             if state in [MintQuoteState.paid, MintQuoteState.issued]:
@@ -547,10 +541,8 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            unit=mint_quote_resp.unit,
+            amount=mint_quote_resp.amount,
             state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -569,8 +561,6 @@ class MintQuote(LedgerEvent):
         mint_quote_resp,
         mint: str,
         mint_quote_local: Optional["MintQuote"] = None,
-        default_amount: int = 0,
-        default_unit: str = "sat",
     ) -> "MintQuote":
         # Check if the response from the mint is stale compared to the local quote
         is_stale = False
@@ -604,25 +594,12 @@ class MintQuote(LedgerEvent):
         if is_stale and mint_quote_local:
             return mint_quote_local
 
-        amount = (
-            (mint_quote_resp.amount or mint_quote_local.amount)
-            if mint_quote_local
-            else default_amount
-        )
-        unit = (
-            (mint_quote_resp.unit or mint_quote_local.unit)
-            if mint_quote_local
-            else default_unit
-        )
-
         paid_time = mint_quote_local.paid_time if mint_quote_local else None
         issued_time = mint_quote_local.issued_time if mint_quote_local else None
 
         return cls.from_resp_wallet(
             mint_quote_resp,
             mint=mint,
-            amount=amount,
-            unit=unit,
             paid_time=paid_time,
             issued_time=issued_time,
         )

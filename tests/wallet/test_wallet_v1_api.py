@@ -8,6 +8,11 @@ from pydantic import ValidationError
 from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
+from cashu.core.models import (
+    GetInfoResponse,
+    PostMeltQuoteResponse,
+    PostMintQuoteResponse,
+)
 from cashu.core.settings import settings
 from cashu.wallet.v1_api import LedgerAPI
 
@@ -259,11 +264,60 @@ async def test_get_info_uses_unprefixed_path(monkeypatch, api: LedgerAPI):
         assert method == "GET"
         assert path == "/v1/info"
         assert kwargs["noprefix"] is True
-        return _response(200, {"name": "MintName", "version": "1.0.0"})
+        return _response(
+            200,
+            {
+                "name": "MintName",
+                "version": "1.0.0",
+                "contact": [{"method": "email", "info": "mint@example.com"}],
+            },
+        )
 
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     mint_info = await api._get_info()
     assert mint_info.name == "MintName"
+    assert mint_info.contact
+    assert mint_info.contact[0].method == "email"
+    assert mint_info.contact[0].info == "mint@example.com"
+
+
+def test_get_info_rejects_deprecated_contact_shape():
+    with pytest.raises(ValidationError):
+        GetInfoResponse.model_validate({"contact": [["email", "mint@example.com"]]})
+
+
+@pytest.mark.parametrize("missing", ["amount", "unit", "method", "state"])
+def test_mint_quote_response_requires_current_fields(missing: str):
+    response = {
+        "quote": "q-1",
+        "request": "lnbc1",
+        "amount": 1,
+        "unit": "sat",
+        "method": "bolt11",
+        "state": "UNPAID",
+    }
+    del response[missing]
+
+    with pytest.raises(ValidationError):
+        PostMintQuoteResponse.model_validate(response)
+
+
+@pytest.mark.parametrize("missing", ["unit", "method", "request", "state"])
+def test_melt_quote_response_requires_current_fields(missing: str):
+    response = {
+        "quote": "q-1",
+        "amount": 1,
+        "unit": "sat",
+        "method": "bolt11",
+        "request": "lnbc1",
+        "fee_reserve": 1,
+        "state": "UNPAID",
+        "expiry": None,
+    }
+    del response[missing]
+
+    with pytest.raises(ValidationError):
+        PostMeltQuoteResponse.model_validate(response)
 
 
 @pytest.mark.asyncio
@@ -363,6 +417,7 @@ async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: Ledge
                 "request": "lnbc1",
                 "amount": 21,
                 "unit": "sat",
+                "method": "bolt11",
                 "state": "UNPAID",
                 "expiry": 123,
             },
@@ -529,6 +584,7 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
                     "quote": "m-1",
                     "amount": 1,
                     "unit": "sat",
+                    "method": "bolt11",
                     "request": "lnbc1",
                     "fee_reserve": 1,
                     "state": "UNPAID",
@@ -542,6 +598,7 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
                     "quote": "m-1",
                     "amount": 1,
                     "unit": "sat",
+                    "method": "bolt11",
                     "request": "lnbc1",
                     "fee_reserve": 1,
                     "state": "UNPAID",
@@ -555,6 +612,7 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
                     "quote": "m-1",
                     "amount": 1,
                     "unit": "sat",
+                    "method": "bolt11",
                     "request": "lnbc1",
                     "fee_reserve": 1,
                     "state": "PAID",

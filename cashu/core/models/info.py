@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 
 class MintMethodBolt11OptionSetting(BaseModel):
@@ -50,22 +50,6 @@ class GetInfoResponse(BaseModel):
 
     def supports(self, nut: int) -> Optional[bool]:
         return nut in self.nuts if self.nuts else None
-
-    # BEGIN DEPRECATED: NUT-06 contact field change
-    # NUT-06 PR: https://github.com/cashubtc/nuts/pull/117
-    @model_validator(mode="before")
-    @classmethod
-    def preprocess_deprecated_contact_field(cls, values: dict):
-        if "contact" in values and values["contact"]:
-            if isinstance(values["contact"][0], list):
-                values["contact"] = [
-                    MintInfoContact(method=method, info=info)
-                    for method, info in values["contact"]
-                    if method and info
-                ]
-        return values
-
-    # END DEPRECATED: NUT-06 contact field change
 
 
 class Nut15MppSupport(BaseModel):
