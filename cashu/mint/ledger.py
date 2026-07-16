@@ -1340,21 +1340,22 @@ class Ledger(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
-                    B_ = PublicKey(bytes.fromhex(output.B_))
-                    keyset = self.keysets[promise.id]
-                    private_key_amount = keyset.private_keys[promise.amount]
-                    C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-                    if C_.format().hex() != promise.C_:
-                        raise TransactionError(
-                            "restored signature does not match promise"
-                        )
-                    promise.dleq = DLEQ(e=e.to_hex(), s=s.to_hex())
+                    promise.dleq = self._generate_dleq(output, promise)
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
         return return_outputs, signatures
 
     # ------- BLIND SIGNATURES -------
+
+    def _generate_dleq(self, output: BlindedMessage, promise: BlindedSignature) -> DLEQ:
+        B_ = PublicKey(bytes.fromhex(output.B_))
+        keyset = self.keysets[promise.id]
+        private_key_amount = keyset.private_keys[promise.amount]
+        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+        if C_.format().hex() != promise.C_:
+            raise TransactionError("restored signature does not match promise")
+        return DLEQ(e=e.to_hex(), s=s.to_hex())
 
     async def _store_blinded_messages(
         self,
