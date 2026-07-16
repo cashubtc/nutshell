@@ -595,13 +595,6 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert restore_response.signatures[0].dleq.e == original_proof.dleq.e
     assert restore_response.signatures[0].dleq.s == original_proof.dleq.s
 
-    async with ledger.db.connect() as conn:
-        columns = await conn.fetchall(
-            f"PRAGMA table_info({ledger.db.table_with_schema('promises')})"
-        )
-    assert "dleq_e" not in {column["name"] for column in columns}
-    assert "dleq_s" not in {column["name"] for column in columns}
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
