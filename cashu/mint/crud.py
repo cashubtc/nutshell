@@ -183,8 +183,6 @@ class LedgerCrud(ABC):
         amount: int,
         b_: str,
         c_: str,
-        e: str = "",
-        s: str = "",
         conn: Optional[Connection] = None,
     ) -> None: ...
 
@@ -443,15 +441,13 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             UPDATE {db.table_with_schema("promises")}
-            SET amount = :amount, c_ = :c_, dleq_e = :dleq_e, dleq_s = :dleq_s, signed_at = :signed_at
+            SET amount = :amount, c_ = :c_, signed_at = :signed_at
             WHERE b_ = :b_;
             """,
             {
                 "b_": b_,
                 "amount": amount,
                 "c_": c_,
-                "dleq_e": e,
-                "dleq_s": s,
                 "signed_at": db.to_timestamp(db.timestamp_now_str()),
             },
         )

@@ -127,3 +127,14 @@ async def m003_add_final_expiry_to_keysets(db: Database):
                 ADD COLUMN final_expiry INTEGER NULL
             """
         )
+
+
+async def m004_remove_dleq_from_promises(db: Database):
+    """Remove deterministically generated DLEQ proofs from persisted promises."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_e"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
+        )

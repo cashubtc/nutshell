@@ -1327,3 +1327,14 @@ async def m037_remove_paid_from_melt_quote(db: Database):
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS paid"
             )
+
+
+async def m038_remove_dleq_from_promises(db: Database):
+    """Remove deterministically generated DLEQ proofs from persisted promises."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_e"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
+        )

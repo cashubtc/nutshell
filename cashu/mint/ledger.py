@@ -1340,6 +1340,15 @@ class Ledger(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
+                    B_ = PublicKey(bytes.fromhex(output.B_))
+                    keyset = self.keysets[promise.id]
+                    private_key_amount = keyset.private_keys[promise.amount]
+                    C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+                    if C_.format().hex() != promise.C_:
+                        raise TransactionError(
+                            "restored signature does not match promise"
+                        )
+                    promise.dleq = DLEQ(e=e.to_hex(), s=s.to_hex())
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
@@ -1435,8 +1444,6 @@ class Ledger(
                     amount=amount,
                     b_=B_.format().hex(),
                     c_=C_.format().hex(),
-                    e=e.to_hex(),
-                    s=s.to_hex(),
                     db=self.db,
                     conn=conn,
                 )

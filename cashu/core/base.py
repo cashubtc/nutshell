@@ -274,7 +274,6 @@ class BlindedSignature(BaseModel):
             id=row["id"],
             amount=row["amount"],
             C_=row["c_"],
-            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
         )
 
 

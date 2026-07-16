@@ -572,6 +572,10 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
         secret_counter - 1, secret_counter - 1
     )
     outputs, rs = wallet._construct_outputs([64], secrets, rs)
+    original_proof = next(
+        proof for proof in wallet.proofs if proof.secret == secrets[0]
+    )
+    assert original_proof.dleq
 
     payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
@@ -587,6 +591,16 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert len(restore_response.signatures) == 1
     assert len(restore_response.outputs) == 1
     assert restore_response.outputs == outputs
+    assert restore_response.signatures[0].dleq
+    assert restore_response.signatures[0].dleq.e == original_proof.dleq.e
+    assert restore_response.signatures[0].dleq.s == original_proof.dleq.s
+
+    async with ledger.db.connect() as conn:
+        columns = await conn.fetchall(
+            f"PRAGMA table_info({ledger.db.table_with_schema('promises')})"
+        )
+    assert "dleq_e" not in {column["name"] for column in columns}
+    assert "dleq_s" not in {column["name"] for column in columns}
 
 
 @pytest.mark.asyncio
