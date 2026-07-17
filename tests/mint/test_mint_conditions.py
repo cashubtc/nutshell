@@ -55,7 +55,7 @@ def test_verify_p2pk_signatures_valid_threshold():
     message = "msg-1"
     pub1, sig1 = _pubkey_and_sig(message)
     pub2, sig2 = _pubkey_and_sig(message)
-    assert cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
+    assert cond._verify_p2pk_signatures([message.encode("utf-8")], [pub1, pub2], [sig1, sig2], 2)
 
 
 def test_verify_p2pk_signatures_accepts_duplicate_pubkeys():
@@ -63,7 +63,7 @@ def test_verify_p2pk_signatures_accepts_duplicate_pubkeys():
     message = "msg-dup-pubkeys"
     pub, sig = _pubkey_and_sig(message)
     # Deduplication means 1 valid signature is sufficient even if pub is passed twice
-    assert cond._verify_p2pk_signatures(message, [pub, pub], [sig], 1)
+    assert cond._verify_p2pk_signatures([message.encode("utf-8")], [pub, pub], [sig], 1)
 
 
 def test_verify_p2pk_signatures_reject_duplicate_signatures():
@@ -71,14 +71,14 @@ def test_verify_p2pk_signatures_reject_duplicate_signatures():
     message = "msg-dup-sigs"
     pub, sig = _pubkey_and_sig(message)
     with pytest.raises(TransactionError, match="signatures must be unique"):
-        cond._verify_p2pk_signatures(message, [pub], [sig, sig], 1)
+        cond._verify_p2pk_signatures([message.encode("utf-8")], [pub], [sig, sig], 1)
 
 
 def test_verify_p2pk_signatures_reject_missing_signatures():
     cond = LedgerSpendingConditions()
     pub, _ = _pubkey_and_sig("msg-empty")
     with pytest.raises(TransactionError, match="no signatures in proof"):
-        cond._verify_p2pk_signatures("msg-empty", [pub], [], 1)
+        cond._verify_p2pk_signatures([b"msg-empty"], [pub], [], 1)
 
 
 def test_verify_p2pk_signatures_reject_threshold_not_met():
@@ -89,7 +89,7 @@ def test_verify_p2pk_signatures_reject_threshold_not_met():
     with pytest.raises(
         TransactionError, match=r"not enough pubkeys \(2\) or signatures \(1\)"
     ):
-        cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1], 2)
+        cond._verify_p2pk_signatures([message.encode("utf-8")], [pub1, pub2], [sig1], 2)
 
 
 def test_verify_p2pk_sig_inputs_skips_for_non_input_sigflag():
@@ -313,7 +313,7 @@ def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
     with pytest.raises(
         TransactionError, match="pubkeys must have unique x-coordinates"
     ):
-        cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
+        cond._verify_p2pk_signatures([message.encode("utf-8")], [pub1, pub2], [sig1, sig2], 2)
 
 
 def test_verify_p2pk_sig_inputs_handles_duplicate_pubkeys_gracefully():
@@ -329,3 +329,23 @@ def test_verify_p2pk_sig_inputs_handles_duplicate_pubkeys_gracefully():
     proof = _proof(secret_str, signatures=[sig])
 
     assert cond._verify_input_spending_conditions(proof)
+
+
+def test_verify_sigall_spending_conditions_ignores_legacy_only_witness():
+    # The legacy message format does not commit to C values or output amounts,
+    # so a witness carrying only a legacy signature must not satisfy the mint.
+    cond = LedgerSpendingConditions()
+    outputs = [BlindedMessage(id="ks", amount=1, B_="abcd")]
+
+    signer = PrivateKey()
+    signer_pub = signer.public_key.format().hex()
+    fixed_secret = _secret(
+        kind=SecretKind.P2PK, data=signer_pub, sigflag=SigFlags.SIG_ALL
+    )
+    proofs = [_proof(fixed_secret), _proof(fixed_secret)]
+    legacy_msg = nut11.sigall_message_to_sign_legacy(proofs, outputs)
+    signature = schnorr_sign(legacy_msg.encode("utf-8"), signer).hex()
+    proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
+
+    with pytest.raises(TransactionError, match="signature threshold not met"):
+        cond._verify_sigall_spending_conditions(proofs, outputs)

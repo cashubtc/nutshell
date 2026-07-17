@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from loguru import logger
 
@@ -109,12 +109,15 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         logger.debug(f"Signatures: {signatures}")
         return signatures
 
-    def schnorr_sign_message(self, message: str, signing_key: Optional[PrivateKey] = None) -> str:
+    def schnorr_sign_message(
+        self, message: Union[str, bytes], signing_key: Optional[PrivateKey] = None
+    ) -> str:
         """Sign a message with the given key or the wallet's private key."""
         key = signing_key or self.private_key
         assert key.public_key
+        message_bytes = message.encode("utf-8") if isinstance(message, str) else message
         return schnorr_sign(
-            message=message.encode("utf-8"),
+            message=message_bytes,
             private_key=key,
         ).hex()
 
@@ -146,7 +149,7 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
-        message_to_sign: Optional[str] = None,
+        quote_id: Optional[str] = None,
     ) -> List[Proof]:
         """Determine whether the first input's sig flag is SIG_ALL ()"""
         if not self._inputs_require_sigall(proofs):
@@ -159,24 +162,27 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
             secrets = set([Secret.deserialize(p.secret) for p in proofs])
             if not len(secrets) == 1:
                 raise Exception("Secrets not identical")
-            message_to_sign = message_to_sign or nut11.sigall_message_to_sign(
-                proofs, outputs
-            )
+            # Sign every known SIG_ALL message format so the transaction verifies
+            # on mints that have not (or have already) upgraded. Mints ignore
+            # signatures that do not verify and count unique pubkeys.
+            quote_suffix = quote_id or ""
+            messages_to_sign: List[Union[str, bytes]] = [
+                nut11.sigall_message_to_sign_v1(proofs, outputs, quote_id),
+                nut11.sigall_message_to_sign(proofs, outputs) + quote_suffix,
+                nut11.sigall_message_to_sign_legacy(proofs, outputs) + quote_suffix,
+            ]
             # For P2BK proofs, use the derived blinded signing key
             p2bk_keys = self._derive_p2bk_signing_keys(proofs[0])
-            signing_key = p2bk_keys[0] if p2bk_keys else None
-            signature = self.schnorr_sign_message(message_to_sign, signing_key)
+            signing_keys = p2bk_keys if p2bk_keys else [None]
             # add witness to only the first proof
-            signed_proofs = self.add_signatures_to_proofs([proofs[0]], [signature])
-            proofs[0].witness = signed_proofs[0].witness
-            logger.debug(
-                f"SIGALL Adding witness to proof: {proofs[0].secret} with signature: {signature}"
-            )
-            # Sign message_to_sign with remaining keys for SIG_ALL multi-key slots
-            if proofs[0].p2pk_e and len(p2bk_keys) > 1:
-                for extra_key in p2bk_keys[1:]:
-                    extra_sig = self.schnorr_sign_message(message_to_sign, extra_key)
-                    self.add_signatures_to_proofs([proofs[0]], [extra_sig])
+            for key in signing_keys:
+                for message_to_sign in messages_to_sign:
+                    signature = self.schnorr_sign_message(message_to_sign, key)
+                    signed_proofs = self.add_signatures_to_proofs(
+                        [proofs[0]], [signature]
+                    )
+                    proofs[0].witness = signed_proofs[0].witness
+            logger.debug(f"SIGALL Added witness to proof: {proofs[0].secret}")
         except Exception:
             logger.error("not all secrets are the same, skipping SIG_ALL signature")
             return proofs
@@ -210,9 +216,8 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
     ) -> List[Proof]:
         # sign proofs if they are P2PK SIG_INPUTS
         proofs = self.add_witnesses_sig_inputs(proofs)
-        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs) + quote_id
-        # sign first proof if swap is SIG_ALL
-        proofs = self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
+        # sign first proof if melt is SIG_ALL
+        proofs = self.add_witness_swap_sig_all(proofs, outputs, quote_id=quote_id)
 
         # p2pk_e stripped AFTER signing: add_witnesses_sig_inputs derives the
         # blinded key via _derive_p2bk_signing_keys before we clear the field.
