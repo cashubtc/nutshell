@@ -171,9 +171,12 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
                 nut11.sigall_message_to_sign(proofs, outputs) + quote_suffix,
                 nut11.sigall_message_to_sign_legacy(proofs, outputs) + quote_suffix,
             ]
-            # For P2BK proofs, use the derived blinded signing key
+            # For P2BK proofs, use the derived blinded signing keys; None falls
+            # back to the wallet's private key in schnorr_sign_message
             p2bk_keys = self._derive_p2bk_signing_keys(proofs[0])
-            signing_keys = p2bk_keys if p2bk_keys else [None]
+            signing_keys: List[Optional[PrivateKey]] = (
+                [*p2bk_keys] if p2bk_keys else [None]
+            )
             # add witness to only the first proof
             for key in signing_keys:
                 for message_to_sign in messages_to_sign:
