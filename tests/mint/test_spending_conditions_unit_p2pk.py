@@ -4,6 +4,7 @@ from hashlib import sha256
 import pytest
 
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.errors import TransactionError
 from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind
 from cashu.mint.conditions import LedgerSpendingConditions
@@ -77,7 +78,7 @@ def test_verify_p2pk_sig_inputs_rejects_sig_all():
     pub, _ = pubkey_and_sig("msg-sig-all")
     raw_secret = secret_str(kind=SecretKind.P2PK, data=pub, sigflag=SigFlags.SIG_ALL)
     p2pk_secret = P2PKSecret.from_secret(Secret.deserialize(raw_secret))
-    with pytest.raises(AssertionError, match="SIG_ALL proofs must be verified"):
+    with pytest.raises(TransactionError, match="SIG_ALL proofs must be verified"):
         cond._verify_p2pk_or_htlc_sig_inputs(proof(raw_secret), p2pk_secret)
 
 
@@ -159,7 +160,9 @@ def test_verify_p2pk_sig_inputs_refund_path_after_locktime():
         extra_tags=[["locktime", past], ["refund", refund_pub]],
     )
     refund_sig = schnorr_sign(raw_secret.encode("utf-8"), refund_signer).hex()
-    assert cond._verify_input_spending_conditions(proof(raw_secret, signatures=[refund_sig]))
+    assert cond._verify_input_spending_conditions(
+        proof(raw_secret, signatures=[refund_sig])
+    )
 
 
 def test_verify_p2pk_sig_inputs_allows_anyone_after_locktime_without_refund_pubkeys():
