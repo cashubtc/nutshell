@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Tuple
 
 import bolt11
@@ -6,6 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import TokenV4
+from cashu.core.p2pk import P2PKSecret
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -685,6 +687,74 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
+
+
+def test_send_with_lock_and_timelock(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    lock = None
+    for word in result.output.split(" "):
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+
+    before = int(time.time())
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--lock", lock, "--timelock", "5"],
+    )
+    after = int(time.time())
+    assert result.exception is None
+    print("test_send_with_lock_and_timelock", result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    secret = P2PKSecret.deserialize(token.token[0].proofs[0].secret)
+    assert secret.locktime is not None
+    assert before + 5 <= secret.locktime <= after + 5
+
+
+def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    lock = None
+    for word in result.output.split(" "):
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+
+    before = int(time.time())
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--lock", lock],
+    )
+    after = int(time.time())
+    assert result.exception is None
+    print(
+        "test_send_with_lock_uses_locktime_delta_seconds_by_default", result.output
+    )
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    secret = P2PKSecret.deserialize(token.token[0].proofs[0].secret)
+    assert secret.locktime is not None
+    assert (
+        before + settings.locktime_delta_seconds
+        <= secret.locktime
+        <= after + settings.locktime_delta_seconds
+    )
 
 
 def mint_tokens(runner, cli_prefix, amount: str):
