@@ -855,6 +855,15 @@ class Ledger(
         if not melt_quote:
             raise Exception("quote not found")
 
+        if melt_quote.change:
+            change_outputs = await self.crud.get_blinded_messages_melt_id(
+                melt_id=quote_id, db=self.db, signed=True
+            )
+            if len(change_outputs) != len(melt_quote.change):
+                raise TransactionError("could not reconstruct melt change promises")
+            for output, promise in zip(change_outputs, melt_quote.change):
+                promise.dleq = self._generate_dleq(output, promise)
+
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
         )

@@ -687,7 +687,7 @@ async def test_get_melt_quote_preserves_change_signatures_order(
             melt_id=melt_id,
             order_index=idx,
         )
-        
+
         # Sign it right away so it is returned in change
         priv = ledger.keyset.private_keys[amount]
         _, e, s = step2_bob(PublicKey(bytes.fromhex(b_values[idx])), priv)
@@ -695,9 +695,11 @@ async def test_get_melt_quote_preserves_change_signatures_order(
             db=ledger.db,
             amount=amount,
             b_=b_values[idx],
-            c_=PublicKey(bytes.fromhex(b_values[idx])).format().hex(), # Mock C_ just to not be NULL
+            c_=PublicKey(bytes.fromhex(b_values[idx]))
+            .format()
+            .hex(),  # Mock C_ just to not be NULL
             e=e.to_hex(),
-            s=s.to_hex()
+            s=s.to_hex(),
         )
 
     # Act
@@ -707,12 +709,15 @@ async def test_get_melt_quote_preserves_change_signatures_order(
     assert quote_db is not None
     assert quote_db.change is not None
     assert len(quote_db.change) == 5
-    
+
     # We check if we can reconstruct the original B_ mapping using the DB again (to verify test mock is valid)
     # However we can just verify that C_ values matches what we inserted
     # Since we mocked C_ to be the same as B_ in our test
     for i in range(5):
-        assert quote_db.change[i].C_ == b_values[i], f"Change signature at index {i} is out of order"
+        assert (
+            quote_db.change[i].C_ == b_values[i]
+        ), f"Change signature at index {i} is out of order"
+
 
 @pytest.mark.asyncio
 async def test_get_melt_quote_includes_change_signatures(
@@ -767,6 +772,13 @@ async def test_get_melt_quote_includes_change_signatures(
     assert len(quote_db.change) == 1
     assert quote_db.change[0].amount == amount
     assert quote_db.change[0].id == keyset_id
+
+    # The public retrieval path deterministically reconstructs the dropped DLEQ.
+    quote = await ledger.get_melt_quote(melt_id)
+    assert quote.change is not None
+    assert quote.change[0].dleq is not None
+    assert quote.change[0].dleq.e == e.to_hex()
+    assert quote.change[0].dleq.s == s.to_hex()
 
 
 @pytest.mark.asyncio
@@ -868,31 +880,39 @@ async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger
     error = next(r for r in results if isinstance(r, Exception))
     assert "Melt quote already paid or pending." in str(error)
 
+
 # === CONCURRENCY TESTS FOR PARAMETERIZED ROW LOCKS ===
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     is_github_actions,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
-async def test_concurrent_set_mint_quote_pending_same_quote(wallet: Wallet, ledger: Ledger):
+async def test_concurrent_set_mint_quote_pending_same_quote(
+    wallet: Wallet, ledger: Ledger
+):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     _ = await ledger.get_mint_quote(mint_quote.quote)
     # Get quote object
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
-    
+
     results = await asyncio.gather(
         ledger.db_write._set_mint_quote_pending(quote.quote),
         ledger.db_write._set_mint_quote_pending(quote.quote),
-        return_exceptions=True
+        return_exceptions=True,
     )
     success = sum(1 for r in results if not isinstance(r, Exception))
     errors = [r for r in results if isinstance(r, Exception)]
     assert success == 1, f"Expected 1 success, got {success}. Errors: {errors}"
     assert len(errors) == 1, f"Expected 1 error, got {len(errors)}"
     err_str = str(errors[0])
-    assert "lock" in err_str.lower() or "pending" in err_str.lower() or "locked" in err_str.lower(), f"Unexpected error: {err_str}"
+    assert (
+        "lock" in err_str.lower()
+        or "pending" in err_str.lower()
+        or "locked" in err_str.lower()
+    ), f"Unexpected error: {err_str}"
 
 
 @pytest.mark.asyncio
@@ -900,18 +920,20 @@ async def test_concurrent_set_mint_quote_pending_same_quote(wallet: Wallet, ledg
     is_github_actions,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
-async def test_concurrent_set_mint_quote_pending_different_quotes(wallet: Wallet, ledger: Ledger):
+async def test_concurrent_set_mint_quote_pending_different_quotes(
+    wallet: Wallet, ledger: Ledger
+):
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote1.request)
     await pay_if_regtest(mint_quote2.request)
     _ = await ledger.get_mint_quote(mint_quote1.quote)
     _ = await ledger.get_mint_quote(mint_quote2.quote)
-    
+
     results = await asyncio.gather(
         ledger.db_write._set_mint_quote_pending(mint_quote1.quote),
         ledger.db_write._set_mint_quote_pending(mint_quote2.quote),
-        return_exceptions=True
+        return_exceptions=True,
     )
     errors = [r for r in results if isinstance(r, Exception)]
     assert len(errors) == 0, f"Expected 0 errors, got: {errors}"
@@ -922,24 +944,31 @@ async def test_concurrent_set_mint_quote_pending_different_quotes(wallet: Wallet
     is_github_actions,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
-async def test_concurrent_set_melt_quote_pending_same_quote(wallet: Wallet, ledger: Ledger):
+async def test_concurrent_set_melt_quote_pending_same_quote(
+    wallet: Wallet, ledger: Ledger
+):
     mint_quote = await wallet.request_mint(64)
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
     )
     quote_db = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
-    
+
     results = await asyncio.gather(
         ledger.db_write._set_melt_quote_pending(quote_db),
         ledger.db_write._set_melt_quote_pending(quote_db),
-        return_exceptions=True
+        return_exceptions=True,
     )
     success = sum(1 for r in results if not isinstance(r, Exception))
     errors = [r for r in results if isinstance(r, Exception)]
     assert success == 1, f"Expected 1 success, got {success}. Errors: {errors}"
     assert len(errors) == 1, f"Expected 1 error, got {len(errors)}"
     err_str = str(errors[0])
-    assert "lock" in err_str.lower() or "pending" in err_str.lower() or "locked" in err_str.lower() or "paid" in err_str.lower(), f"Unexpected error: {err_str}"
+    assert (
+        "lock" in err_str.lower()
+        or "pending" in err_str.lower()
+        or "locked" in err_str.lower()
+        or "paid" in err_str.lower()
+    ), f"Unexpected error: {err_str}"
 
 
 @pytest.mark.asyncio
@@ -947,7 +976,9 @@ async def test_concurrent_set_melt_quote_pending_same_quote(wallet: Wallet, ledg
     is_github_actions,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
-async def test_concurrent_set_melt_quote_pending_different_quotes(wallet: Wallet, ledger: Ledger):
+async def test_concurrent_set_melt_quote_pending_different_quotes(
+    wallet: Wallet, ledger: Ledger
+):
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(64)
     melt_quote1 = await ledger.melt_quote(
@@ -956,13 +987,17 @@ async def test_concurrent_set_melt_quote_pending_different_quotes(wallet: Wallet
     melt_quote2 = await ledger.melt_quote(
         PostMeltQuoteRequest(request=mint_quote2.request, unit="sat")
     )
-    quote_db1 = await ledger.crud.get_melt_quote(quote_id=melt_quote1.quote, db=ledger.db)
-    quote_db2 = await ledger.crud.get_melt_quote(quote_id=melt_quote2.quote, db=ledger.db)
-    
+    quote_db1 = await ledger.crud.get_melt_quote(
+        quote_id=melt_quote1.quote, db=ledger.db
+    )
+    quote_db2 = await ledger.crud.get_melt_quote(
+        quote_id=melt_quote2.quote, db=ledger.db
+    )
+
     results = await asyncio.gather(
         ledger.db_write._set_melt_quote_pending(quote_db1),
         ledger.db_write._set_melt_quote_pending(quote_db2),
-        return_exceptions=True
+        return_exceptions=True,
     )
     errors = [r for r in results if isinstance(r, Exception)]
     assert len(errors) == 0, f"Expected 0 errors, got: {errors}"
@@ -977,22 +1012,27 @@ async def test_concurrent_swap_same_proofs(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(64, quote_id=mint_quote.quote)
-    
+
     secrets, rs, _ = await wallet.generate_n_secrets(2)
     outputs, _ = wallet._construct_outputs([32, 32], secrets, rs)
-    
+
     results = await asyncio.gather(
         ledger.swap(proofs=wallet.proofs, outputs=outputs),
         ledger.swap(proofs=wallet.proofs, outputs=outputs),
-        return_exceptions=True
+        return_exceptions=True,
     )
-    
+
     success = sum(1 for r in results if not isinstance(r, Exception))
     errors = [r for r in results if isinstance(r, Exception)]
     assert success == 1, f"Expected 1 success, got {success}. Errors: {errors}"
     assert len(errors) == 1, f"Expected 1 error, got {len(errors)}"
     err_str = str(errors[0])
-    assert "lock" in err_str.lower() or "pending" in err_str.lower() or "locked" in err_str.lower() or "spent" in err_str.lower(), f"Unexpected error: {err_str}"
+    assert (
+        "lock" in err_str.lower()
+        or "pending" in err_str.lower()
+        or "locked" in err_str.lower()
+        or "spent" in err_str.lower()
+    ), f"Unexpected error: {err_str}"
 
 
 @pytest.mark.asyncio
@@ -1004,20 +1044,20 @@ async def test_concurrent_swap_different_proofs(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(64, quote_id=mint_quote.quote, split=[32, 32])
-    
+
     proofs1 = wallet.proofs[:1]
     proofs2 = wallet.proofs[1:]
-    
+
     secrets1, rs1, _ = await wallet.generate_n_secrets(1)
     outputs1, _ = wallet._construct_outputs([32], secrets1, rs1)
-    
+
     secrets2, rs2, _ = await wallet.generate_n_secrets(1)
     outputs2, _ = wallet._construct_outputs([32], secrets2, rs2)
-    
+
     results = await asyncio.gather(
         ledger.swap(proofs=proofs1, outputs=outputs1),
         ledger.swap(proofs=proofs2, outputs=outputs2),
-        return_exceptions=True
+        return_exceptions=True,
     )
     errors = [r for r in results if isinstance(r, Exception)]
     assert len(errors) == 0, f"Expected 0 errors, got: {errors}"

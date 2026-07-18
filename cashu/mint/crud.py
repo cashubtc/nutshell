@@ -192,6 +192,7 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         melt_id: str,
+        signed: bool = False,
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]: ...
 
@@ -370,12 +371,14 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         melt_id: str,
+        signed: bool = False,
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema("promises")}
-            WHERE melt_quote = :melt_id AND c_ IS NULL
+            WHERE melt_quote = :melt_id
+                AND c_ IS {'NOT NULL' if signed else 'NULL'}
             ORDER BY order_index ASC
             """,
             {"melt_id": melt_id},
