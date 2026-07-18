@@ -57,7 +57,9 @@ class WitnessForP2pkOrHtlc:
 
         try:
             parsed = HTLCWitness.from_witness(witness)
-            return cls(preimage=parsed.preimage, signatures=list(parsed.signatures or []))
+            return cls(
+                preimage=parsed.preimage, signatures=list(parsed.signatures or [])
+            )
         except Exception:
             return cls(preimage=None, signatures=[])
 
@@ -111,9 +113,10 @@ class LedgerSpendingConditions:
         This verifier returns `True` on success and raises on failure.
         """
 
-        assert self._at_least_one_proof_has_sig_all(proofs), (
-            "_verify_sigall_spending_conditions() called without any SIG_ALL proofs"
-        )
+        if not self._at_least_one_proof_has_sig_all(proofs):
+            raise TransactionError(
+                "_verify_sigall_spending_conditions() called without any SIG_ALL proofs"
+            )
 
         # Raise if the secrets (ignoring nonce) are not identical to each other:
 
@@ -137,7 +140,8 @@ class LedgerSpendingConditions:
 
         if SecretKind(unique_secret.kind) == SecretKind.P2PK:
             secret_lock_p2pk: P2PKSecret = P2PKSecret.from_secret(unique_secret)
-            assert secret_lock_p2pk.sigflag == SigFlags.SIG_ALL
+            if secret_lock_p2pk.sigflag != SigFlags.SIG_ALL:
+                raise TransactionError("P2PK secret does not have SIG_ALL flag")
             return self._verify_p2pk_or_htlc_spending_requirements(
                 self._get_spending_requirements(secret_lock_p2pk),
                 WitnessForP2pkOrHtlc.from_p2pk_witness(first_proof.witness),
@@ -145,7 +149,8 @@ class LedgerSpendingConditions:
             )
         elif SecretKind(unique_secret.kind) == SecretKind.HTLC:
             secret_lock_htlc: HTLCSecret = HTLCSecret.from_secret(unique_secret)
-            assert secret_lock_htlc.sigflag == SigFlags.SIG_ALL
+            if secret_lock_htlc.sigflag != SigFlags.SIG_ALL:
+                raise TransactionError("HTLC secret does not have SIG_ALL flag")
             return self._verify_p2pk_or_htlc_spending_requirements(
                 self._get_spending_requirements(secret_lock_htlc),
                 WitnessForP2pkOrHtlc.from_htlc_witness(first_proof.witness),
@@ -267,20 +272,23 @@ class LedgerSpendingConditions:
 
         message_to_sign = proof.secret
 
-        assert (
-            secret.sigflag != SigFlags.SIG_ALL
-        ), "SIG_ALL proofs must be verified using a different method."
+        if secret.sigflag == SigFlags.SIG_ALL:
+            raise TransactionError(
+                "SIG_ALL proofs must be verified using a different method."
+            )
 
         requirements = self._get_spending_requirements(secret)
         if SecretKind(secret.kind) == SecretKind.P2PK:
-            assert isinstance(secret, P2PKSecret)
+            if not isinstance(secret, P2PKSecret):
+                raise TransactionError("Expected P2PKSecret")
             return self._verify_p2pk_or_htlc_spending_requirements(
                 requirements,
                 WitnessForP2pkOrHtlc.from_p2pk_witness(proof.witness),
                 message_to_sign,
             )
 
-        assert isinstance(secret, HTLCSecret)
+        if not isinstance(secret, HTLCSecret):
+            raise TransactionError("Expected HTLCSecret")
         return self._verify_p2pk_or_htlc_spending_requirements(
             requirements,
             WitnessForP2pkOrHtlc.from_htlc_witness(proof.witness),
@@ -320,7 +328,7 @@ class LedgerSpendingConditions:
                 refund_path = SpendPath(pubkeys=[], required_sigs=0)
 
         return SpendingRequirements(
-            preimage_hash=preimage_hash, # None, for P2PK
+            preimage_hash=preimage_hash,  # None, for P2PK
             primary_path=SpendPath(
                 pubkeys=pubkeys,
                 required_sigs=required_sigs,
@@ -353,7 +361,9 @@ class LedgerSpendingConditions:
                 witness.signatures,
                 requirements.primary_path.required_sigs,
             ):
-                logger.trace("Spending condition satisfied via primary (non-refund) path")
+                logger.trace(
+                    "Spending condition satisfied via primary (non-refund) path"
+                )
                 return True
         except Exception as exc:
             # Primary-path failures do not immediately abort spending, because

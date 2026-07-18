@@ -127,12 +127,15 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 pass
                 continue
 
-            if SecretKind(secret.kind) == SecretKind.P2PK:
-                if P2PKSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
-                    return True
-            elif SecretKind(secret.kind) == SecretKind.HTLC:
-                if HTLCSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
-                    return True
+            try:
+                if SecretKind(secret.kind) == SecretKind.P2PK:
+                    if P2PKSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
+                        return True
+                elif SecretKind(secret.kind) == SecretKind.HTLC:
+                    if HTLCSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
+                        return True
+            except Exception:
+                continue
 
         return False
 
@@ -227,10 +230,13 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                     witness = HTLCWitness.from_witness(p.witness)
                     proof_signatures = witness.signatures
                     if proof_signatures:
-                        proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                        proof_signatures_lower = [
+                            sig.lower() for sig in proof_signatures
+                        ]
                         if s_lower not in proof_signatures_lower:
                             p.witness = HTLCWitness(
-                                preimage=witness.preimage, signatures=proof_signatures + [s]
+                                preimage=witness.preimage,
+                                signatures=proof_signatures + [s],
                             ).model_dump_json()
                 else:
                     if p.witness:
@@ -255,9 +261,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
 
             if SecretKind(secret.kind) == SecretKind.P2PK:
                 typed_secret = P2PKSecret.from_secret(secret)
-                pubkeys = [typed_secret.data] + typed_secret.tags.get_tag_all(
-                    "pubkeys"
-                )
+                pubkeys = [typed_secret.data] + typed_secret.tags.get_tag_all("pubkeys")
             elif SecretKind(secret.kind) == SecretKind.HTLC:
                 typed_secret = HTLCSecret.from_secret(secret)
                 pubkeys = typed_secret.tags.get_tag_all("pubkeys")

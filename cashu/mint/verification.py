@@ -84,20 +84,17 @@ class LedgerVerification(
         expected_output_unit: Optional[Unit] = None,
         verify_input_output_balance: bool = True,
     ) -> None:
-        # 1. Verify NUT-10 spending conditions (P2PK, HTLC, and grouped
-        # SIG_ALL rules) at the transaction level. This binds together the
-        # relevant inputs, outputs, and optional melt quote before any generic
-        # cryptographic or bookkeeping checks run.
-        self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
-
-        # 2. Verify the inputs generically: amounts, secret and witness
+        # 1. Verify the inputs generically: amounts, secret and witness
         # criteria, duplicate-input prevention, ECASH signature validity, and
         # whether the proofs are still spendable.
         await self._verify_inputs(proofs)
 
-        # If there are no outputs, no output-level or cross-input/output checks
-        # are needed.
-        if outputs is None:
+        # 2. Verify NUT-10 spending conditions (P2PK, HTLC, and grouped
+        # SIG_ALL rules) at the transaction level.
+        self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
+
+        # Melts can omit NUT-08 change outputs or provide an empty array.
+        if outputs is None or not outputs:
             return
 
         # 3. Verify the outputs generically: keyset consistency, amount rules,
@@ -169,7 +166,6 @@ class LedgerVerification(
         expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
     ):
-
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         if not outputs:
