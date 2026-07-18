@@ -77,3 +77,26 @@ async def test_redeem_tokenv3_reuses_receivers_private_key(
     mint_wallet = await redeem_TokenV3(wallet_bob, token)
 
     assert mint_wallet.private_key.to_hex() == wallet_bob.private_key.to_hex()
+
+
+@pytest.mark.asyncio
+async def test_redeem_tokenv3_custom_db_dir_reuses_receivers_private_key(
+    wallet_sender: Wallet,
+):
+    """Pins that the mint_wallet built inside redeem_TokenV3 derives its db
+    directory from the receiver wallet's actual db.db_location, not from
+    settings.cashu_dir + wallet.name. A wallet created with a custom db
+    directory (library/test usage) must still redeem into itself instead of
+    opening whatever wallet happens to live under <cashu_dir>/<name>.
+    """
+    wallet_receiver = await Wallet.with_db(
+        SERVER_ENDPOINT, "test_data/wallet_receive_named_custom_dir", name="bob"
+    )
+    await wallet_receiver.load_mint()
+
+    send_proofs = await _mint_p2pk_locked_proofs_to(wallet_sender, wallet_receiver, 8)
+    token = TokenV3(token=[TokenV3Token(mint=wallet_sender.url, proofs=send_proofs)])
+
+    mint_wallet = await redeem_TokenV3(wallet_receiver, token)
+
+    assert mint_wallet.private_key.to_hex() == wallet_receiver.private_key.to_hex()

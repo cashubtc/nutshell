@@ -1,5 +1,4 @@
 import hashlib
-import os
 from typing import List, Optional
 
 from loguru import logger
@@ -56,7 +55,7 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
         assert t.mint, Exception("redeem_TokenV3: multimint redeem without URL")
         mint_wallet = await Wallet.with_db(
             t.mint,
-            os.path.join(settings.cashu_dir, wallet.name),
+            wallet.db.db_location,
             name=wallet.name,
             unit=token.unit or wallet.unit.name,
             auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
