@@ -29,8 +29,8 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id)
-        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id)
+          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id, p2pk_e)
+        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id, :p2pk_e)
         """,
         {
             "id": proof.id,
@@ -42,6 +42,7 @@ async def store_proof(
             "dleq": json.dumps(proof.dleq.model_dump()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "p2pk_e": proof.p2pk_e,
         },
     )
 
@@ -109,8 +110,8 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id)
-        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id)
+          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id, p2pk_e)
+        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id, :p2pk_e)
         """,
         {
             "amount": proof.amount,
@@ -121,6 +122,7 @@ async def invalidate_proof(
             "derivation_path": proof.derivation_path,
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "p2pk_e": proof.p2pk_e,
         },
     )
 
@@ -186,8 +188,8 @@ async def store_keyset(
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys, unit, input_fee_ppk)
-        VALUES (:id, :mint_url, :valid_from, :valid_to, :first_seen, :active, :public_keys, :unit, :input_fee_ppk)
+          (id, mint_url, valid_from, valid_to, first_seen, active, deleted_at, public_keys, unit, input_fee_ppk)
+        VALUES (:id, :mint_url, :valid_from, :valid_to, :first_seen, :active, :deleted_at, :public_keys, :unit, :input_fee_ppk)
         """,
         {
             "id": keyset.id,
@@ -196,6 +198,7 @@ async def store_keyset(
             "valid_to": keyset.valid_to or int(time.time()),
             "first_seen": keyset.first_seen or int(time.time()),
             "active": keyset.active,
+            "deleted_at": keyset.deleted_at,
             "public_keys": keyset.serialize(),
             "unit": keyset.unit.name,
             "input_fee_ppk": keyset.input_fee_ppk,
@@ -209,6 +212,7 @@ async def get_keysets(
     unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
+    exclude_deleted: bool = True,
 ) -> List[WalletKeyset]:
     clauses = []
     values: Dict[str, Any] = {}
@@ -221,6 +225,8 @@ async def get_keysets(
     if unit:
         clauses.append("unit = :unit")
         values["unit"] = unit
+    if exclude_deleted:
+        clauses.append("deleted_at IS NULL")
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
@@ -235,6 +241,28 @@ async def get_keysets(
     return [WalletKeyset.from_row(r) for r in rows]  # type: ignore
 
 
+async def delete_keyset(
+    keyset_id: str,
+    db: Database,
+    mint_url: Optional[str] = None,
+    conn: Optional[Connection] = None,
+) -> None:
+    await (conn or db).execute(
+        """
+        UPDATE keysets
+        SET deleted_at = :deleted_at
+        WHERE id = :id
+        AND (:mint_url IS NULL OR mint_url = :mint_url)
+        AND deleted_at IS NULL
+        """,
+        {
+            "deleted_at": int(time.time()),
+            "id": keyset_id,
+            "mint_url": mint_url,
+        },
+    )
+
+
 async def update_keyset(
     keyset: WalletKeyset,
     db: Database,
@@ -243,12 +271,15 @@ async def update_keyset(
     await (conn or db).execute(
         """
         UPDATE keysets
-        SET active = :active, input_fee_ppk = :input_fee_ppk
+        SET active = :active, deleted_at = :deleted_at, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
+        AND (:mint_url IS NULL OR mint_url = :mint_url)
         """,
         {
             "active": keyset.active,
+            "deleted_at": keyset.deleted_at,
             "id": keyset.id,
+            "mint_url": keyset.mint_url,
             "input_fee_ppk": keyset.input_fee_ppk,
         },
     )
@@ -262,8 +293,8 @@ async def store_bolt11_mint_quote(
     await (conn or db).execute(
         """
         INSERT INTO bolt11_mint_quotes
-            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey)
-        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey)
+            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey, amount_paid, amount_issued, updated_at)
+        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey, :amount_paid, :amount_issued, :updated_at)
         """,
         {
             "quote": quote.quote,
@@ -278,6 +309,9 @@ async def store_bolt11_mint_quote(
             "paid_time": quote.paid_time,
             "expiry": quote.expiry,
             "privkey": quote.privkey or "",
+            "amount_paid": quote.amount_paid,
+            "amount_issued": quote.amount_issued,
+            "updated_at": quote.updated_at,
         },
     )
 
@@ -346,20 +380,37 @@ async def update_bolt11_mint_quote(
     db: Database,
     quote: str,
     state: MintQuoteState,
-    paid_time: int,
+    paid_time: Optional[int] = None,
+    amount_paid: Optional[int] = None,
+    amount_issued: Optional[int] = None,
+    updated_at: Optional[int] = None,
     conn: Optional[Connection] = None,
 ) -> None:
+    clauses = ["state = :state"]
+    values: Dict[str, Any] = {
+        "state": state.value,
+        "quote": quote,
+    }
+    if paid_time is not None:
+        clauses.append("paid_time = :paid_time")
+        values["paid_time"] = paid_time
+    if amount_paid is not None:
+        clauses.append("amount_paid = :amount_paid")
+        values["amount_paid"] = amount_paid
+    if amount_issued is not None:
+        clauses.append("amount_issued = :amount_issued")
+        values["amount_issued"] = amount_issued
+    if updated_at is not None:
+        clauses.append("updated_at = :updated_at")
+        values["updated_at"] = updated_at
+
     await (conn or db).execute(
-        """
+        f"""
         UPDATE bolt11_mint_quotes
-        SET state = :state, paid_time = :paid_time
+        SET {", ".join(clauses)}
         WHERE quote = :quote
         """,
-        {
-            "state": state.value,
-            "paid_time": paid_time,
-            "quote": quote,
-        },
+        values,
     )
 
 
@@ -390,7 +441,9 @@ async def store_bolt11_melt_quote(
             "payment_preimage": quote.payment_preimage,
             "expiry": quote.expiry,
             "change": (
-                json.dumps([c.model_dump() for c in quote.change]) if quote.change else ""
+                json.dumps([c.model_dump() for c in quote.change])
+                if quote.change
+                else ""
             ),
         },
     )

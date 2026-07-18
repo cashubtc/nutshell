@@ -11,11 +11,10 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.htlc import HTLCSecret
+from ..core.nuts import nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
-    sig_all_melt_message,
-    sig_all_swap_message,
     verify_schnorr_signature,
 )
 from ..core.secret import Secret, SecretKind
@@ -131,10 +130,9 @@ class LedgerSpendingConditions:
 
         # Compute the grouped message that the signing pubkeys are expected to sign:
 
-        if quote is None:
-            message_to_sign = sig_all_swap_message(proofs, outputs)
-        else:
-            message_to_sign = sig_all_melt_message(proofs, outputs, quote)
+        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
+        if quote is not None:
+            message_to_sign += quote
 
         # Now split depending on whether the secret kind is P2PK or HTLC:
 

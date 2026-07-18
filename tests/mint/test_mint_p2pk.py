@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import P2PKWitness
-from cashu.core.p2pk import sig_all_swap_message
+from cashu.core.nuts import nut11
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
@@ -62,18 +62,18 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
     )
 
     # Test that the mint-side SIG_ALL detector correctly detects SIG_ALL.
-    assert not ledger._at_least_one_proof_has_sig_all(
-        send_proofs_inputs
-    ), "Should not detect SIG_ALL"
-    assert ledger._at_least_one_proof_has_sig_all(
-        send_proofs_all
-    ), "Should detect SIG_ALL"
+    assert not ledger._at_least_one_proof_has_sig_all(send_proofs_inputs), (
+        "Should not detect SIG_ALL"
+    )
+    assert ledger._at_least_one_proof_has_sig_all(send_proofs_all), (
+        "Should detect SIG_ALL"
+    )
 
     # Test with a mixed list of proofs (should detect SIG_ALL if any proof has it)
     mixed_proofs = send_proofs_inputs + send_proofs_all
-    assert ledger._at_least_one_proof_has_sig_all(
-        mixed_proofs
-    ), "Should detect SIG_ALL in mixed list"
+    assert ledger._at_least_one_proof_has_sig_all(mixed_proofs), (
+        "Should detect SIG_ALL in mixed list"
+    )
 
 
 @pytest.mark.asyncio
@@ -115,9 +115,9 @@ async def test_ledger_verify_p2pk_signature_validation(
 
     # The swap should succeed because the signatures are valid
     promises = await ledger.swap(proofs=signed_proofs, outputs=outputs)
-    assert len(promises) == len(
-        outputs
-    ), "Should have the same number of promises as outputs"
+    assert len(promises) == len(outputs), (
+        "Should have the same number of promises as outputs"
+    )
 
     # Test for a failure
     # Create a fake witness with an incorrect signature
@@ -195,7 +195,7 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     # Create the message to sign (all inputs + all outputs)
-    message_to_sign = sig_all_swap_message(send_proofs, outputs)
+    message_to_sign = nut11.sigall_message_to_sign(send_proofs, outputs)
 
     # Sign the message with the wallet's private key
     signature = wallet1.schnorr_sign_message(message_to_sign)
@@ -205,9 +205,9 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
 
     # The swap should succeed because the SIG_ALL signature is valid
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
-    assert len(promises) == len(
-        outputs
-    ), "Should have the same number of promises as outputs"
+    assert len(promises) == len(outputs), (
+        "Should have the same number of promises as outputs"
+    )
 
 
 @pytest.mark.asyncio

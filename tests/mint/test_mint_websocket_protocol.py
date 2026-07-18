@@ -93,6 +93,18 @@ async def test_websocket_start_returns_jsonrpc_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_websocket_start_exits_on_disconnect_message(monkeypatch):
+    websocket = FakeWebSocket([{"type": "websocket.disconnect", "code": 1012}])
+    manager = _client_manager(websocket)
+    monkeypatch.setattr("cashu.mint.events.client.limit_websocket", lambda ws: None)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        await manager.start()
+
+    assert exc_info.value.code == 1012
+
+
+@pytest.mark.asyncio
 async def test_handle_request_subscribe_and_unsubscribe_roundtrip(monkeypatch):
     manager = _client_manager(FakeWebSocket())
     monkeypatch.setattr(
@@ -270,3 +282,33 @@ async def test_event_manager_rejects_unsupported_events():
     manager = LedgerEventManager()
     with pytest.raises(ValueError, match="Unsupported event object type"):
         await manager.submit(cast(Any, object()))
+
+
+def test_remove_subscription_removes_all_filter_entries_for_subid(monkeypatch):
+    """Regression test for `remove_subscription` early-return bug.
+
+    NUT-17 lets a wallet subscribe to multiple filters in one subscribe
+    request, with a single `subId`. The unsubscribe command carries
+    only that `subId`, so `remove_subscription` must remove the
+    `subId` from every filter list it was registered against. The
+    current implementation returns after the first match, leaving
+    stranded `subId` entries for every other filter -- the client
+    keeps receiving notifications it already unsubscribed from, and
+    the server accumulates one stranded subscription per filter per
+    subscribe/unsubscribe cycle.
+    """
+    manager = _client_manager(FakeWebSocket())
+    monkeypatch.setattr(
+        "cashu.mint.events.client.asyncio.create_task",
+        lambda coro: (coro.close(), None)[1],
+    )
+    manager.add_subscription(
+        JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
+        ["quote-1", "quote-2", "quote-3"],
+        "sub-X",
+    )
+    manager.remove_subscription("sub-X")
+    kind_map = manager.subscriptions[JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE]
+    assert kind_map["quote-1"] == []
+    assert kind_map["quote-2"] == []
+    assert kind_map["quote-3"] == []

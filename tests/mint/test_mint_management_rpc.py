@@ -198,6 +198,9 @@ async def test_nut04_quote(rpc_servicer):
     assert response_get.quote.quote == quote_id
     assert response_get.quote.state == str(MintQuoteState.unpaid)
     assert response_get.quote.amount == 100
+    assert response_get.quote.amount_paid == 0
+    assert response_get.quote.amount_issued == 0
+    assert response_get.quote.updated_at > 0
     
     # Mock UpdateNut04Quote state update
     rpc_servicer.ledger.db_write._update_mint_quote_state = AsyncMock()
@@ -260,4 +263,50 @@ async def test_nut05_quote(rpc_servicer):
     rpc_servicer.ledger.db_write._update_melt_quote_state.assert_called_once_with(
         quote_id, MeltQuoteState.paid
     )
+
+
+@pytest.mark.asyncio
+async def test_get_keyset(rpc_servicer):
+    # Get an existing keyset from the ledger
+    keyset_id = list(rpc_servicer.ledger.keysets.keys())[0]
+
+    # Test GetKeyset for existing keyset
+    request = management_pb2.GetKeysetRequest(id=keyset_id)
+    response = await rpc_servicer.GetKeyset(request, None)
+
+    assert response.id == keyset_id
+    assert response.unit in ["sat", "usd", "eur"]
+    assert isinstance(response.active, bool)
+    assert response.derivation_path != ""
+    assert list(response.amounts)
+    assert response.balance >= 0
+    assert response.fees_paid >= 0
+
+    # Test GetKeyset with missing ID should raise error
+    mock_context = AsyncMock()
+    with pytest.raises(Exception):
+        await rpc_servicer.GetKeyset(management_pb2.GetKeysetRequest(id=""), mock_context)
+    mock_context.abort.assert_called_once()
+
+    # Test GetKeyset with non-existent ID should raise error
+    mock_context_not_found = AsyncMock()
+    with pytest.raises(Exception):
+        await rpc_servicer.GetKeyset(management_pb2.GetKeysetRequest(id="non-existent-id"), mock_context_not_found)
+    mock_context_not_found.abort.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_keysets(rpc_servicer):
+    request = management_pb2.GetKeysetsRequest()
+    response = await rpc_servicer.GetKeysets(request, None)
+
+    assert len(response.keysets) > 0
+    first_keyset = response.keysets[0]
+    assert first_keyset.id != ""
+    assert first_keyset.unit in ["sat", "usd", "eur"]
+    assert isinstance(first_keyset.active, bool)
+    assert first_keyset.derivation_path != ""
+    assert list(first_keyset.amounts)
+    assert first_keyset.balance >= 0
+    assert first_keyset.fees_paid >= 0
 

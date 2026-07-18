@@ -48,6 +48,10 @@ service Mint {
     rpc UpdateLightningFee(UpdateLightningFeeRequest) returns (UpdateResponse) {}
     // UpdateAuthLimits updates the authentication rate limits for the mint.
     rpc UpdateAuthLimits(UpdateAuthLimitsRequest) returns (UpdateResponse) {}
+    // GetKeyset retrieves details and liability information for a keyset by its ID.
+    rpc GetKeyset(GetKeysetRequest) returns (GetKeysetResponse) {}
+    // GetKeysets retrieves details and liability information for all keysets.
+    rpc GetKeysets(GetKeysetsRequest) returns (GetKeysetsResponse) {}
 }
 
 // GetInfoRequest is an empty message used to request general mint information.
@@ -224,6 +228,12 @@ message Nut04Quote {
     optional string pubkey = 13;
     // Optional: The Unix timestamp when the ecash has been issued.
     optional int64 issued_time = 14;
+    // Optional: The amount paid in the quote.
+    optional uint64 amount_paid = 15;
+    // Optional: The amount of tokens issued.
+    optional uint64 amount_issued = 16;
+    // Optional: The Unix timestamp when the quote was updated.
+    optional int64 updated_at = 17;
 }
 
 // BlindedMessage represents a blinded message used in Cashu.
@@ -364,4 +374,49 @@ message UpdateAuthLimitsRequest {
     optional uint64 auth_rate_limit_per_minute = 1;
     // Optional: The maximum number of blind tokens allowed for authentication.
     optional uint64 auth_max_blind_tokens = 2;
+}
+
+// GetKeysetRequest is used to request details for a specific keyset.
+message GetKeysetRequest {
+    // The ID of the keyset to retrieve.
+    string id = 1;
+}
+
+// GetKeysetResponse contains details and liability information for a keyset.
+message GetKeysetResponse {
+    // The ID of the keyset.
+    string id = 1;
+    // The unit of the keyset.
+    string unit = 2;
+    // Indicates if the keyset is currently active.
+    bool active = 3;
+    // The derivation path used for the keyset.
+    string derivation_path = 4;
+    // The input fee per kilobyte.
+    uint64 input_fee_ppk = 5;
+    // Optional: The timestamp when the keyset became valid.
+    optional string valid_from = 6;
+    // Optional: The timestamp when the keyset stops being valid.
+    optional string valid_to = 7;
+    // Optional: The timestamp when the keyset was first seen.
+    optional string first_seen = 8;
+    // Optional: The version of the keyset.
+    optional string version = 9;
+    // The list of supported amounts.
+    repeated uint64 amounts = 10;
+    // The current liability balance of the keyset (outstanding tokens).
+    int64 balance = 11;
+    // The total fees paid for this keyset.
+    int64 fees_paid = 12;
+    // Optional: The final expiry of the keyset.
+    optional uint64 final_expiry = 13;
+}
+
+// GetKeysetsRequest is used to request details for all keysets.
+message GetKeysetsRequest {
+}
+
+// GetKeysetsResponse contains details and liability information for all keysets.
+message GetKeysetsResponse {
+    repeated GetKeysetResponse keysets = 1;
 }

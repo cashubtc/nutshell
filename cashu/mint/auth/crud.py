@@ -388,8 +388,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time)
+            (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, amount_paid, amount_issued, updated_at)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :amount_paid, :amount_issued, :updated_at)
             """,
             {
                 "quote": quote.quote,
@@ -411,6 +411,13 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                     db.timestamp_from_seconds(quote.issued_time) or ""
                 )
                 if quote.issued_time
+                else None,
+                "amount_paid": quote.amount_paid,
+                "amount_issued": quote.amount_issued,
+                "updated_at": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.updated_at) or ""
+                )
+                if quote.updated_at
                 else None,
             },
         )
@@ -473,7 +480,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time, amount_paid = :amount_paid, amount_issued = :amount_issued, updated_at = :updated_at WHERE quote = :quote",
             {
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(
@@ -485,6 +492,13 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                     db.timestamp_from_seconds(quote.issued_time) or ""
                 )
                 if quote.issued_time
+                else None,
+                "amount_paid": quote.amount_paid,
+                "amount_issued": quote.amount_issued,
+                "updated_at": db.to_timestamp(
+                    db.timestamp_from_seconds(quote.updated_at) or ""
+                )
+                if quote.updated_at
                 else None,
                 "quote": quote.quote,
             },
@@ -500,8 +514,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :paid, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, created_time, paid_time, fee_paid, proof, change, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -511,8 +525,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "unit": quote.unit,
                 "amount": quote.amount,
                 "fee_reserve": quote.fee_reserve or 0,
-                "paid": quote.paid,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
@@ -571,11 +584,10 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET paid = :paid, state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
             """,
             {
-                "paid": quote.paid,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "fee_paid": quote.fee_paid,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""

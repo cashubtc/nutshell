@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ class PostMintResponse(BaseModel):
 
 
 class PostMintBatchRequest(BaseModel):
-    quotes: List[str] = Field(..., max_length=settings.mint_max_request_length)
+    quotes: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]] = Field(..., max_length=settings.mint_max_request_length)
     quote_amounts: Optional[List[int]] = Field(default=None, max_length=settings.mint_max_request_length)
     outputs: List[BlindedMessage] = Field(
         ..., max_length=settings.mint_max_request_length

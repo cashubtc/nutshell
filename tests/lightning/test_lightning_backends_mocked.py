@@ -383,14 +383,67 @@ async def test_lndrest_create_invoice_decodes_r_hash():
 
 
 @pytest.mark.asyncio
-async def test_lndrest_pay_invoice_returns_failed_on_payment_error(monkeypatch):
+async def test_lndrest_pay_invoice_settled_reads_stream_result(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat
     wallet.supports_mpp = False
 
+    lines = [
+        json.dumps(
+            {
+                "result": {
+                    "status": "SUCCEEDED",
+                    "payment_hash": "11" * 32,
+                    "fee_msat": "7",
+                    "payment_preimage": "ab" * 32,
+                }
+            }
+        )
+    ]
+
     class Client:
-        async def post(self, *args, **kwargs):
-            return _response(200, {"payment_error": "denied"})
+        def stream(self, method, url, json=None, timeout=None):
+            assert method == "POST"
+            assert url == "/v2/router/send"
+            assert json is not None
+            assert json["payment_request"] == "lnbc1fake"
+            assert json["fee_limit_msat"] == "1000"
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.SETTLED
+    assert result.checking_id == "11" * 32
+    assert result.fee == Amount(Unit.msat, 7)
+    assert result.preimage == "ab" * 32
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_returns_failed_on_payment_failure(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    lines = [
+        json.dumps(
+            {
+                "result": {
+                    "status": "FAILED",
+                    "failure_reason": "FAILURE_REASON_NO_ROUTE",
+                }
+            }
+        )
+    ]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse(lines)
 
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
@@ -401,7 +454,79 @@ async def test_lndrest_pay_invoice_returns_failed_on_payment_error(monkeypatch):
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
     )
     assert result.result == PaymentResult.FAILED
-    assert result.error_message == "denied"
+    assert result.error_message == "FAILURE_REASON_NO_ROUTE"
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_returns_failed_on_rest_proxy_error(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    lines = [json.dumps({"code": 5, "message": "Not Found", "details": []})]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.FAILED
+    assert result.error_message == "Not Found"
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_unknown_on_stream_error(monkeypatch):
+    # a streaming error envelope (e.g. payment already in flight) arrives after
+    # the request was accepted, so the payment may be live: must be UNKNOWN, not
+    # FAILED, so the ledger re-checks the real state with TrackPaymentV2.
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    lines = [json.dumps({"error": {"code": 6, "message": "invoice is already paid"}})]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.UNKNOWN
+    assert result.error_message == "invoice is already paid"
+
+
+@pytest.mark.asyncio
+async def test_lndrest_pay_invoice_unknown_on_empty_stream(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse([])
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.UNKNOWN
 
 
 @pytest.mark.asyncio
@@ -529,3 +654,180 @@ async def test_blink_get_sats_per_usd_raises_on_missing_conversion():
     cast(Any, wallet).client = Client()
     with pytest.raises(Exception, match="Currency conversion service unavailable"):
         await wallet._get_sats_per_usd()
+
+
+@pytest.mark.asyncio
+async def test_spark_pay_invoice_rejects_non_bolt11():
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    wallet = object.__new__(SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+
+    class MockMethod:
+        def is_bolt11_invoice(self):
+            return False
+
+    class MockPrepareResponse:
+        payment_method = MockMethod()
+
+    class MockSDK:
+        async def prepare_send_payment(self, req):
+            return MockPrepareResponse()
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    res = await wallet.pay_invoice(_quote("non-bolt11"), 1000)
+    assert res.result == PaymentResult.FAILED
+    assert "Only BOLT11 payments are supported" in str(res.error_message)
+
+
+@pytest.mark.asyncio
+async def test_spark_pay_invoice_prepare_error_is_failed(monkeypatch):
+    from cashu.lightning import sparkl2
+
+    wallet = object.__new__(sparkl2.SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+    monkeypatch.setattr(
+        sparkl2.breez_sdk_spark,
+        "PrepareSendPaymentRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    class MockSDK:
+        async def prepare_send_payment(self, req):
+            raise RuntimeError("prepare failed")
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    res = await wallet.pay_invoice(_quote("lnbc1fake"), 1000)
+    assert res.result == PaymentResult.FAILED
+    assert "Failed to prepare payment" in str(res.error_message)
+
+
+@pytest.mark.asyncio
+async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
+    from cashu.lightning import sparkl2
+
+    wallet = object.__new__(sparkl2.SparkL2Wallet)
+    wallet.unit = Unit.sat
+    wallet.prefer_spark_over_lightning = True
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+    send_request = None
+
+    def mock_send_payment_request(**kwargs):
+        nonlocal send_request
+        send_request = SimpleNamespace(**kwargs)
+        return send_request
+
+    monkeypatch.setattr(
+        sparkl2.breez_sdk_spark,
+        "PrepareSendPaymentRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+    monkeypatch.setattr(
+        sparkl2.breez_sdk_spark,
+        "SendPaymentRequest",
+        mock_send_payment_request,
+    )
+
+    class MockMethod:
+        lightning_fee_sats = 0
+        spark_transfer_fee_sats = 0
+
+        def is_bolt11_invoice(self):
+            return True
+
+    class MockPrepareResponse:
+        payment_method = MockMethod()
+
+    class MockSDK:
+        async def prepare_send_payment(self, req):
+            return MockPrepareResponse()
+
+        async def send_payment(self, req):
+            raise RuntimeError("send failed")
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    res = await wallet.pay_invoice(_quote("lnbc1fake"), 1000)
+    assert res.result == PaymentResult.UNKNOWN
+    assert res.checking_id == "checking-1"
+    assert "Payment failed or unknown" in str(res.error_message)
+    assert send_request
+    assert send_request.options.prefer_spark is True
+    assert (
+        send_request.options.completion_timeout_secs
+        == sparkl2.SPARK_SEND_PAYMENT_COMPLETION_TIMEOUT_SECONDS
+    )
+
+
+@pytest.mark.asyncio
+async def test_spark_get_invoice_status_not_found_is_unknown(monkeypatch):
+    from cashu.lightning import sparkl2
+
+    wallet = object.__new__(sparkl2.SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+    monkeypatch.setattr(
+        sparkl2.breez_sdk_spark,
+        "ListPaymentsRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    class MockSDK:
+        async def list_payments(self, req):
+            return SimpleNamespace(payments=[])
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    status = await wallet.get_invoice_status("missing-hash")
+    assert status.result == PaymentResult.UNKNOWN
+    assert status.error_message == "Invoice not found"
+
+
+@pytest.mark.asyncio
+async def test_spark_get_payment_quote_rejects_non_bolt11():
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    wallet = object.__new__(SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+
+    class MockMethod:
+        def is_bolt11_invoice(self):
+            return False
+
+    class MockPrepareResponse:
+        payment_method = MockMethod()
+
+    class MockSDK:
+        async def prepare_send_payment(self, req):
+            return MockPrepareResponse()
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    melt_quote = PostMeltQuoteRequest(unit="sat", request="non-bolt11")
+    with pytest.raises(Exception, match="Only BOLT11 payments are supported"):
+        await wallet.get_payment_quote(melt_quote)

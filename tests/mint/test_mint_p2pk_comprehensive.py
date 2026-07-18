@@ -7,7 +7,8 @@ import pytest_asyncio
 
 from cashu.core.base import BlindedMessage, P2PKWitness
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import P2PKSecret, SigFlags, sig_all_swap_message
+from cashu.core.nuts import nut11
+from cashu.core.p2pk import P2PKSecret, SigFlags
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.mint.ledger import Ledger
 from cashu.wallet import migrations
@@ -109,6 +110,38 @@ async def test_p2pk_sig_inputs_basic(wallet1: Wallet, wallet2: Wallet, ledger: L
 
 
 @pytest.mark.asyncio
+async def test_p2pk_sig_all_message_aggregation(
+    wallet1: Wallet, wallet2: Wallet, ledger: Ledger
+):
+    # Mint tokens to wallet1
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    # Create locked tokens with SIG_ALL
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2, sig_all=True)
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 16, secret_lock=secret_lock
+    )
+
+    # Verify that sent tokens have P2PK secrets with SIG_ALL flag
+    for proof in send_proofs:
+        p2pk_secret = Secret.deserialize(proof.secret)
+        assert p2pk_secret.kind == SecretKind.P2PK.value
+        assert P2PKSecret.from_secret(p2pk_secret).sigflag == SigFlags.SIG_ALL
+
+    # Create outputs for redemption
+    outputs = await create_test_outputs(wallet2, 16)
+
+    message_to_sign_expected = "".join(
+        [p.secret + p.C for p in send_proofs] + [str(o.amount) + o.B_ for o in outputs]
+    )
+    message_to_sign_actual = nut11.sigall_message_to_sign(send_proofs, outputs)
+    assert message_to_sign_actual == message_to_sign_expected
+
+
+@pytest.mark.asyncio
 async def test_p2pk_sig_all_valid(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
     """Test P2PK with SIG_ALL where the signature covers both inputs and outputs."""
     # Mint tokens to wallet1
@@ -133,7 +166,7 @@ async def test_p2pk_sig_all_valid(wallet1: Wallet, wallet2: Wallet, ledger: Ledg
     outputs = await create_test_outputs(wallet2, 16)
 
     # Create a message from concatenated inputs and outputs
-    message_to_sign = sig_all_swap_message(send_proofs, outputs)
+    message_to_sign = nut11.sigall_message_to_sign(send_proofs, outputs)
 
     # Sign with wallet2's private key
     signature = wallet2.schnorr_sign_message(message_to_sign)
@@ -316,7 +349,7 @@ async def test_p2pk_timelock(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
     )
 
     # Store current time to check if locktime passed
-    locktime = 0
+    locktime: int | None = 0
     for proof in send_proofs:
         secret = Secret.deserialize(proof.secret)
         p2pk_secret = P2PKSecret.from_secret(secret)
@@ -327,9 +360,9 @@ async def test_p2pk_timelock(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
 
     # Verify that current time is past the locktime
     assert locktime is not None, "Locktime should not be None"
-    assert (
-        int(time.time()) > locktime
-    ), f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
+    assert int(time.time()) > locktime, (
+        f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
+    )
 
     # ensure wallet1 doesn't reuse already swapped proofs later in the test suite
     await wallet1.invalidate(send_proofs)
@@ -635,9 +668,9 @@ async def test_p2pk_invalid_pubkey_check(
         )
     except Exception as e:
         # If it fails during creation, that's fine too
-        assert (
-            "pubkey" in str(e).lower() or "key" in str(e).lower()
-        ), f"Expected error about invalid public key, got: {str(e)}"
+        assert "pubkey" in str(e).lower() or "key" in str(e).lower(), (
+            f"Expected error about invalid public key, got: {str(e)}"
+        )
 
 
 @pytest.mark.asyncio
@@ -668,7 +701,7 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     outputs = await create_test_outputs(wallet1, 16)
 
     # Create message to sign (all inputs + all outputs)
-    message_to_sign = sig_all_swap_message(send_proofs, outputs)
+    message_to_sign = nut11.sigall_message_to_sign(send_proofs, outputs)
 
     # Sign with wallet1's key
     signature1 = wallet1.schnorr_sign_message(message_to_sign)
@@ -677,7 +710,9 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     signature2 = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add both signatures to the first proof only (SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).model_dump_json()
+    send_proofs[0].witness = P2PKWitness(
+        signatures=[signature1, signature2]
+    ).model_dump_json()
 
     # This should succeed with 2 valid signatures
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)

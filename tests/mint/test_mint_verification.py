@@ -14,7 +14,7 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
-from cashu.core.crypto.b_dhke import step1_alice
+from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     InvalidProofsError,
@@ -32,8 +32,8 @@ from cashu.core.errors import (
     TransactionUnitMismatchError,
     WitnessTooLongError,
 )
-from cashu.core.nuts import nut20
-from cashu.core.p2pk import SigFlags, schnorr_sign, sig_all_swap_message
+from cashu.core.nuts import nut11, nut20
+from cashu.core.p2pk import SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -379,6 +379,20 @@ def test_verify_mint_quote_witness_rejects_bad_signature(ledger: Ledger):
     assert ledger._verify_mint_quote_witness(quote, outs, signature=wrong_sig) is False
 
 
+def test_verify_mint_quote_witness_legacy_fallback(ledger: Ledger):
+    priv, pub = nut20.generate_keypair()
+    quote = _mint_quote_with_pubkey(pub)
+    outs = [_blinded_output(ledger, label="nut20_legacy")]
+
+    from cashu.core.crypto.secp import PrivateKey
+
+    privkey = PrivateKey(bytes.fromhex(priv))
+    msgbytes_legacy = nut20.construct_message_legacy(quote.quote, outs)
+    sig_legacy = privkey.sign_schnorr(msgbytes_legacy).hex()
+
+    assert ledger._verify_mint_quote_witness(quote, outs, signature=sig_legacy) is True
+
+
 # ---------------------------------------------------------------------------
 # _verify_proof_bdhke
 # ---------------------------------------------------------------------------
@@ -393,6 +407,37 @@ def test_verify_proof_bdhke_rejects_invalid_token(ledger: Ledger):
         C="02" + "de" * 32,
     )
     assert ledger._verify_proof_bdhke(p) is False
+
+
+def test_verify_proof_bdhke_rejects_legacy_hash_to_curve_alias(ledger: Ledger):
+    current_secret = "alias-241138080"
+    legacy_alias = bytes.fromhex(
+        "".join(
+            [
+                "6562185f066132377f76642849e397bc001026704b1006521775301235c68f7d",
+                "01000000",
+            ]
+        )
+    ).decode("utf-8")
+    amount = 8
+    private_key = ledger.keyset.private_keys[amount]
+    C = (hash_to_curve(current_secret.encode()) * private_key).format().hex()  # type: ignore
+
+    current_proof = Proof(
+        id=ledger.keyset.id,
+        amount=amount,
+        secret=current_secret,
+        C=C,
+    )
+    alias_proof = Proof(
+        id=ledger.keyset.id,
+        amount=amount,
+        secret=legacy_alias,
+        C=C,
+    )
+
+    assert ledger._verify_proof_bdhke(current_proof) is True
+    assert ledger._verify_proof_bdhke(alias_proof) is False
 
 
 def test_verify_proof_bdhke_asserts_unknown_keyset(ledger: Ledger):
@@ -994,7 +1039,7 @@ def test_together_sig_all_succeeds_when_signed(ledger: Ledger):
     )
     fee = ledger.get_fees_for_proofs([p])
     outs = [_blinded_output(ledger, amount=p.amount - fee, label="sigall-ok")]
-    msg = sig_all_swap_message([p], outs)
+    msg = nut11.sigall_message_to_sign([p], outs)
     sig = schnorr_sign(msg.encode("utf-8"), signer).hex()
     p.witness = P2PKWitness(signatures=[sig]).model_dump_json()
     ledger._verify_input_output_spending_conditions([p], outs)

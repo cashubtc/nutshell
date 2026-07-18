@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
-VERSION = "0.20.0"
+VERSION = "0.20.2"
 
 
 def find_env_file():
@@ -57,6 +57,9 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
 
     mint_database: str = Field(default="data/mint")
+    mint_database_lock_timeout: int = Field(
+        default=30000
+    )  # Postgres lock timeout in milliseconds
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
     mint_max_witness_length: int = Field(default=1024)
@@ -103,6 +106,7 @@ class MintWatchdogSettings(MintSettings):
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
 
+
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
@@ -114,6 +118,10 @@ class MintBackends(MintSettings):
     mint_lnbits_key: Optional[str] = Field(default=None)
     mint_strike_key: Optional[str] = Field(default=None)
     mint_blink_key: Optional[str] = Field(default=None)
+
+    mint_spark_network: str = Field(default="TESTNET")
+    mint_spark_api_key: Optional[str] = Field(default=None)
+    mint_spark_mnemonic: Optional[str] = Field(default=None)
 
 
 class MintLimits(MintSettings):
@@ -281,7 +289,6 @@ class WalletSettings(CashuSettings):
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
-    wallet_use_deprecated_h2c: bool = Field(default=False)
     wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
@@ -348,6 +355,7 @@ class AuthSettings(MintSettings):
         ["POST", "/v1/swap"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
+        ["POST", "/v1/mint/bolt11/batch"],
         ["POST", "/v1/melt/bolt11"],
     ]
 

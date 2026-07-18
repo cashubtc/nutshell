@@ -140,10 +140,15 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
-        mint_quote_dict = mint_quote.dict()
-        mint_quote_dict['state'] = str(mint_quote_dict['state'])
+        mint_quote_dict = mint_quote.model_dump()
+        mint_quote_dict['state'] = str(mint_quote.state)
+        mint_quote_dict.pop('state_val', None)
         del mint_quote_dict['mint'] # unused
         del mint_quote_dict['privkey'] # unused
+        # Remove any None values to prevent protobuf type validation errors
+        for key in list(mint_quote_dict.keys()):
+            if mint_quote_dict[key] is None:
+                del mint_quote_dict[key]
         return management_pb2.GetNut04QuoteResponse(
             quote=management_pb2.Nut04Quote(**mint_quote_dict)
         )
@@ -157,7 +162,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut05Quote(self, request, _):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
-        melt_quote_dict = melt_quote.dict()
+        melt_quote_dict = melt_quote.model_dump()
         melt_quote_dict['state'] = str(melt_quote_dict['state'])
         del melt_quote_dict['mint']
         return management_pb2.GetNut05QuoteResponse(
@@ -210,6 +215,65 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No auth limit was specified")
         return management_pb2.UpdateResponse()
+
+    def _keyset_to_dict(self, keyset):
+        response_dict = {
+            "id": keyset.id,
+            "unit": str(keyset.unit.name),
+            "active": keyset.active,
+            "derivation_path": keyset.derivation_path,
+            "input_fee_ppk": keyset.input_fee_ppk,
+            "amounts": keyset.amounts,
+            "balance": keyset.balance,
+            "fees_paid": keyset.fees_paid,
+        }
+        if keyset.valid_from is not None:
+            response_dict["valid_from"] = str(keyset.valid_from)
+        if keyset.valid_to is not None:
+            response_dict["valid_to"] = str(keyset.valid_to)
+        if keyset.first_seen is not None:
+            response_dict["first_seen"] = str(keyset.first_seen)
+        if keyset.version is not None:
+            response_dict["version"] = str(keyset.version)
+        if keyset.final_expiry is not None:
+            response_dict["final_expiry"] = keyset.final_expiry
+        return response_dict
+
+    async def GetKeyset(self, request, context):
+        logger.debug("gRPC GetKeyset has been called")
+        if not request.id:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "Keyset ID is required",
+            )
+            raise Exception("Keyset ID is required")
+
+        keysets = await self.ledger.crud.get_keyset(
+            db=self.ledger.db,
+            id=request.id,
+        )
+        if not keysets:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND,
+                f"Keyset with ID {request.id} not found",
+            )
+            raise Exception(f"Keyset with ID {request.id} not found")
+
+        keyset = keysets[0]
+        response_dict = self._keyset_to_dict(keyset)
+        return management_pb2.GetKeysetResponse(**response_dict)
+
+    async def GetKeysets(self, request, context):
+        logger.debug("gRPC GetKeysets has been called")
+        keysets = await self.ledger.crud.get_keyset(
+            db=self.ledger.db,
+        )
+        proto_keysets = []
+        for keyset in keysets:
+            response_dict = self._keyset_to_dict(keyset)
+            proto_keysets.append(management_pb2.GetKeysetResponse(**response_dict))
+
+        return management_pb2.GetKeysetsResponse(keysets=proto_keysets)
 
 async def serve(ledger: Ledger):
     host = settings.mint_rpc_server_addr
