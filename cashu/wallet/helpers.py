@@ -157,7 +157,7 @@ async def send(
             if timelock_seconds is not None
             else settings.locktime_delta_seconds
         )
-        # we add a time lock to the P2PK lock by appending the current unix time + 14 days
+        # we add a time lock by appending the current unix time + locktime_seconds
         if lock.startswith("P2PK:") or lock.startswith("P2PK-SIGALL:"):
             sigall = lock.startswith("P2PK-SIGALL:")
             logger.debug(f"Locking token to: {lock}")
