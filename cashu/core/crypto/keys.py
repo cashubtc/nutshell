@@ -130,7 +130,7 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
 
     Base64 keyset IDs:
     - Don't start with "00" or "01" version prefix
-    - Are typically 12 characters long
+    - Are exactly 12 characters long
     - Are valid base64 strings
 
     Args:
@@ -139,8 +139,12 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
     Returns:
         True if the keyset ID is base64 format, False otherwise
     """
-    # If it starts with a known version prefix, it's not base64
-    if keyset_id.startswith("00") or keyset_id.startswith("01"):
+    # Legacy IDs are the first 12 characters of a Base64-encoded digest.
+    if len(keyset_id) != 12:
+        return False
+
+    # If it starts with a known version prefix, it's not Base64.
+    if keyset_id.startswith(("00", "01")):
         return False
 
     # Use b64decode with URL-safe alternative characters instead of

@@ -369,7 +369,7 @@ async def test_error_handling():
     secrets.seed = b"test_seed"
     
     # Test unsupported version
-    invalid_keyset_id = "99invalid.version_id"
+    invalid_keyset_id = "99invalid_version_id"
     secrets.keyset_id = invalid_keyset_id
     
     with pytest.raises(ValueError, match="Unsupported keyset version"):
@@ -386,6 +386,10 @@ def test_base64_keyset_id_detection():
     assert is_base64_keyset_id(BASE64URL_KEYSET_ID)
     assert get_keyset_id_version(BASE64URL_KEYSET_ID) == "base64"
     assert is_supported_keyset_version(BASE64URL_KEYSET_ID)
+
+    # Valid Base64URL with the wrong length is not a legacy keyset ID
+    assert not is_base64_keyset_id("99invalid_version_id")
+    assert not is_supported_keyset_version("99invalid_version_id")
     
     # Test v1 keyset is not detected as base64
     assert not is_base64_keyset_id(LEGACY_V1_KEYSET_ID)
