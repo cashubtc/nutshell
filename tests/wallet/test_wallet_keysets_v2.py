@@ -18,6 +18,7 @@ from cashu.core.crypto.keys import (
     get_keyset_id_version,
     is_base64_keyset_id,
     is_keyset_id_v2,
+    is_supported_keyset_version,
 )
 from cashu.core.crypto.secp import PrivateKey
 from cashu.wallet.keyset_manager import KeysetManager
@@ -29,6 +30,7 @@ MNEMONIC = "half depart obvious quality work element tank gorilla view sugar pic
 LEGACY_V1_KEYSET_ID = "009a1f293253e41e"
 V2_KEYSET_ID = "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 BASE64_KEYSET_ID = "yjzQhxghPdrr"
+BASE64URL_KEYSET_ID = "DfVs_IPltHaB"
 
 
 @pytest.mark.asyncio
@@ -367,7 +369,7 @@ async def test_error_handling():
     secrets.seed = b"test_seed"
     
     # Test unsupported version
-    invalid_keyset_id = "99invalid_version_id"
+    invalid_keyset_id = "99invalid.version_id"
     secrets.keyset_id = invalid_keyset_id
     
     with pytest.raises(ValueError, match="Unsupported keyset version"):
@@ -379,6 +381,11 @@ def test_base64_keyset_id_detection():
     # Test base64 keyset ID is detected correctly
     assert is_base64_keyset_id(BASE64_KEYSET_ID)
     assert get_keyset_id_version(BASE64_KEYSET_ID) == "base64"
+
+    # URL-safe legacy IDs must not be mistaken for unsupported hex versions
+    assert is_base64_keyset_id(BASE64URL_KEYSET_ID)
+    assert get_keyset_id_version(BASE64URL_KEYSET_ID) == "base64"
+    assert is_supported_keyset_version(BASE64URL_KEYSET_ID)
     
     # Test v1 keyset is not detected as base64
     assert not is_base64_keyset_id(LEGACY_V1_KEYSET_ID)
@@ -413,3 +420,20 @@ async def test_base64_keyset_secret_derivation():
     keyset_id_int = int.from_bytes(base64.b64decode(BASE64_KEYSET_ID), "big") % (2**31 - 1)
     expected_path = f"m/129372'/0'/{keyset_id_int}'/1'"
     assert expected_path in path
+
+
+@pytest.mark.asyncio
+async def test_base64url_keyset_secret_derivation():
+    secrets = WalletSecrets()
+    secrets.keyset_id = BASE64URL_KEYSET_ID
+    secrets.seed = b"test_seed_for_base64url"
+    secrets.bip32 = BIP32.from_seed(secrets.seed)
+
+    _, _, path = await secrets.generate_determinstic_secret(1)
+
+    import base64
+
+    keyset_id_int = int.from_bytes(
+        base64.urlsafe_b64decode(BASE64URL_KEYSET_ID), "big"
+    ) % (2**31 - 1)
+    assert f"m/129372'/0'/{keyset_id_int}'/1'" in path

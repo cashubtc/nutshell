@@ -143,9 +143,10 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
     if keyset_id.startswith("00") or keyset_id.startswith("01"):
         return False
 
-    # Try to decode as base64 to confirm
+    # Try to decode as URL-safe base64 to confirm. Legacy keyset IDs can use
+    # either the standard or URL-safe alphabet.
     try:
-        base64.b64decode(keyset_id, validate=True)
+        base64.b64decode(keyset_id, altchars=b"-_", validate=True)
         return True
     except Exception:
         return False

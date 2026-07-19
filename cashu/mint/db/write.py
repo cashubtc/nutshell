@@ -287,7 +287,10 @@ class DbWriteHelper:
                     )
                 # set the quote to previous state
                 quote.state = state
-                quote.updated_at = int(time.time())
+                now = int(time.time())
+                quote.updated_at = now
+                if state == MintQuoteState.issued and not quote.issued_time:
+                    quote.issued_time = now
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
@@ -592,4 +595,3 @@ class DbWriteHelper:
         await self.events.submit(quote_copy)
 
         return quote_copy
-
