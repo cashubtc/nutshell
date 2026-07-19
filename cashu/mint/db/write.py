@@ -41,6 +41,17 @@ class DbWriteHelper:
         self.events = events
         self.db_read = db_read
 
+    @staticmethod
+    def _set_mint_quote_state(quote: MintQuote, state: MintQuoteState) -> None:
+        """Set a mint quote state and its corresponding timestamps."""
+        now = int(time.time())
+        quote.state = state
+        quote.updated_at = now
+        if state == MintQuoteState.paid and not quote.paid_time:
+            quote.paid_time = now
+        if state == MintQuoteState.issued and not quote.issued_time:
+            quote.issued_time = now
+
     async def _verify_spent_proofs_and_set_pending(
         self,
         proofs: List[Proof],
@@ -166,8 +177,7 @@ class DbWriteHelper:
             if not quote.paid:
                 raise TransactionError("Mint quote is not paid yet.")
             # set the quote as pending
-            quote.state = MintQuoteState.pending
-            quote.updated_at = int(time.time())
+            self._set_mint_quote_state(quote, MintQuoteState.pending)
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -208,8 +218,7 @@ class DbWriteHelper:
                     raise TransactionError(f"Mint quote {quote_id} is not paid yet.")
                 
                 # set the quote as pending
-                quote.state = MintQuoteState.pending
-                quote.updated_at = int(time.time())
+                self._set_mint_quote_state(quote, MintQuoteState.pending)
                 logger.trace(f"crud: setting quote {quote_id} as PENDING")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
@@ -241,11 +250,7 @@ class DbWriteHelper:
                     f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
                 )
             # set the quote to previous state
-            quote.state = state
-            now = int(time.time())
-            quote.updated_at = now
-            if state == MintQuoteState.issued and not quote.issued_time:
-                quote.issued_time = now
+            self._set_mint_quote_state(quote, state)
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -286,11 +291,7 @@ class DbWriteHelper:
                         f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot set as {state.value}."
                     )
                 # set the quote to previous state
-                quote.state = state
-                now = int(time.time())
-                quote.updated_at = now
-                if state == MintQuoteState.issued and not quote.issued_time:
-                    quote.issued_time = now
+                self._set_mint_quote_state(quote, state)
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
