@@ -180,6 +180,34 @@ def test_pay_nut18_unsupported_method(mint, cli_prefix):
     assert "cashuB" not in result.output
 
 
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_rejects_sm_without_unit(mint, cli_prefix):
+    """`sm` (and its per-method fees) are denominated in `u`; reject if `u` is absent."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(a=10, sm=[SupportedMethod(mn="bolt11")])
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "supported methods but no unit" in result.output
+    assert "cashuB" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_rejects_unit_mismatch(mint, cli_prefix):
+    """A request unit that differs from the wallet's unit is rejected."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(a=10, u="usd", sm=[SupportedMethod(mn="bolt11")])
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "does not match" in result.output
+    assert "cashuB" not in result.output
+
+
 def _extract_creq(output: str) -> str:
     """Pull the creqA payment request out of CLI output that may include logs."""
     for line in output.splitlines():
