@@ -150,9 +150,9 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         except ValueError:
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
             # calculate an integer keyset id from the base64 encoded keyset id
-            keyest_id_int = int.from_bytes(base64.b64decode(keyset_id), "big") % (
-                2**31 - 1
-            )
+            keyest_id_int = int.from_bytes(
+                base64.b64decode(keyset_id, altchars=b"-_", validate=True), "big"
+            ) % (2**31 - 1)
             # END: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
 
         logger.trace(f"BIP32: keyset id: {keyset_id} becomes {keyest_id_int}")

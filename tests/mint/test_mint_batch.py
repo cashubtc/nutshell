@@ -81,6 +81,11 @@ async def test_ledger_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert promises[0].amount == 64
     assert promises[1].amount == 32
 
+    quote1 = await ledger.get_mint_quote(mint_quote1.quote)
+    quote2 = await ledger.get_mint_quote(mint_quote2.quote)
+    assert quote1.issued_time is not None
+    assert quote2.issued_time is not None
+
 
 @pytest.mark.asyncio
 async def test_ledger_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):

@@ -226,6 +226,11 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.state == MintQuoteState.paid
 
+    # Legacy paid quotes may not have a payment timestamp. Moving through
+    # PENDING and back to PAID must not invent one during rollback.
+    quote.paid_time = None
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
     previous_state = MintQuoteState.paid
     await ledger.db_write._set_mint_quote_pending(quote.quote)
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
@@ -244,6 +249,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.state == previous_state
     assert quote.state == MintQuoteState.paid
+    assert quote.paid_time is None
 
     # # set paid and mint again
     # quote.state = MintQuoteState.paid
