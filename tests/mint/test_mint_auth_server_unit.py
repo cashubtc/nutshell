@@ -223,7 +223,10 @@ async def test_verify_blind_auth_warns_on_nut10_secret():
     ledger = _ledger()
     token = _auth_token(
         secret=Secret(
-            kind="P2PK", data="pk", tags=Tags(tags=[]), nonce="0" * 32
+            kind="P2PK",
+            data="0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            tags=Tags(tags=[]),
+            nonce="0" * 32,
         ).serialize()
     )
 
@@ -250,6 +253,20 @@ async def test_verify_blind_auth_warns_on_nut10_secret():
 
     warning.assert_called_once()
     assert "does not enforce spending conditions" in warning.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_verify_blind_auth_rejects_malformed_nut10_secret():
+    ledger = _ledger()
+    token = _auth_token(
+        secret=Secret(
+            kind="P2PK", data="not-a-pubkey", tags=Tags(tags=[]), nonce="0" * 32
+        ).serialize()
+    )
+
+    with pytest.raises(BlindAuthFailedError):
+        async with ledger.verify_blind_auth(token):
+            pass
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ from ..core.base import (
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.htlc import HTLCSecret
-from ..core.nuts import nut11
+from ..core.nuts import nut10, nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
@@ -59,21 +59,24 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         if not tags:
             tags = Tags()
             logger.debug(f"Before tags: {tags}")
-        if locktime_seconds:
+        if locktime_seconds and tags.get_tag("locktime") is None:
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
             )
-        tags["sigflag"] = (
-            SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
-        )
-        if n_sigs > 1:
+        if tags.get_tag("sigflag") is None:
+            tags["sigflag"] = (
+                SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
+            )
+        if n_sigs != 1 and tags.get_tag("n_sigs") is None:
             tags["n_sigs"] = str(n_sigs)
         logger.debug(f"After tags: {tags}")
-        return P2PKSecret(
+        secret = P2PKSecret(
             kind=SecretKind.P2PK.value,
             data=data,
             tags=tags,
         )
+        nut10.parse_spending_condition(secret.serialize())
+        return secret
 
     def signatures_proofs_sig_inputs(self, proofs: List[Proof]) -> List[str]:
         """Signs proof secrets with the private key of the wallet.

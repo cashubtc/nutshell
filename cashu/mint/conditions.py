@@ -11,13 +11,13 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.htlc import HTLCSecret
-from ..core.nuts import nut11
+from ..core.nuts import nut10, nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
     verify_schnorr_signature,
 )
-from ..core.secret import Secret, SecretKind
+from ..core.secret import SecretKind
 
 
 @dataclass
@@ -136,22 +136,20 @@ class LedgerSpendingConditions:
 
         # Now split depending on whether the secret kind is P2PK or HTLC:
 
-        if SecretKind(unique_secret.kind) == SecretKind.P2PK:
-            secret_lock_p2pk: P2PKSecret = P2PKSecret.from_secret(unique_secret)
-            if secret_lock_p2pk.sigflag != SigFlags.SIG_ALL:
-                raise TransactionError("P2PK secret does not have SIG_ALL flag")
-            return self._verify_p2pk_or_htlc_spending_requirements(
-                self._get_spending_requirements(secret_lock_p2pk),
-                WitnessForP2pkOrHtlc.from_p2pk_witness(first_proof.witness),
-                message_to_sign,
-            )
-        elif SecretKind(unique_secret.kind) == SecretKind.HTLC:
-            secret_lock_htlc: HTLCSecret = HTLCSecret.from_secret(unique_secret)
-            if secret_lock_htlc.sigflag != SigFlags.SIG_ALL:
+        if isinstance(unique_secret, HTLCSecret):
+            if unique_secret.sigflag != SigFlags.SIG_ALL:
                 raise TransactionError("HTLC secret does not have SIG_ALL flag")
             return self._verify_p2pk_or_htlc_spending_requirements(
-                self._get_spending_requirements(secret_lock_htlc),
+                self._get_spending_requirements(unique_secret),
                 WitnessForP2pkOrHtlc.from_htlc_witness(first_proof.witness),
+                message_to_sign,
+            )
+        elif isinstance(unique_secret, P2PKSecret):
+            if unique_secret.sigflag != SigFlags.SIG_ALL:
+                raise TransactionError("P2PK secret does not have SIG_ALL flag")
+            return self._verify_p2pk_or_htlc_spending_requirements(
+                self._get_spending_requirements(unique_secret),
+                WitnessForP2pkOrHtlc.from_p2pk_witness(first_proof.witness),
                 message_to_sign,
             )
         else:
@@ -178,34 +176,14 @@ class LedgerSpendingConditions:
         This verifier returns `True` on success and raises on failure.
         """
 
-        try:
-            secret = Secret.deserialize(proof.secret)
-            logger.trace(f"proof.secret: {proof.secret}")
-            logger.trace(f"secret: {secret}")
-        except Exception:
-            # secret is not a NUT-10 spending condition so we treat it as a
-            # plain secret and ignore any witness data.
+        condition = nut10.parse_spending_condition(proof.secret)
+        if condition is None:
             return True
 
-        # If we get here, the secret is a NUT-10 secret.
+        logger.trace(f"proof.secret: {proof.secret}")
+        logger.trace(f"condition: {condition}")
 
-        # P2PK
-        if SecretKind(secret.kind) == SecretKind.P2PK:
-            p2pk_secret = P2PKSecret.from_secret(secret)
-            return self._verify_p2pk_or_htlc_sig_inputs(proof, p2pk_secret)
-
-        # HTLC
-        if SecretKind(secret.kind) == SecretKind.HTLC:
-            htlc_secret = HTLCSecret.from_secret(secret)
-            return self._verify_p2pk_or_htlc_sig_inputs(proof, htlc_secret)
-
-        # no spending condition present, or it's an unsupported 'kind', in which
-        # case it's suggested to allow anyone-can-spend:
-        #   "If the mint does not support spending conditions or a specific kind
-        #    of spending condition, proofs may be treated as a regular
-        #    anyone-can-spend tokens."
-        # https://github.com/cashubtc/nuts/blob/main/10.md
-        return True
+        return self._verify_p2pk_or_htlc_sig_inputs(proof, condition)
 
     def _at_least_one_proof_has_sig_all(self, proofs: List[Proof]) -> bool:
         """
@@ -222,29 +200,28 @@ class LedgerSpendingConditions:
         """
         Check if a single proof encodes a SIG_ALL spending condition.
         """
-        try:
-            secret = Secret.deserialize(proof.secret)
-        except Exception:
-            # secret is not a spending condition so we treat is a normal secret
+        condition = nut10.parse_spending_condition(proof.secret)
+        if condition is None:
             return False
 
-        if SecretKind(secret.kind) == SecretKind.P2PK:
-            return P2PKSecret.from_secret(secret).sigflag == SigFlags.SIG_ALL
+        return condition.sigflag == SigFlags.SIG_ALL
 
-        if SecretKind(secret.kind) == SecretKind.HTLC:
-            return HTLCSecret.from_secret(secret).sigflag == SigFlags.SIG_ALL
-
-        return False
-
-    def _verify_all_secrets_equal_and_return(self, proofs: List[Proof]) -> Secret:
+    def _verify_all_secrets_equal_and_return(
+        self, proofs: List[Proof]
+    ) -> nut10.SpendingCondition:
         """
         Verify that all secrets are equal (kind, data, tags)
 
         Raise if they are different. If all identical, return that unique Secret
         """
-        secrets = set()
+        secrets: set[nut10.SpendingCondition] = set()
         for proof in proofs:
-            secrets.add(Secret.deserialize(proof.secret))
+            condition = nut10.parse_spending_condition(proof.secret)
+            if condition is None:
+                raise TransactionError(
+                    "SIG_ALL transaction contains an ordinary secret."
+                )
+            secrets.add(condition)
 
         if len(secrets) != 1:
             raise TransactionError("not all secrets are equal.")

@@ -94,7 +94,7 @@ class LedgerVerification(
         self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
 
         # Melts can omit NUT-08 change outputs or provide an empty array.
-        if outputs is None or not outputs:
+        if outputs is None or (not outputs and not verify_input_output_balance):
             return
 
         # 3. Verify the outputs generically: keyset consistency, amount rules,

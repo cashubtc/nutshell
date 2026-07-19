@@ -12,6 +12,7 @@ from coincurve import PublicKeyXOnly
 
 from cashu.core.base import P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
+from cashu.core.errors import TransactionError
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import P2PKSecret, SigFlags
 from cashu.core.secret import Secret, SecretKind, Tags
@@ -354,43 +355,22 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
 
 
 @pytest.mark.asyncio
-async def test_p2pk_multisig_case_bypass(wallet1: Wallet, wallet2: Wallet):
+async def test_p2pk_multisig_case_bypass_rejected_by_constructor(
+    wallet1: Wallet, wallet2: Wallet
+):
     """
     Tests an exploit where the same pubkey and signature are duplicated using
     upper and lower case to bypass deduplication checks in the mint.
     """
-    mint_quote = await wallet1.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
-    
-    # We use wallet2's pubkey, but provide it twice: once lower, once upper.
     pubkey_wallet2_lower = await wallet2.create_p2pk_pubkey()
     pubkey_wallet2_upper = pubkey_wallet2_lower.upper()
-    
-    # p2pk test: require 2 signatures, but provide the same pubkey (just cased differently)
-    secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2_lower, tags=Tags([["pubkeys", pubkey_wallet2_upper]]), n_sigs=2
-    )
-    
-    # wallet1 locks the proofs to the bypass 2-of-2 secret
-    _, send_proofs = await wallet1.swap_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    
-    # wallet2 creates one valid signature
-    send_proofs = wallet2.sign_p2pk_sig_inputs(send_proofs)
-    
-    # duplicate the signature using upper/lower case
-    for proof in send_proofs:
-        sig_lower = proof.p2pksigs[0]
-        sig_upper = sig_lower.upper()
-        # update witness with both identically-evaluating signatures
-        proof.witness = P2PKWitness(signatures=[sig_lower, sig_upper]).model_dump_json()
 
-    # Execute the attack: the mint should reject this as pubkeys are not unique
-    await assert_err(
-        wallet2.redeem(send_proofs), "Mint Error: signatures must be unique."
-    )
+    with pytest.raises(TransactionError, match="pubkeys must be unique"):
+        await wallet1.create_p2pk_lock(
+            pubkey_wallet2_lower,
+            tags=Tags([["pubkeys", pubkey_wallet2_upper]]),
+            n_sigs=2,
+        )
 
 
 @pytest.mark.asyncio
@@ -432,14 +412,12 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
 
     # verify both signatures:
     xonly_pub = PublicKeyXOnly(bytes.fromhex(pubkey_wallet2)[1:])
-    assert xonly_pub.verify(
-        bytes.fromhex(proof.p2pksigs[0]), msg
-    )
-    assert xonly_pub.verify(
-        coincurve_signature, msg
-    )
+    assert xonly_pub.verify(bytes.fromhex(proof.p2pksigs[0]), msg)
+    assert xonly_pub.verify(coincurve_signature, msg)
     # add coincurve signature, and the wallet2 signature will be added during .redeem
-    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).model_dump_json()
+    send_proofs[0].witness = P2PKWitness(
+        signatures=[coincurve_signature.hex()]
+    ).model_dump_json()
 
     # here we add the signatures of wallet2
     await assert_err(
@@ -499,22 +477,17 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
 
 
 @pytest.mark.asyncio
-async def test_p2pk_multisig_with_duplicate_publickey(wallet1: Wallet, wallet2: Wallet):
-    mint_quote = await wallet1.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
+async def test_p2pk_multisig_with_duplicate_publickey_rejected_by_constructor(
+    wallet1: Wallet, wallet2: Wallet
+):
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    # p2pk test
-    secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet2]]), n_sigs=2
-    )
-    _, send_proofs = await wallet1.swap_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    await assert_err(
-        wallet2.redeem(send_proofs),
-        "Mint Error: not enough pubkeys (1) or signatures (1) present for n_sigs (2).",
-    )
+
+    with pytest.raises(TransactionError, match="pubkeys must be unique"):
+        await wallet1.create_p2pk_lock(
+            pubkey_wallet2,
+            tags=Tags([["pubkeys", pubkey_wallet2]]),
+            n_sigs=2,
+        )
 
 
 @pytest.mark.asyncio
@@ -566,9 +539,22 @@ def test_tags():
 
 @pytest.mark.asyncio
 async def test_secret_initialized_with_tags(wallet1: Wallet):
-    tags = Tags([["locktime", "100"], ["n_sigs", "3"], ["sigflag", "SIG_ALL"]])
     pubkey = PrivateKey().public_key
-    assert pubkey
+    additional_pubkey_1 = PrivateKey().public_key
+    additional_pubkey_2 = PrivateKey().public_key
+    assert pubkey and additional_pubkey_1 and additional_pubkey_2
+    tags = Tags(
+        [
+            ["locktime", "100"],
+            [
+                "pubkeys",
+                additional_pubkey_1.format().hex(),
+                additional_pubkey_2.format().hex(),
+            ],
+            ["n_sigs", "3"],
+            ["sigflag", "SIG_ALL"],
+        ]
+    )
     secret = await wallet1.create_p2pk_lock(
         data=pubkey.format().hex(),
         tags=tags,
@@ -581,17 +567,37 @@ async def test_secret_initialized_with_tags(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_secret_initialized_with_arguments(wallet1: Wallet):
     pubkey = PrivateKey().public_key
-    assert pubkey
+    additional_pubkey_1 = PrivateKey().public_key
+    additional_pubkey_2 = PrivateKey().public_key
+    assert pubkey and additional_pubkey_1 and additional_pubkey_2
     secret = await wallet1.create_p2pk_lock(
         data=pubkey.format().hex(),
         locktime_seconds=100,
         n_sigs=3,
         sig_all=True,
+        tags=Tags(
+            [
+                [
+                    "pubkeys",
+                    additional_pubkey_1.format().hex(),
+                    additional_pubkey_2.format().hex(),
+                ]
+            ]
+        ),
     )
     assert secret.locktime
     assert secret.locktime > 1689000000
     assert secret.n_sigs == 3
     assert secret.sigflag == SigFlags.SIG_ALL
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n_sigs", [0, -1, 2])
+async def test_create_p2pk_lock_rejects_invalid_threshold(wallet1: Wallet, n_sigs: int):
+    pubkey = await wallet1.create_p2pk_pubkey()
+
+    with pytest.raises(TransactionError, match="n_sigs"):
+        await wallet1.create_p2pk_lock(pubkey, n_sigs=n_sigs)
 
 
 @pytest.mark.asyncio

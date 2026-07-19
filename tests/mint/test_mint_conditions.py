@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from cashu.core.crypto.secp import PrivateKey
-from cashu.core.errors import InvalidProofsError
+from cashu.core.errors import TransactionError
 from cashu.core.p2pk import schnorr_sign
 from cashu.core.secret import SecretKind
 from cashu.mint.ledger import Ledger
@@ -31,7 +31,7 @@ async def test_verify_inputs_and_outputs_p2pk_custom_sigflag_fails_without_outpu
             ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
         ),
     ):
-        with pytest.raises(InvalidProofsError):
+        with pytest.raises(TransactionError, match="malformed NUT-10 secret"):
             ledger._verify_input_spending_conditions(p)
 
 
@@ -54,5 +54,5 @@ async def test_verify_inputs_and_outputs_htlc_custom_sigflag_fails_without_outpu
             ledger.db_read, "_verify_proofs_spendable", AsyncMock(return_value=True)
         ),
     ):
-        with pytest.raises(InvalidProofsError):
+        with pytest.raises(TransactionError, match="malformed NUT-10 secret"):
             ledger._verify_input_spending_conditions(p)

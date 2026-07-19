@@ -33,11 +33,7 @@ class P2PKSecret(Secret):
 
     @property
     def locktime(self) -> Union[None, int]:
-        locktime = self.tags.get_tag("locktime")
-        try:
-            return int(locktime) if locktime else None
-        except (TypeError, ValueError):
-            return None
+        return self.tags.get_tag_int("locktime")
 
     @property
     def sigflag(self) -> SigFlags:

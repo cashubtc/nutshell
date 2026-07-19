@@ -148,7 +148,7 @@ def test_verify_p2pk_sig_inputs_main_path_valid():
     assert cond._verify_input_spending_conditions(proof(raw_secret, signatures=[sig]))
 
 
-def test_verify_p2pk_sig_inputs_invalid_locktime_keeps_primary_path():
+def test_verify_p2pk_sig_inputs_invalid_locktime_rejects_primary_path():
     cond = LedgerSpendingConditions()
     signer = PrivateKey()
     pub = signer.public_key.format().hex()
@@ -159,7 +159,8 @@ def test_verify_p2pk_sig_inputs_invalid_locktime_keeps_primary_path():
         extra_tags=[["locktime", "invalid"], ["refund", refund_pub]],
     )
     sig = schnorr_sign(raw_secret.encode("utf-8"), signer).hex()
-    assert cond._verify_input_spending_conditions(proof(raw_secret, signatures=[sig]))
+    with pytest.raises(TransactionError, match="locktime must be an integer"):
+        cond._verify_input_spending_conditions(proof(raw_secret, signatures=[sig]))
 
 
 def test_verify_p2pk_sig_inputs_invalid_locktime_rejects_refund_path():
@@ -173,7 +174,7 @@ def test_verify_p2pk_sig_inputs_invalid_locktime_rejects_refund_path():
         extra_tags=[["locktime", "invalid"], ["refund", refund_pub]],
     )
     refund_sig = schnorr_sign(raw_secret.encode("utf-8"), refund_signer).hex()
-    with pytest.raises(TransactionError, match="signature threshold not met"):
+    with pytest.raises(TransactionError, match="locktime must be an integer"):
         cond._verify_input_spending_conditions(
             proof(raw_secret, signatures=[refund_sig])
         )

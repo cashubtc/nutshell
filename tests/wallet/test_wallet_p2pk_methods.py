@@ -71,12 +71,19 @@ async def test_create_p2pk_lock_default(wallet1: Wallet):
 async def test_create_p2pk_lock_with_options(wallet1: Wallet):
     """Test creating a P2PK lock with all options specified."""
     pubkey = await wallet1.create_p2pk_pubkey()
+    additional_pubkey = PrivateKey().public_key
+    assert additional_pubkey is not None
     secret_lock = await wallet1.create_p2pk_lock(
         pubkey,
         locktime_seconds=3600,
         sig_all=True,
         n_sigs=2,
-        tags=Tags([["custom_tag", "custom_value"]]),
+        tags=Tags(
+            [
+                ["custom_tag", "custom_value"],
+                ["pubkeys", additional_pubkey.format().hex()],
+            ]
+        ),
     )
 
     # Verify created lock properties
