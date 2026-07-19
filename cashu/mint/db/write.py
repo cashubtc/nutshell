@@ -47,8 +47,6 @@ class DbWriteHelper:
         now = int(time.time())
         quote.state = state
         quote.updated_at = now
-        if state == MintQuoteState.paid and not quote.paid_time:
-            quote.paid_time = now
         if state == MintQuoteState.issued and not quote.issued_time:
             quote.issued_time = now
 
