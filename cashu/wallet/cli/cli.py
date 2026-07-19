@@ -308,6 +308,17 @@ async def pay(
             print(f"Accepted mints: {pr.m}")
             return
 
+        # `a` and `mf` are denominated in the request unit `u`
+        if pr.sm is not None and pr.u is None:
+            print("Error: Payment request lists supported methods but no unit.")
+            return
+        if pr.u is not None and pr.u != wallet.unit.name:
+            print(
+                f"Error: Payment request unit '{pr.u}' does not match "
+                f"wallet unit '{wallet.unit.name}'."
+            )
+            return
+
         # The sending mint must support (melt via) one of the requested methods
         method_fee = wallet.mint_info.payment_request_method_fee(pr.sm, wallet.unit)
         if method_fee is None:
