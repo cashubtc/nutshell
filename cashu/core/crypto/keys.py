@@ -143,8 +143,9 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
     if keyset_id.startswith("00") or keyset_id.startswith("01"):
         return False
 
-    # Try to decode as URL-safe base64 to confirm. Legacy keyset IDs can use
-    # either the standard or URL-safe alphabet.
+    # Use b64decode with URL-safe alternative characters instead of
+    # urlsafe_b64decode because only b64decode supports validate=True. This
+    # accepts both Base64 alphabets while strictly rejecting malformed IDs.
     try:
         base64.b64decode(keyset_id, altchars=b"-_", validate=True)
         return True
