@@ -119,18 +119,6 @@ async def test_ledger_verify_p2pk_signature_validation(
         "Should have the same number of promises as outputs"
     )
 
-    # Test for a failure
-    # Create a fake witness with an incorrect signature
-    fake_signature = "0" * 128  # Just a fake 64-byte hex string
-    for proof in send_proofs:
-        proof.witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
-
-    # The swap should fail because the signatures are invalid
-    await assert_err(
-        ledger.swap(proofs=send_proofs, outputs=outputs),
-        "signature threshold not met",
-    )
-
 
 @pytest.mark.asyncio
 async def test_ledger_verify_incorrect_signature(wallet1: Wallet1, ledger: Ledger):
