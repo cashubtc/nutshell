@@ -1327,3 +1327,11 @@ async def m037_remove_paid_from_melt_quote(db: Database):
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS paid"
             )
+
+
+async def m038_add_d_gap_to_promises(db: Database):
+    """Store NUT-342 recovery window metadata with blinded signatures."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN d_gap TEXT DEFAULT NULL"
+        )

@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -163,6 +163,7 @@ class LedgerCrud(ABC):
         melt_id: Optional[str] = None,
         swap_id: Optional[str] = None,
         order_index: int = 0,
+        d_gap: Optional[Union[int, str]] = None,
         conn: Optional[Connection] = None,
     ) -> None: ...
 
@@ -347,13 +348,14 @@ class LedgerCrudSqlite(LedgerCrud):
         melt_id: Optional[str] = None,
         swap_id: Optional[str] = None,
         order_index: int = 0,
+        d_gap: Optional[Union[int, str]] = None,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("promises")}
-            (amount, b_, id, created, mint_quote, melt_quote, swap_id, order_index)
-            VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id, :order_index)
+            (amount, b_, id, created, mint_quote, melt_quote, swap_id, order_index, d_gap)
+            VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id, :order_index, :d_gap)
             """,
             {
                 "amount": amount,
@@ -364,6 +366,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "melt_quote": melt_id,
                 "swap_id": swap_id,
                 "order_index": order_index,
+                "d_gap": d_gap,
             },
         )
 
