@@ -1359,7 +1359,13 @@ class Ledger(
 
     def _generate_dleq(self, output: BlindedMessage, promise: BlindedSignature) -> DLEQ:
         B_ = PublicKey(bytes.fromhex(output.B_))
+        if promise.id not in self.keysets:
+            raise TransactionError(f"keyset {promise.id} not found")
         keyset = self.keysets[promise.id]
+        if promise.amount not in keyset.private_keys:
+            raise TransactionError(
+                f"keyset {promise.id} does not support amount {promise.amount}"
+            )
         private_key_amount = keyset.private_keys[promise.amount]
         C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
         if C_.format().hex() != promise.C_:

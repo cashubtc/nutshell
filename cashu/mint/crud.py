@@ -427,8 +427,6 @@ class LedgerCrudSqlite(LedgerCrud):
         amount: int,
         b_: str,
         c_: str,
-        e: str = "",
-        s: str = "",
         conn: Optional[Connection] = None,
     ) -> None:
         existing = await (conn or db).fetchone(
