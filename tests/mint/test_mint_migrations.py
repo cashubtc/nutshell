@@ -6,6 +6,21 @@ from cashu.mint import migrations as mint_migrations
 
 
 @pytest.mark.asyncio
+async def test_m038_remove_dleq_from_promises(tmp_path):
+    db = Database("mint", str(tmp_path / "mint"))
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        columns = await conn.fetchall(
+            f"PRAGMA table_info({db.table_with_schema('promises')})"
+        )
+
+    column_names = {column["name"] for column in columns}
+    assert "dleq_e" not in column_names
+    assert "dleq_s" not in column_names
+
+
+@pytest.mark.asyncio
 async def test_m029_witness_cleanup():
     db = Database("mint", "./test_data/mig_witness_cleanup")
 

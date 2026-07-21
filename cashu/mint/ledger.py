@@ -855,6 +855,15 @@ class Ledger(
         if not melt_quote:
             raise Exception("quote not found")
 
+        if melt_quote.change:
+            change_outputs = await self.crud.get_blinded_messages_melt_id(
+                melt_id=quote_id, db=self.db, signed=True
+            )
+            if len(change_outputs) != len(melt_quote.change):
+                raise TransactionError("could not reconstruct melt change promises")
+            for output, promise in zip(change_outputs, melt_quote.change):
+                promise.dleq = self._generate_dleq(output, promise)
+
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
         )
@@ -1373,12 +1382,28 @@ class Ledger(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
+                    promise.dleq = self._generate_dleq(output, promise)
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
         return return_outputs, signatures
 
     # ------- BLIND SIGNATURES -------
+
+    def _generate_dleq(self, output: BlindedMessage, promise: BlindedSignature) -> DLEQ:
+        B_ = PublicKey(bytes.fromhex(output.B_))
+        if promise.id not in self.keysets:
+            raise TransactionError(f"keyset {promise.id} not found")
+        keyset = self.keysets[promise.id]
+        if promise.amount not in keyset.private_keys:
+            raise TransactionError(
+                f"keyset {promise.id} does not support amount {promise.amount}"
+            )
+        private_key_amount = keyset.private_keys[promise.amount]
+        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+        if C_.format().hex() != promise.C_:
+            raise TransactionError("restored signature does not match promise")
+        return DLEQ(e=e.to_hex(), s=s.to_hex())
 
     async def _store_blinded_messages(
         self,
@@ -1468,8 +1493,6 @@ class Ledger(
                     amount=amount,
                     b_=B_.format().hex(),
                     c_=C_.format().hex(),
-                    e=e.to_hex(),
-                    s=s.to_hex(),
                     db=self.db,
                     conn=conn,
                 )
