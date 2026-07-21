@@ -141,6 +141,7 @@ async def send(
     memo: Optional[str] = None,
     force_swap: bool = False,
     refund_pubkeys: Optional[List[str]] = None,
+    timelock_seconds: Optional[int] = None,
 ):
     """
     Prints token to send to stdout.
@@ -151,20 +152,23 @@ async def send(
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
         )
-        # we add a time lock to the P2PK lock by appending the current unix time + 14 days
+        locktime_seconds = (
+            timelock_seconds
+            if timelock_seconds is not None
+            else settings.locktime_delta_seconds
+        )
+        # we add a time lock by appending the current unix time + locktime_seconds
         if lock.startswith("P2PK:") or lock.startswith("P2PK-SIGALL:"):
             sigall = lock.startswith("P2PK-SIGALL:")
             logger.debug(f"Locking token to: {lock}")
-            logger.debug(
-                f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
-            )
+            logger.debug(f"Adding a time lock of {locktime_seconds} seconds.")
             tags = None
             if refund_pubkeys:
                 tags = Tags()
                 tags["refund"] = refund_pubkeys
             secret_lock = await wallet.create_p2pk_lock(
                 lock.split(":")[1],
-                locktime_seconds=settings.locktime_delta_seconds,
+                locktime_seconds=locktime_seconds,
                 sig_all=sigall,
                 n_sigs=1,
                 tags=tags,
@@ -173,16 +177,14 @@ async def send(
         elif lock.startswith("P2BK:") or lock.startswith("P2BK-SIGALL:"):
             sigall = lock.startswith("P2BK-SIGALL:")
             logger.debug(f"Locking token with P2BK to: {lock}")
-            logger.debug(
-                f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
-            )
+            logger.debug(f"Adding a time lock of {locktime_seconds} seconds.")
             tags = None
             if refund_pubkeys:
                 tags = Tags()
                 tags["refund"] = refund_pubkeys
             secret_lock, p2pk_e = await wallet.create_p2bk_lock(
                 lock.split(":")[1],
-                locktime_seconds=settings.locktime_delta_seconds,
+                locktime_seconds=locktime_seconds,
                 sig_all=sigall,
                 n_sigs=1,
                 tags=tags,
