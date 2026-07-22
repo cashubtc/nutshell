@@ -1,4 +1,6 @@
 import base64
+import datetime
+import time
 from typing import Dict, List, Optional
 
 from loguru import logger
@@ -11,6 +13,9 @@ from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
+    keyset: MintKeyset
+    derivation_path: str
+
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -40,6 +45,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         max_order: Optional[int] = None,
         input_fee_ppk: Optional[int] = None,
         final_expiry: Optional[int] = None,
+        active_keyset_id: Optional[str] = None,
     ) -> MintKeyset:
         """
         This function:
@@ -54,65 +60,112 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
             input_fee_ppk (Optional[int], optional):  The new keyset's fee
             final_expiry (Optional[int], optional): The keyset's expiration date, after which it might be dropped from the database.
+            active_keyset_id (Optional[str], optional): The active keyset ID that triggered rotation check.
         Returns:
             MintKeyset: Resulting keyset of the rotation
         """
 
         logger.info(f"Attempting keyset rotation for unit {str(unit)}")
 
-        # Select keyset with the greatest counter
-        selected_keyset = None
-        selected_keyset_counter = -1
-        for keyset in self.keysets.values():
-            if keyset.active and keyset.unit == unit:
-                keyset_derivation_path = keyset.derivation_path.split("/")
-                keyset_derivation_counter = int(
-                    keyset_derivation_path[-1].replace("'", "")
+        async with self.db.connect(lock_table="keysets") as conn:
+            # Sync in-memory keysets from DB inside the lock preserving object identity
+            db_keysets = await self.crud.get_keyset(db=self.db, conn=conn)
+            for k in db_keysets:
+                if k.id not in self.keysets:
+                    self.keysets[k.id] = k
+                else:
+                    self.keysets[k.id].active = k.active
+                    self.keysets[k.id].valid_from = k.valid_from
+                    self.keysets[k.id].valid_to = k.valid_to
+                    self.keysets[k.id].first_seen = k.first_seen
+                    self.keysets[k.id].final_expiry = k.final_expiry
+
+            # Avoid concurrent rotations if another task/instance has already rotated
+            if active_keyset_id:
+                target_keyset = self.keysets.get(active_keyset_id)
+                if target_keyset and not target_keyset.active:
+                    logger.info(
+                        f"Keyset {active_keyset_id} was already deactivated (likely rotated by another process/task). Skipping redundant rotation."
+                    )
+                    active_keyset = next(
+                        (
+                            k
+                            for k in self.keysets.values()
+                            if k.active and k.unit == unit
+                        ),
+                        None,
+                    )
+                    if active_keyset:
+                        if self.keyset and self.keyset.id == active_keyset_id:
+                            self.keyset = active_keyset
+                            self.derivation_path = active_keyset.derivation_path
+                            logger.info(
+                                f"Updated default keyset to {active_keyset.id} with derivation path {active_keyset.derivation_path}"
+                            )
+                        return active_keyset
+
+            # Select keyset with the greatest counter
+            selected_keyset = None
+            selected_keyset_counter = -1
+            for keyset in self.keysets.values():
+                if keyset.active and keyset.unit == unit:
+                    keyset_derivation_path = keyset.derivation_path.split("/")
+                    keyset_derivation_counter = int(
+                        keyset_derivation_path[-1].replace("'", "")
+                    )
+                    if keyset_derivation_counter > selected_keyset_counter:
+                        selected_keyset = keyset
+                        selected_keyset_counter = keyset_derivation_counter
+
+            # If no selected keyset, then there is no keyset for this unit
+            if not selected_keyset:
+                logger.error(
+                    f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
                 )
-                if keyset_derivation_counter > selected_keyset_counter:
-                    selected_keyset = keyset
+                raise Exception(
+                    f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+                )
 
-        # If no selected keyset, then there is no keyset for this unit
-        if not selected_keyset:
-            logger.error(
-                f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+            logger.info(f"Rotating keyset {selected_keyset.id}")
+
+            # New derivation path is just old derivation path with increased counter
+            new_derivation_path = selected_keyset.derivation_path.split("/")
+            new_derivation_path[-1] = (
+                str(int(new_derivation_path[-1].replace("'", "")) + 1) + "'"
             )
-            raise Exception(
-                f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+
+            # keys amounts for this keyset: if amounts is None we use `self.amounts`
+            amounts = [2**i for i in range(max_order)] if max_order else self.amounts
+
+            # Generate the keyset
+            new_keyset = MintKeyset(
+                derivation_path="/".join(new_derivation_path),
+                seed=self.seed,
+                amounts=amounts,
+                input_fee_ppk=input_fee_ppk,
+                active=True,
+                final_expiry=final_expiry,
             )
 
-        logger.info(f"Rotating keyset {selected_keyset.id}")
+            logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
+            await self.crud.store_keyset(keyset=new_keyset, db=self.db, conn=conn)
 
-        # New derivation path is just old derivation path with increased counter
-        new_derivation_path = selected_keyset.derivation_path.split("/")
-        new_derivation_path[-1] = (
-            str(int(new_derivation_path[-1].replace("'", "")) + 1) + "'"
-        )
+            logger.debug(f"De-activating keyset {selected_keyset.id}...")
+            selected_keyset.active = False
+            await self.crud.update_keyset(keyset=selected_keyset, db=self.db, conn=conn)
 
-        # keys amounts for this keyset: if amounts is None we use `self.amounts`
-        amounts = [2**i for i in range(max_order)] if max_order else self.amounts
+            self.keysets[new_keyset.id] = new_keyset
+            self.keysets[selected_keyset.id] = selected_keyset
 
-        # Generate the keyset
-        new_keyset = MintKeyset(
-            derivation_path="/".join(new_derivation_path),
-            seed=self.seed,
-            amounts=amounts,
-            input_fee_ppk=input_fee_ppk,
-            active=True,
-            final_expiry=final_expiry
-        )
+            if self.keyset and self.keyset.id == selected_keyset.id:
+                self.keyset = new_keyset
+                self.derivation_path = new_keyset.derivation_path
+                logger.info(
+                    f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}"
+                )
 
-        logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
-        await self.crud.store_keyset(keyset=new_keyset, db=self.db)
-        self.keysets[new_keyset.id] = new_keyset
-
-        logger.debug(f"De-activating keyset {selected_keyset.id}...")
-        selected_keyset.active = False
-        await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
-        self.keysets[selected_keyset.id] = selected_keyset
-
-        logger.debug(f"Keyset {keyset.id} was de-activated")
-        return new_keyset
+            logger.debug(f"Keyset {selected_keyset.id} was de-activated")
+            return new_keyset
 
     async def activate_keyset(
         self,
@@ -244,6 +297,75 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 keyset.active = False
                 self.keysets[keyset.id] = keyset
                 await self.crud.update_keyset(keyset=keyset, db=self.db)
+
+    def _parse_valid_from(self, keyset: MintKeyset) -> float:
+        # Handles multiple types for keyset.valid_from because database drivers return
+        # different types (PostgreSQL returns datetime.datetime, SQLite stores/returns
+        # stringified timestamp integers/floats), while test mocks or JSON payloads
+        # may supply formatted datetime strings.
+        if not keyset.valid_from:
+            raise ValueError("keyset.valid_from is None")
+        try:
+            if isinstance(keyset.valid_from, datetime.datetime):
+                return keyset.valid_from.timestamp()
+            else:
+                return float(keyset.valid_from)
+        except (ValueError, TypeError):
+            return datetime.datetime.strptime(
+                keyset.valid_from, "%Y-%m-%d %H:%M:%S"
+            ).timestamp()
+
+    def should_rotate_keyset(self, keyset: MintKeyset) -> bool:
+        if not keyset.active or not keyset.valid_from:
+            return False
+        try:
+            valid_from_ts = self._parse_valid_from(keyset)
+        except Exception:
+            logger.warning(
+                f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation."
+            )
+            return True
+
+        return (
+            time.time() - valid_from_ts
+        ) >= settings.mint_keyset_rotation_interval_seconds
+
+    async def rotate_keysets_if_needed(self) -> None:
+        if not settings.mint_keyset_rotation_enabled:
+            return
+
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        for keyset in active_keysets:
+            if self.should_rotate_keyset(keyset):
+                logger.warning(
+                    f"Active keyset {keyset.id} for unit {keyset.unit.name} is older than "
+                    f"the configured rotation interval ({settings.mint_keyset_rotation_interval_seconds}s). "
+                    f"Rotating now."
+                )
+                try:
+                    new_final_expiry = None
+                    if keyset.final_expiry is not None:
+                        try:
+                            valid_from_ts = self._parse_valid_from(keyset)
+                        except Exception:
+                            valid_from_ts = time.time()
+                        active_duration = int(time.time() - valid_from_ts)
+                        new_final_expiry = keyset.final_expiry + active_duration
+
+                    new_keyset = await self.rotate_next_keyset(
+                        unit=keyset.unit,
+                        max_order=len(keyset.amounts),
+                        input_fee_ppk=keyset.input_fee_ppk,
+                        final_expiry=new_final_expiry,
+                        active_keyset_id=keyset.id,
+                    )
+                    logger.info(
+                        f"Successfully rotated keyset {keyset.id} -> {new_keyset.id} for unit {keyset.unit.name}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to automatically rotate keyset {keyset.id}: {e}"
+                    )
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
