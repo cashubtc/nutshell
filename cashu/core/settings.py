@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
-VERSION = "0.20.2"
+VERSION = "0.20.3"
 
 
 def find_env_file():
