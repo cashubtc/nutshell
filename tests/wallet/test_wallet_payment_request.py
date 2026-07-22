@@ -1,8 +1,10 @@
 import pytest
+from bech32 import convertbits
 
-from cashu.core.base import NUT10Option, PaymentRequest, Transport
+from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, Transport
 from cashu.core.nuts.nut18 import deserialize, serialize
-from cashu.core.nuts.nut26 import bech32m_decode
+from cashu.core.nuts.nut26 import _tlv_entry as nut26_tlv_entry
+from cashu.core.nuts.nut26 import bech32m_decode, bech32m_encode
 from cashu.core.nuts.nut26 import serialize as serialize_bech32m
 
 
@@ -56,6 +58,72 @@ def test_nut18_round_trip():
     assert decoded.m == ["https://mint.example.com"]
     assert decoded.d == "Coffee"
     assert decoded.i is None
+
+
+def test_nut18_preferred_mints_vector():
+    """Frozen spec vector: preferred mint list with supported methods and a per-method fee."""
+    expected = (
+        "creqApmFpdXByZWZlcnJlZF9mZWVfbWV0aG9kc2FhGGRhdWNzYXRhbYF4GGh0dHBz"
+        "Oi8vbWludC5leGFtcGxlLmNvbWJtcPVic22CoWJtbmZib2x0MTGiYm1uZmJvbHQx"
+        "MmJtZgU"
+    )
+    req = PaymentRequest(
+        i="preferred_fee_methods",
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11"), SupportedMethod(mn="bolt12", mf=5)],
+    )
+    assert serialize(req) == expected
+
+    decoded = deserialize(expected)
+    assert decoded.mp is True
+    assert decoded.sm == [
+        SupportedMethod(mn="bolt11"),
+        SupportedMethod(mn="bolt12", mf=5),
+    ]
+
+
+def test_nut18_round_trip_mint_list_fields():
+    """mp and sm (with a per-method fee) round-trip through the CBOR format."""
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11"), SupportedMethod(mn="bolt12", mf=5)],
+    )
+    decoded = deserialize(serialize(req))
+    assert decoded.mp is True
+    assert decoded.sm == [
+        SupportedMethod(mn="bolt11"),
+        SupportedMethod(mn="bolt12", mf=5),
+    ]
+
+
+def test_nut18_round_trip_explicit_zero_fee():
+    """An explicit mf=0 must round-trip distinctly from an omitted mf."""
+    req = PaymentRequest(a=100, u="sat", sm=[SupportedMethod(mn="bolt11", mf=0)])
+    decoded = deserialize(serialize(req))
+    assert decoded.sm == [SupportedMethod(mn="bolt11", mf=0)]
+    assert decoded.sm[0].mf == 0
+    assert decoded.sm[0].mf is not None
+
+
+def test_nut18_round_trip_unknown_method_name():
+    """Method names unknown to this wallet (e.g. non-bolt11) still round-trip opaquely."""
+    req = PaymentRequest(a=100, u="sat", sm=[SupportedMethod(mn="onchain", mf=50)])
+    decoded = deserialize(serialize(req))
+    assert decoded.sm == [SupportedMethod(mn="onchain", mf=50)]
+
+
+def test_nut18_omits_mint_list_fields_when_unset():
+    """mp and sm must not appear in the encoding when unset."""
+    req = PaymentRequest(a=100, u="sat")
+    decoded = deserialize(serialize(req))
+    assert decoded.mp is None
+    assert decoded.sm is None
 
 
 # ─── NUT-26 Tests ────────────────────────────────────────────────────
@@ -141,6 +209,88 @@ def test_nut26_round_trip_nut10():
     assert decoded.nut10 is not None
     assert decoded.nut10.k == "P2PK"
     assert decoded.nut10.d == "abcdef1234567890" * 4
+
+
+def test_nut26_preferred_mints_vector():
+    """Frozen spec vector: preferred mint list with supported methods and a per-method fee."""
+    expected = (
+        "CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQ"
+        "QZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQJQGQQE3X"
+        "7MR5XYCS5QQ5QYQQVCN0D36RZVSZQQYQQQQQQQQQQQQ9FJ2568"
+    )
+    req = PaymentRequest(
+        i="preferred_fee_methods",
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11"), SupportedMethod(mn="bolt12", mf=5)],
+    )
+    assert serialize_bech32m(req) == expected
+
+    decoded = deserialize(expected)
+    assert decoded.mp is True
+    assert decoded.sm == [
+        SupportedMethod(mn="bolt11"),
+        SupportedMethod(mn="bolt12", mf=5),
+    ]
+
+
+def test_nut26_round_trip_mint_list_fields():
+    """mp and sm (with a per-method fee) round-trip through the TLV format."""
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11"), SupportedMethod(mn="bolt12", mf=5)],
+    )
+    decoded = deserialize(serialize_bech32m(req))
+    assert decoded.mp is True
+    assert decoded.sm == [
+        SupportedMethod(mn="bolt11"),
+        SupportedMethod(mn="bolt12", mf=5),
+    ]
+
+
+def test_nut26_round_trip_strict_mint_list():
+    """mp=False round-trips and a single supported method is preserved."""
+    req = PaymentRequest(
+        a=100,
+        u="sat",
+        m=["https://mint.example.com"],
+        mp=False,
+        sm=[SupportedMethod(mn="bolt11")],
+    )
+    decoded = deserialize(serialize_bech32m(req))
+    assert decoded.mp is False
+    assert decoded.sm == [SupportedMethod(mn="bolt11")]
+
+
+def test_nut26_round_trip_explicit_zero_fee():
+    """An explicit mf=0 must round-trip distinctly from an omitted mf."""
+    req = PaymentRequest(a=100, u="sat", sm=[SupportedMethod(mn="bolt11", mf=0)])
+    decoded = deserialize(serialize_bech32m(req))
+    assert decoded.sm == [SupportedMethod(mn="bolt11", mf=0)]
+    assert decoded.sm[0].mf == 0
+    assert decoded.sm[0].mf is not None
+
+
+def test_nut26_round_trip_unknown_method_name():
+    """Method names unknown to this wallet (e.g. non-bolt11) still round-trip opaquely."""
+    req = PaymentRequest(a=100, u="sat", sm=[SupportedMethod(mn="onchain", mf=50)])
+    decoded = deserialize(serialize_bech32m(req))
+    assert decoded.sm == [SupportedMethod(mn="onchain", mf=50)]
+
+
+def test_nut26_decode_rejects_invalid_method_fee_length():
+    """A crafted supported_method sub-TLV with a malformed fee length must raise."""
+    bad_sub_tlv = nut26_tlv_entry(0x01, b"bolt11") + nut26_tlv_entry(0x02, b"\x00\x01")
+    raw = nut26_tlv_entry(0x0A, bad_sub_tlv)
+    five_bit = convertbits(raw, 8, 5)
+    token = bech32m_encode("creqb", five_bit).upper()
+    with pytest.raises(ValueError, match="Invalid method fee length"):
+        deserialize(token)
 
 
 def test_nut26_case_insensitive_decode():

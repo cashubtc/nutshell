@@ -3,9 +3,14 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from .base import Method, Unit
-from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
-from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+from .base import Method, SupportedMethod, Unit
+from .models import (
+    MeltMethodSetting,
+    MintInfoContact,
+    MintInfoProtectedEndpoint,
+    Nut15MppSupport,
+)
+from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MELT_NUT, MPP_NUT, WEBSOCKETS_NUT
 
 
 def _match_protected_endpoint(endpoint_path: str, request_path: str) -> bool:
@@ -66,6 +71,36 @@ class MintInfo(BaseModel):
                 return True
 
         return False
+
+    def payment_request_method_fee(
+        self, sm: Optional[List[SupportedMethod]], unit: Unit
+    ) -> Optional[int]:
+        """
+        Given the `sm` (supported methods) list from a NUT-18/26 payment request,
+        return the lowest per-method fee this mint owes for melting via one of the
+        listed methods in `unit`, or `None` if it melts none of them.
+        """
+        if not sm:
+            return 0
+        if not self.nuts:
+            return None
+        nut_05 = self.nuts.get(MELT_NUT)
+        if not nut_05 or not nut_05.get("methods"):
+            return None
+
+        melt_methods = [MeltMethodSetting.model_validate(e) for e in nut_05["methods"]]
+
+        lowest_fee: Optional[int] = None
+        for entry in sm:
+            supported = any(
+                m.method == entry.mn and m.unit == unit.name for m in melt_methods
+            )
+            if supported:
+                fee = entry.mf or 0
+                if lowest_fee is None or fee < lowest_fee:
+                    lowest_fee = fee
+
+        return lowest_fee
 
     def supports_websocket_mint_quote(self, method: Method, unit: Unit) -> bool:
         if not self.nuts or not self.supports_nut(WEBSOCKETS_NUT):
