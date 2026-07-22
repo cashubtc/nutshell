@@ -200,12 +200,18 @@ async def test_add_witness_swap_sig_all(wallet1: Wallet):
     # Verify the first proof has a witness
     assert signed_proofs[0].witness is not None
     witness = P2PKWitness.from_witness(signed_proofs[0].witness)
-    assert len(witness.signatures) == 1
+    # One signature per supported SIG_ALL message format (v1, current, legacy)
+    assert len(witness.signatures) == 3
 
-    # Verify the signature includes both inputs and outputs
-    message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
-    signature = wallet1.schnorr_sign_message(message_to_sign)
-    assert witness.signatures[0] == signature
+    # Verify the signatures cover all formats over both inputs and outputs
+    expected = [
+        wallet1.schnorr_sign_message(nut11.sigall_message_to_sign_v1(proofs, outputs)),
+        wallet1.schnorr_sign_message(nut11.sigall_message_to_sign(proofs, outputs)),
+        wallet1.schnorr_sign_message(
+            nut11.sigall_message_to_sign_legacy(proofs, outputs)
+        ),
+    ]
+    assert witness.signatures == expected
 
 
 @pytest.mark.asyncio
@@ -229,10 +235,10 @@ async def test_sign_proofs_inplace_swap(wallet1: Wallet):
     # Sign proofs
     signed_proofs = wallet1.sign_proofs_inplace_swap(proofs, outputs)
 
-    # Verify the first proof has a witness with a signature
+    # Verify the first proof has a witness with a signature per format
     assert signed_proofs[0].witness is not None
     witness = P2PKWitness.from_witness(signed_proofs[0].witness)
-    assert len(witness.signatures) == 1
+    assert len(witness.signatures) == 3
 
 
 @pytest.mark.asyncio
