@@ -1,6 +1,6 @@
 import json
 from posixpath import join
-from typing import List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import bolt11
 import httpx
@@ -66,7 +66,6 @@ def async_set_httpx_client(func):
 
     async def wrapper(self, *args, **kwargs):
         # set proxy
-        proxies_dict = {}
         proxy_url: Union[str, None] = None
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
@@ -76,18 +75,19 @@ def async_set_httpx_client(func):
             proxy_url = f"socks5://{settings.socks_proxy}"
         elif settings.http_proxy:
             proxy_url = settings.http_proxy
-        if proxy_url:
-            proxies_dict.update({"all://": proxy_url})
 
         headers_dict = {"Client-version": settings.version}
 
-        self.httpx = httpx.AsyncClient(
-            verify=not settings.debug,
-            proxies=proxies_dict,  # type: ignore
-            headers=headers_dict,
-            base_url=self.url.rstrip("/"),
-            timeout=None if settings.debug else 60,
-        )
+        client_kwargs: dict[str, Any] = {
+            "verify": not settings.debug,
+            "headers": headers_dict,
+            "base_url": self.url.rstrip("/"),
+            "timeout": None if settings.debug else 60,
+        }
+        if proxy_url:
+            client_kwargs["proxy"] = proxy_url
+
+        self.httpx = httpx.AsyncClient(**client_kwargs)
         return await func(self, *args, **kwargs)
 
     return wrapper
