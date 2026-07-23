@@ -184,8 +184,8 @@ def partial_pay_real_invoice(invoice: str, amount: int, node: int) -> str:
     return run_cmd(cmd)
 
 
-def get_real_invoice_cln(sats: int) -> str:
-    cmd = docker_clightning_cli(1)
+def get_real_invoice_cln(sats: int, node: int = 1) -> str:
+    cmd = docker_clightning_cli(node)
     cmd.extend(
         [
             "invoice",
