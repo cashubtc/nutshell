@@ -1,10 +1,9 @@
 import hashlib
 from enum import Enum
-from typing import List, Union
+from typing import Union
 
 from coincurve import PublicKeyXOnly
 
-from .base import BlindedMessage, Proof
 from .crypto.secp import PrivateKey, PublicKey
 from .errors import InvalidProofsError
 from .secret import Secret, SecretKind
@@ -67,23 +66,3 @@ def verify_schnorr_signature(
         signature,
         hashlib.sha256(message).digest(),
     )
-
-
-def sig_all_swap_message(proofs: List[Proof], outputs: List[BlindedMessage]) -> str:
-    message = ""
-
-    for proof in proofs:
-        message += proof.secret
-        message += proof.C
-
-    for output in outputs:
-        message += str(output.amount)
-        message += output.B_
-
-    return message
-
-
-def sig_all_melt_message(
-    proofs: List[Proof], outputs: List[BlindedMessage], quote: str
-) -> str:
-    return sig_all_swap_message(proofs, outputs) + quote

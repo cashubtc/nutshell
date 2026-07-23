@@ -5,12 +5,11 @@ import pytest
 
 from cashu.core.base import BlindedMessage, HTLCWitness, P2PKWitness
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.nuts import nut11
 from cashu.core.p2pk import (
     P2PKSecret,
     SigFlags,
     schnorr_sign,
-    sig_all_melt_message,
-    sig_all_swap_message,
 )
 from cashu.core.secret import Secret, SecretKind
 from cashu.mint.conditions import LedgerSpendingConditions, WitnessForP2pkOrHtlc
@@ -33,7 +32,9 @@ def sig_all_signature(
     outputs: list[BlindedMessage],
     signer: PrivateKey,
 ) -> str:
-    return schnorr_sign(sig_all_swap_message(proofs, outputs).encode("utf-8"), signer).hex()
+    return schnorr_sign(
+        nut11.sigall_message_to_sign(proofs, outputs).encode("utf-8"), signer
+    ).hex()
 
 
 def sig_all_melt_signature(
@@ -43,7 +44,8 @@ def sig_all_melt_signature(
     signer: PrivateKey,
 ) -> str:
     return schnorr_sign(
-        sig_all_melt_message(proofs, outputs, quote).encode("utf-8"), signer
+        (nut11.sigall_message_to_sign(proofs, outputs) + quote).encode("utf-8"),
+        signer,
     ).hex()
 
 
@@ -166,7 +168,9 @@ def test_transaction_p2pk_sig_inputs_anyone_can_spend_after_locktime():
         data=alice.public_key.format().hex(),
         extra_tags=[["locktime", str(int(time.time()) - 5)]],
     )
-    assert cond._verify_input_output_spending_conditions([proof(secret)], outputs_for_amounts([1]))
+    assert cond._verify_input_output_spending_conditions(
+        [proof(secret)], outputs_for_amounts([1])
+    )
 
 
 def test_transaction_p2pk_refund_multisig_after_locktime_insufficient_signatures_fails():
@@ -184,7 +188,9 @@ def test_transaction_p2pk_refund_multisig_after_locktime_insufficient_signatures
         ],
     )
     sig = p2pk_sig_inputs_signature(secret, bob)
-    with pytest.raises(Exception, match=r"not enough pubkeys \(2\) or signatures \(1\)"):
+    with pytest.raises(
+        Exception, match=r"not enough pubkeys \(2\) or signatures \(1\)"
+    ):
         cond._verify_input_output_spending_conditions(
             [proof(secret, signatures=[sig])],
             outputs_for_amounts([1]),
@@ -381,14 +387,21 @@ def test_transaction_htlc_multisig_2of3_succeeds():
         kind=SecretKind.HTLC,
         data=digest,
         extra_tags=[
-            ["pubkeys", alice.public_key.format().hex(), bob.public_key.format().hex(), carol.public_key.format().hex()],
+            [
+                "pubkeys",
+                alice.public_key.format().hex(),
+                bob.public_key.format().hex(),
+                carol.public_key.format().hex(),
+            ],
             ["n_sigs", "2"],
         ],
     )
     sig_a = p2pk_sig_inputs_signature(secret, alice)
     sig_b = p2pk_sig_inputs_signature(secret, bob)
     p = proof(secret)
-    p.witness = HTLCWitness(preimage=preimage, signatures=[sig_a, sig_b]).model_dump_json()
+    p.witness = HTLCWitness(
+        preimage=preimage, signatures=[sig_a, sig_b]
+    ).model_dump_json()
     assert cond._verify_input_output_spending_conditions([p], outputs_for_amounts([1]))
 
 
@@ -421,7 +434,9 @@ def test_transaction_p2pk_sigall_unsigned_fails():
         sigflag=SigFlags.SIG_ALL,
     )
     with pytest.raises(Exception, match="no witness in proof|no signatures in proof"):
-        cond._verify_input_output_spending_conditions([proof(secret)], outputs_for_amounts([1]))
+        cond._verify_input_output_spending_conditions(
+            [proof(secret)], outputs_for_amounts([1])
+        )
 
 
 def test_transaction_p2pk_mixed_sigflags_fails():
@@ -588,7 +603,9 @@ def test_transaction_p2pk_sigall_anyone_can_spend_after_locktime():
         sigflag=SigFlags.SIG_ALL,
         extra_tags=[["locktime", str(int(time.time()) - 5)]],
     )
-    assert cond._verify_input_output_spending_conditions([proof(secret)], outputs_for_amounts([1]))
+    assert cond._verify_input_output_spending_conditions(
+        [proof(secret)], outputs_for_amounts([1])
+    )
 
 
 def test_transaction_p2pk_sigall_multisig_primary_still_works_after_locktime():
@@ -737,7 +754,9 @@ def test_transaction_htlc_sigall_valid_succeeds():
     proofs = [proof(secret)]
     outputs = outputs_for_amounts([1])
     sig = sig_all_signature(proofs, outputs, signer)
-    proofs[0].witness = HTLCWitness(preimage=preimage, signatures=[sig]).model_dump_json()
+    proofs[0].witness = HTLCWitness(
+        preimage=preimage, signatures=[sig]
+    ).model_dump_json()
     assert cond._verify_input_output_spending_conditions(proofs, outputs)
 
 
@@ -748,7 +767,9 @@ def test_transaction_htlc_sigall_grouped_preimage_only_first_witness_succeeds():
     secret = secret_str(kind=SecretKind.HTLC, data=digest, sigflag=SigFlags.SIG_ALL)
     proofs = [proof(secret), proof(secret)]
     proofs[0].witness = HTLCWitness(preimage=preimage).model_dump_json()
-    assert cond._verify_input_output_spending_conditions(proofs, outputs_for_amounts([1, 1]))
+    assert cond._verify_input_output_spending_conditions(
+        proofs, outputs_for_amounts([1, 1])
+    )
 
 
 def test_transaction_htlc_sigall_refund_after_locktime_succeeds():
@@ -789,7 +810,9 @@ def test_transaction_htlc_sigall_grouped_wrong_preimage_fails():
     proofs = [proof(secret), proof(secret)]
     outputs = outputs_for_amounts([1, 1])
     sig = sig_all_signature(proofs, outputs, signer)
-    proofs[0].witness = HTLCWitness(preimage=wrong_preimage, signatures=[sig]).model_dump_json()
+    proofs[0].witness = HTLCWitness(
+        preimage=wrong_preimage, signatures=[sig]
+    ).model_dump_json()
     with pytest.raises(Exception, match="HTLC preimage does not match"):
         cond._verify_input_output_spending_conditions(proofs, outputs)
 
@@ -806,7 +829,12 @@ def test_transaction_htlc_sigall_grouped_multisig_2of3_succeeds():
         data=digest,
         sigflag=SigFlags.SIG_ALL,
         extra_tags=[
-            ["pubkeys", alice.public_key.format().hex(), bob.public_key.format().hex(), carol.public_key.format().hex()],
+            [
+                "pubkeys",
+                alice.public_key.format().hex(),
+                bob.public_key.format().hex(),
+                carol.public_key.format().hex(),
+            ],
             ["n_sigs", "2"],
         ],
     )
@@ -814,7 +842,9 @@ def test_transaction_htlc_sigall_grouped_multisig_2of3_succeeds():
     outputs = outputs_for_amounts([1, 1])
     sig_a = sig_all_signature(proofs, outputs, alice)
     sig_b = sig_all_signature(proofs, outputs, bob)
-    proofs[0].witness = HTLCWitness(preimage=preimage, signatures=[sig_a, sig_b]).model_dump_json()
+    proofs[0].witness = HTLCWitness(
+        preimage=preimage, signatures=[sig_a, sig_b]
+    ).model_dump_json()
     assert cond._verify_input_output_spending_conditions(proofs, outputs)
 
 
@@ -835,7 +865,9 @@ def test_transaction_htlc_sigall_receiver_path_still_valid_after_locktime():
     proofs = [proof(secret)]
     outputs = outputs_for_amounts([1])
     sig = sig_all_signature(proofs, outputs, receiver)
-    proofs[0].witness = HTLCWitness(preimage=preimage, signatures=[sig]).model_dump_json()
+    proofs[0].witness = HTLCWitness(
+        preimage=preimage, signatures=[sig]
+    ).model_dump_json()
     assert cond._verify_input_output_spending_conditions(proofs, outputs)
 
 
@@ -868,5 +900,7 @@ def test_transaction_htlc_sigall_melt_message_valid_succeeds():
     proofs = [proof(secret)]
     outputs = outputs_for_amounts([1])
     sig = sig_all_melt_signature(proofs, outputs, "quote-a", signer)
-    proofs[0].witness = HTLCWitness(preimage=preimage, signatures=[sig]).model_dump_json()
+    proofs[0].witness = HTLCWitness(
+        preimage=preimage, signatures=[sig]
+    ).model_dump_json()
     assert cond._verify_input_output_spending_conditions(proofs, outputs, "quote-a")

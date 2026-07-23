@@ -139,9 +139,10 @@ class LedgerVerification(
             raise InvalidProofsError()
         # NUT-10 spending conditions are intentionally not checked here.
         # For swap and melt, those are verified at the transaction level by
-        # `_verify_input_output_spending_conditions(...)` before `_verify_inputs(...)`
-        # is called. Blind-auth uses this generic proof-validation path and does
-        # not rely on NUT-10 spending-condition enforcement here.
+        # `_verify_input_output_spending_conditions(...)`, which `_verify_transaction(...)`
+        # calls right after `_verify_inputs(...)`. Blind-auth uses this generic
+        # proof-validation path and does not rely on NUT-10 spending-condition
+        # enforcement here.
         # Verify proofs are not already spent (raises ProofsAlreadySpentError)
         await self.db_read._verify_proofs_spendable(proofs)
 

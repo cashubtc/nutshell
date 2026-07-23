@@ -67,7 +67,7 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
             tags["sigflag"] = (
                 SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
             )
-        if n_sigs != 1 and tags.get_tag("n_sigs") is None:
+        if n_sigs > 1 and tags.get_tag("n_sigs") is None:
             tags["n_sigs"] = str(n_sigs)
         logger.debug(f"After tags: {tags}")
         secret = P2PKSecret(
