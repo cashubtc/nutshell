@@ -5,8 +5,8 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Unit
+from cashu.core.helpers import fee_reserve
 from cashu.core.models import PostMeltQuoteRequest
-from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResponse
 from cashu.lightning.lnd_grpc.lnd_grpc import LndRPCWallet
 from cashu.lightning.lndrest import LndRestWallet
@@ -123,20 +123,15 @@ async def test_lnd_payment_quote_uses_probed_fee(ledger: Ledger):
     # CLN node 2 is not directly connected to the backend's LND node 3, so
     # this invoice requires a multi-hop route with a non-zero fee.
     request = get_real_invoice_cln(100_000, node=2)
-    fee_percent = settings.lightning_fee_percent
-    minimum_fee = settings.lightning_reserve_fee_min
-    try:
-        settings.lightning_fee_percent = 0
-        settings.lightning_reserve_fee_min = 0
-        payment_quote = await backend.get_payment_quote(
-            PostMeltQuoteRequest(request=request, unit=Unit.sat.name)
-        )
-    finally:
-        settings.lightning_fee_percent = fee_percent
-        settings.lightning_reserve_fee_min = minimum_fee
+    payment_quote = await backend.get_payment_quote(
+        PostMeltQuoteRequest(request=request, unit=Unit.sat.name)
+    )
 
     assert payment_quote.amount == Amount(Unit.sat, 100_000)
     assert payment_quote.fee.amount > 0
+    assert payment_quote.fee < Amount(Unit.msat, fee_reserve(100_000 * 1000)).to(
+        Unit.sat, round="up"
+    )
 
 
 @pytest.mark.asyncio

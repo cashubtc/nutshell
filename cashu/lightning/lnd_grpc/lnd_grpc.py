@@ -454,7 +454,10 @@ class LndRPCWallet(LightningBackend):
                         )
                     )
                 if response.failure_reason == lnrpc.FAILURE_REASON_NONE:
-                    fees_msat = max(fees_msat, response.routing_fee_msat)
+                    fees_msat = max(
+                        settings.lightning_reserve_fee_min,
+                        response.routing_fee_msat,
+                    )
                 else:
                     logger.debug(
                         "LND fee probe failed: "
