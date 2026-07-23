@@ -44,6 +44,7 @@ INVOICE_RESULT_MAP = {
 MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
+FEE_PROBE_TIMEOUT_SECONDS = 5
 
 
 class LndRestWallet(LightningBackend):
@@ -228,9 +229,7 @@ class LndRestWallet(LightningBackend):
                 # ledger re-check the real state with TrackPaymentV2.
                 if line.get("error"):
                     error = line["error"]
-                    message = (
-                        error["message"] if "message" in error else str(error)
-                    )
+                    message = error["message"] if "message" in error else str(error)
                     return PaymentResponse(
                         result=PaymentResult.UNKNOWN, error_message=message
                     )
@@ -514,6 +513,26 @@ class LndRestWallet(LightningBackend):
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
+        if not melt_quote.is_mpp:
+            try:
+                response = await self.client.post(
+                    "/v2/router/route/estimatefee",
+                    json={
+                        "payment_request": melt_quote.request,
+                        "timeout": FEE_PROBE_TIMEOUT_SECONDS,
+                    },
+                    timeout=FEE_PROBE_TIMEOUT_SECONDS,
+                )
+                response.raise_for_status()
+                data = response.json()
+                failure_reason = data.get("failure_reason")
+                if failure_reason in (None, 0, "FAILURE_REASON_NONE"):
+                    fees_msat = max(fees_msat, int(data["routing_fee_msat"]))
+                else:
+                    logger.debug(f"LND fee probe failed: {failure_reason}")
+            except Exception as exc:
+                logger.debug(f"LND fee probe failed, using configured reserve: {exc}")
+
         fees = Amount(unit=Unit.msat, amount=fees_msat)
 
         amount = Amount(unit=Unit.msat, amount=amount_msat)

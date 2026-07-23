@@ -48,6 +48,7 @@ INVOICE_RESULT_MAP = {
 
 MAX_ROUTE_RETRIES = 50
 PAYMENT_TIMEOUT_SECONDS = 60
+FEE_PROBE_TIMEOUT_SECONDS = 5
 
 
 class LndRPCWallet(LightningBackend):
@@ -440,6 +441,28 @@ class LndRPCWallet(LightningBackend):
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
+        if not melt_quote.is_mpp:
+            try:
+                async with grpc.aio.secure_channel(
+                    self.endpoint, self.combined_creds
+                ) as channel:
+                    router_stub = routerstub.RouterStub(channel)
+                    response = await router_stub.EstimateRouteFee(
+                        routerrpc.RouteFeeRequest(
+                            payment_request=melt_quote.request,
+                            timeout=FEE_PROBE_TIMEOUT_SECONDS,
+                        )
+                    )
+                if response.failure_reason == lnrpc.FAILURE_REASON_NONE:
+                    fees_msat = max(fees_msat, response.routing_fee_msat)
+                else:
+                    logger.debug(
+                        "LND fee probe failed: "
+                        f"{lnrpc.PaymentFailureReason.Name(response.failure_reason)}"
+                    )
+            except AioRpcError as exc:
+                logger.debug(f"LND fee probe failed, using configured reserve: {exc}")
+
         fees = Amount(unit=Unit.msat, amount=fees_msat)
 
         amount = Amount(unit=Unit.msat, amount=amount_msat)
