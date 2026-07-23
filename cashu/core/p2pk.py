@@ -18,7 +18,7 @@ class SigFlags(Enum):
 
 class P2PKSecret(Secret):
     @classmethod
-    def from_secret(cls, secret: Secret):
+    def from_secret(cls, secret: Secret) -> "P2PKSecret":
         if SecretKind(secret.kind) != SecretKind.P2PK:
             raise InvalidProofsError("Secret is not a P2PK secret")
         if secret.tags.get_tag("sigflag") and secret.tags.get_tag("sigflag") not in [
@@ -32,8 +32,7 @@ class P2PKSecret(Secret):
 
     @property
     def locktime(self) -> Union[None, int]:
-        locktime = self.tags.get_tag("locktime")
-        return int(locktime) if locktime else None
+        return self.tags.get_tag_int("locktime")
 
     @property
     def sigflag(self) -> SigFlags:

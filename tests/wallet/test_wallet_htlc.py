@@ -9,6 +9,7 @@ import pytest_asyncio
 
 from cashu.core.base import HTLCWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.errors import TransactionError
 from cashu.core.htlc import HTLCSecret
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
@@ -67,6 +68,24 @@ async def test_create_htlc_secret(wallet1: Wallet):
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
     assert secret.data == preimage_hash
+
+
+@pytest.mark.asyncio
+async def test_create_htlc_secret_rejects_invalid_hash(wallet1: Wallet):
+    with pytest.raises(TransactionError, match="invalid HTLC hash"):
+        await wallet1.create_htlc_lock(preimage_hash="not-a-hash")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n_sigs", [0, -1])
+async def test_create_htlc_secret_rejects_invalid_threshold(
+    wallet1: Wallet, n_sigs: int
+):
+    with pytest.raises(TransactionError, match="n_sigs"):
+        await wallet1.create_htlc_lock(
+            preimage_hash="11" * 32,
+            hashlock_n_sigs=n_sigs,
+        )
 
 
 @pytest.mark.asyncio
@@ -197,7 +216,9 @@ async def test_htlc_redeem_with_2_of_1_signatures(wallet1: Wallet, wallet2: Wall
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2]
+        ).model_dump_json()
 
     await wallet2.redeem(send_proofs)
 
@@ -221,67 +242,43 @@ async def test_htlc_redeem_with_2_of_2_signatures(wallet1: Wallet, wallet2: Wall
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2]
+        ).model_dump_json()
 
     await wallet2.redeem(send_proofs)
 
 
 @pytest.mark.asyncio
-async def test_htlc_redeem_with_2_of_2_signatures_with_duplicate_pubkeys(
+async def test_htlc_duplicate_pubkeys_rejected_by_constructor(
     wallet1: Wallet, wallet2: Wallet
 ):
-    mint_quote = await wallet1.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
     preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = pubkey_wallet1
-    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(
-        preimage=preimage,
-        hashlock_pubkeys=[pubkey_wallet1, pubkey_wallet2],
-        hashlock_n_sigs=2,
-    )
-    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
-    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
-    for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
-
-    await assert_err(
-        wallet2.redeem(send_proofs),
-        "Mint Error: not enough pubkeys (1) or signatures (2) present for n_sigs (2).",
-    )
+    with pytest.raises(TransactionError, match="pubkeys must be unique"):
+        await wallet1.create_htlc_lock(
+            preimage=preimage,
+            hashlock_pubkeys=[pubkey_wallet1, pubkey_wallet2],
+            hashlock_n_sigs=2,
+        )
 
 
 @pytest.mark.asyncio
-async def test_htlc_redeem_with_3_of_3_signatures_but_only_2_provided(
+async def test_htlc_impossible_threshold_rejected_by_constructor(
     wallet1: Wallet, wallet2: Wallet
 ):
-    mint_quote = await wallet1.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
     preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(
-        preimage=preimage,
-        hashlock_pubkeys=[pubkey_wallet1, pubkey_wallet2],
-        hashlock_n_sigs=3,
-    )
-    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
-    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
-    for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).model_dump_json()
-
-    await assert_err(
-        wallet2.redeem(send_proofs),
-        "Mint Error: not enough pubkeys (2) or signatures (2) present for n_sigs (3).",
-    )
+    with pytest.raises(TransactionError, match="n_sigs exceeds available pubkeys"):
+        await wallet1.create_htlc_lock(
+            preimage=preimage,
+            hashlock_pubkeys=[pubkey_wallet1, pubkey_wallet2],
+            hashlock_n_sigs=3,
+        )
 
 
 @pytest.mark.asyncio
@@ -310,7 +307,9 @@ async def test_htlc_redeem_with_2_of_3_signatures_with_2_valid_and_1_invalid_pro
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     signatures3 = [f"{s[:-5]}11111" for s in signatures1]  # wrong signature
     for p, s1, s2, s3 in zip(send_proofs, signatures1, signatures2, signatures3):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2, s3]).model_dump_json()
+        p.witness = HTLCWitness(
+            preimage=preimage, signatures=[s1, s2, s3]
+        ).model_dump_json()
 
     await wallet2.redeem(send_proofs)
 
@@ -372,7 +371,9 @@ async def test_htlc_hashlock_path_valid_after_locktime(
 
     signatures = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for proof, signature in zip(send_proofs, signatures):
-        proof.witness = HTLCWitness(preimage=preimage, signatures=[signature]).model_dump_json()
+        proof.witness = HTLCWitness(
+            preimage=preimage, signatures=[signature]
+        ).model_dump_json()
 
     # Even though locktime expired, hashlock path should still be honored
     await wallet2.redeem(send_proofs)
@@ -547,15 +548,16 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
     send_proofs_copy = copy.deepcopy(send_proofs)
 
-    # First, try to redeem with a preimage + signatures, which will trigger the preimage path and fail
+    # First, try to redeem with a wrong preimage + signatures. The receiver path
+    # fails, but the expired refund path is still considered.
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs_copy)
     for p, sig in zip(send_proofs_copy, signatures1):
         p.witness = HTLCWitness(preimage=preimage, signatures=[sig]).model_dump_json()
 
-    # Should fail because we need 2 signatures
+    # Should fail because the refund path requires 2 signatures.
     await assert_err(
         wallet1.redeem(send_proofs_copy),
-        "HTLC preimage does not match.",
+        "Mint Error: not enough pubkeys (3) or signatures (1) present for n_sigs (2)",
     )
 
     # NOW: try to redeem via locktime path but with only 1 signature
@@ -603,6 +605,7 @@ async def test_htlc_redeem_with_automatic_signature(wallet1: Wallet, wallet2: Wa
 
     # ensure the signer appended HTLC signatures without clobbering the preimage
     for p in send_proofs:
+        assert p.witness is not None
         witness = HTLCWitness.from_witness(p.witness)
         assert witness.preimage == preimage
         assert witness.signatures

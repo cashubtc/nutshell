@@ -4,7 +4,7 @@ from hashlib import sha256
 from ..base import Proof
 from ..errors import TransactionError
 from ..htlc import HTLCSecret
-from ..secret import Secret, SecretKind
+from . import nut10
 
 
 def verify_htlc_spending_conditions(
@@ -14,10 +14,10 @@ def verify_htlc_spending_conditions(
     Verifies an HTLC spending condition.
     Either the preimage is provided or the locktime has passed and a refund is requested.
     """
-    secret = Secret.deserialize(proof.secret)
-    if not secret.kind or secret.kind != SecretKind.HTLC.value:
+    condition = nut10.parse_spending_condition(proof.secret)
+    if not isinstance(condition, HTLCSecret):
         raise TransactionError("not an HTLC secret.")
-    htlc_secret = HTLCSecret.from_secret(secret)
+    htlc_secret = condition
     preimage = proof.htlcpreimage
     now = time.time()
     locktime = htlc_secret.locktime

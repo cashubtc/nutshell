@@ -84,7 +84,7 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     assert wallet.balance == 64
 
 
-'''
+_DISABLED_TEST_REGTEST_PAY_MPP_INCOMPLETE_PAYMENT = """
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger):
@@ -147,7 +147,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     await asyncio.sleep(2)
 
     assert wallet.balance <= 384 - 64
-'''
+"""
 
 
 @pytest.mark.asyncio
@@ -240,9 +240,6 @@ async def test_regtest_pay_mpp_cancel_payment_pay_partial_invoice(
     invoice_obj = bolt11.decode(invoice_payment_request)
     payment_hash = invoice_obj.payment_hash
 
-    # Use a shared container to store the result
-    result_container = []
-
     async def _mint_pay_mpp(invoice: str, amount: int) -> PaymentResponse:
         ret = await ledger.backends[Method["bolt11"]][wallet.unit].pay_invoice(
             MeltQuote(
@@ -259,19 +256,12 @@ async def test_regtest_pay_mpp_cancel_payment_pay_partial_invoice(
         )
         return ret
 
-    # Create a wrapper function that will store the result
-    def thread_func():
-        result = asyncio.run(_mint_pay_mpp(invoice_payment_request, 32))
-        result_container.append(result)
-
-    t1 = threading.Thread(target=thread_func)
-    t1.start()
+    payment_task = asyncio.create_task(_mint_pay_mpp(invoice_payment_request, 32))
     await asyncio.sleep(SLEEP_TIME)
 
     # cancel the invoice
     cancel_invoice(payment_hash)
     await asyncio.sleep(SLEEP_TIME)
 
-    t1.join()
-    # Get the result from the container
-    assert result_container[0].failed
+    result = await payment_task
+    assert result.failed

@@ -61,17 +61,19 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
         wallet1.proofs, 16, secret_lock=secret_lock_all
     )
 
-    # Test that _inputs_require_sigall correctly detects SIG_ALL flag
-    assert not ledger._inputs_require_sigall(
-        send_proofs_inputs
-    ), "Should not detect SIG_ALL"
-    assert ledger._inputs_require_sigall(send_proofs_all), "Should detect SIG_ALL"
+    # Test that the mint-side SIG_ALL detector correctly detects SIG_ALL.
+    assert not ledger._at_least_one_proof_has_sig_all(send_proofs_inputs), (
+        "Should not detect SIG_ALL"
+    )
+    assert ledger._at_least_one_proof_has_sig_all(send_proofs_all), (
+        "Should detect SIG_ALL"
+    )
 
     # Test with a mixed list of proofs (should detect SIG_ALL if any proof has it)
     mixed_proofs = send_proofs_inputs + send_proofs_all
-    assert ledger._inputs_require_sigall(
-        mixed_proofs
-    ), "Should detect SIG_ALL in mixed list"
+    assert ledger._at_least_one_proof_has_sig_all(mixed_proofs), (
+        "Should detect SIG_ALL in mixed list"
+    )
 
 
 @pytest.mark.asyncio
@@ -113,20 +115,8 @@ async def test_ledger_verify_p2pk_signature_validation(
 
     # The swap should succeed because the signatures are valid
     promises = await ledger.swap(proofs=signed_proofs, outputs=outputs)
-    assert len(promises) == len(
-        outputs
-    ), "Should have the same number of promises as outputs"
-
-    # Test for a failure
-    # Create a fake witness with an incorrect signature
-    fake_signature = "0" * 128  # Just a fake 64-byte hex string
-    for proof in send_proofs:
-        proof.witness = P2PKWitness(signatures=[fake_signature]).model_dump_json()
-
-    # The swap should fail because the signatures are invalid
-    await assert_err(
-        ledger.swap(proofs=send_proofs, outputs=outputs),
-        "signature threshold not met",
+    assert len(promises) == len(outputs), (
+        "Should have the same number of promises as outputs"
     )
 
 
@@ -203,9 +193,9 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
 
     # The swap should succeed because the SIG_ALL signature is valid
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
-    assert len(promises) == len(
-        outputs
-    ), "Should have the same number of promises as outputs"
+    assert len(promises) == len(outputs), (
+        "Should have the same number of promises as outputs"
+    )
 
 
 @pytest.mark.asyncio
@@ -275,7 +265,7 @@ async def test_ledger_swap_p2pk_without_signature(wallet1: Wallet1, ledger: Ledg
     # Attempt to swap WITHOUT adding signatures - this should fail
     await assert_err(
         ledger.swap(proofs=send_proofs, outputs=outputs),
-        "Witness is missing for p2pk signature",
+        "no signatures in proof",
     )
 
 

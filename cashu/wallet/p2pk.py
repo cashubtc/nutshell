@@ -12,7 +12,7 @@ from ..core.base import (
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.htlc import HTLCSecret
-from ..core.nuts import nut11
+from ..core.nuts import nut10, nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
@@ -59,21 +59,24 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         if not tags:
             tags = Tags()
             logger.debug(f"Before tags: {tags}")
-        if locktime_seconds:
+        if locktime_seconds and tags.get_tag("locktime") is None:
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
             )
-        tags["sigflag"] = (
-            SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
-        )
-        if n_sigs > 1:
+        if tags.get_tag("sigflag") is None:
+            tags["sigflag"] = (
+                SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
+            )
+        if n_sigs > 1 and tags.get_tag("n_sigs") is None:
             tags["n_sigs"] = str(n_sigs)
         logger.debug(f"After tags: {tags}")
-        return P2PKSecret(
+        secret = P2PKSecret(
             kind=SecretKind.P2PK.value,
             data=data,
             tags=tags,
         )
+        nut10.parse_spending_condition(secret.serialize())
+        return secret
 
     def signatures_proofs_sig_inputs(self, proofs: List[Proof]) -> List[str]:
         """Signs proof secrets with the private key of the wallet.
@@ -109,7 +112,9 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         logger.debug(f"Signatures: {signatures}")
         return signatures
 
-    def schnorr_sign_message(self, message: str, signing_key: Optional[PrivateKey] = None) -> str:
+    def schnorr_sign_message(
+        self, message: str, signing_key: Optional[PrivateKey] = None
+    ) -> str:
         """Sign a message with the given key or the wallet's private key."""
         key = signing_key or self.private_key
         assert key.public_key
@@ -125,21 +130,21 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         for proof in proofs:
             try:
                 secret = Secret.deserialize(proof.secret)
-                try:
-                    p2pk_secret = P2PKSecret.from_secret(secret)
-                    if p2pk_secret.sigflag is SigFlags.SIG_ALL:
-                        return True
-                except Exception:
-                    pass
-                try:
-                    htlc_secret = HTLCSecret.from_secret(secret)
-                    if htlc_secret.sigflag is SigFlags.SIG_ALL:
-                        return True
-                except Exception:
-                    pass
             except Exception:
                 # secret is not a spending condition so we treat is a normal secret
                 pass
+                continue
+
+            try:
+                if SecretKind(secret.kind) == SecretKind.P2PK:
+                    if P2PKSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
+                        return True
+                elif SecretKind(secret.kind) == SecretKind.HTLC:
+                    if HTLCSecret.from_secret(secret).sigflag is SigFlags.SIG_ALL:
+                        return True
+            except Exception:
+                continue
+
         return False
 
     def add_witness_swap_sig_all(
@@ -255,10 +260,13 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
                     witness = HTLCWitness.from_witness(p.witness)
                     proof_signatures = witness.signatures
                     if proof_signatures:
-                        proof_signatures_lower = [sig.lower() for sig in proof_signatures]
+                        proof_signatures_lower = [
+                            sig.lower() for sig in proof_signatures
+                        ]
                         if s_lower not in proof_signatures_lower:
                             p.witness = HTLCWitness(
-                                preimage=witness.preimage, signatures=proof_signatures + [s]
+                                preimage=witness.preimage,
+                                signatures=proof_signatures + [s],
                             ).model_dump_json()
                 else:
                     if p.witness:
@@ -274,23 +282,29 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         return proofs
 
     def filter_proofs_locked_to_our_pubkey(self, proofs: List[Proof]) -> List[Proof]:
-        """Filter proofs locked to our pubkey. Handles both plain P2PK and P2BK proofs."""
+        """Filter P2PK, HTLC, or P2BK proofs whose signer set includes our key."""
         assert self.private_key.public_key
         our_pubkey = self.private_key.public_key.format().hex().lower()
         our_pubkey_proofs = []
         for p in proofs:
-            # P2BK: if p2pk_e is present, try to unblind and check
+            # P2BK: if p2pk_e is present, try to unblind and check.
             if p.p2pk_e:
                 if self._derive_p2bk_signing_keys(p):
                     our_pubkey_proofs.append(p)
                 continue
-            # Plain P2PK: check if our pubkey is in the secret
-            secret = P2PKSecret.deserialize(p.secret)
-            pubkeys = (
-                [secret.data]
-                + secret.tags.get_tag_all("pubkeys")
-                + secret.tags.get_tag_all("refund")
-            )
+
+            secret = Secret.deserialize(p.secret)
+
+            if SecretKind(secret.kind) == SecretKind.P2PK:
+                typed_secret = P2PKSecret.from_secret(secret)
+                pubkeys = [typed_secret.data] + typed_secret.tags.get_tag_all("pubkeys")
+            elif SecretKind(secret.kind) == SecretKind.HTLC:
+                typed_secret = HTLCSecret.from_secret(secret)
+                pubkeys = typed_secret.tags.get_tag_all("pubkeys")
+            else:
+                continue
+
+            pubkeys += typed_secret.tags.get_tag_all("refund")
             pubkeys_lower = [pk.lower() for pk in pubkeys]
             if our_pubkey in pubkeys_lower:
                 # we are one of the signers
@@ -329,11 +343,17 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
             return []
 
         # filter proofs that that are P2PK and SIG_INPUTS
-        sig_inputs_proofs = [
-            p
-            for p in p2pk_proofs
-            if P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_INPUTS
-        ]
+        sig_inputs_proofs = []
+        for p in p2pk_proofs:
+            secret = Secret.deserialize(p.secret)
+            if SecretKind(secret.kind) == SecretKind.P2PK:
+                typed_secret = P2PKSecret.from_secret(secret)
+            else:
+                typed_secret = HTLCSecret.from_secret(secret)
+
+            if typed_secret.sigflag == SigFlags.SIG_INPUTS:
+                sig_inputs_proofs.append(p)
+
         if not sig_inputs_proofs:
             return []
 
