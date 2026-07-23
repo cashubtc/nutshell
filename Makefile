@@ -43,6 +43,20 @@ test-mint:
 	DEBUG=true \
 	poetry run pytest tests/mint --cov-report xml --cov cashu
 
+mutation:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	MINT_BACKEND_BOLT11_SAT=FakeWallet \
+	MUTATION_TESTING=true \
+	TOR=false \
+	poetry run mutmut run $(if $(MUTATION_TARGET),"$(MUTATION_TARGET)")
+
+mutation-results:
+	poetry run mutmut results
+
+mutation-stats:
+	poetry run mutmut export-cicd-stats
+
 test-lndrest:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \

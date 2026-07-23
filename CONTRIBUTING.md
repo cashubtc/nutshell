@@ -35,6 +35,51 @@ LOG_LEVEL=TRACE
 
 To run the tests, run `make test` or `pytest tests` in the poetry environment.
 
+### Mutation testing
+
+Mutation testing checks whether the test suite detects small behavioral changes
+to the production code. Nutshell uses
+[Mutmut](https://mutmut.readthedocs.io/en/latest/) for this.
+
+Run the mutation-testing pilot with:
+
+```bash
+make mutation
+```
+
+The profiles cover each complete production subsystem: core, mint, wallet,
+lightning, and Tor. A profile target limits mutant execution to its subtree,
+while Mutmut uses the non-fuzz pytest suite to discover relevant tests.
+
+For a function-specific rerun within the configured scope, pass a Mutmut
+wildcard:
+
+```bash
+make mutation MUTATION_TARGET='cashu.core.split*'
+```
+
+Mutmut stores incremental results in the ignored `mutants/` directory. View
+surviving mutants with `make mutation-results`, or create the machine-readable
+`mutants/mutmut-cicd-stats.json` report with `make mutation-stats`. Use
+`poetry run mutmut show <mutant-name>` to inspect a mutant and
+`poetry run mutmut apply <mutant-name>` to apply it temporarily for debugging.
+Only apply mutants in a clean worktree.
+
+Scheduled CI runs each profile independently at 01:00 UTC: core on Monday, mint
+on Tuesday, wallet on Wednesday, lightning on Thursday, and Tor on Friday.
+Every workflow also supports manual dispatch. Surviving mutants are advisory
+during the initial rollout: improve the relevant tests or document why a mutant
+is equivalent. CI uploads each profile's report and log as artifacts and retains
+its incremental mutation state in a separate cache.
+Jobs use GitHub's six-hour hosted-runner limit. Mutation execution receives 340
+minutes, leaving time to upload partial results if a profile does not finish.
+Do not add `# pragma: no mutate` or broaden `do_not_mutate` without review.
+Changes involving cryptography, key handling, migrations, protocol behavior, or
+public APIs require maintainer review.
+
+The dedicated Hypothesis fuzz suite remains a separate quality check; run it
+with `make fuzz`.
+
 ### FakeWallet
 
 We use the `FakeWallet` backend for most of the tests. `FakeWallet` acts like a Lightning node where all (fake) invoices are always automatically paid. It's great for testing code that does not affect the Lightning functionality of the mint. To use it, set:

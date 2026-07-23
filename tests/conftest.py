@@ -2,6 +2,7 @@ import importlib
 import multiprocessing
 import os
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -137,6 +138,26 @@ def mint():
         host=settings.mint_listen_host,
         log_level="trace",
     )
+
+    if os.getenv("MUTATION_TESTING") == "true":
+        server = Server(config=config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+
+        assert settings.mint_url is not None
+        for _ in range(100):
+            try:
+                httpx.get(settings.mint_url)
+                break
+            except httpx.ConnectError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("Mutation-test mint server did not start")
+
+        yield server
+        server.should_exit = True
+        thread.join(timeout=10)
+        return
 
     server = UvicornServer(config=config)
     server.start()

@@ -58,6 +58,7 @@ mypy = "^1.13.0"
 pre-commit = "^4.0.1"
 types-redis = "^4.6.0"
 hypothesis = "^6.150.0"
+mutmut = "^3.6.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -67,6 +68,18 @@ build-backend = "poetry.core.masonry.api"
 addopts = "--junitxml=junit.xml -o junit_family=legacy"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.mutmut]
+source_paths = ["cashu/"]
+pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/fuzz"]
+pytest_add_cli_args = ["-o", "addopts=", "-x", "-q"]
+do_not_mutate = [
+    "cashu/lightning/lnd_grpc/protos/*",
+    "cashu/mint/management_rpc/protos/*",
+]
+# Mutmut 3.6 drops grouping parentheses when removing this multiline `not`,
+# producing invalid Python in cashu/lightning/blink.py.
+do_not_mutate_patterns = ['not resp\.get']
 
 [tool.poetry.scripts]
 mint = "cashu.mint.main:main"

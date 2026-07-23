@@ -1,0 +1,14 @@
+name: mutation tor
+
+on:
+  schedule:
+    - cron: "0 1 * * 5"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    uses: ./.github/workflows/_mutation-profile.yml
+    with:
+      profile: tor
+      target: "cashu.tor*"
+      prefix: "cashu.tor"
