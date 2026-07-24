@@ -70,7 +70,9 @@ on Tuesday, wallet on Wednesday, lightning on Thursday, and Tor on Friday.
 Every workflow also supports manual dispatch. Surviving mutants are advisory
 during the initial rollout: improve the relevant tests or document why a mutant
 is equivalent. CI uploads each profile's report and log as artifacts and retains
-its incremental mutation state in a separate cache.
+its incremental mutation state in a separate cache. On Saturday, CI collects
+the five profile reports and opens a labeled weekly GitHub issue when actionable
+mutants remain or a profile report is unavailable.
 Jobs use GitHub's six-hour hosted-runner limit. Mutation execution receives 340
 minutes, leaving time to upload partial results if a profile does not finish.
 Do not add `# pragma: no mutate` or broaden `do_not_mutate` without review.
