@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import html
 import os
 import time
@@ -40,12 +41,14 @@ from ..core.nuts.nuts import (
     DLEQ_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,
+    MINT_NUT,
     MINT_QUOTE_SIGNATURE_NUT,
     MPP_NUT,
     P2PK_NUT,
     RESTORE_NUT,
     SCRIPT_NUT,
     STATE_NUT,
+    SWAP_NUT,
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
@@ -242,6 +245,15 @@ async def index(request: Request) -> HTMLResponse:
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
     mint_info = ledger.mint_info
+    nuts = copy.deepcopy(mint_info.nuts)
+    if (await ledger.panic.get_state()).enabled:
+        # NUT-04 and NUT-05 define `disabled`; the other affected NUTs use
+        # their existing feature flags. NUT-05 remains unchanged because
+        # melting is the only token operation admitted during panic mode.
+        nuts.setdefault(SWAP_NUT, {})["disabled"] = True
+        nuts[MINT_NUT]["disabled"] = True
+        nuts[RESTORE_NUT]["supported"] = False
+        nuts[BATCH_MINT_NUT]["supported"] = False
     return GetInfoResponse(
         name=mint_info.name,
         pubkey=mint_info.pubkey,
@@ -249,7 +261,7 @@ async def info() -> GetInfoResponse:
         description=mint_info.description,
         description_long=mint_info.description_long,
         contact=mint_info.contact,
-        nuts=mint_info.nuts,
+        nuts=nuts,
         icon_url=mint_info.icon_url,
         tos_url=mint_info.tos_url,
         urls=settings.mint_info_urls,

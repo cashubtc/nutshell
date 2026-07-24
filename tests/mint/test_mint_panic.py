@@ -1,6 +1,7 @@
 import asyncio
 import time
 
+import httpx
 import pytest
 import pytest_asyncio
 
@@ -10,9 +11,17 @@ from cashu.core.db import COCKROACH, POSTGRES
 from cashu.core.errors import NotAllowedError, TransactionError
 from cashu.core.migrations import migrate_databases
 from cashu.core.models import (
+    GetInfoResponse,
     PostMeltQuoteRequest,
     PostMintBatchRequest,
     PostMintQuoteRequest,
+)
+from cashu.core.nuts.nuts import (
+    BATCH_MINT_NUT,
+    MELT_NUT,
+    MINT_NUT,
+    RESTORE_NUT,
+    SWAP_NUT,
 )
 from cashu.core.settings import Settings, settings
 from cashu.mint import migrations as mint_migrations
@@ -53,6 +62,33 @@ async def test_panic_state_is_persistent_and_blocks_swap(
     await ledger.panic.set_state(
         enabled=False, reason="incident test complete", updated_by="pytest"
     )
+
+
+@pytest.mark.asyncio
+async def test_info_signals_panic_operation_restrictions(
+    wallet: Wallet, ledger: Ledger
+):
+    normal = GetInfoResponse(
+        **httpx.get(f"{SERVER_ENDPOINT}/v1/info").json()
+    )
+    assert normal.nuts
+    assert normal.nuts[MINT_NUT]["disabled"] is False
+    assert normal.nuts[MELT_NUT]["disabled"] is False
+    assert normal.nuts[RESTORE_NUT]["supported"] is True
+    assert normal.nuts[BATCH_MINT_NUT]["supported"] is True
+
+    await ledger.panic.set_state(
+        enabled=True, reason="info restriction test", updated_by="pytest"
+    )
+    panic = GetInfoResponse(
+        **httpx.get(f"{SERVER_ENDPOINT}/v1/info").json()
+    )
+    assert panic.nuts
+    assert panic.nuts[SWAP_NUT]["disabled"] is True
+    assert panic.nuts[MINT_NUT]["disabled"] is True
+    assert panic.nuts[MELT_NUT]["disabled"] is False
+    assert panic.nuts[RESTORE_NUT]["supported"] is False
+    assert panic.nuts[BATCH_MINT_NUT]["supported"] is False
 
 
 @pytest.mark.asyncio
