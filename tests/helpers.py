@@ -84,9 +84,10 @@ docker_lightning_cli = [
 docker_bitcoin_cli = [
     "docker",
     "exec",
-    "cashu-bitcoind-1-1bitcoin-cli",
-    "-rpcuser=lnbits",
-    "-rpcpassword=lnbits",
+    "cashu-bitcoind-1",
+    "bitcoin-cli",
+    "-rpcuser=cashu",
+    "-rpcpassword=cashu",
     "-regtest",
 ]
 
