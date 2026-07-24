@@ -52,6 +52,11 @@ service Mint {
     rpc GetKeyset(GetKeysetRequest) returns (GetKeysetResponse) {}
     // GetKeysets retrieves details and liability information for all keysets.
     rpc GetKeysets(GetKeysetsRequest) returns (GetKeysetsResponse) {}
+    rpc GetPanicStatus(GetPanicStatusRequest) returns (PanicStatusResponse) {}
+    rpc SetPanicMode(SetPanicModeRequest) returns (PanicStatusResponse) {}
+    rpc ResolvePanicBlacklist(PanicBlacklistTimeRangeRequest) returns (PanicBlacklistPreviewResponse) {}
+    rpc CommitPanicBlacklist(PanicBlacklistTimeRangeRequest) returns (PanicBlacklistPreviewResponse) {}
+    rpc CommitPanicBlindedMessages(PanicBlindedMessagesRequest) returns (PanicBlindedMessagesResponse) {}
 }
 
 // GetInfoRequest is an empty message used to request general mint information.
@@ -419,4 +424,54 @@ message GetKeysetsRequest {
 // GetKeysetsResponse contains details and liability information for all keysets.
 message GetKeysetsResponse {
     repeated GetKeysetResponse keysets = 1;
+}
+
+message GetPanicStatusRequest {
+}
+
+message SetPanicModeRequest {
+    bool enabled = 1;
+    string reason = 2;
+    optional string operator = 3;
+}
+
+message PanicStatusResponse {
+    bool enabled = 1;
+    uint64 revision = 2;
+    optional string reason = 3;
+}
+
+message PanicBlacklistTimeRangeRequest {
+    int64 issued_from = 1;
+    int64 issued_until = 2;
+    string reason = 3;
+    optional string operator = 4;
+}
+
+message PanicBlacklistMatch {
+    string B_ = 1;
+    uint64 amount = 2;
+    string keyset_id = 3;
+    string operation_type = 4;
+    optional string operation_id = 5;
+    optional int64 signed_at = 6;
+}
+
+message PanicBlacklistPreviewResponse {
+    string selector_id = 1;
+    int64 issued_from = 2;
+    int64 issued_until = 3;
+    repeated PanicBlacklistMatch matches = 4;
+    uint64 total_amount = 5;
+    bool committed = 6;
+}
+
+message PanicBlindedMessagesRequest {
+    repeated string B_ = 1;
+    string reason = 2;
+    optional string operator = 3;
+}
+
+message PanicBlindedMessagesResponse {
+    uint64 blacklisted = 1;
 }

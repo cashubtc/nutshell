@@ -192,6 +192,57 @@ def test_get_quote_ttl_invalid_id(cli_prefix):
     assert result.exception is None
     assert "Error:" in result.output
 
+
+def test_panic_management_cli(cli_prefix):
+    runner = CliRunner()
+    enabled = runner.invoke(
+        cli,
+        [
+            *cli_prefix,
+            "panic-mode",
+            "true",
+            "--reason",
+            "cli test",
+            "--operator",
+            "pytest",
+        ],
+    )
+    assert enabled.exception is None
+    assert "enabled: true" in enabled.output
+
+    status = runner.invoke(cli, [*cli_prefix, "panic-status"])
+    assert status.exception is None
+    assert "enabled: true" in status.output
+
+    preview = runner.invoke(
+        cli,
+        [
+            *cli_prefix,
+            "panic-blacklist-time-range",
+            "1",
+            "2",
+            "--reason",
+            "empty historical window",
+        ],
+    )
+    assert preview.exception is None
+    assert "selector_id:" in preview.output
+
+    disabled = runner.invoke(
+        cli,
+        [
+            *cli_prefix,
+            "panic-mode",
+            "false",
+            "--reason",
+            "cli test cleanup",
+            "--operator",
+            "pytest",
+        ],
+    )
+    assert disabled.exception is None
+    assert "enabled: false" in disabled.output
+
 '''
 @pytest.mark.asyncio
 async def test_rotate_next_keyset(cli_prefix):

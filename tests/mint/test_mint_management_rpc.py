@@ -155,6 +155,58 @@ async def test_update_auth_limits(rpc_servicer):
     with pytest.raises(Exception, match="No auth limit was specified"):
         await rpc_servicer.UpdateAuthLimits(request_empty, None)
 
+
+@pytest.mark.asyncio
+async def test_panic_management_rpc(rpc_servicer):
+    enabled = await rpc_servicer.SetPanicMode(
+        management_pb2.SetPanicModeRequest(
+            enabled=True, reason="rpc test", operator="pytest"
+        ),
+        None,
+    )
+    assert enabled.enabled
+    status = await rpc_servicer.GetPanicStatus(
+        management_pb2.GetPanicStatusRequest(), None
+    )
+    assert status.enabled
+    assert status.reason == "rpc test"
+
+    preview = await rpc_servicer.ResolvePanicBlacklist(
+        management_pb2.PanicBlacklistTimeRangeRequest(
+            issued_from=1,
+            issued_until=2,
+            reason="empty historical window",
+            operator="pytest",
+        ),
+        None,
+    )
+    assert not preview.committed
+    committed = await rpc_servicer.CommitPanicBlacklist(
+        management_pb2.PanicBlacklistTimeRangeRequest(
+            issued_from=1,
+            issued_until=2,
+            reason="empty historical window",
+            operator="pytest",
+        ),
+        None,
+    )
+    assert committed.committed
+
+    with pytest.raises(ValueError, match="invalid blinded"):
+        await rpc_servicer.CommitPanicBlindedMessages(
+            management_pb2.PanicBlindedMessagesRequest(
+                B_=["invalid"], reason="rpc test", operator="pytest"
+            ),
+            None,
+        )
+
+    await rpc_servicer.SetPanicMode(
+        management_pb2.SetPanicModeRequest(
+            enabled=False, reason="rpc test cleanup", operator="pytest"
+        ),
+        None,
+    )
+
 @pytest.mark.asyncio
 async def test_rotate_next_keyset(rpc_servicer):
     request = management_pb2.RotateNextKeysetRequest(
@@ -309,4 +361,3 @@ async def test_get_keysets(rpc_servicer):
     assert list(first_keyset.amounts)
     assert first_keyset.balance >= 0
     assert first_keyset.fees_paid >= 0
-

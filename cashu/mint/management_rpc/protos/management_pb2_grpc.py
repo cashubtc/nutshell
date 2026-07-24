@@ -152,6 +152,31 @@ class MintStub(object):
                 request_serializer=management__pb2.GetKeysetsRequest.SerializeToString,
                 response_deserializer=management__pb2.GetKeysetsResponse.FromString,
                 _registered_method=True)
+        self.GetPanicStatus = channel.unary_unary(
+                '/cashu.Mint/GetPanicStatus',
+                request_serializer=management__pb2.GetPanicStatusRequest.SerializeToString,
+                response_deserializer=management__pb2.PanicStatusResponse.FromString,
+                _registered_method=True)
+        self.SetPanicMode = channel.unary_unary(
+                '/cashu.Mint/SetPanicMode',
+                request_serializer=management__pb2.SetPanicModeRequest.SerializeToString,
+                response_deserializer=management__pb2.PanicStatusResponse.FromString,
+                _registered_method=True)
+        self.ResolvePanicBlacklist = channel.unary_unary(
+                '/cashu.Mint/ResolvePanicBlacklist',
+                request_serializer=management__pb2.PanicBlacklistTimeRangeRequest.SerializeToString,
+                response_deserializer=management__pb2.PanicBlacklistPreviewResponse.FromString,
+                _registered_method=True)
+        self.CommitPanicBlacklist = channel.unary_unary(
+                '/cashu.Mint/CommitPanicBlacklist',
+                request_serializer=management__pb2.PanicBlacklistTimeRangeRequest.SerializeToString,
+                response_deserializer=management__pb2.PanicBlacklistPreviewResponse.FromString,
+                _registered_method=True)
+        self.CommitPanicBlindedMessages = channel.unary_unary(
+                '/cashu.Mint/CommitPanicBlindedMessages',
+                request_serializer=management__pb2.PanicBlindedMessagesRequest.SerializeToString,
+                response_deserializer=management__pb2.PanicBlindedMessagesResponse.FromString,
+                _registered_method=True)
 
 
 class MintServicer(object):
@@ -321,6 +346,36 @@ class MintServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetPanicStatus(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetPanicMode(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResolvePanicBlacklist(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CommitPanicBlacklist(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CommitPanicBlindedMessages(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MintServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -438,6 +493,31 @@ def add_MintServicer_to_server(servicer, server):
                     servicer.GetKeysets,
                     request_deserializer=management__pb2.GetKeysetsRequest.FromString,
                     response_serializer=management__pb2.GetKeysetsResponse.SerializeToString,
+            ),
+            'GetPanicStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetPanicStatus,
+                    request_deserializer=management__pb2.GetPanicStatusRequest.FromString,
+                    response_serializer=management__pb2.PanicStatusResponse.SerializeToString,
+            ),
+            'SetPanicMode': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetPanicMode,
+                    request_deserializer=management__pb2.SetPanicModeRequest.FromString,
+                    response_serializer=management__pb2.PanicStatusResponse.SerializeToString,
+            ),
+            'ResolvePanicBlacklist': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolvePanicBlacklist,
+                    request_deserializer=management__pb2.PanicBlacklistTimeRangeRequest.FromString,
+                    response_serializer=management__pb2.PanicBlacklistPreviewResponse.SerializeToString,
+            ),
+            'CommitPanicBlacklist': grpc.unary_unary_rpc_method_handler(
+                    servicer.CommitPanicBlacklist,
+                    request_deserializer=management__pb2.PanicBlacklistTimeRangeRequest.FromString,
+                    response_serializer=management__pb2.PanicBlacklistPreviewResponse.SerializeToString,
+            ),
+            'CommitPanicBlindedMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.CommitPanicBlindedMessages,
+                    request_deserializer=management__pb2.PanicBlindedMessagesRequest.FromString,
+                    response_serializer=management__pb2.PanicBlindedMessagesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1064,6 +1144,141 @@ class Mint(object):
             '/cashu.Mint/GetKeysets',
             management__pb2.GetKeysetsRequest.SerializeToString,
             management__pb2.GetKeysetsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetPanicStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/GetPanicStatus',
+            management__pb2.GetPanicStatusRequest.SerializeToString,
+            management__pb2.PanicStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetPanicMode(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/SetPanicMode',
+            management__pb2.SetPanicModeRequest.SerializeToString,
+            management__pb2.PanicStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolvePanicBlacklist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/ResolvePanicBlacklist',
+            management__pb2.PanicBlacklistTimeRangeRequest.SerializeToString,
+            management__pb2.PanicBlacklistPreviewResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CommitPanicBlacklist(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/CommitPanicBlacklist',
+            management__pb2.PanicBlacklistTimeRangeRequest.SerializeToString,
+            management__pb2.PanicBlacklistPreviewResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CommitPanicBlindedMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/CommitPanicBlindedMessages',
+            management__pb2.PanicBlindedMessagesRequest.SerializeToString,
+            management__pb2.PanicBlindedMessagesResponse.FromString,
             options,
             channel_credentials,
             insecure,

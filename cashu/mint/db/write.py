@@ -452,6 +452,7 @@ class DbWriteHelper:
         quote: MeltQuote,
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
+        conn: Optional[Connection] = None,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -459,6 +460,7 @@ class DbWriteHelper:
             quote (MeltQuote): Melt quote to set as pending.
             proofs (List[Proof]): Proofs to set as pending.
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
+            conn (Optional[Connection]): Existing transaction connection.
 
         Returns:
             MeltQuote: Updated melt quote object.
@@ -466,6 +468,7 @@ class DbWriteHelper:
         async with self.db.get_connection(
             lock_table="proofs_pending",
             lock_timeout=1,
+            conn=conn,
         ) as conn:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn

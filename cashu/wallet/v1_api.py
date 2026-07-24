@@ -526,7 +526,7 @@ class LedgerAPI(SupportsAuth):
             proofs: List[Proof], outputs: Optional[List[BlindedMessage]]
         ):
             """strips away fields from the model that aren't necessary for the /melt"""
-            proofs_include = {"id", "amount", "secret", "C", "witness"}
+            proofs_include = {"id", "amount", "secret", "C", "witness", "dleq"}
             outputs_include = {"id", "amount", "B_"}
             include = {
                 "quote": ...,

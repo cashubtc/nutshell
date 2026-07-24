@@ -275,6 +275,90 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
 
         return management_pb2.GetKeysetsResponse(keysets=proto_keysets)
 
+    async def GetPanicStatus(self, request, context):
+        state = await self.ledger.panic.get_state()
+        return management_pb2.PanicStatusResponse(  # type: ignore[attr-defined]
+            enabled=state.enabled, revision=state.revision, reason=state.reason
+        )
+
+    async def SetPanicMode(self, request, context):
+        state = await self.ledger.panic.set_state(
+            enabled=request.enabled,
+            reason=request.reason,
+            updated_by=request.operator if request.HasField("operator") else "",
+        )
+        logger.warning(
+            f"Panic mode set to {state.enabled}; revision={state.revision}; "
+            f"reason={state.reason}"
+        )
+        return management_pb2.PanicStatusResponse(  # type: ignore[attr-defined]
+            enabled=state.enabled, revision=state.revision, reason=state.reason
+        )
+
+    @staticmethod
+    def _panic_preview_response(preview, committed=False):
+        matches = []
+        for match in preview.promises:
+            values = {
+                "B_": match["b_"],
+                "amount": match["amount"],
+                "keyset_id": match["keyset_id"],
+                "operation_type": match["operation_type"],
+            }
+            if match["operation_id"] is not None:
+                values["operation_id"] = match["operation_id"]
+            if match["signed_at"] is not None:
+                values["signed_at"] = match["signed_at"]
+            matches.append(
+                management_pb2.PanicBlacklistMatch(  # type: ignore[attr-defined]
+                    **values
+                )
+            )
+        return management_pb2.PanicBlacklistPreviewResponse(  # type: ignore[attr-defined]
+            selector_id=preview.selector_id,
+            issued_from=preview.issued_from,
+            issued_until=preview.issued_until,
+            matches=matches,
+            total_amount=preview.total_amount,
+            committed=committed,
+        )
+
+    async def ResolvePanicBlacklist(self, request, context):
+        preview = await self.ledger.panic.preview_selector(
+            issued_from=request.issued_from,
+            issued_until=request.issued_until,
+            reason=request.reason,
+            created_by=request.operator if request.HasField("operator") else "",
+        )
+        return self._panic_preview_response(preview)
+
+    async def CommitPanicBlacklist(self, request, context):
+        operator = request.operator if request.HasField("operator") else ""
+        preview = await self.ledger.panic.preview_selector(
+            issued_from=request.issued_from,
+            issued_until=request.issued_until,
+            reason=request.reason,
+            created_by=operator,
+        )
+        await self.ledger.panic.commit_selector(
+            preview, reason=request.reason, created_by=operator
+        )
+        logger.warning(
+            f"Committed panic blacklist selector {preview.selector_id}: "
+            f"{len(preview.promises)} promises, amount={preview.total_amount}"
+        )
+        return self._panic_preview_response(preview, committed=True)
+
+    async def CommitPanicBlindedMessages(self, request, context):
+        count = await self.ledger.panic.blacklist_blinded_messages(
+            list(request.B_),
+            reason=request.reason,
+            created_by=request.operator if request.HasField("operator") else "",
+        )
+        return management_pb2.PanicBlindedMessagesResponse(  # type: ignore[attr-defined]
+            blacklisted=count
+        )
+
 async def serve(ledger: Ledger):
     host = settings.mint_rpc_server_addr
     port = settings.mint_rpc_server_port

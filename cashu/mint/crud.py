@@ -224,6 +224,64 @@ class LedgerCrud(ABC):
     ) -> List[BlindedMessage]: ...
 
     @abstractmethod
+    async def get_panic_issued_promises(
+        self,
+        *,
+        db: Database,
+        b_s: List[str],
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]: ...
+
+    @abstractmethod
+    async def get_panic_state(
+        self,
+        *,
+        db: Database,
+        lock: bool = False,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Dict[str, Any]]: ...
+
+    @abstractmethod
+    async def update_panic_state(
+        self,
+        *,
+        db: Database,
+        enabled: bool,
+        reason: str,
+        updated_at: int,
+        updated_by: str,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_panic_signed_promises(
+        self,
+        *,
+        db: Database,
+        b_s: Optional[List[str]] = None,
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]: ...
+
+    @abstractmethod
+    async def panic_selector_exists(
+        self,
+        *,
+        db: Database,
+        selector_id: str,
+        conn: Optional[Connection] = None,
+    ) -> bool: ...
+
+    @abstractmethod
+    async def store_panic_blacklist(
+        self,
+        *,
+        db: Database,
+        selector: Dict[str, Any],
+        promises: List[Dict[str, Any]],
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
     async def store_mint_quote(
         self,
         *,
@@ -485,6 +543,159 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         # could be unsigned (BlindedMessage) or signed (BlindedSignature), but BlindedMessage is a subclass of BlindedSignature
         return [BlindedMessage.from_row(r) for r in rows] if rows else []  # type: ignore
+
+    async def get_panic_issued_promises(
+        self,
+        *,
+        db: Database,
+        b_s: List[str],
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT p.amount, p.id, p.b_,
+                   CASE WHEN bp.b_ IS NULL THEN 0 ELSE 1 END AS blacklisted
+            FROM {db.table_with_schema("promises")} p
+            LEFT JOIN {db.table_with_schema("panic_blacklisted_promises")} bp
+              ON bp.b_ = p.b_ AND bp.revoked_at IS NULL
+            WHERE p.c_ IS NOT NULL
+              AND p.b_ IN ({",".join(f":b_{i}" for i in range(len(b_s)))})
+            """,
+            {f"b_{i}": b_s[i] for i in range(len(b_s))},
+        )
+        return [dict(row) for row in rows]
+
+    async def get_panic_state(
+        self,
+        *,
+        db: Database,
+        lock: bool = False,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Dict[str, Any]]:
+        connection = conn or db
+        if lock and connection.type == "SQLITE":
+            await connection.execute(
+                f"""
+                UPDATE {db.table_with_schema("panic_state")}
+                SET revision = revision
+                WHERE singleton_id = 1
+                """
+            )
+        lock_clause = " FOR UPDATE" if lock and connection.type != "SQLITE" else ""
+        row = await connection.fetchone(
+            f"""
+            SELECT *
+            FROM {db.table_with_schema("panic_state")}
+            WHERE singleton_id = 1{lock_clause}
+            """
+        )
+        return dict(row) if row else None
+
+    async def update_panic_state(
+        self,
+        *,
+        db: Database,
+        enabled: bool,
+        reason: str,
+        updated_at: int,
+        updated_by: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema("panic_state")}
+            SET enabled = :enabled, revision = revision + 1, reason = :reason,
+                updated_at = :updated_at, updated_by = :updated_by
+            WHERE singleton_id = 1
+            """,
+            {
+                "enabled": int(enabled),
+                "reason": reason,
+                "updated_at": updated_at,
+                "updated_by": updated_by,
+            },
+        )
+
+    async def get_panic_signed_promises(
+        self,
+        *,
+        db: Database,
+        b_s: Optional[List[str]] = None,
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]:
+        if b_s == []:
+            return []
+        values = (
+            {f"b_{i}": b_ for i, b_ in enumerate(b_s)}
+            if b_s is not None
+            else {}
+        )
+        b_clause = (
+            " AND b_ IN ("
+            + ",".join(f":b_{i}" for i in range(len(b_s)))
+            + ")"
+            if b_s is not None
+            else ""
+        )
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT amount, id, b_, c_, created, signed_at,
+                   mint_quote, melt_quote, swap_id
+            FROM {db.table_with_schema("promises")}
+            WHERE c_ IS NOT NULL{b_clause}
+            """,
+            values,
+        )
+        return [dict(row) for row in rows]
+
+    async def panic_selector_exists(
+        self,
+        *,
+        db: Database,
+        selector_id: str,
+        conn: Optional[Connection] = None,
+    ) -> bool:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT selector_id
+            FROM {db.table_with_schema("panic_blacklist_selectors")}
+            WHERE selector_id = :selector_id
+            """,
+            {"selector_id": selector_id},
+        )
+        return row is not None
+
+    async def store_panic_blacklist(
+        self,
+        *,
+        db: Database,
+        selector: Dict[str, Any],
+        promises: List[Dict[str, Any]],
+        conn: Optional[Connection] = None,
+    ) -> None:
+        async with db.get_connection(conn) as connection:
+            await connection.execute(
+                f"""
+                INSERT INTO {db.table_with_schema("panic_blacklist_selectors")}
+                    (selector_id, selector_kind, issued_from, issued_until,
+                     reason, created_at, created_by, committed_at)
+                VALUES (:selector_id, :selector_kind, :issued_from,
+                        :issued_until, :reason, :created_at, :created_by,
+                        :committed_at)
+                """,
+                selector,
+            )
+            for promise in promises:
+                await connection.execute(
+                    f"""
+                    INSERT INTO {db.table_with_schema("panic_blacklisted_promises")}
+                        (b_, selector_id, operation_type, operation_id, created_at)
+                    VALUES (:b_, :selector_id, :operation_type, :operation_id,
+                            :created_at)
+                    ON CONFLICT (b_, selector_id) DO NOTHING
+                    """,
+                    promise,
+                )
 
     async def invalidate_proof(
         self,

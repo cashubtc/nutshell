@@ -65,6 +65,7 @@ from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .keysets import LedgerKeysets
+from .panic import PanicService
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
 from .watchdog import LedgerWatchdog
@@ -127,6 +128,7 @@ class Ledger(
 
         self.db = db
         self.crud = crud
+        self.panic = PanicService(db, crud)
 
         if backends:
             self.backends = backends
@@ -319,6 +321,7 @@ class Ledger(
             MintQuote: Mint quote object.
         """
         logger.trace("called request_mint")
+        await self.panic.assert_normal_operation("mint quote creation")
         if not quote_request.amount > 0:
             raise TransactionError("amount must be positive")
         if (
@@ -503,6 +506,7 @@ class Ledger(
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
+        await self.panic.assert_normal_operation("minting")
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
         # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
@@ -558,6 +562,7 @@ class Ledger(
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
+        await self.panic.assert_normal_operation("batch minting")
         if not payload.quotes:
             raise TransactionError("batch must not be empty")
 
@@ -976,6 +981,8 @@ class Ledger(
         # settle externally if units are different
         if mint_quote.unit != melt_quote.unit:
             return melt_quote
+        if (await self.panic.get_state()).enabled:
+            raise NotAllowedError("Internal settlement is disabled in panic mode.")
 
         # we settle the transaction internally
         if melt_quote.state == MeltQuoteState.paid:
@@ -1135,10 +1142,18 @@ class Ledger(
         # We must have called _verify_outputs here already! (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
-        # set quote and proofs to pending to avoid race conditions
-        melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
-            quote=melt_quote, proofs=proofs, keysets=self.keysets
-        )
+        # Lock panic state and set quote/proofs pending in one transaction. This
+        # gives panic activation and melt admission a deterministic order.
+        async with self.db.get_connection() as conn:
+            await self.panic.verify_melt_inputs(
+                proofs, conn=conn, lock_state=True
+            )
+            melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
+                quote=melt_quote,
+                proofs=proofs,
+                keysets=self.keysets,
+                conn=conn,
+            )
 
         try:
             # store the change outputs
@@ -1329,6 +1344,8 @@ class Ledger(
             List[BlindedSignature]: New promises (signatures) for the outputs.
         """
         logger.trace("swap called")
+        await self.panic.assert_normal_operation("swapping")
+        swap_id = generate_uuid_v7()
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
         await self.db_write._verify_spent_proofs_and_set_pending(
@@ -1343,7 +1360,9 @@ class Ledger(
                 lock_select_statement=f"y IN ({ys_list})",
                 lock_parameters=lock_parameters,
             ) as conn:
-                await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
+                await self._store_blinded_messages(
+                    outputs, keyset=keyset, swap_id=swap_id, conn=conn
+                )
 
                 # Calculate fees
                 proofs_by_keyset: Dict[str, List[Proof]] = {}
@@ -1373,6 +1392,7 @@ class Ledger(
     async def restore(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
+        await self.panic.assert_normal_operation("restoring promises")
         signatures: List[BlindedSignature] = []
         return_outputs: List[BlindedMessage] = []
         async with self.db.get_connection() as conn:

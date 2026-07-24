@@ -1338,3 +1338,63 @@ async def m038_remove_dleq_from_promises(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
         )
+
+
+async def m039_panic_mode(db: Database):
+    """Add persistent panic state and audited blinded-message blacklist tables."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("panic_state")} (
+                singleton_id INTEGER PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 0,
+                reason TEXT,
+                updated_at INTEGER NOT NULL,
+                updated_by TEXT
+            )
+            """
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("panic_state")}
+                (singleton_id, enabled, revision, updated_at)
+            VALUES (1, 0, 0, 0)
+            ON CONFLICT (singleton_id) DO NOTHING
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("panic_blacklist_selectors")} (
+                selector_id TEXT PRIMARY KEY,
+                selector_kind TEXT NOT NULL,
+                issued_from INTEGER,
+                issued_until INTEGER,
+                reason TEXT,
+                created_at INTEGER NOT NULL,
+                created_by TEXT,
+                committed_at INTEGER
+            )
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("panic_blacklisted_promises")} (
+                b_ TEXT NOT NULL,
+                selector_id TEXT NOT NULL,
+                operation_type TEXT NOT NULL,
+                operation_id TEXT,
+                created_at INTEGER NOT NULL,
+                revoked_at INTEGER,
+                PRIMARY KEY (b_, selector_id),
+                FOREIGN KEY (selector_id)
+                    REFERENCES {db.table_with_schema("panic_blacklist_selectors")}(selector_id)
+            )
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS panic_blacklisted_promises_b_idx
+            ON {db.table_with_schema("panic_blacklisted_promises")} (b_)
+            """
+        )

@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from environs import Env  # type: ignore
 from pydantic import Field
@@ -66,6 +66,19 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_panic_mode: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Override the persistent panic-mode state at startup. If unset, the "
+            "database state is preserved."
+        ),
+    )
+    mint_panic_mode_reason: str = Field(
+        default="configured through MINT_PANIC_MODE"
+    )
+    mint_panic_mode_operator: str = Field(default="environment")
+    mint_panic_blacklist_blinded_messages: List[str] = Field(default=[])
+    mint_panic_blacklist_time_ranges: List[Dict[str, Any]] = Field(default=[])
     mint_quote_ttl: Optional[int] = Field(
         default=None,
         ge=0,

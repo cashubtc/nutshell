@@ -104,6 +104,82 @@ def get_info(ctx: Context):
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
 
+
+@cli.command("panic-status", help="Show the persistent panic-mode state.")
+@click.pass_context
+def panic_status(ctx: Context):
+    response = ctx.obj["STUB"].GetPanicStatus(
+        management_pb2.GetPanicStatusRequest()  # type: ignore[attr-defined]
+    )
+    click.echo(f"enabled: {str(response.enabled).lower()}")
+    click.echo(f"revision: {response.revision}")
+    click.echo(f"reason: {response.reason}")
+
+
+@cli.command("panic-mode", help="Enable or disable panic mode.")
+@click.argument("enabled", type=click.BOOL)
+@click.option("--reason", required=True)
+@click.option("--operator", default="")
+@click.pass_context
+def panic_mode(ctx: Context, enabled: bool, reason: str, operator: str):
+    response = ctx.obj["STUB"].SetPanicMode(
+        management_pb2.SetPanicModeRequest(  # type: ignore[attr-defined]
+            enabled=enabled, reason=reason, operator=operator
+        )
+    )
+    click.echo(f"enabled: {str(response.enabled).lower()}")
+    click.echo(f"revision: {response.revision}")
+    click.echo(f"reason: {response.reason}")
+
+
+@cli.command(
+    "panic-blacklist-time-range",
+    help="Resolve a time range against issued promises; use --commit to store it.",
+)
+@click.argument("issued_from", type=int)
+@click.argument("issued_until", type=int)
+@click.option("--reason", required=True)
+@click.option("--operator", default="")
+@click.option("--commit", is_flag=True)
+@click.pass_context
+def panic_blacklist(
+    ctx: Context,
+    issued_from: int,
+    issued_until: int,
+    reason: str,
+    operator: str,
+    commit: bool,
+):
+    request = management_pb2.PanicBlacklistTimeRangeRequest(  # type: ignore[attr-defined]
+        issued_from=issued_from,
+        issued_until=issued_until,
+        reason=reason,
+        operator=operator,
+    )
+    method = (
+        ctx.obj["STUB"].CommitPanicBlacklist
+        if commit
+        else ctx.obj["STUB"].ResolvePanicBlacklist
+    )
+    click.echo(method(request))
+
+
+@cli.command(
+    "panic-blacklist-blinded",
+    help="Blacklist one or more exact issued blinded messages.",
+)
+@click.argument("blinded_messages", nargs=-1, required=True)
+@click.option("--reason", required=True)
+@click.option("--operator", default="")
+@click.pass_context
+def panic_blacklist_blinded(
+    ctx: Context, blinded_messages: tuple[str, ...], reason: str, operator: str
+):
+    request = management_pb2.PanicBlindedMessagesRequest(  # type: ignore[attr-defined]
+        B_=list(blinded_messages), reason=reason, operator=operator
+    )
+    click.echo(ctx.obj["STUB"].CommitPanicBlindedMessages(request))
+
 @cli.group()
 @click.pass_context
 def update(ctx: Context):
