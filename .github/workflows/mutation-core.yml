@@ -1,0 +1,14 @@
+name: mutation core
+
+on:
+  schedule:
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    uses: ./.github/workflows/_mutation-profile.yml
+    with:
+      profile: core
+      target: "cashu.core*"
+      prefix: "cashu.core"

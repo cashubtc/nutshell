@@ -1,0 +1,79 @@
+name: mutation profile
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      prefix:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    name: Mutate ${{ inputs.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v6
+
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: "3.12"
+          poetry-version: "2.3.2"
+
+      - name: Restore mutation cache
+        uses: actions/cache@v4
+        with:
+          path: mutants
+          key: mutation-${{ runner.os }}-${{ inputs.profile }}-${{ hashFiles('poetry.lock') }}-${{ github.sha }}
+          restore-keys: |
+            mutation-${{ runner.os }}-${{ inputs.profile }}-${{ hashFiles('poetry.lock') }}-
+
+      - name: Run mutation profile
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout --signal=INT --kill-after=2m 340m \
+            make mutation MUTATION_TARGET='${{ inputs.target }}' 2>&1 \
+            | tee 'mutation-${{ inputs.profile }}.log'
+
+      - name: Create mutation report
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          poetry run mutmut results --all true \
+            | grep -F '    ${{ inputs.prefix }}' \
+            > 'mutation-${{ inputs.profile }}-results.txt'
+
+          results_file='mutation-${{ inputs.profile }}-results.txt'
+          {
+            echo '## Mutation results: ${{ inputs.profile }}'
+            echo
+            echo '| Status | Count |'
+            echo '|---|---:|'
+            for status in killed survived "no tests" timeout suspicious skipped; do
+              count=$(awk -F ': ' -v status="$status" \
+                '$NF == status { count++ } END { print count + 0 }' "$results_file")
+              echo "| $status | $count |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ inputs.profile }}-${{ github.run_id }}
+          path: |
+            mutation-${{ inputs.profile }}.log
+            mutation-${{ inputs.profile }}-results.txt
+          retention-days: 14
+          if-no-files-found: warn

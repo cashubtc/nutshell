@@ -1,0 +1,14 @@
+name: mutation lightning
+
+on:
+  schedule:
+    - cron: "0 1 * * 4"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    uses: ./.github/workflows/_mutation-profile.yml
+    with:
+      profile: lightning
+      target: "cashu.lightning*"
+      prefix: "cashu.lightning"
