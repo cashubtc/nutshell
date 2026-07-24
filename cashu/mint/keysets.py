@@ -71,6 +71,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 )
                 if keyset_derivation_counter > selected_keyset_counter:
                     selected_keyset = keyset
+                    selected_keyset_counter = keyset_derivation_counter 
 
         # If no selected keyset, then there is no keyset for this unit
         if not selected_keyset:
@@ -111,7 +112,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
         self.keysets[selected_keyset.id] = selected_keyset
 
-        logger.debug(f"Keyset {keyset.id} was de-activated")
+        logger.debug(f"Keyset {selected_keyset.id} was de-activated")
         return new_keyset
 
     async def activate_keyset(
