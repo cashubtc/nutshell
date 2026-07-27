@@ -267,6 +267,18 @@ def test_request_method_with_fee_syntax(mint, cli_prefix):
 
 
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+@pytest.mark.parametrize("amount", ["0", "-1"])
+def test_request_rejects_non_positive_amount(mint, cli_prefix, amount):
+    """A request amount must be positive: the pay path can't process 0 or less."""
+    runner = CliRunner()
+
+    result = runner.invoke(cli, [*cli_prefix, "request", "--", amount])
+
+    assert "Invalid value" in result.output
+    assert "creqA" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
 def test_request_rejects_invalid_method_fee(mint, cli_prefix):
     """--method name:fee with a non-integer or negative fee is rejected."""
     runner = CliRunner()

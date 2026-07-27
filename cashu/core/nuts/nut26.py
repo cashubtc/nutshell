@@ -340,6 +340,8 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
         elif tag == 0x08:
             kwargs["nut10"] = _decode_nut10(val)
         elif tag == 0x09:
+            if len(val) != 1:
+                raise ValueError("Invalid mint preferred length")
             kwargs["mp"] = val[0] == 1
         elif tag == 0x0A:
             supported_methods.append(_decode_supported_method(val))

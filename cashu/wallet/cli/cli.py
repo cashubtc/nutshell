@@ -527,7 +527,7 @@ def _parse_supported_method(spec: str) -> Optional[SupportedMethod]:
 
 
 @cli.command("request", help="Create a NUT-18 payment request.")
-@click.argument("amount", type=int)
+@click.argument("amount", type=click.IntRange(min=1))
 @click.option("--description", "-d", default=None, help="Human-readable description.")
 @click.option(
     "--mint",

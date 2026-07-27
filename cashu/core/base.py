@@ -1680,7 +1680,8 @@ class NUT10Option(BaseModel):
 
 class SupportedMethod(BaseModel):
     mn: str  # method name
-    mf: Optional[int] = None  # per-method fee, absent = 0
+    # per-method fee, absent = 0; u64 range per NUT-26
+    mf: Optional[int] = Field(default=None, ge=0, lt=2**64)
 
 
 class PaymentRequest(BaseModel):
