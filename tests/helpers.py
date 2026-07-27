@@ -81,16 +81,6 @@ docker_lightning_cli = [
     "--rpcserver=lnd-1",
 ]
 
-docker_bitcoin_cli = [
-    "docker",
-    "exec",
-    "cashu-bitcoind-1-1bitcoin-cli",
-    "-rpcuser=lnbits",
-    "-rpcpassword=lnbits",
-    "-regtest",
-]
-
-
 docker_lightning_unconnected_cli = [
     "docker",
     "exec",
@@ -198,31 +188,12 @@ def get_real_invoice_cln(sats: int) -> str:
     return result["bolt11"]
 
 
-def mine_blocks(blocks: int = 1) -> str:
-    cmd = docker_bitcoin_cli.copy()
-    cmd.extend(["-generate", str(blocks)])
-    return run_cmd(cmd)
-
-
 def get_unconnected_node_uri() -> str:
     cmd = docker_lightning_unconnected_cli.copy()
     cmd.append("getinfo")
     info = run_cmd_json(cmd)
     pubkey = info["identity_pubkey"]
     return f"{pubkey}@lnd-2:9735"
-
-
-def create_onchain_address(address_type: str = "bech32") -> str:
-    cmd = docker_bitcoin_cli.copy()
-    cmd.extend(["getnewaddress", address_type])
-    return run_cmd(cmd)
-
-
-def pay_onchain(address: str, sats: int) -> str:
-    btc = sats * 0.00000001
-    cmd = docker_bitcoin_cli.copy()
-    cmd.extend(["sendtoaddress", address, str(btc)])
-    return run_cmd(cmd)
 
 
 async def pay_if_regtest(bolt11: str) -> None:
