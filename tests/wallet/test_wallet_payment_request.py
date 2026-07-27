@@ -1,5 +1,6 @@
 import pytest
 from bech32 import convertbits
+from pydantic import ValidationError
 
 from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, Transport
 from cashu.core.nuts.nut18 import deserialize, serialize
@@ -384,3 +385,19 @@ def test_deserialize_malformed_short_amount():
     token = "CREQB1QGQQYQGZSWP0M3"
     with pytest.raises(ValueError, match="Invalid amount length"):
         deserialize(token)
+
+
+@pytest.mark.parametrize("value", [b"", b"\x01\x02\x03"])
+def test_deserialize_malformed_mint_preferred(value):
+    """The mint-preferred flag is a u8: empty and multi-byte values must raise."""
+    raw = nut26_tlv_entry(0x09, value)
+    token = bech32m_encode("creqb", convertbits(raw, 8, 5)).upper()
+    with pytest.raises(ValueError, match="Invalid mint preferred length"):
+        deserialize(token)
+
+
+@pytest.mark.parametrize("fee", [-1, 2**64])
+def test_supported_method_rejects_out_of_range_fee(fee):
+    """`mf` is a u64: negative fees would let a payer underpay the request."""
+    with pytest.raises(ValidationError):
+        SupportedMethod(mn="bolt11", mf=fee)
