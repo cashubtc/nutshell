@@ -406,6 +406,48 @@ async def test_concurrent_rotation_updates_stale_default_keyset(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_concurrent_rotation_selects_newest_active_keyset(ledger: Ledger):
+    """A losing worker must not adopt an older active keyset."""
+    for task in ledger.regular_tasks:
+        task.cancel()
+    ledger.regular_tasks = []
+
+    old_keyset = ledger.keyset
+    original_counter = int(old_keyset.derivation_path.split("/")[-1].replace("'", ""))
+
+    def keyset_at_counter(counter: int, *, active: bool) -> MintKeyset:
+        path_parts = old_keyset.derivation_path.split("/")
+        path_parts[-1] = f"{counter}'"
+        return MintKeyset(
+            derivation_path="/".join(path_parts),
+            seed=ledger.seed,
+            amounts=old_keyset.amounts,
+            input_fee_ppk=old_keyset.input_fee_ppk,
+            active=active,
+        )
+
+    rotated_keyset = keyset_at_counter(original_counter + 1, active=False)
+    newest_keyset = keyset_at_counter(original_counter + 2, active=True)
+    await ledger.crud.store_keyset(keyset=rotated_keyset, db=ledger.db)
+    await ledger.crud.update_keyset(keyset=rotated_keyset, db=ledger.db)
+    await ledger.crud.store_keyset(keyset=newest_keyset, db=ledger.db)
+
+    # The old keyset remains active and precedes the winner in insertion order.
+    ledger.keysets[rotated_keyset.id] = rotated_keyset
+    ledger.keyset = rotated_keyset
+    ledger.derivation_path = rotated_keyset.derivation_path
+
+    result = await ledger.rotate_next_keyset(
+        unit=old_keyset.unit,
+        active_keyset_id=rotated_keyset.id,
+    )
+
+    assert result.id == newest_keyset.id
+    assert ledger.keyset.id == newest_keyset.id
+    assert ledger.derivation_path == newest_keyset.derivation_path
+
+
+@pytest.mark.asyncio
 async def test_regression_highest_counter_selection_incomplete(ledger: Ledger):
     """
     Regression test: highest-counter selection is incomplete.

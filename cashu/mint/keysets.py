@@ -87,13 +87,16 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                     logger.info(
                         f"Keyset {active_keyset_id} was already deactivated (likely rotated by another process/task). Skipping redundant rotation."
                     )
-                    active_keyset = next(
+                    active_keyset = max(
                         (
                             k
                             for k in self.keysets.values()
                             if k.active and k.unit == unit
                         ),
-                        None,
+                        key=lambda k: int(
+                            k.derivation_path.split("/")[-1].replace("'", "")
+                        ),
+                        default=None,
                     )
                     if active_keyset:
                         if self.keyset and self.keyset.id == active_keyset_id:
