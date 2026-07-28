@@ -133,6 +133,23 @@ async def test_lnd_payment_quote_uses_probed_fee(ledger: Ledger):
         Unit.sat, round="up"
     )
 
+    quote = MeltQuote(
+        quote="test",
+        method=Method.bolt11.name,
+        unit=Unit.sat.name,
+        state=MeltQuoteState.unpaid,
+        request=request,
+        checking_id=payment_quote.checking_id,
+        amount=payment_quote.amount.amount,
+        fee_reserve=payment_quote.fee.amount,
+    )
+    estimated_fee_msat = payment_quote.fee.to(Unit.msat).amount
+    payment = await backend.pay_invoice(quote, estimated_fee_msat)
+
+    assert payment.settled
+    assert payment.fee is not None
+    assert payment.fee <= Amount(Unit.msat, estimated_fee_msat)
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")

@@ -451,7 +451,8 @@ class LndRPCWallet(LightningBackend):
                         routerrpc.RouteFeeRequest(
                             payment_request=melt_quote.request,
                             timeout=FEE_PROBE_TIMEOUT_SECONDS,
-                        )
+                        ),
+                        timeout=FEE_PROBE_TIMEOUT_SECONDS,
                     )
                 if response.failure_reason == lnrpc.FAILURE_REASON_NONE:
                     fees_msat = max(
