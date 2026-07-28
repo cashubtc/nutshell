@@ -143,12 +143,12 @@ async def test_lnd_payment_quote_uses_probed_fee(ledger: Ledger):
         amount=payment_quote.amount.amount,
         fee_reserve=payment_quote.fee.amount,
     )
-    estimated_fee_msat = payment_quote.fee.to(Unit.msat).amount
-    payment = await backend.pay_invoice(quote, estimated_fee_msat)
+    quoted_fee_limit_msat = payment_quote.fee.to(Unit.msat).amount
+    payment = await backend.pay_invoice(quote, quoted_fee_limit_msat)
 
     assert payment.settled
     assert payment.fee is not None
-    assert payment.fee <= Amount(Unit.msat, estimated_fee_msat)
+    assert payment.fee <= Amount(Unit.msat, quoted_fee_limit_msat)
 
 
 @pytest.mark.asyncio

@@ -455,9 +455,10 @@ class LndRPCWallet(LightningBackend):
                         timeout=FEE_PROBE_TIMEOUT_SECONDS,
                     )
                 if response.failure_reason == lnrpc.FAILURE_REASON_NONE:
-                    fees_msat = max(
-                        settings.lightning_reserve_fee_min,
-                        response.routing_fee_msat,
+                    # The probe is a lower bound; add the configured base reserve
+                    # to allow for a more expensive route at payment time.
+                    fees_msat = (
+                        settings.lightning_reserve_fee_min + response.routing_fee_msat
                     )
                 else:
                     logger.debug(

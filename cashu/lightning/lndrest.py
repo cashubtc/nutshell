@@ -527,9 +527,10 @@ class LndRestWallet(LightningBackend):
                 data = response.json()
                 failure_reason = data.get("failure_reason")
                 if failure_reason in (None, 0, "FAILURE_REASON_NONE"):
-                    fees_msat = max(
-                        settings.lightning_reserve_fee_min,
-                        int(data["routing_fee_msat"]),
+                    # The probe is a lower bound; add the configured base reserve
+                    # to allow for a more expensive route at payment time.
+                    fees_msat = settings.lightning_reserve_fee_min + int(
+                        data["routing_fee_msat"]
                     )
                 else:
                     logger.debug(f"LND fee probe failed: {failure_reason}")
