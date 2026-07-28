@@ -25,7 +25,10 @@ from cashu.lightning.clnrest import (
     CLNRestWallet,
 )
 from cashu.lightning.fake import FakeWallet
-from cashu.lightning.lnd_grpc.lnd_grpc import LndRPCWallet
+from cashu.lightning.lnd_grpc.lnd_grpc import (
+    FEE_PROBE_TIMEOUT_SECONDS,
+    LndRPCWallet,
+)
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
 from cashu.wallet.lightning import LightningWallet
@@ -870,6 +873,53 @@ async def test_spark_checks_payment_by_quote_hash_after_reconnecting(state):
     assert request.type_filter == [breez.PaymentType.SEND]
     assert request.sort_ascending is False
     sdk.get_payment.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_lndgrpc_get_payment_quote_sets_rpc_deadline(monkeypatch):
+    wallet = object.__new__(LndRPCWallet)
+    wallet.unit = Unit.sat
+    wallet.endpoint = "lnd.test"
+    wallet.combined_creds = object()
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="ph"),
+    )
+
+    class Channel:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.grpc.aio.secure_channel",
+        lambda *args: Channel(),
+    )
+    rpc_timeouts = []
+
+    class RouterStub:
+        def __init__(self, channel):
+            pass
+
+        async def EstimateRouteFee(self, request, timeout=None):
+            rpc_timeouts.append(timeout)
+            return SimpleNamespace(
+                failure_reason=0,
+                routing_fee_msat=1000,
+            )
+
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.routerstub.RouterStub", RouterStub
+    )
+
+    quote = await wallet.get_payment_quote(
+        PostMeltQuoteRequest(unit="sat", request="lnbc1")
+    )
+
+    assert quote.fee == Amount(Unit.sat, 2)
+    assert rpc_timeouts == [FEE_PROBE_TIMEOUT_SECONDS]
 
 
 @pytest.mark.asyncio
