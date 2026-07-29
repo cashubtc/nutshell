@@ -181,6 +181,42 @@ def test_pay_nut18_unsupported_method(mint, cli_prefix):
 
 
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_list_ignores_trailing_slash(mint, cli_prefix):
+    """A trailing-slash difference must not classify our own mint as outside the list."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=[settings.mint_url.rstrip("/") + "/"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    # our mint is in the list, so no method fee is owed
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_fee_reason_without_mint_list(mint, cli_prefix):
+    """With no mint list the fee still applies, but the reason must say so."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(a=10, u="sat", sm=[SupportedMethod(mn="bolt11", mf=5)])
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*cli_prefix, "pay", creq, "-y"])
+
+    assert "Adding method fee of 5 sat" in result.output
+    assert "the request has no mint list" in result.output
+    assert "outside the preferred list" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
 def test_pay_nut18_rejects_sm_without_unit(mint, cli_prefix):
     """`sm` (and its per-method fees) are denominated in `u`; reject if `u` is absent."""
     runner = CliRunner()
@@ -292,5 +328,9 @@ def test_request_rejects_invalid_method_fee(mint, cli_prefix):
     result = runner.invoke(
         cli, [*cli_prefix, "request", "100", "--method", "onchain:abc"]
     )
+    assert "Invalid --method" in result.output
+    assert "creqA" not in result.output
+
+    result = runner.invoke(cli, [*cli_prefix, "request", "100", "--method", ":5"])
     assert "Invalid --method" in result.output
     assert "creqA" not in result.output
