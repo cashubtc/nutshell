@@ -575,7 +575,7 @@ async def invoice(
     # user requests an invoice
     if amount and not id:
         mint_supports_websockets = wallet.mint_info.supports_websocket_mint_quote(
-            Method["bolt11"], wallet.unit
+            Method.bolt11, wallet.unit
         )
         if mint_supports_websockets and not no_check:
             mint_quote, subscription = await wallet.request_mint_with_callback(

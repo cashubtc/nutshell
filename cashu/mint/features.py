@@ -34,7 +34,6 @@ _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
 _METHOD = "method"
 _UNIT = "unit"
-_BOLT11 = "bolt11"
 _MPP = "mpp"
 _COMMANDS = "commands"
 _BOLT11_MINT_QUOTE = "bolt11_mint_quote"
@@ -166,7 +165,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         }
         # we check the backend to see if "bolt11_mint_quote" is supported as well
         for method, unit_dict in self.backends.items():
-            if method == Method[_BOLT11]:
+            if method == Method.bolt11:
                 for unit in unit_dict.keys():
                     websocket_features[_SUPPORTED].append(
                         {

@@ -348,7 +348,7 @@ class MeltQuote(LedgerEvent):
     def from_resp_wallet(cls, melt_quote_resp, mint: str, unit: str, request: str):
         return cls(
             quote=melt_quote_resp.quote,
-            method="bolt11",
+            method=Method.bolt11.name,
             request=melt_quote_resp.request
             or request,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             checking_id="",
@@ -547,7 +547,7 @@ class MintQuote(LedgerEvent):
 
         return cls(
             quote=mint_quote_resp.quote,
-            method="bolt11",
+            method=Method.bolt11.name,
             request=mint_quote_resp.request,
             checking_id="",
             unit=mint_quote_resp.unit

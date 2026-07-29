@@ -13,6 +13,7 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MeltQuoteState,
+    Method,
     Proof,
     ProofSpentState,
     ProofState,
@@ -561,7 +562,7 @@ class LedgerAPI(SupportsAuth):
                 quote=quote,
                 amount=0,
                 unit="sat",
-                method="bolt11",
+                method=Method.bolt11.name,
                 request="lnbc0",
                 fee_reserve=0,
                 state=(

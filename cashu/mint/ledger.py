@@ -583,7 +583,7 @@ class Ledger(
         methods = set([q.method for q in quotes])
         if len(methods) > 1:
             raise TransactionError("all quotes must have the same method")
-        if "bolt11" not in methods:
+        if Method.bolt11.name not in methods:
             raise TransactionError("all quotes must be of bolt11 method")
 
         # Check currency unit consistency
@@ -607,7 +607,7 @@ class Ledger(
                 raise TransactionError("quote_amounts length must match quotes length")
             for i, quote in enumerate(quotes):
                 if (
-                    quote.method == "bolt11"
+                    quote.method == Method.bolt11.name
                     and payload.quote_amounts[i] != quote.amount
                 ):
                     raise TransactionError(
@@ -619,7 +619,7 @@ class Ledger(
                     )
 
         quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
-        if "bolt11" in methods:
+        if Method.bolt11.name in methods:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
                     "amount to mint does not match quote amounts sum"
