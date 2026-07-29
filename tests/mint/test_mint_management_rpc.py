@@ -14,52 +14,59 @@ from cashu.mint.management_rpc.management_rpc import MintManagementRPC
 def rpc_servicer(ledger: Ledger):
     return MintManagementRPC(ledger=ledger)
 
+
 def test_get_info(rpc_servicer):
     request = management_pb2.GetInfoRequest()
     response = rpc_servicer.GetInfo(request, None)
-    
+
     assert response.name == settings.mint_info_name
     assert response.pubkey == rpc_servicer.ledger.mint_info.pubkey
+
 
 @pytest.mark.asyncio
 async def test_update_motd(rpc_servicer):
     request = management_pb2.UpdateMotdRequest(motd="New Test MOTD")
     response = await rpc_servicer.UpdateMotd(request, None)
-    
+
     assert settings.mint_info_motd == "New Test MOTD"
     assert isinstance(response, management_pb2.UpdateResponse)
+
 
 @pytest.mark.asyncio
 async def test_update_short_description(rpc_servicer):
     request = management_pb2.UpdateDescriptionRequest(description="New Short Desc")
     response = await rpc_servicer.UpdateShortDescription(request, None)
-    
+
     assert settings.mint_info_description == "New Short Desc"
     assert isinstance(response, management_pb2.UpdateResponse)
+
 
 @pytest.mark.asyncio
 async def test_update_long_description(rpc_servicer):
     request = management_pb2.UpdateDescriptionRequest(description="New Long Desc")
     response = await rpc_servicer.UpdateLongDescription(request, None)
-    
+
     assert settings.mint_info_description_long == "New Long Desc"
     assert isinstance(response, management_pb2.UpdateResponse)
+
 
 @pytest.mark.asyncio
 async def test_update_icon_url(rpc_servicer):
     request = management_pb2.UpdateIconUrlRequest(icon_url="http://test.com/icon.png")
     response = await rpc_servicer.UpdateIconUrl(request, None)
-    
+
     assert settings.mint_info_icon_url == "http://test.com/icon.png"
     assert isinstance(response, management_pb2.UpdateResponse)
+
 
 @pytest.mark.asyncio
 async def test_update_name(rpc_servicer):
     request = management_pb2.UpdateNameRequest(name="New Name")
     response = await rpc_servicer.UpdateName(request, None)
-    
+
     assert settings.mint_info_name == "New Name"
     assert isinstance(response, management_pb2.UpdateResponse)
+
 
 @pytest.mark.asyncio
 async def test_add_remove_url(rpc_servicer):
@@ -81,12 +88,15 @@ async def test_add_remove_url(rpc_servicer):
     with pytest.raises(Exception, match="No such URL in mint_info_urls"):
         await rpc_servicer.RemoveUrl(request_remove, None)
 
+
 @pytest.mark.asyncio
 async def test_add_remove_contact(rpc_servicer):
     settings.mint_info_contact = []
-    
+
     # Add contact
-    request_add = management_pb2.UpdateContactRequest(method="email", info="test@example.com")
+    request_add = management_pb2.UpdateContactRequest(
+        method="email", info="test@example.com"
+    )
     await rpc_servicer.AddContact(request_add, None)
     assert ["email", "test@example.com"] in settings.mint_info_contact
 
@@ -102,6 +112,7 @@ async def test_add_remove_contact(rpc_servicer):
     # Remove non-existent contact should raise exception
     with pytest.raises(Exception, match="Contact method not found"):
         await rpc_servicer.RemoveContact(request_remove, None)
+
 
 @pytest.mark.asyncio
 async def test_update_quote_ttl(rpc_servicer):
@@ -126,6 +137,7 @@ async def test_update_quote_ttl(rpc_servicer):
     with pytest.raises(Exception, match="No quote ttl was specified"):
         await rpc_servicer.UpdateQuoteTtl(request_empty, None)
 
+
 @pytest.mark.asyncio
 async def test_update_lightning_fee(rpc_servicer):
     request = management_pb2.UpdateLightningFeeRequest(fee_percent=1.5)
@@ -140,6 +152,7 @@ async def test_update_lightning_fee(rpc_servicer):
     request_empty = management_pb2.UpdateLightningFeeRequest()
     with pytest.raises(Exception, match="No fee specified"):
         await rpc_servicer.UpdateLightningFee(request_empty, None)
+
 
 @pytest.mark.asyncio
 async def test_update_auth_limits(rpc_servicer):
@@ -200,6 +213,16 @@ async def test_panic_management_rpc(rpc_servicer):
             None,
         )
 
+    with pytest.raises(ValueError, match="not found"):
+        await rpc_servicer.ResolvePanicMintQuotes(
+            management_pb2.PanicMintQuoteIdsRequest(
+                quote_ids=["unknown-quote"],
+                reason="rpc quote test",
+                operator="pytest",
+            ),
+            None,
+        )
+
     await rpc_servicer.SetPanicMode(
         management_pb2.SetPanicModeRequest(
             enabled=False, reason="rpc test cleanup", operator="pytest"
@@ -207,25 +230,24 @@ async def test_panic_management_rpc(rpc_servicer):
         None,
     )
 
+
 @pytest.mark.asyncio
 async def test_rotate_next_keyset(rpc_servicer):
     request = management_pb2.RotateNextKeysetRequest(
-        unit="sat",
-        input_fee_ppk=2,
-        final_expiry=86400,
-        max_order=12
+        unit="sat", input_fee_ppk=2, final_expiry=86400, max_order=12
     )
     response = await rpc_servicer.RotateNextKeyset(request, None)
-    
+
     assert response.unit == "sat"
     assert response.input_fee_ppk == 2
     assert response.final_expiry == 86400
     assert response.max_order > 0
 
+
 @pytest.mark.asyncio
 async def test_nut04_quote(rpc_servicer):
     quote_id = "test-mint-quote-123"
-    
+
     # Mock get_mint_quote
     mock_quote = MintQuote(
         quote=quote_id,
@@ -238,41 +260,41 @@ async def test_nut04_quote(rpc_servicer):
         created_time=int(time.time()),
         expiry=int(time.time()) + 3600,
         mint=None,
-        privkey=None
+        privkey=None,
     )
-    
+
     rpc_servicer.ledger.get_mint_quote = AsyncMock(return_value=mock_quote)
-    
+
     # Test GetNut04Quote
     request_get = management_pb2.GetNut04QuoteRequest(quote_id=quote_id)
     response_get = await rpc_servicer.GetNut04Quote(request_get, None)
-    
+
     assert response_get.quote.quote == quote_id
     assert response_get.quote.state == str(MintQuoteState.unpaid)
     assert response_get.quote.amount == 100
     assert response_get.quote.amount_paid == 0
     assert response_get.quote.amount_issued == 0
     assert response_get.quote.updated_at > 0
-    
+
     # Mock UpdateNut04Quote state update
     rpc_servicer.ledger.db_write._update_mint_quote_state = AsyncMock()
-    
+
     # Test UpdateNut04Quote
     request_update = management_pb2.UpdateQuoteRequest(
-        quote_id=quote_id,
-        state=MintQuoteState.paid.value
+        quote_id=quote_id, state=MintQuoteState.paid.value
     )
     response_update = await rpc_servicer.UpdateNut04Quote(request_update, None)
-    
+
     assert isinstance(response_update, management_pb2.UpdateResponse)
     rpc_servicer.ledger.db_write._update_mint_quote_state.assert_called_once_with(
         quote_id, MintQuoteState.paid
     )
 
+
 @pytest.mark.asyncio
 async def test_nut05_quote(rpc_servicer):
     quote_id = "test-melt-quote-123"
-    
+
     # Mock get_melt_quote
     mock_quote = MeltQuote(
         quote=quote_id,
@@ -287,30 +309,29 @@ async def test_nut05_quote(rpc_servicer):
         expiry=int(time.time()) + 3600,
         payment_preimage=None,
         error=None,
-        mint=None
+        mint=None,
     )
-    
+
     rpc_servicer.ledger.get_melt_quote = AsyncMock(return_value=mock_quote)
-    
+
     # Test GetNut05Quote
     request_get = management_pb2.GetNut05QuoteRequest(quote_id=quote_id)
     response_get = await rpc_servicer.GetNut05Quote(request_get, None)
-    
+
     assert response_get.quote.quote == quote_id
     assert response_get.quote.state == str(MeltQuoteState.unpaid)
     assert response_get.quote.amount == 100
     assert response_get.quote.fee_reserve == 5
-    
+
     # Mock UpdateNut05Quote state update
     rpc_servicer.ledger.db_write._update_melt_quote_state = AsyncMock()
-    
+
     # Test UpdateNut05Quote
     request_update = management_pb2.UpdateQuoteRequest(
-        quote_id=quote_id,
-        state=MeltQuoteState.paid.value
+        quote_id=quote_id, state=MeltQuoteState.paid.value
     )
     response_update = await rpc_servicer.UpdateNut05Quote(request_update, None)
-    
+
     assert isinstance(response_update, management_pb2.UpdateResponse)
     rpc_servicer.ledger.db_write._update_melt_quote_state.assert_called_once_with(
         quote_id, MeltQuoteState.paid
@@ -337,13 +358,18 @@ async def test_get_keyset(rpc_servicer):
     # Test GetKeyset with missing ID should raise error
     mock_context = AsyncMock()
     with pytest.raises(Exception):
-        await rpc_servicer.GetKeyset(management_pb2.GetKeysetRequest(id=""), mock_context)
+        await rpc_servicer.GetKeyset(
+            management_pb2.GetKeysetRequest(id=""), mock_context
+        )
     mock_context.abort.assert_called_once()
 
     # Test GetKeyset with non-existent ID should raise error
     mock_context_not_found = AsyncMock()
     with pytest.raises(Exception):
-        await rpc_servicer.GetKeyset(management_pb2.GetKeysetRequest(id="non-existent-id"), mock_context_not_found)
+        await rpc_servicer.GetKeyset(
+            management_pb2.GetKeysetRequest(id="non-existent-id"),
+            mock_context_not_found,
+        )
     mock_context_not_found.abort.assert_called_once()
 
 

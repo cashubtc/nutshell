@@ -25,6 +25,8 @@ class PanicBlacklistPreview:
     issued_from: int
     issued_until: int
     promises: List[Dict[str, Any]]
+    selector_kind: str = "TIME_RANGE"
+    mint_quote_ids: Tuple[str, ...] = ()
 
     @property
     def total_amount(self) -> int:
@@ -69,9 +71,7 @@ class PanicService:
     async def get_state(
         self, *, conn: Optional[Connection] = None, lock: bool = False
     ) -> PanicState:
-        row = await self.crud.get_panic_state(
-            db=self.db, conn=conn, lock=lock
-        )
+        row = await self.crud.get_panic_state(db=self.db, conn=conn, lock=lock)
         if row is None:
             # Missing state after migrations is unsafe.
             raise RuntimeError("panic state is unavailable")
@@ -134,10 +134,9 @@ class PanicService:
         promises: List[Dict[str, Any]] = []
         for row in serialised:
             operation_type, operation_id = _operation(row)
-            if (
-                (operation_type, operation_id) not in matched_operations
-                and str(row["b_"]) not in directly_matched
-            ):
+            if (operation_type, operation_id) not in matched_operations and str(
+                row["b_"]
+            ) not in directly_matched:
                 continue
             promises.append(
                 {
@@ -171,9 +170,17 @@ class PanicService:
             db=self.db,
             selector={
                 "selector_id": preview.selector_id,
-                "selector_kind": "TIME_RANGE",
-                "issued_from": preview.issued_from,
-                "issued_until": preview.issued_until,
+                "selector_kind": preview.selector_kind,
+                "issued_from": (
+                    preview.issued_from
+                    if preview.selector_kind == "TIME_RANGE"
+                    else None
+                ),
+                "issued_until": (
+                    preview.issued_until
+                    if preview.selector_kind == "TIME_RANGE"
+                    else None
+                ),
                 "reason": reason,
                 "created_at": now,
                 "created_by": created_by,
@@ -191,6 +198,65 @@ class PanicService:
             ],
         )
         return len(preview.promises)
+
+    async def preview_mint_quote_selector(
+        self,
+        *,
+        quote_ids: List[str],
+        reason: str,
+        created_by: str = "",
+        selector_id: Optional[str] = None,
+    ) -> PanicBlacklistPreview:
+        canonical_ids = tuple(dict.fromkeys(q.strip() for q in quote_ids if q.strip()))
+        if not canonical_ids:
+            raise ValueError("at least one mint quote ID is required")
+        if not reason.strip():
+            raise ValueError("a blacklist reason is required")
+
+        missing = []
+        for quote_id in canonical_ids:
+            quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
+            if quote is None:
+                missing.append(quote_id)
+        if missing:
+            raise ValueError(f"mint quote was not found: {', '.join(sorted(missing))}")
+
+        rows = await self.crud.get_panic_signed_promises(db=self.db)
+        by_quote: Dict[str, List[Dict[str, Any]]] = {
+            quote_id: [] for quote_id in canonical_ids
+        }
+        for row in rows:
+            mint_quote = row.get("mint_quote")
+            if mint_quote in by_quote:
+                by_quote[str(mint_quote)].append(row)
+        unissued = [quote_id for quote_id, promises in by_quote.items() if not promises]
+        if unissued:
+            raise ValueError(
+                f"mint quote has no issued promises: {', '.join(sorted(unissued))}"
+            )
+
+        promises = []
+        for quote_id in canonical_ids:
+            for row in by_quote[quote_id]:
+                promises.append(
+                    {
+                        "b_": str(row["b_"]),
+                        "amount": int(row["amount"]),
+                        "keyset_id": str(row["id"]),
+                        "operation_type": "MINT",
+                        "operation_id": quote_id,
+                        "created": _unix_timestamp(row.get("created")),
+                        "signed_at": _unix_timestamp(row.get("signed_at")),
+                    }
+                )
+        return PanicBlacklistPreview(
+            selector_id=selector_id or secrets.token_hex(16),
+            issued_from=0,
+            issued_until=0,
+            promises=promises,
+            selector_kind="MINT_QUOTE_IDS",
+            mint_quote_ids=canonical_ids,
+        )
 
     async def selector_exists(self, selector_id: str) -> bool:
         return await self.crud.panic_selector_exists(
@@ -216,9 +282,7 @@ class PanicService:
                 canonical.append(PublicKey(bytes.fromhex(value)).format().hex())
             except Exception as exc:
                 raise ValueError("invalid blinded message") from exc
-        rows = await self.crud.get_panic_signed_promises(
-            db=self.db, b_s=canonical
-        )
+        rows = await self.crud.get_panic_signed_promises(db=self.db, b_s=canonical)
         found = {str(row["b_"]): row for row in rows}
         missing = set(canonical) - set(found)
         if missing:
@@ -268,9 +332,7 @@ class PanicService:
         recomputed: List[Tuple[Proof, str]] = []
         for proof in proofs:
             if not proof.dleq:
-                raise TransactionError(
-                    "panic mode requires DLEQ data for every input"
-                )
+                raise TransactionError("panic mode requires DLEQ data for every input")
             try:
                 r = PrivateKey(bytes.fromhex(proof.dleq.r))
                 B_, _ = b_dhke.step1_alice(proof.secret, r)

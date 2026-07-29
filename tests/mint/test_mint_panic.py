@@ -68,9 +68,7 @@ async def test_panic_state_is_persistent_and_blocks_swap(
 async def test_info_signals_panic_operation_restrictions(
     wallet: Wallet, ledger: Ledger
 ):
-    normal = GetInfoResponse(
-        **httpx.get(f"{SERVER_ENDPOINT}/v1/info").json()
-    )
+    normal = GetInfoResponse(**httpx.get(f"{SERVER_ENDPOINT}/v1/info").json())
     assert normal.nuts
     assert normal.nuts[MINT_NUT]["disabled"] is False
     assert normal.nuts[MELT_NUT]["disabled"] is False
@@ -80,9 +78,7 @@ async def test_info_signals_panic_operation_restrictions(
     await ledger.panic.set_state(
         enabled=True, reason="info restriction test", updated_by="pytest"
     )
-    panic = GetInfoResponse(
-        **httpx.get(f"{SERVER_ENDPOINT}/v1/info").json()
-    )
+    panic = GetInfoResponse(**httpx.get(f"{SERVER_ENDPOINT}/v1/info").json())
     assert panic.nuts
     assert panic.nuts[SWAP_NUT]["disabled"] is True
     assert panic.nuts[MINT_NUT]["disabled"] is True
@@ -92,9 +88,7 @@ async def test_info_signals_panic_operation_restrictions(
 
 
 @pytest.mark.asyncio
-async def test_panic_verifies_original_blinding_factor(
-    wallet: Wallet, ledger: Ledger
-):
+async def test_panic_verifies_original_blinding_factor(wallet: Wallet, ledger: Ledger):
     proof = wallet.proofs[0]
     assert proof.dleq
     await ledger.panic.set_state(
@@ -191,6 +185,66 @@ async def test_time_range_selector_expands_complete_mint_operation(
 
 
 @pytest.mark.asyncio
+async def test_mint_quote_selector_blacklists_complete_issuance(
+    wallet: Wallet, ledger: Ledger
+):
+    original_proof = wallet.proofs[0]
+    first_quote_id = original_proof.mint_id
+    assert first_quote_id
+    second_quote = await wallet.request_mint(16)
+    await pay_if_regtest(second_quote.request)
+    await wallet.mint(16, quote_id=second_quote.quote)
+    quote_ids = [first_quote_id, second_quote.quote]
+    operation_rows = [
+        row
+        for row in await ledger.crud.get_panic_signed_promises(db=ledger.db)
+        if row["mint_quote"] in quote_ids
+    ]
+    assert len(operation_rows) > 1
+
+    preview = await ledger.panic.preview_mint_quote_selector(
+        quote_ids=[*quote_ids, first_quote_id],
+        reason="compromised quote",
+        created_by="pytest",
+    )
+    assert preview.selector_kind == "MINT_QUOTE_IDS"
+    assert preview.mint_quote_ids == tuple(quote_ids)
+    assert {row["b_"] for row in preview.promises} == {
+        row["b_"] for row in operation_rows
+    }
+
+    await ledger.panic.commit_selector(
+        preview, reason="compromised quote", created_by="pytest"
+    )
+    await ledger.panic.set_state(
+        enabled=True, reason="quote blacklist test", updated_by="pytest"
+    )
+    with pytest.raises(TransactionError, match="not eligible"):
+        await ledger.panic.verify_melt_inputs([original_proof])
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_selector_rejects_unknown_or_unissued_quotes(
+    wallet: Wallet, ledger: Ledger
+):
+    issued_quote_id = wallet.proofs[0].mint_id
+    assert issued_quote_id
+    with pytest.raises(ValueError, match="not found"):
+        await ledger.panic.preview_mint_quote_selector(
+            quote_ids=[issued_quote_id, "unknown-quote"],
+            reason="must fail atomically",
+        )
+
+    unissued = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    with pytest.raises(ValueError, match="no issued promises"):
+        await ledger.panic.preview_mint_quote_selector(
+            quote_ids=[unissued.quote],
+            reason="unissued quote",
+        )
+    assert not await ledger.panic.selector_exists("uncommitted")
+
+
+@pytest.mark.asyncio
 async def test_time_range_selector_expands_complete_swap_operation(
     wallet: Wallet, ledger: Ledger
 ):
@@ -254,9 +308,7 @@ async def test_operator_can_blacklist_exact_blinded_message(
 
 
 @pytest.mark.asyncio
-async def test_invalid_selectors_and_blinded_messages(
-    wallet: Wallet, ledger: Ledger
-):
+async def test_invalid_selectors_and_blinded_messages(wallet: Wallet, ledger: Ledger):
     with pytest.raises(ValueError, match="greater"):
         await ledger.panic.preview_selector(
             issued_from=10, issued_until=10, reason="invalid"
@@ -266,9 +318,7 @@ async def test_invalid_selectors_and_blinded_messages(
             issued_from=-1, issued_until=10, reason="invalid"
         )
     with pytest.raises(ValueError, match="invalid blinded"):
-        await ledger.panic.blacklist_blinded_messages(
-            ["not-a-point"], reason="invalid"
-        )
+        await ledger.panic.blacklist_blinded_messages(["not-a-point"], reason="invalid")
     unknown, _ = b_dhke.step1_alice("unknown panic output")
     with pytest.raises(ValueError, match="not found"):
         await ledger.panic.blacklist_blinded_messages(
@@ -277,9 +327,7 @@ async def test_invalid_selectors_and_blinded_messages(
 
 
 @pytest.mark.asyncio
-async def test_panic_rejects_all_non_melt_mutations(
-    wallet: Wallet, ledger: Ledger
-):
+async def test_panic_rejects_all_non_melt_mutations(wallet: Wallet, ledger: Ledger):
     internal_mint_quote = await ledger.mint_quote(
         PostMintQuoteRequest(amount=8, unit="sat")
     )
@@ -295,22 +343,16 @@ async def test_panic_rejects_all_non_melt_mutations(
     with pytest.raises(NotAllowedError, match="minting"):
         await ledger.mint(outputs=[], quote_id="unused")
     with pytest.raises(NotAllowedError, match="batch minting"):
-        await ledger.mint_batch(
-            PostMintBatchRequest(quotes=[], outputs=[])
-        )
+        await ledger.mint_batch(PostMintBatchRequest(quotes=[], outputs=[]))
     with pytest.raises(NotAllowedError, match="restoring"):
         await ledger.restore([])
     with pytest.raises(NotAllowedError, match="Internal settlement"):
-        await ledger.melt_mint_settle_internally(
-            internal_melt_quote, wallet.proofs
-        )
+        await ledger.melt_mint_settle_internally(internal_melt_quote, wallet.proofs)
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_regtest, reason="requires cashu-regtest backend")
-async def test_successful_http_melt_in_panic_mode(
-    wallet: Wallet, ledger: Ledger
-):
+async def test_successful_http_melt_in_panic_mode(wallet: Wallet, ledger: Ledger):
     invoice = get_real_invoice(32)["payment_request"]
     quote = await wallet.melt_quote(invoice)
     await ledger.panic.set_state(
@@ -327,28 +369,26 @@ async def test_successful_http_melt_in_panic_mode(
 
 def test_environment_json_parsing(monkeypatch):
     monkeypatch.setenv("MINT_PANIC_MODE", "true")
-    monkeypatch.setenv(
-        "MINT_PANIC_BLACKLIST_BLINDED_MESSAGES", '["02abc", "03def"]'
-    )
+    monkeypatch.setenv("MINT_PANIC_BLACKLIST_BLINDED_MESSAGES", '["02abc", "03def"]')
     monkeypatch.setenv(
         "MINT_PANIC_BLACKLIST_TIME_RANGES",
         '[{"issued_from":100,"issued_until":200,"reason":"incident"}]',
     )
+    monkeypatch.setenv("MINT_PANIC_BLACKLIST_MINT_QUOTE_IDS", '["quote-1", "quote-2"]')
     parsed = Settings(_env_file=None)
     assert parsed.mint_panic_mode is True
     assert parsed.mint_panic_blacklist_blinded_messages == ["02abc", "03def"]
     assert parsed.mint_panic_blacklist_time_ranges == [
         {"issued_from": 100, "issued_until": 200, "reason": "incident"}
     ]
+    assert parsed.mint_panic_blacklist_mint_quote_ids == ["quote-1", "quote-2"]
 
 
 @pytest.mark.asyncio
 async def test_concurrent_activation_precedes_pending_transition(
     wallet: Wallet, ledger: Ledger, monkeypatch
 ):
-    mint_quote = await ledger.mint_quote(
-        PostMintQuoteRequest(amount=8, unit="sat")
-    )
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
     )
@@ -398,9 +438,7 @@ async def test_panic_migration_preserves_populated_database(
         await conn.execute(
             f"DROP TABLE {ledger.db.table_with_schema('panic_blacklist_selectors')}"
         )
-        await conn.execute(
-            f"DROP TABLE {ledger.db.table_with_schema('panic_state')}"
-        )
+        await conn.execute(f"DROP TABLE {ledger.db.table_with_schema('panic_state')}")
         await conn.execute(
             f"""
             UPDATE {ledger.db.table_with_schema("dbversions")}
@@ -446,6 +484,7 @@ async def test_environment_can_override_persistent_panic_state(
     previous_reason = settings.mint_panic_mode_reason
     previous_operator = settings.mint_panic_mode_operator
     previous_blinded = settings.mint_panic_blacklist_blinded_messages
+    previous_mint_quotes = settings.mint_panic_blacklist_mint_quote_ids
     previous_time_ranges = settings.mint_panic_blacklist_time_ranges
     try:
         now = int(time.time())
@@ -458,9 +497,10 @@ async def test_environment_can_override_persistent_panic_state(
         settings.mint_panic_mode = True
         settings.mint_panic_mode_reason = "environment test"
         settings.mint_panic_mode_operator = "pytest"
-        settings.mint_panic_blacklist_blinded_messages = [
-            preview.promises[0]["b_"]
-        ]
+        settings.mint_panic_blacklist_blinded_messages = [preview.promises[0]["b_"]]
+        quote_id = wallet.proofs[0].mint_id
+        assert quote_id
+        settings.mint_panic_blacklist_mint_quote_ids = [quote_id]
         settings.mint_panic_blacklist_time_ranges = [
             {
                 "issued_from": now - 120,
@@ -483,7 +523,7 @@ async def test_environment_can_override_persistent_panic_state(
             WHERE selector_id LIKE 'env-%'
             """
         )
-        assert len(rows) == 2
+        assert len(rows) == 3
 
         settings.mint_panic_mode = False
         await apply_panic_mode_environment()
@@ -493,4 +533,5 @@ async def test_environment_can_override_persistent_panic_state(
         settings.mint_panic_mode_reason = previous_reason
         settings.mint_panic_mode_operator = previous_operator
         settings.mint_panic_blacklist_blinded_messages = previous_blinded
+        settings.mint_panic_blacklist_mint_quote_ids = previous_mint_quotes
         settings.mint_panic_blacklist_time_ranges = previous_time_ranges

@@ -73,11 +73,10 @@ class MintSettings(CashuSettings):
             "database state is preserved."
         ),
     )
-    mint_panic_mode_reason: str = Field(
-        default="configured through MINT_PANIC_MODE"
-    )
+    mint_panic_mode_reason: str = Field(default="configured through MINT_PANIC_MODE")
     mint_panic_mode_operator: str = Field(default="environment")
     mint_panic_blacklist_blinded_messages: List[str] = Field(default=[])
+    mint_panic_blacklist_mint_quote_ids: List[str] = Field(default=[])
     mint_panic_blacklist_time_ranges: List[Dict[str, Any]] = Field(default=[])
     mint_quote_ttl: Optional[int] = Field(
         default=None,

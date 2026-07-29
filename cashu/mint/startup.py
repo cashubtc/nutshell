@@ -140,9 +140,7 @@ async def apply_panic_mode_environment() -> None:
 
     blinded_messages = settings.mint_panic_blacklist_blinded_messages
     if blinded_messages:
-        canonical = json.dumps(
-            sorted(set(blinded_messages)), separators=(",", ":")
-        )
+        canonical = json.dumps(sorted(set(blinded_messages)), separators=(",", ":"))
         selector_id = "env-b-" + hashlib.sha256(canonical.encode()).hexdigest()
         count = await ledger.panic.blacklist_blinded_messages(
             blinded_messages,
@@ -156,17 +154,35 @@ async def apply_panic_mode_environment() -> None:
                 count,
             )
 
+    mint_quote_ids = settings.mint_panic_blacklist_mint_quote_ids
+    if mint_quote_ids:
+        canonical = json.dumps(sorted(set(mint_quote_ids)), separators=(",", ":"))
+        selector_id = "env-mint-quote-" + hashlib.sha256(canonical.encode()).hexdigest()
+        if not await ledger.panic.selector_exists(selector_id):
+            preview = await ledger.panic.preview_mint_quote_selector(
+                quote_ids=mint_quote_ids,
+                reason=settings.mint_panic_mode_reason,
+                created_by=settings.mint_panic_mode_operator,
+                selector_id=selector_id,
+            )
+            count = await ledger.panic.commit_selector(
+                preview,
+                reason=settings.mint_panic_mode_reason,
+                created_by=settings.mint_panic_mode_operator,
+            )
+            logger.warning(
+                "Applied panic mint quote selector from the environment: "
+                "{} promises.",
+                count,
+            )
+
     for selector in settings.mint_panic_blacklist_time_ranges:
         try:
             issued_from = int(selector["issued_from"])
             issued_until = int(selector["issued_until"])
-            reason = str(
-                selector.get("reason", settings.mint_panic_mode_reason)
-            )
+            reason = str(selector.get("reason", settings.mint_panic_mode_reason))
         except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(
-                "invalid MINT_PANIC_BLACKLIST_SELECTORS entry"
-            ) from exc
+            raise ValueError("invalid MINT_PANIC_BLACKLIST_SELECTORS entry") from exc
         canonical = json.dumps(
             {
                 "issued_from": issued_from,
