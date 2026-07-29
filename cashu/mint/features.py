@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Union
 
 from ..core.base import Method
+from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.mint_info import MintInfo
 from ..core.models import (
     MeltMethodSetting,
@@ -34,11 +35,7 @@ _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
 _METHOD = "method"
 _UNIT = "unit"
-_MPP = "mpp"
 _COMMANDS = "commands"
-_BOLT11_MINT_QUOTE = "bolt11_mint_quote"
-_BOLT11_MELT_QUOTE = "bolt11_melt_quote"
-_PROOF_STATE = "proof_state"
 _PROTECTED_ENDPOINTS = "protected_endpoints"
 _BAT_MAX_MINT = "bat_max_mint"
 _OPENID_DISCOVERY = "openid_discovery"
@@ -171,7 +168,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                         {
                             _METHOD: method.name,
                             _UNIT: unit.name,
-                            _COMMANDS: [_BOLT11_MELT_QUOTE, _PROOF_STATE],
+                            _COMMANDS: [
+                                JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE.value,
+                                JSONRPCSubscriptionKinds.PROOF_STATE.value,
+                            ],
                         }
                     )
                     if unit_dict[unit].supports_incoming_payment_stream:
@@ -179,7 +179,8 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             websocket_features[_SUPPORTED][-1][_COMMANDS]
                         )
                         websocket_features[_SUPPORTED][-1][_COMMANDS] = (
-                            supported_features + [_BOLT11_MINT_QUOTE]
+                            supported_features
+                            + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
                         )
 
         if websocket_features:
