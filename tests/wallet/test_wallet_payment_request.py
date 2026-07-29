@@ -2,11 +2,19 @@ import pytest
 from bech32 import convertbits
 from pydantic import ValidationError
 
-from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, Transport
+from cashu.core.base import (
+    NUT10Option,
+    PaymentRequest,
+    SupportedMethod,
+    Transport,
+    Unit,
+)
+from cashu.core.mint_info import MintInfo
 from cashu.core.nuts.nut18 import deserialize, serialize
 from cashu.core.nuts.nut26 import _tlv_entry as nut26_tlv_entry
 from cashu.core.nuts.nut26 import bech32m_decode, bech32m_encode
 from cashu.core.nuts.nut26 import serialize as serialize_bech32m
+from cashu.core.nuts.nuts import MELT_NUT
 
 
 def test_nut18_serialization_example():
@@ -401,3 +409,46 @@ def test_supported_method_rejects_out_of_range_fee(fee):
     """`mf` is a u64: negative fees would let a payer underpay the request."""
     with pytest.raises(ValidationError):
         SupportedMethod(mn="bolt11", mf=fee)
+
+
+def test_supported_method_rejects_empty_method_name():
+    """A supported method must name a method."""
+    with pytest.raises(ValidationError):
+        SupportedMethod(mn="", mf=5)
+
+
+# ─── Method fee lookup ───────────────────────────────────────────────
+def _mint_info(nut_05: dict) -> MintInfo:
+    return MintInfo(
+        name=None, pubkey=None, version=None, description=None,
+        description_long=None, contact=None, motd=None, icon_url=None,
+        urls=None, tos_url=None, time=None, nuts={MELT_NUT: nut_05},
+    )
+
+
+_MELT_BOLT11_SAT = [{"method": "bolt11", "unit": "sat"}]
+
+
+def test_method_fee_rejects_when_melting_is_disabled():
+    """`sm` requires the mint to melt the request unit; a disabled NUT-05 cannot."""
+    info = _mint_info({"methods": _MELT_BOLT11_SAT, "disabled": True})
+    assert info.payment_request_method_fee([SupportedMethod(mn="bolt11")], Unit.sat) is None
+
+
+@pytest.mark.parametrize(
+    "nut_05",
+    [
+        {"methods": _MELT_BOLT11_SAT, "disabled": False},
+        {"methods": _MELT_BOLT11_SAT},
+    ],
+)
+def test_method_fee_allows_when_melting_is_enabled(nut_05):
+    """Melting enabled, or the flag absent, still resolves a fee."""
+    info = _mint_info(nut_05)
+    assert info.payment_request_method_fee([SupportedMethod(mn="bolt11")], Unit.sat) == 0
+
+
+def test_method_fee_zero_when_request_has_no_method_requirement():
+    """An unset `sm` means no requirement, which is distinct from `None`."""
+    info = _mint_info({"methods": _MELT_BOLT11_SAT})
+    assert info.payment_request_method_fee(None, Unit.sat) == 0

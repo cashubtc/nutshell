@@ -301,7 +301,9 @@ async def pay(
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
         # The mint list is strict unless `mp` is explicitly true (preferred)
-        mint_outside_list = pr.m is not None and wallet.url not in pr.m
+        mint_outside_list = pr.m is not None and wallet.url.rstrip("/") not in [
+            mint.rstrip("/") for mint in pr.m
+        ]
         if mint_outside_list and not pr.mp:
             print(
                 f"Error: Current mint {wallet.url} is not accepted by the receiver.")
@@ -336,10 +338,12 @@ async def pay(
         fee_applies = pr.m is None or mint_outside_list
         if fee_applies and method_fee:
             amount_to_pay += method_fee
-            print(
-                f"Adding method fee of {wallet.unit.str(method_fee)} "
-                "(paying from a mint outside the preferred list)."
+            reason = (
+                "the request has no mint list"
+                if pr.m is None
+                else "paying from a mint outside the preferred list"
             )
+            print(f"Adding method fee of {wallet.unit.str(method_fee)} ({reason}).")
 
         if not yes and not ctx.obj.get("YES"):
             message = f"Pay {wallet.unit.str(amount_to_pay)}?"
@@ -513,8 +517,11 @@ async def pay(
 
 def _parse_supported_method(spec: str) -> Optional[SupportedMethod]:
     """Parse a `--method` value of the form `name` or `name:fee` into a
-    SupportedMethod, or return None if `fee` isn't a non-negative int."""
+    SupportedMethod, or return None if `name` is empty or `fee` isn't a
+    non-negative int."""
     mn, sep, fee_str = spec.partition(":")
+    if not mn:
+        return None
     if not sep:
         return SupportedMethod(mn=mn)
     try:
@@ -578,7 +585,10 @@ async def request(
     for spec in methods:
         parsed = _parse_supported_method(spec)
         if parsed is None:
-            print(f"Error: Invalid --method '{spec}', fee must be a non-negative int.")
+            print(
+                f"Error: Invalid --method '{spec}', expected a method name and a"
+                " non-negative int fee."
+            )
             return
         supported_methods.append(parsed)
 

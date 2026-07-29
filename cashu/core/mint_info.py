@@ -78,14 +78,16 @@ class MintInfo(BaseModel):
         """
         Given the `sm` (supported methods) list from a NUT-18/26 payment request,
         return the lowest per-method fee this mint owes for melting via one of the
-        listed methods in `unit`, or `None` if it melts none of them.
+        listed methods in `unit`. Returns 0 when `sm` is unset, i.e. the request
+        makes no method requirement, and `None` when this mint cannot melt via any
+        of the listed methods.
         """
         if not sm:
             return 0
         if not self.nuts:
             return None
         nut_05 = self.nuts.get(MELT_NUT)
-        if not nut_05 or not nut_05.get("methods"):
+        if not nut_05 or not nut_05.get("methods") or nut_05.get("disabled"):
             return None
 
         melt_methods = [MeltMethodSetting.model_validate(e) for e in nut_05["methods"]]
