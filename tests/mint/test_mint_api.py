@@ -558,8 +558,7 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
-    # invoice from a node with no direct channel to the mint's node: the
-    # payment routes through lnd-1, which charges a real routing fee
+    # external invoice that the mint can only pay through a routing node
     invoice_payment_request = get_real_invoice_routed(62)
 
     quote = await wallet.melt_quote(invoice_payment_request)
@@ -589,19 +588,16 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     assert resp_quote.state == MeltQuoteState.paid.value
     assert resp_quote.payment_preimage is not None
 
-    # the routed payment must have cost a nonzero fee, so the change returned
-    # is strictly less than the fee reserve, but the fee can never exceed the
-    # reserve because the mint passes it to the backend as the fee limit
+    # we get back less than the full fee reserve because the routing fee was paid
     change_sat = sum([c.amount for c in resp_quote.change or []])
     fee_paid = quote.fee_reserve - change_sat
-    assert fee_paid > 0, "expected a nonzero routing fee on a routed payment"
-    assert fee_paid <= quote.fee_reserve
+    assert fee_paid > 0, "No routing fee paid"
+    # the mint passes the fee reserve to the backend as the fee limit
+    assert fee_paid <= quote.fee_reserve, "Fee exceeded the fee reserve"
 
-    melt_quote = await ledger.crud.get_melt_quote(
-        quote_id=quote.quote, db=ledger.db
-    )
-    assert melt_quote is not None
-    assert melt_quote.fee_paid == fee_paid
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert melt_quote, "No melt quote in db"
+    assert melt_quote.fee_paid == fee_paid, "Wrong fee paid"
 
 
 @pytest.mark.asyncio

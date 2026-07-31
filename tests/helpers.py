@@ -81,8 +81,6 @@ docker_lightning_cli = [
     "--rpcserver=lnd-1",
 ]
 
-# lnd-2 has no direct channel to the mint's LND node (lnd-3), so payments
-# from the mint to lnd-2 route through lnd-1 and incur a real routing fee.
 docker_lightning_routed_cli = [
     "docker",
     "exec",
@@ -93,7 +91,7 @@ docker_lightning_routed_cli = [
     "--rpcserver=lnd-2",
 ]
 
-# lnd-3 — the node the LND-backed mint backends connect to
+
 docker_lightning_mint_cli = [
     "docker",
     "exec",
@@ -201,46 +199,38 @@ def get_real_invoice_cln(sats: int) -> str:
     return result["bolt11"]
 
 
-def _wait_for_gossip(node_is_known, timeout: int = 60) -> None:
-    """Poll until `node_is_known()` returns True, so a routed payment does not
-    fail with 'no route' just because gossip has not propagated yet after the
-    regtest environment booted."""
+def _wait_for_node_in_graph(cmd: list, key: str, timeout: int = 60) -> None:
+    """Wait until the node lookup in `cmd` returns a result under `key`."""
     start = time.time()
     while time.time() - start < timeout:
-        try:
-            if node_is_known():
-                return
-        except Exception:
-            pass
-        time.sleep(2)
-    raise TimeoutError("gossip did not propagate within timeout")
+        if run_cmd_json(cmd).get(key):
+            return
+        time.sleep(SLEEP_TIME)
+    raise TimeoutError(f"gossip did not propagate after {timeout} seconds")
 
 
 def get_real_invoice_routed(sats: int) -> str:
-    """Invoice from a node the mint's backend has no direct channel to, so
-    paying it routes through lnd-1 and incurs a real routing fee.
-
-    LND-backed mints pay from lnd-3 (direct peers: lnd-1, cln-1, cln-3), so
-    lnd-2 is a routed destination. CLN-backed mints pay from clightning-2
-    (direct peers: lnd-1, lnd-2), so cln-1 is a routed destination.
-    """
-    if WALLET.__class__.__name__ in ("CLNRestWallet", "CoreLightningRestWallet"):
-        dest = run_cmd_json(docker_clightning_cli(1) + ["getinfo"])["id"]
-        _wait_for_gossip(
-            lambda: len(
-                run_cmd_json(docker_clightning_cli(2) + ["listnodes", dest]).get(
-                    "nodes", []
-                )
-            )
-            == 1
-        )
+    """Get an invoice from a node the mint has no direct channel to."""
+    # the mint pays a routed invoice through lnd-1, which charges a routing fee
+    if WALLET.__class__.__name__ in ["CLNRestWallet", "CoreLightningRestWallet"]:
+        # the mint is clightning-2, whose direct peers are lnd-1 and lnd-2 – so we use cln-1
+        cmd = docker_clightning_cli(1)
+        cmd.append("getinfo")
+        destination = run_cmd_json(cmd)["id"]
+        cmd = docker_clightning_cli(2)
+        cmd.extend(["listnodes", destination])
+        # gossip takes a while to propagate after the regtest environment started
+        _wait_for_node_in_graph(cmd, "nodes")
         return get_real_invoice_cln(sats)
-    dest = run_cmd_json(docker_lightning_routed_cli + ["getinfo"])["identity_pubkey"]
-    _wait_for_gossip(
-        lambda: "node" in run_cmd_json(
-            docker_lightning_mint_cli + ["getnodeinfo", "--pub_key", dest]
-        )
-    )
+
+    # the mint is lnd-3, whose direct peers are lnd-1, cln-1 and cln-3 – so we use lnd-2
+    cmd = docker_lightning_routed_cli.copy()
+    cmd.append("getinfo")
+    destination = run_cmd_json(cmd)["identity_pubkey"]
+    cmd = docker_lightning_mint_cli.copy()
+    cmd.extend(["getnodeinfo", "--pub_key", destination])
+    # gossip takes a while to propagate after the regtest environment started
+    _wait_for_node_in_graph(cmd, "node")
     cmd = docker_lightning_routed_cli.copy()
     cmd.extend(["addinvoice", str(sats)])
     return run_cmd_json(cmd)["payment_request"]

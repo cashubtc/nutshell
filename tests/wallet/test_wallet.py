@@ -385,8 +385,7 @@ async def test_melt_routed_invoice(wallet1: Wallet):
     await wallet1.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet1.balance == 128
 
-    # invoice from a node with no direct channel to the mint's node: paying
-    # it routes through lnd-1, which charges a real routing fee
+    # external invoice that the mint can only pay through a routing node
     invoice_payment_request = get_real_invoice_routed(64)
 
     quote = await wallet1.melt_quote(invoice_payment_request)
@@ -402,11 +401,10 @@ async def test_melt_routed_invoice(wallet1: Wallet):
         quote_id=quote.quote,
     )
 
-    # a routed payment costs a nonzero fee, so the balance must end strictly
-    # below the free-payment outcome (128 - amount) but the fee can never
-    # exceed the reserve, which the mint passes to the backend as fee limit
-    assert wallet1.balance < 128 - quote.amount, "expected a nonzero routing fee"
-    assert wallet1.balance >= 128 - total_amount, "fee exceeded the reserve"
+    # the payment had a routing fee, so we get back less than the full fee reserve
+    assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
+    # the mint passes the fee reserve to the backend as the fee limit
+    assert wallet1.balance >= 128 - total_amount, "Fee exceeded the fee reserve"
 
 
 @pytest.mark.asyncio
