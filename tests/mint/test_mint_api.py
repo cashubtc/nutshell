@@ -20,7 +20,13 @@ from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    get_real_invoice_routed,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+)
 
 BASE_URL = "http://localhost:3337"
 
@@ -535,6 +541,67 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert resp_quote.change is not None
     assert resp_quote.change[0].amount == 2
     assert resp_quote.state == MeltQuoteState.paid.value
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
+
+    # invoice from a node with no direct channel to the mint's node: the
+    # payment routes through lnd-1, which charges a real routing fee
+    invoice_payment_request = get_real_invoice_routed(62)
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 62
+    assert quote.fee_reserve == 2
+
+    keep, send = await wallet.swap_to_send(wallet.proofs, 64)
+    inputs_payload = [p.to_dict() for p in send]
+
+    # outputs for change
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote = PostMeltQuoteResponse(**response.json())
+    assert resp_quote.state == MeltQuoteState.paid.value
+    assert resp_quote.payment_preimage is not None
+
+    # the routed payment must have cost a nonzero fee, so the change returned
+    # is strictly less than the fee reserve, but the fee can never exceed the
+    # reserve because the mint passes it to the backend as the fee limit
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    fee_paid = quote.fee_reserve - change_sat
+    assert fee_paid > 0, "expected a nonzero routing fee on a routed payment"
+    assert fee_paid <= quote.fee_reserve
+
+    melt_quote = await ledger.crud.get_melt_quote(
+        quote_id=quote.quote, db=ledger.db
+    )
+    assert melt_quote is not None
+    assert melt_quote.fee_paid == fee_paid
 
 
 @pytest.mark.asyncio

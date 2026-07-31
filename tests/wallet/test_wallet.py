@@ -29,6 +29,7 @@ from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
+    get_real_invoice_routed,
     is_deprecated_api_only,
     is_fake,
     is_github_actions,
@@ -374,6 +375,38 @@ async def test_melt(wallet1: Wallet):
     # the payment was without fees so we need to remove it from the total amount
     assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
     assert wallet1.balance == 64, "Wrong balance"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only works on regtest")
+async def test_melt_routed_invoice(wallet1: Wallet):
+    topup_mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    await wallet1.mint(128, quote_id=topup_mint_quote.quote)
+    assert wallet1.balance == 128
+
+    # invoice from a node with no direct channel to the mint's node: paying
+    # it routes through lnd-1, which charges a real routing fee
+    invoice_payment_request = get_real_invoice_routed(64)
+
+    quote = await wallet1.melt_quote(invoice_payment_request)
+    total_amount = quote.amount + quote.fee_reserve
+    assert quote.fee_reserve == 2
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
+
+    await wallet1.melt(
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
+    )
+
+    # a routed payment costs a nonzero fee, so the balance must end strictly
+    # below the free-payment outcome (128 - amount) but the fee can never
+    # exceed the reserve, which the mint passes to the backend as fee limit
+    assert wallet1.balance < 128 - quote.amount, "expected a nonzero routing fee"
+    assert wallet1.balance >= 128 - total_amount, "fee exceeded the reserve"
 
 
 @pytest.mark.asyncio
