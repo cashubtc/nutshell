@@ -605,6 +605,62 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(1024)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(1024, quote_id=mint_quote.quote)
+    assert wallet.balance == 1024
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(1000)
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 1000
+    # fee reserve is 2% of the amount
+    assert quote.fee_reserve == 20
+
+    keep, send = await wallet.swap_to_send(wallet.proofs, 1020)
+    inputs_payload = [p.to_dict() for p in send]
+
+    # 5 blank outputs for the change of the 20 sat fee reserve
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(5)
+    outputs, rs = wallet._construct_outputs([1, 1, 1, 1, 1], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote = PostMeltQuoteResponse(**response.json())
+    assert resp_quote.state == MeltQuoteState.paid.value
+
+    # the routing fee for 1000 sat is 1001 msat (1000 msat base fee + 1 ppm)
+    # which the mint must round up to 2 sat when it accounts the fee
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert melt_quote, "No melt quote in db"
+    assert melt_quote.fee_paid == 2, "Fee not rounded up to the next sat"
+
+    # we get back the fee reserve minus the rounded up fee
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    assert change_sat == 18, "Wrong change returned"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_check_state(ledger: Ledger):
     payload = PostCheckStateRequest(Ys=["asdasdasd", "asdasdasd1"])
     response = httpx.post(
