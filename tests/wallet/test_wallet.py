@@ -394,12 +394,14 @@ async def test_melt_routed_invoice(wallet1: Wallet):
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
-    await wallet1.melt(
+    melt_response = await wallet1.melt(
         proofs=send_proofs,
         invoice=invoice_payment_request,
         fee_reserve_sat=quote.fee_reserve,
         quote_id=quote.quote,
     )
+    assert melt_response.state == MeltQuoteState.paid.value, "Melt not paid"
+    assert melt_response.payment_preimage is not None, "No payment preimage"
 
     # the payment had a routing fee, so we get back less than the full fee reserve
     assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
