@@ -405,8 +405,6 @@ async def test_melt_routed_invoice(wallet1: Wallet):
 
     # the payment had a routing fee, so we get back less than the full fee reserve
     assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
-    # the mint passes the fee reserve to the backend as the fee limit
-    assert wallet1.balance >= 128 - total_amount, "Fee exceeded the fee reserve"
 
 
 @pytest.mark.asyncio

@@ -588,16 +588,15 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     assert resp_quote.state == MeltQuoteState.paid.value
     assert resp_quote.payment_preimage is not None
 
-    # we get back less than the full fee reserve because the routing fee was paid
-    change_sat = sum([c.amount for c in resp_quote.change or []])
-    fee_paid = quote.fee_reserve - change_sat
-    assert fee_paid > 0, "No routing fee paid"
-    # the mint passes the fee reserve to the backend as the fee limit
-    assert fee_paid <= quote.fee_reserve, "Fee exceeded the fee reserve"
-
     melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
     assert melt_quote, "No melt quote in db"
-    assert melt_quote.fee_paid == fee_paid, "Wrong fee paid"
+    assert melt_quote.fee_paid > 0, "No routing fee paid"
+    # the mint passes the fee reserve to the backend as the fee limit
+    assert melt_quote.fee_paid <= quote.fee_reserve, "Fee exceeded the fee reserve"
+
+    # change must compensate exactly for the unspent part of the reserve
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    assert change_sat == quote.fee_reserve - melt_quote.fee_paid, "Wrong change returned"
 
 
 @pytest.mark.asyncio
