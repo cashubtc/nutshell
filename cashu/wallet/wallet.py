@@ -1475,6 +1475,9 @@ class Wallet(
         keep_proofs, send_proofs = await self.split(
             swap_proofs, amount, secret_lock, include_fees=include_fees, p2pk_e=p2pk_e
         )
+        # Bearer spend info: the receiver needs `k` to run the receive cascade
+        # and sign the sweep's transaction witness (spec 2.5.2).
+        self._attach_bearer_spend_info(send_proofs)
         if set_reserved:
             await self.set_reserved_for_send(send_proofs, reserved=True)
         return keep_proofs, send_proofs
