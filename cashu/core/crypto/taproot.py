@@ -328,3 +328,64 @@ def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def verify_script_path_spend(
+    secret: bytes,
+    digest: bytes,
+    witness: dict,
+    now: Optional[float] = None,
+    preimage_max_len: int = 32,
+) -> None:
+    """Verify a script-path witness: commitment, then evaluate the revealed leaf.
+
+    Witness shape (spec 2.3.2): {"leaf": hex, "control": {"K": hex, "path": [hex]},
+    "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
+    transaction digest. Raises ValueError on any failure (fail closed).
+    """
+    import hashlib as _hashlib
+    import time as _time
+
+    from coincurve import PublicKeyXOnly
+
+    leaf_bytes = bytes.fromhex(witness["leaf"])
+    control = witness["control"]
+    internal_key = bytes.fromhex(control["K"])
+    path = [bytes.fromhex(h) for h in control.get("path", [])]
+    if not verify_taproot_commitment(secret, internal_key, leaf_bytes, path):
+        raise ValueError("script path commitment does not reach the secret")
+    leaf = parse_taproot_leaf(leaf_bytes)  # raises on unknown version/type/fields
+
+    if leaf.type == "after":
+        assert leaf.time is not None
+        if (now if now is not None else _time.time()) < leaf.time:
+            raise ValueError("after leaf locktime not reached")
+
+    if leaf.type == "hashlock":
+        assert leaf.hash is not None
+        preimage_hex = witness.get("preimage")
+        if not isinstance(preimage_hex, str):
+            raise ValueError("hashlock leaf requires a preimage")
+        preimage = bytes.fromhex(preimage_hex)
+        if len(preimage) > preimage_max_len:
+            raise ValueError("hashlock preimage too long")
+        if _hashlib.sha256(preimage).digest() != leaf.hash:
+            raise ValueError("hashlock preimage does not match")
+
+    signatures = witness.get("signatures") or []
+    if not isinstance(signatures, list):
+        raise ValueError("invalid signatures field")
+    unique_sigs = list(dict.fromkeys(signatures))
+    satisfied_keys = set()
+    for key in leaf.keys:
+        for sig_hex in unique_sigs:
+            try:
+                if PublicKeyXOnly(key[1:]).verify(bytes.fromhex(sig_hex), digest):
+                    satisfied_keys.add(key)
+                    break
+            except Exception:
+                continue
+    if len(satisfied_keys) < leaf.n:
+        raise ValueError(
+            f"threshold not met: {len(satisfied_keys)} of {leaf.n} signatures"
+        )
