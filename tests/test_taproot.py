@@ -372,3 +372,60 @@ def test_transcript_rejects_empty_sections():
         )
     with pytest.raises(ValueError, match="output"):
         build_transaction_transcript(type(tx)(proof_inputs=tx.proof_inputs))
+
+
+def _swap_vector_proofs_and_outputs():
+    from cashu.core.base import BlindedMessage, Proof
+
+    tv = VECTORS["transcript"]["swap"]
+    proofs = [
+        Proof(
+            amount=p["amount"],
+            id=p["keyset_id"],
+            secret=p["secret"],
+            C=p["C"],
+        )
+        for p in tv["tx"]["proof_inputs"]
+    ]
+    outputs = [
+        BlindedMessage(amount=o["amount"], id=o["keyset_id"], B_=o["B_"])
+        for o in tv["tx"]["blinded_outputs"]
+    ]
+    return tv, proofs, outputs
+
+
+def test_mint_verifies_taproot_transaction_witnesses():
+    from cashu.core.errors import TransactionError
+    from cashu.mint.verification import LedgerVerification
+
+    verify = LedgerVerification._verify_taproot_transaction_witnesses
+
+    tv, proofs, outputs = _swap_vector_proofs_and_outputs()
+
+    # Absent witness tolerated (migration).
+    verify(proofs, outputs)
+
+    # Valid witness passes.
+    proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})
+    verify(proofs, outputs)
+
+    # Tampered signature rejects.
+    bad_sig = tv["signature"][:-2] + ("00" if tv["signature"][-2:] != "00" else "01")
+    proofs[0].witness = json.dumps({"signatures": [bad_sig]})
+    with pytest.raises(TransactionError, match="taproot transaction witness"):
+        verify(proofs, outputs)
+
+    # Malformed witness rejects.
+    proofs[0].witness = "not-json"
+    with pytest.raises(TransactionError, match="taproot transaction witness"):
+        verify(proofs, outputs)
+
+    # Witness over a different output set rejects (digest binds outputs).
+    proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})
+    with pytest.raises(TransactionError, match="taproot transaction witness"):
+        verify(proofs, outputs[:1])
+
+    # Non-point secrets skip transaction-level verification entirely.
+    proofs[0].secret = "not-a-point-secret"
+    proofs[0].witness = "not-json"
+    verify(proofs, outputs)
