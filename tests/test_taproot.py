@@ -102,15 +102,6 @@ def test_leaf_serialization_6_1():
 
 
 def test_leaf_serialization_6_2():
-    melt_to = serialize_taproot_leaf(
-        TaprootLeaf(
-            type="melt_to",
-            n=1,
-            keys=[bytes.fromhex(V62["kid_pub"])],
-            destination=bytes.fromhex(V62["node_pub"]),
-        )
-    )
-    assert melt_to.hex() == V62["leaf_melt_to"]
     after = serialize_taproot_leaf(
         TaprootLeaf(
             type="after",
@@ -120,8 +111,14 @@ def test_leaf_serialization_6_2():
         )
     )
     assert after.hex() == V62["leaf_after"]
+    # The 6.2 melt_to covenant is a spec extensibility example, not an
+    # implemented leaf type; its bytes still pin the tree and tweak math,
+    # and parsing it must fail closed as an unknown type.
+    melt_to = bytes.fromhex(V62["leaf_melt_to"])
     assert taproot_leaf_hash(melt_to).hex() == V62["leaf_hash_melt_to"]
     assert taproot_leaf_hash(after).hex() == V62["leaf_hash_after"]
+    with pytest.raises(ValueError, match="type"):
+        parse_taproot_leaf(melt_to)
 
 
 def test_leaf_parsing_fails_closed():
