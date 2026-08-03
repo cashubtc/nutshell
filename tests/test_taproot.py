@@ -285,3 +285,15 @@ async def test_nut13_v3_secret_derivation_vectors():
         assert r.hex() == output["blinding_factor"]
         expected_pub = PrivateKey(bytes.fromhex(output["secret_key"])).public_key
         assert expected_pub and expected_pub.format() == secret
+
+
+def test_point_secret_hashes_as_raw_bytes():
+    """JSON carries hex; the hash input is the raw 33 bytes (shared Y vector pin)."""
+    from cashu.core.crypto.bls_dhke import hash_to_curve, secret_to_hash_input
+
+    output = VECTORS["nut13_v3"]["outputs"][0]
+    y = hash_to_curve(secret_to_hash_input(output["secret"]))
+    assert y.format().hex() == output["Y"]
+    # Non-point strings still hash as utf8 (legacy NUT-10 secrets on v3 keysets).
+    assert secret_to_hash_input("not-a-point") == b"not-a-point"
+    assert secret_to_hash_input(output["secret"]) == bytes.fromhex(output["secret"])
