@@ -279,9 +279,9 @@ class LedgerVerification(
         )
         for proof in proofs:
             if proof.witness is None:
-                # ponytail: tolerated until every wallet flow attaches witnesses,
-                # then this becomes a rejection (M2 gate).
-                continue
+                # Inputs sign (spec 2.2.2): with spend_info live in both wallets,
+                # every legitimate spender of a point secret can sign.
+                raise TransactionError("missing taproot transaction witness.")
             try:
                 signatures = json.loads(proof.witness).get("signatures")
                 assert isinstance(signatures, list) and signatures

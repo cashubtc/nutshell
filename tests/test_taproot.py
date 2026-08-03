@@ -402,8 +402,9 @@ def test_mint_verifies_taproot_transaction_witnesses():
 
     tv, proofs, outputs = _swap_vector_proofs_and_outputs()
 
-    # Absent witness tolerated (migration).
-    verify(proofs, outputs)
+    # Absent witness rejects: inputs sign (spec 2.2.2).
+    with pytest.raises(TransactionError, match="missing taproot transaction witness"):
+        verify(proofs, outputs)
 
     # Valid witness passes.
     proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})

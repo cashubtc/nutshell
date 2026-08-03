@@ -52,6 +52,20 @@ def assert_amt(proofs: List[Proof], expected: int):
     assert [p.amount for p in proofs] == expected
 
 
+
+async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **kwargs):
+    """ledger.melt with client-side taproot witnesses attached (spec 2.2.2)."""
+    quote_obj = await ledger.crud.get_melt_quote(quote_id=quote, db=ledger.db)
+    if quote_obj is not None:
+        signer_wallet._attach_taproot_witnesses(
+            proofs,
+            outputs or [],
+            melt_quote_id=quote,
+            melt_quote_amount=quote_obj.amount,
+        )
+    return await ledger.melt(proofs=proofs, quote=quote, outputs=outputs, **kwargs)
+
+
 @pytest_asyncio.fixture(scope="function")
 async def wallet(ledger: Ledger):
     wallet1 = await Wallet.with_db(
@@ -136,13 +150,15 @@ async def test_pending_melt_quote_outputs_registration_regression(
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    response1 = await ledger.melt(
-        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    response1 = await melt_signed(
+        ledger, wallet, proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
     )
     assert response1.state == "PENDING"
 
     await assert_err(
-        ledger.melt(
+        melt_signed(
+            ledger,
+            wallet,
             proofs=proofs2,
             quote=melt_quote2.quote,
             outputs=change_outputs,
@@ -196,14 +212,16 @@ async def test_settled_melt_quote_outputs_registration_regression(
         n_change_outputs * [1], change_secrets, change_rs
     )
     await assert_err(
-        ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
+        melt_signed(ledger, wallet, proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
         "Lightning payment failed.",
     )
 
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
 
-    response2 = await ledger.melt(
+    response2 = await melt_signed(
+        ledger,
+        wallet,
         proofs=proofs2,
         quote=melt_quote2.quote,
         outputs=change_outputs,
@@ -253,10 +271,14 @@ async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    await ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs)
+    await melt_signed(
+        ledger, wallet, proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    )
 
     await assert_err(
-        ledger.melt(
+        melt_signed(
+            ledger,
+            wallet,
             proofs=proofs2,
             quote=melt_quote2.quote,
             outputs=change_outputs,
@@ -381,7 +403,7 @@ async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet
     # quote = await ledger.get_melt_quote(quote_id)
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
-    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    melt_response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert melt_response.state == MeltQuoteState.paid.value
 
 
@@ -402,10 +424,35 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     try:
-        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
         raise AssertionError("Expected LightningPaymentFailedError")
     except LightningPaymentFailedError:
         pass
+
+    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
+    try:
+        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
+        pass
+
+    settings.fakewallet_payment_state = PaymentResult.FAILED.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
+    try:
+        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
+        pass
+
+    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
+    try:
+        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
+        pass
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
@@ -422,7 +469,9 @@ async def test_melt_lightning_unknown_status_keeps_proofs_pending(
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
-    response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    response = await melt_signed(
+        ledger, wallet, proofs=wallet.proofs, quote=quote_id
+    )
 
     assert response.state == MeltQuoteState.pending.value
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
@@ -446,7 +495,7 @@ async def test_melt_lightning_pay_invoice_failed_settled(
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
 
-    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    melt_response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert melt_response.state == MeltQuoteState.pending.value
     # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
@@ -470,7 +519,7 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
 
-    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    melt_response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert melt_response.state == MeltQuoteState.pending.value
     # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
@@ -499,7 +548,7 @@ async def test_melt_lightning_pay_invoice_exception_exception(
     settings.fakewallet_pay_invoice_state_exception = True
 
     # we expect a pending melt quote because something has gone wrong (for example has lost connection to backend)
-    resp = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    resp = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert resp.state == MeltQuoteState.pending.value
 
     # the mint should be locked now and not allow any other melts until it is restarted
@@ -509,7 +558,7 @@ async def test_melt_lightning_pay_invoice_exception_exception(
         )
     ).quote
     await assert_err(
-        ledger.melt(proofs=wallet.proofs, quote=quote_id),
+        melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id),
         "Melt is disabled. Please contact the operator.",
     )
 
@@ -548,7 +597,7 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     assert usd_melt_quote.state != MeltQuoteState.paid
 
     # pay melt quote with usd
-    await ledger.melt(proofs=wallet_usd.proofs, quote=usd_melt_quote.quote)
+    await melt_signed(ledger, wallet_usd, proofs=wallet_usd.proofs, quote=usd_melt_quote.quote)
 
     output_amounts = [32]
 
@@ -809,8 +858,8 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     assert melt_quote1.quote != melt_quote2.quote
 
     responses = await asyncio.gather(
-        ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
-        ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
+        melt_signed(ledger, wallet, proofs=proofs1, quote=melt_quote1.quote),
+        melt_signed(ledger, wallet, proofs=proofs2, quote=melt_quote2.quote),
         return_exceptions=True,
     )
 
@@ -862,7 +911,7 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
     assert sat_melt_quote.unit == "sat"
 
     await assert_err(
-        ledger.melt(proofs=usd_proofs, quote=sat_melt_quote.quote, outputs=[]),
+        melt_signed(ledger, wallet_usd, proofs=usd_proofs, quote=sat_melt_quote.quote, outputs=[]),
         "proof unit usd does not match quote unit sat",
     )
 
@@ -894,7 +943,7 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
 
     # Try to melt - it should fail because mint quote is already paid
     await assert_err(
-        ledger.melt(proofs=proofs, quote=sat_melt_quote.quote, outputs=[]),
+        melt_signed(ledger, wallet, proofs=proofs, quote=sat_melt_quote.quote, outputs=[]),
         "mint quote already paid",
     )
 
