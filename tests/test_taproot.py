@@ -297,3 +297,78 @@ def test_point_secret_hashes_as_raw_bytes():
     # Non-point strings still hash as utf8 (legacy NUT-10 secrets on v3 keysets).
     assert secret_to_hash_input("not-a-point") == b"not-a-point"
     assert secret_to_hash_input(output["secret"]) == bytes.fromhex(output["secret"])
+
+
+def _tx_from_vector(tx: dict):
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        TranscriptQuote,
+    )
+
+    return TransactionShape(
+        proof_inputs=[
+            TranscriptProofInput(
+                amount=p["amount"],
+                keyset_id=bytes.fromhex(p["keyset_id"]),
+                secret=bytes.fromhex(p["secret"]),
+                C=bytes.fromhex(p["C"]),
+            )
+            for p in tx.get("proof_inputs", [])
+        ],
+        mint_quote_inputs=[
+            TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
+            for q in tx.get("mint_quote_inputs", [])
+        ],
+        blinded_outputs=[
+            TranscriptBlindedOutput(
+                amount=o["amount"],
+                keyset_id=bytes.fromhex(o["keyset_id"]),
+                B_=bytes.fromhex(o["B_"]),
+            )
+            for o in tx.get("blinded_outputs", [])
+        ],
+        melt_quote_outputs=[
+            TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
+            for q in tx.get("melt_quote_outputs", [])
+        ],
+    )
+
+
+def test_transaction_transcript_vectors():
+    from cashu.core.crypto.transcript import (
+        TRANSCRIPT_DOMAIN_TAG,
+        build_transaction_transcript,
+        transaction_digest,
+    )
+
+    tv = VECTORS["transcript"]
+    assert tv["domain_tag"] == TRANSCRIPT_DOMAIN_TAG
+    for name in ("swap", "mint", "melt"):
+        example = tv[name]
+        tx = _tx_from_vector(example["tx"])
+        assert build_transaction_transcript(tx).hex() == example["transcript"]
+        assert transaction_digest(tx).hex() == example["digest"]
+
+
+def test_transcript_swap_signature_is_keypath_witness():
+    tv = VECTORS["transcript"]["swap"]
+    assert verify_schnorr_digest(
+        bytes.fromhex(tv["signature"]),
+        bytes.fromhex(tv["digest"]),
+        bytes.fromhex(tv["tx"]["proof_inputs"][0]["secret"]),
+    )
+
+
+def test_transcript_rejects_empty_sections():
+    from cashu.core.crypto.transcript import build_transaction_transcript
+
+    tv = VECTORS["transcript"]["swap"]
+    tx = _tx_from_vector(tv["tx"])
+    with pytest.raises(ValueError, match="input"):
+        build_transaction_transcript(
+            type(tx)(blinded_outputs=tx.blinded_outputs)
+        )
+    with pytest.raises(ValueError, match="output"):
+        build_transaction_transcript(type(tx)(proof_inputs=tx.proof_inputs))
