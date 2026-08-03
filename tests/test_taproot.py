@@ -429,3 +429,47 @@ def test_mint_verifies_taproot_transaction_witnesses():
     proofs[0].secret = "not-a-point-secret"
     proofs[0].witness = "not-json"
     verify(proofs, outputs)
+
+
+@pytest.mark.asyncio
+async def test_wallet_attaches_taproot_witnesses():
+    """The wallet re-derives k from the proof's derivation path and signs the transcript."""
+    from cashu.core.base import BlindedMessage, Proof
+    from cashu.wallet.wallet import Wallet
+
+    tv = VECTORS["transcript"]["swap"]
+    n13 = VECTORS["nut13_v3"]
+    wallet = Wallet.__new__(Wallet)
+    wallet.seed = n13["seed_utf8"].encode()
+    proofs = [
+        Proof(
+            amount=8,
+            id=n13["keyset_id"],
+            secret=n13["outputs"][0]["secret"],
+            C=tv["tx"]["proof_inputs"][0]["C"],
+            derivation_path=f"HMAC-SHA256:{n13['keyset_id']}:0",
+        )
+    ]
+    outputs = [
+        BlindedMessage(amount=o["amount"], id=o["keyset_id"], B_=o["B_"])
+        for o in tv["tx"]["blinded_outputs"]
+    ]
+    out = wallet._attach_taproot_witnesses(proofs, outputs)
+    assert out[0].witness is not None
+    signatures = json.loads(out[0].witness)["signatures"]
+    assert verify_schnorr_digest(
+        bytes.fromhex(signatures[0]),
+        bytes.fromhex(tv["digest"]),
+        bytes.fromhex(proofs[0].secret),
+    )
+
+    # A proof with a foreign derivation path stays unsigned.
+    foreign = Proof(
+        amount=8,
+        id=n13["keyset_id"],
+        secret=n13["outputs"][1]["secret"],
+        C=tv["tx"]["proof_inputs"][0]["C"],
+        derivation_path="m/129372'/0'/0'/0'",
+    )
+    out2 = wallet._attach_taproot_witnesses([foreign], outputs)
+    assert out2[0].witness is None
