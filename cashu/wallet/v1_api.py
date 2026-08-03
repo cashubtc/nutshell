@@ -561,7 +561,7 @@ class LedgerAPI(SupportsAuth):
             return PostMeltQuoteResponse(
                 quote=quote,
                 amount=0,
-                unit="sat",
+                unit=Unit.sat.name,
                 method=Method.bolt11.name,
                 request="lnbc0",
                 fee_reserve=0,
