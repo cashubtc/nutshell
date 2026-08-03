@@ -531,3 +531,210 @@ def test_resolve_v3_secret_key_prefers_spend_info():
     # Wrong bearer key and no derivation path -> None
     proof.spend_info = SpendInfo(k="11" * 32)
     assert wallet._resolve_v3_secret_key(proof) is None
+
+
+def _sign_digest(privkey_int: int, digest: bytes) -> str:
+    from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey
+
+    return SecpPrivateKey(privkey_int.to_bytes(32, "big")).sign_schnorr(
+        digest, b"\x00" * 32
+    ).hex()
+
+
+def test_script_path_spend_after_leaf_vectors():
+    """6.1: refund via the after leaf, evaluated with the vector witness."""
+    from cashu.core.crypto.taproot import verify_script_path_spend
+
+    v61 = VECTORS["example_6_1"]
+    witness = {
+        "leaf": v61["scriptpath_witness"]["leaf"],
+        "control": v61["scriptpath_witness"]["control"],
+        "signatures": v61["scriptpath_witness"]["signatures"],
+    }
+    digest = bytes.fromhex(v61["transcript_digest"])
+    secret = bytes.fromhex(v61["secret"])
+    # After the locktime: passes.
+    verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] + 1)
+    # Before the locktime: fails closed.
+    with pytest.raises(ValueError, match="locktime"):
+        verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] - 1)
+    # Wrong merkle path: fails.
+    bad = dict(witness, control={"K": witness["control"]["K"], "path": [v61["merkle_root"]]})
+    with pytest.raises(ValueError, match="commitment"):
+        verify_script_path_spend(secret, digest, bad, now=v61["refund_time"] + 1)
+    # Wrong signature (kid key 3 signed a different digest): threshold fails.
+    bad_sig = dict(witness, signatures=[VECTORS["example_6_2"]["melt_witness"]["signatures"][0]])
+    with pytest.raises(ValueError, match="threshold"):
+        verify_script_path_spend(secret, digest, bad_sig, now=v61["refund_time"] + 1)
+
+
+def test_script_path_unknown_leaf_type_fails_closed():
+    """6.2: the example melt_to leaf (0x04) is unknown and unsatisfiable."""
+    from cashu.core.crypto.taproot import verify_script_path_spend
+
+    v62 = VECTORS["example_6_2"]
+    witness = {
+        "leaf": v62["melt_witness"]["leaf"],
+        "control": v62["melt_witness"]["control"],
+        "signatures": v62["melt_witness"]["signatures"],
+    }
+    with pytest.raises(ValueError, match="Unknown leaf type"):
+        verify_script_path_spend(
+            bytes.fromhex(v62["secret"]),
+            bytes.fromhex(v62["transcript_digest"]),
+            witness,
+        )
+
+
+def test_script_path_threshold_and_hashlock():
+    """2-of-3 threshold and hashlock leaves, built from well-known test keys."""
+    import hashlib as _hashlib
+
+    from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey
+    from cashu.core.crypto.taproot import (
+        TaprootLeaf,
+        serialize_taproot_leaf,
+        taproot_leaf_hash,
+        taproot_merkle_path,
+        taproot_merkle_root,
+        taproot_tweak_pubkey,
+        verify_script_path_spend,
+    )
+
+    keys = {
+        i: SecpPrivateKey(i.to_bytes(32, "big")).public_key.format() for i in (3, 4, 9)
+    }
+    internal_key = SecpPrivateKey((6).to_bytes(32, "big")).public_key.format()
+    preimage = b"\x07" * 32
+    leaf_threshold = serialize_taproot_leaf(
+        TaprootLeaf(type="threshold", n=2, keys=[keys[3], keys[4], keys[9]])
+    )
+    leaf_hashlock = serialize_taproot_leaf(
+        TaprootLeaf(
+            type="hashlock",
+            n=1,
+            keys=[keys[3]],
+            hash=_hashlib.sha256(preimage).digest(),
+        )
+    )
+    hashes = [taproot_leaf_hash(leaf_threshold), taproot_leaf_hash(leaf_hashlock)]
+    root = taproot_merkle_root(hashes)
+    secret = taproot_tweak_pubkey(internal_key, root)
+    digest = _hashlib.sha256(b"threshold test transcript").digest()
+
+    # 2-of-3 threshold satisfied by keys 3 and 9.
+    verify_script_path_spend(
+        secret,
+        digest,
+        {
+            "leaf": leaf_threshold.hex(),
+            "control": {
+                "K": internal_key.hex(),
+                "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
+            },
+            "signatures": [_sign_digest(3, digest), _sign_digest(9, digest)],
+        },
+    )
+    # One signature is not enough.
+    with pytest.raises(ValueError, match="threshold"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            {
+                "leaf": leaf_threshold.hex(),
+                "control": {
+                    "K": internal_key.hex(),
+                    "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
+                },
+                "signatures": [_sign_digest(3, digest)],
+            },
+        )
+    # Duplicated signature cannot double-count.
+    with pytest.raises(ValueError, match="threshold"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            {
+                "leaf": leaf_threshold.hex(),
+                "control": {
+                    "K": internal_key.hex(),
+                    "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
+                },
+                "signatures": [_sign_digest(3, digest), _sign_digest(3, digest)],
+            },
+        )
+
+    # Hashlock: preimage + signature passes; wrong preimage fails; missing preimage fails.
+    hashlock_witness = {
+        "leaf": leaf_hashlock.hex(),
+        "control": {
+            "K": internal_key.hex(),
+            "path": [h.hex() for h in taproot_merkle_path(hashes, 1)],
+        },
+        "signatures": [_sign_digest(3, digest)],
+        "preimage": preimage.hex(),
+    }
+    verify_script_path_spend(secret, digest, hashlock_witness)
+    with pytest.raises(ValueError, match="preimage"):
+        verify_script_path_spend(
+            secret, digest, dict(hashlock_witness, preimage="00" * 32)
+        )
+    with pytest.raises(ValueError, match="preimage"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            {k: v for k, v in hashlock_witness.items() if k != "preimage"},
+        )
+
+
+def test_mint_accepts_script_path_witness_on_swap():
+    """The mint routes leaf-bearing witnesses through script-path verification."""
+    from cashu.core.errors import TransactionError
+    from cashu.mint.verification import LedgerVerification
+
+    verify = LedgerVerification._verify_taproot_transaction_witnesses
+    tv, proofs, outputs = _swap_vector_proofs_and_outputs()
+    v61 = VECTORS["example_6_1"]
+
+    # Replace the input with the 6.1 tweaked secret, spent via the after leaf,
+    # signed by the refund key (4) over this swap's real transcript digest.
+    proofs[0].secret = v61["secret"]
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        transaction_digest,
+    )
+
+    digest = transaction_digest(
+        TransactionShape(
+            proof_inputs=[
+                TranscriptProofInput(
+                    amount=p.amount,
+                    keyset_id=bytes.fromhex(p.id),
+                    secret=bytes.fromhex(p.secret),
+                    C=bytes.fromhex(p.C),
+                )
+                for p in proofs
+            ],
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=o.amount, keyset_id=bytes.fromhex(o.id), B_=bytes.fromhex(o.B_)
+                )
+                for o in outputs
+            ],
+        )
+    )
+    proofs[0].witness = json.dumps(
+        {
+            "leaf": v61["scriptpath_witness"]["leaf"],
+            "control": v61["scriptpath_witness"]["control"],
+            "signatures": [_sign_digest(4, digest)],
+        }
+    )
+    verify(proofs, outputs)  # refund time (2025) has passed in real time
+
+    # Key-path signature by a leaf key does not satisfy the key path.
+    proofs[0].witness = json.dumps({"signatures": [_sign_digest(4, digest)]})
+    with pytest.raises(TransactionError, match="invalid taproot transaction witness"):
+        verify(proofs, outputs)
