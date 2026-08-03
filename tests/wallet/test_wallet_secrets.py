@@ -23,11 +23,14 @@ async def test_nut13_v3_secret_derivation():
     counter = 3
     
     secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(counter, keyset_id)
-    
-    assert secret_bytes.hex() == "7a45e04943504b25273e9569ab7019ab62f814dade23998c12f5f4cb1bb7978a"
-    
+
+    # Taproot secrets (spec 2.4.2): the 0x00 branch derives the internal key k with the
+    # attempt-counter retry; the secret is K = k*G compressed. Pinned by the shared vectors
+    # in tests/taproot_v3_vectors.json (nut13_v3, counter 3).
+    assert secret_bytes.hex() == "03c687c9ed32e92b1a6301c07e30b433b2c810d0185b3c14f9c2c0851503da0932"
+
     r = BlsPrivateKey(r_bytes)
-    assert r.to_hex() == "236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9" 
+    assert r.to_hex() == "236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9"
 
 
 @pytest.mark.asyncio
