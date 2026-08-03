@@ -312,12 +312,10 @@ class LedgerSpendingConditions:
             # it makes no sense to continue with a SIG_ALL check
             return True
 
-        # verify that all secrets are of the same kind
-        try:
-            secret = self._verify_all_secrets_equal_and_return(proofs)
-        except Exception:
-            # not all secrets are equal, we fail
-            return False
+        # SIG_ALL commits to a single shared spending condition. Let validation
+        # errors propagate so callers cannot accidentally treat a failed check
+        # as successful by ignoring a false return value.
+        secret = self._verify_all_secrets_equal_and_return(proofs)
 
         # now we can enforce that all inputs are SIG_ALL
         secret_lock: Union[P2PKSecret, HTLCSecret]
@@ -328,8 +326,7 @@ class LedgerSpendingConditions:
         elif SecretKind(secret.kind) == SecretKind.HTLC:
             secret_lock = HTLCSecret.from_secret(secret)
         else:
-            # not a P2PK or HTLC secret
-            return False
+            raise TransactionError("SIG_ALL requires a P2PK or HTLC secret.")
 
         main_pubkeys += secret_lock.tags.get_tag_all("pubkeys")
         main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))

@@ -1113,7 +1113,10 @@ class Ledger(
 
         # verify SIG_ALL signatures
         message_to_sign = nut11.sigall_message_to_sign(proofs, outputs or []) + quote
-        self._verify_sigall_spending_conditions(proofs, outputs or [], message_to_sign)
+        if not self._verify_sigall_spending_conditions(
+            proofs, outputs or [], message_to_sign
+        ):
+            raise TransactionError("SIG_ALL spending condition failed.")
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)

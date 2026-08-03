@@ -197,7 +197,7 @@ def test_verify_sigall_spending_conditions_valid():
     assert cond._verify_sigall_spending_conditions(proofs, outputs)
 
 
-def test_verify_sigall_spending_conditions_returns_false_for_different_secrets():
+def test_verify_sigall_spending_conditions_rejects_different_secrets():
     cond = LedgerSpendingConditions()
     pub_a, sig_a = _pubkey_and_sig("msg-mismatch")
     pub_b, _ = _pubkey_and_sig("msg-mismatch")
@@ -208,7 +208,8 @@ def test_verify_sigall_spending_conditions_returns_false_for_different_secrets()
         _secret(kind=SecretKind.P2PK, data=pub_b, sigflag=SigFlags.SIG_ALL), [sig_a]
     )
     outputs = [BlindedMessage(id="ks", amount=1, B_="a1")]
-    assert cond._verify_sigall_spending_conditions([p1, p2], outputs) is False
+    with pytest.raises(TransactionError, match="not all secrets are equal"):
+        cond._verify_sigall_spending_conditions([p1, p2], outputs)
 
 
 def test_verify_sigall_spending_conditions_rejects_duplicate_witness_signatures():

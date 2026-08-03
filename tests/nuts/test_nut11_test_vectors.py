@@ -3,6 +3,7 @@ from typing import List
 import pytest
 
 from cashu.core.base import BlindedMessage, Proof
+from cashu.core.errors import TransactionError
 from cashu.core.nuts import nut11
 from cashu.core.p2pk import P2PKSecret
 from cashu.core.secret import Secret
@@ -402,7 +403,8 @@ def test_sig_all_swap_invalid_multiple_secrets():
     outs = _outputs_from_list(outputs)
     msg = nut11.sigall_message_to_sign(proofs, outs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs, msg) is False
+    with pytest.raises(TransactionError, match="not all secrets are equal"):
+        cond._verify_sigall_spending_conditions(proofs, outs, msg)
 
 
 def test_sig_all_swap_multisig_valid():
