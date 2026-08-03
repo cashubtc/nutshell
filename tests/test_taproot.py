@@ -267,3 +267,21 @@ def test_script_path_commitment():
 def test_bearer_contrast():
     pub = PrivateKey(bytes.fromhex(V61["bearer_contrast"]["k"])).public_key
     assert pub and pub.format().hex() == V61["bearer_contrast"]["secret"]
+
+
+@pytest.mark.asyncio
+async def test_nut13_v3_secret_derivation_vectors():
+    """The 0x00 branch derives the internal key; the secret is K = k*G (spec 2.4.2)."""
+    from cashu.wallet.secrets import WalletSecrets
+
+    nut13 = VECTORS["nut13_v3"]
+    secrets = WalletSecrets()
+    secrets.seed = nut13["seed_utf8"].encode()
+    secrets.keyset_id = nut13["keyset_id"]
+    for output in nut13["outputs"]:
+        secret, r, path = await secrets.generate_determinstic_secret(output["counter"])
+        assert "HMAC-SHA256" in path
+        assert secret.hex() == output["secret"]
+        assert r.hex() == output["blinding_factor"]
+        expected_pub = PrivateKey(bytes.fromhex(output["secret_key"])).public_key
+        assert expected_pub and expected_pub.format() == secret
