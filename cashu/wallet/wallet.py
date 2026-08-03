@@ -729,6 +729,79 @@ class Wallet(
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
 
+    def _attach_taproot_witnesses(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        melt_quote_id: Optional[str] = None,
+        melt_quote_amount: Optional[int] = None,
+    ) -> List[Proof]:
+        """Attach taproot transaction witnesses to v3 point-secret inputs (spec 2.2.2).
+
+        Builds the transcript from the request's own inputs and outputs and signs
+        its digest with each input's internal key, re-derived from the proof's
+        stored derivation path. Inputs without a re-derivable key are left
+        unsigned. No-op unless every input is a v3 point secret.
+        """
+        import json as _json
+
+        from ..core.crypto.taproot import is_taproot_point_secret
+        from ..core.crypto.transcript import (
+            TransactionShape,
+            TranscriptBlindedOutput,
+            TranscriptProofInput,
+            TranscriptQuote,
+            transaction_digest,
+        )
+
+        if not proofs or not all(
+            is_taproot_point_secret(p.secret, p.id) for p in proofs
+        ):
+            return proofs
+        digest = transaction_digest(
+            TransactionShape(
+                proof_inputs=[
+                    TranscriptProofInput(
+                        amount=p.amount,
+                        keyset_id=bytes.fromhex(p.id),
+                        secret=bytes.fromhex(p.secret),
+                        C=bytes.fromhex(p.C),
+                    )
+                    for p in proofs
+                ],
+                blinded_outputs=[
+                    TranscriptBlindedOutput(
+                        amount=o.amount,
+                        keyset_id=bytes.fromhex(o.id),
+                        B_=bytes.fromhex(o.B_),
+                    )
+                    for o in outputs
+                ],
+                melt_quote_outputs=(
+                    [TranscriptQuote(amount=melt_quote_amount, quote_id=melt_quote_id)]
+                    if melt_quote_id is not None and melt_quote_amount is not None
+                    else None
+                ),
+            )
+        )
+        for proof in proofs:
+            path = proof.derivation_path or ""
+            if not path.startswith("HMAC-SHA256:"):
+                continue
+            try:
+                _, path_keyset_id, counter_str = path.split(":")
+                secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
+                pub = SecpPrivateKey(secret_key).public_key
+                assert pub and pub.format().hex() == proof.secret
+            except Exception:
+                continue
+            signature = SecpPrivateKey(secret_key).sign_schnorr(
+                digest,
+                None,  # type: ignore
+            )
+            proof.witness = _json.dumps({"signatures": [signature.hex()]})
+        return proofs
+
     async def split(
         self,
         proofs: List[Proof],
@@ -801,6 +874,9 @@ class Wallet(
             enumerate(outputs), key=lambda p: p[1].amount
         )
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
+
+        # Attach taproot transaction witnesses (v3 keysets)
+        proofs = self._attach_taproot_witnesses(proofs, list(sorted_outputs))
 
         # Call swap API
         sorted_promises = await super().split(proofs, list(sorted_outputs))
@@ -928,6 +1004,17 @@ class Wallet(
 
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
+
+        # Attach taproot transaction witnesses (v3 keysets); the quote amount
+        # comes from the locally stored melt quote.
+        melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote_id)
+        if melt_quote_local is not None:
+            proofs = self._attach_taproot_witnesses(
+                proofs,
+                change_outputs,
+                melt_quote_id=quote_id,
+                melt_quote_amount=melt_quote_local.amount,
+            )
         try:
             melt_quote_resp = await super().melt(
                 quote_id, proofs, change_outputs, prefer_async=prefer_async
