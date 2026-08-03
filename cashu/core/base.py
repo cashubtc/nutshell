@@ -126,6 +126,19 @@ class P2PKWitness(BaseModel):
         return cls(**json.loads(witness))
 
 
+class SpendInfo(BaseModel):
+    """Taproot spend info (spec 2.5): a key and, when conditions exist, the leaf tree.
+
+    `k` (32-byte scalar hex, bearer) and `E` (33-byte point hex, receiver-keyed)
+    are mutually exclusive. `tree` lists serialized leaves (hex) in slot-map order.
+    Local-only: never sent to the mint.
+    """
+
+    k: Optional[str] = None
+    E: Optional[str] = None
+    tree: Optional[List[str]] = None
+
+
 class Proof(BaseModel):
     """
     Value token
@@ -139,6 +152,7 @@ class Proof(BaseModel):
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
+    spend_info: Optional[SpendInfo] = None  # taproot spend info (local-only)
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
@@ -1373,6 +1387,14 @@ class TokenV4DLEQ(BaseModel):
     r: bytes
 
 
+class TokenV4SpendInfo(BaseModel):
+    """Taproot spend info in a V4 token: bearer key, DH ephemeral, leaf tree."""
+
+    k: Optional[bytes] = None
+    e: Optional[bytes] = None
+    t: Optional[List[bytes]] = None
+
+
 class TokenV4Proof(BaseModel):
     """
     Value token
@@ -1384,6 +1406,7 @@ class TokenV4Proof(BaseModel):
     d: Optional[TokenV4DLEQ] = None  # DLEQ proof
     w: Optional[str] = None  # witness
     pe: Optional[bytes] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1)
+    si: Optional[TokenV4SpendInfo] = None  # taproot spend info
 
     @classmethod
     def from_proof(cls, proof: Proof, include_dleq=False):
@@ -1402,6 +1425,19 @@ class TokenV4Proof(BaseModel):
             ),
             w=proof.witness,
             pe=bytes.fromhex(proof.p2pk_e) if proof.p2pk_e else None,
+            si=(
+                TokenV4SpendInfo(
+                    k=bytes.fromhex(proof.spend_info.k) if proof.spend_info.k else None,
+                    e=bytes.fromhex(proof.spend_info.E) if proof.spend_info.E else None,
+                    t=(
+                        [bytes.fromhex(leaf) for leaf in proof.spend_info.tree]
+                        if proof.spend_info.tree
+                        else None
+                    ),
+                )
+                if proof.spend_info
+                else None
+            ),
         )
 
 
@@ -1473,6 +1509,15 @@ class TokenV4(Token):
                 ),
                 witness=p.w,
                 p2pk_e=p.pe.hex() if p.pe else None,
+                spend_info=(
+                    SpendInfo(
+                        k=p.si.k.hex() if p.si.k else None,
+                        E=p.si.e.hex() if p.si.e else None,
+                        tree=[leaf.hex() for leaf in p.si.t] if p.si.t else None,
+                    )
+                    if p.si
+                    else None
+                ),
             )
             for token in self.t
             for p in token.p
@@ -1544,6 +1589,15 @@ class TokenV4(Token):
                 if not proof.get("pe"):
                     if "pe" in proof:
                         del proof["pe"]
+                # strip absent spend info; drop None subfields from present ones
+                if not proof.get("si"):
+                    proof.pop("si", None)
+                else:
+                    proof["si"] = {
+                        key: value
+                        for key, value in proof["si"].items()
+                        if value is not None
+                    }
         # optional memo
         if self.d:
             return_dict.update(dict(d=self.d))
