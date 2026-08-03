@@ -17,6 +17,23 @@ def hash_to_curve(message: bytes) -> PublicKey:
     pt = pyblst.BlstP1Element().hash_to_group(message, DST)
     return PublicKey(point=pt, group="G1")
 
+def secret_to_hash_input(secret_msg: str) -> bytes:
+    """Map a v3 secret string to its hash-to-curve input.
+
+    Taproot secrets are 33-byte compressed points carried as 66-char hex in
+    JSON; they hash as the raw 33 bytes. Anything else (legacy NUT-10 JSON
+    secrets on v3 keysets, pre-taproot hex) hashes as its utf8 bytes until
+    those flows migrate to leaves. The dispatch is unambiguous: no JSON or
+    64-char secret is 66 chars of hex with an 02/03 prefix.
+    """
+    if len(secret_msg) == 66 and secret_msg[:2] in ("02", "03"):
+        try:
+            return bytes.fromhex(secret_msg)
+        except ValueError:
+            pass
+    return secret_msg.encode("utf-8")
+
+
 def step1_alice(
     secret_msg: str, blinding_factor: Optional[PrivateKey] = None
 ) -> tuple[PublicKey, PrivateKey]:
@@ -24,7 +41,7 @@ def step1_alice(
     Alice blinds the message: B' = Y * r
     where Y = hash_to_curve(secret_msg)
     """
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    Y: PublicKey = hash_to_curve(secret_to_hash_input(secret_msg))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y * r
     logger.trace(f"BLS step1: secret='{secret_msg}' -> Y={Y.format().hex()} B_={B_.format().hex()} r={r.to_hex()}")
@@ -60,7 +77,7 @@ def keyed_verification(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     """
     Mint verification: checks C == Y * a
     """
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    Y: PublicKey = hash_to_curve(secret_to_hash_input(secret_msg))
     return C == Y * a
 
 def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
@@ -68,7 +85,7 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     Verify the BLS signature using pairings.
     e(C, G2) == e(Y, K2)
     """
-    Y = hash_to_curve(secret_msg.encode("utf-8"))
+    Y = hash_to_curve(secret_to_hash_input(secret_msg))
     
     p1 = pyblst.miller_loop(-C.point, G2)
     p2 = pyblst.miller_loop(Y.point, K2.point)
@@ -82,7 +99,7 @@ def derive_batch_random_scalars(K2s: list[PublicKey], Cs: list[PublicKey], secre
     n = len(Cs)
     transcript = BLS_BATCH_DST
     for i in range(n):
-        secret_bytes = secret_msgs[i].encode("utf-8")
+        secret_bytes = secret_to_hash_input(secret_msgs[i])
         transcript += Cs[i].format()
         transcript += K2s[i].format()
         transcript += len(secret_bytes).to_bytes(4, "big")
@@ -114,7 +131,7 @@ def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret
     
     rs = derive_batch_random_scalars(K2s, Cs, secret_msgs)
         
-    Ys = [hash_to_curve(msg.encode("utf-8")) for msg in secret_msgs]
+    Ys = [hash_to_curve(secret_to_hash_input(msg)) for msg in secret_msgs]
     
     # Left side: sum(r_i * C_i)
     sum_C = Cs[0].point.scalar_mul(rs[0])
