@@ -473,3 +473,60 @@ async def test_wallet_attaches_taproot_witnesses():
     )
     out2 = wallet._attach_taproot_witnesses([foreign], outputs)
     assert out2[0].witness is None
+
+
+def test_spend_info_roundtrips_through_tokenv4():
+    from cashu.core.base import Proof, SpendInfo, TokenV4, TokenV4Proof, TokenV4Token
+
+    n13 = VECTORS["nut13_v3"]
+    proof = Proof(
+        id=n13["keyset_id"],
+        amount=8,
+        secret=n13["outputs"][0]["secret"],
+        C="84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327",
+        spend_info=SpendInfo(
+            k=n13["outputs"][0]["secret_key"],
+            tree=[VECTORS["example_6_1"]["leaf_after"]],
+        ),
+    )
+    token = TokenV4(
+        m="https://mint.test",
+        u="sat",
+        t=[
+            TokenV4Token(
+                i=bytes.fromhex(n13["keyset_id"]),
+                p=[TokenV4Proof.from_proof(proof)],
+            )
+        ],
+    )
+    serialized = token.serialize()
+    from cashu.core.base import TokenV4 as TV4
+
+    decoded = TV4.deserialize(serialized)
+    out = decoded.proofs[0]
+    assert out.spend_info is not None
+    assert out.spend_info.k == proof.spend_info.k
+    assert out.spend_info.tree == proof.spend_info.tree
+    assert out.spend_info.E is None
+
+
+def test_resolve_v3_secret_key_prefers_spend_info():
+    from cashu.core.base import Proof, SpendInfo
+    from cashu.wallet.wallet import Wallet
+
+    n13 = VECTORS["nut13_v3"]
+    wallet = Wallet.__new__(Wallet)
+    wallet.seed = b"a different seed entirely"
+    proof = Proof(
+        id=n13["keyset_id"],
+        amount=8,
+        secret=n13["outputs"][0]["secret"],
+        C="84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327",
+        spend_info=SpendInfo(k=n13["outputs"][0]["secret_key"]),
+    )
+    assert wallet._resolve_v3_secret_key(proof) == bytes.fromhex(
+        n13["outputs"][0]["secret_key"]
+    )
+    # Wrong bearer key and no derivation path -> None
+    proof.spend_info = SpendInfo(k="11" * 32)
+    assert wallet._resolve_v3_secret_key(proof) is None

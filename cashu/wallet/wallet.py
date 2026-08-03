@@ -785,15 +785,8 @@ class Wallet(
             )
         )
         for proof in proofs:
-            path = proof.derivation_path or ""
-            if not path.startswith("HMAC-SHA256:"):
-                continue
-            try:
-                _, path_keyset_id, counter_str = path.split(":")
-                secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
-                pub = SecpPrivateKey(secret_key).public_key
-                assert pub and pub.format().hex() == proof.secret
-            except Exception:
+            secret_key = self._resolve_v3_secret_key(proof)
+            if secret_key is None:
                 continue
             signature = SecpPrivateKey(secret_key).sign_schnorr(
                 digest,
@@ -801,6 +794,30 @@ class Wallet(
             )
             proof.witness = _json.dumps({"signatures": [signature.hex()]})
         return proofs
+
+    def _resolve_v3_secret_key(self, proof: Proof) -> Optional[bytes]:
+        """The internal key behind a v3 point secret: bearer spend info first,
+        then re-derivation from the stored derivation path. None if neither
+        yields a key matching the secret."""
+        if proof.spend_info and proof.spend_info.k:
+            try:
+                secret_key = bytes.fromhex(proof.spend_info.k)
+                pub = SecpPrivateKey(secret_key).public_key
+                if pub and pub.format().hex() == proof.secret:
+                    return secret_key
+            except Exception:
+                pass
+        path = proof.derivation_path or ""
+        if not path.startswith("HMAC-SHA256:"):
+            return None
+        try:
+            _, path_keyset_id, counter_str = path.split(":")
+            secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
+            pub = SecpPrivateKey(secret_key).public_key
+            assert pub and pub.format().hex() == proof.secret
+            return secret_key
+        except Exception:
+            return None
 
     async def split(
         self,
