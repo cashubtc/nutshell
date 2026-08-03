@@ -66,6 +66,10 @@ wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class(unit=Unit.sat)
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake
+is_cln_backend: bool = WALLET.__class__.__name__ in [
+    "CLNRestWallet",
+    "CoreLightningRestWallet",
+]
 is_deprecated_api_only = settings.debug_mint_only_deprecated
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 is_postgres = settings.mint_database.startswith("postgres")
@@ -199,28 +203,28 @@ def get_real_invoice_cln(sats: int) -> str:
     return result["bolt11"]
 
 
-def _wait_for_node_in_graph(cmd: list, key: str, timeout: int = 60) -> None:
-    """Wait until the node lookup in `cmd` returns a result under `key`."""
+def _wait_for_route(cmd: list, key: str, timeout: int = 60) -> None:
+    """Wait until the route query in `cmd` returns a result under `key`."""
     start = time.time()
     while time.time() - start < timeout:
         if run_cmd_json(cmd).get(key):
             return
         time.sleep(SLEEP_TIME)
-    raise TimeoutError(f"gossip did not propagate after {timeout} seconds")
+    raise TimeoutError(f"no route found after {timeout} seconds")
 
 
 def get_real_invoice_routed(sats: int) -> str:
     """Get an invoice from a node the mint has no direct channel to."""
     # the mint pays a routed invoice through lnd-1, which charges a routing fee
-    if WALLET.__class__.__name__ in ["CLNRestWallet", "CoreLightningRestWallet"]:
+    if is_cln_backend:
         # the mint is clightning-2, whose direct peers are lnd-1 and lnd-2 – so we use cln-1
         cmd = docker_clightning_cli(1)
         cmd.append("getinfo")
         destination = run_cmd_json(cmd)["id"]
         cmd = docker_clightning_cli(2)
-        cmd.extend(["listnodes", destination])
-        # gossip takes a while to propagate after the regtest environment started
-        _wait_for_node_in_graph(cmd, "nodes")
+        cmd.extend(["getroute", destination, str(sats * 1000), "10"])
+        # channel policies take a while to gossip after the regtest environment started
+        _wait_for_route(cmd, "route")
         return get_real_invoice_cln(sats)
 
     # the mint is lnd-3, whose direct peers are lnd-1, cln-1 and cln-3 – so we use lnd-2
@@ -228,9 +232,9 @@ def get_real_invoice_routed(sats: int) -> str:
     cmd.append("getinfo")
     destination = run_cmd_json(cmd)["identity_pubkey"]
     cmd = docker_lightning_mint_cli.copy()
-    cmd.extend(["getnodeinfo", "--pub_key", destination])
-    # gossip takes a while to propagate after the regtest environment started
-    _wait_for_node_in_graph(cmd, "node")
+    cmd.extend(["queryroutes", "--dest", destination, "--amt", str(sats)])
+    # channel policies take a while to gossip after the regtest environment started
+    _wait_for_route(cmd, "routes")
     cmd = docker_lightning_routed_cli.copy()
     cmd.extend(["addinvoice", str(sats)])
     return run_cmd_json(cmd)["payment_request"]

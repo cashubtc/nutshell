@@ -23,6 +23,7 @@ from cashu.wallet.wallet import Wallet
 from tests.helpers import (
     get_real_invoice,
     get_real_invoice_routed,
+    is_cln_backend,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -607,6 +608,10 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
 @pytest.mark.skipif(
     is_fake,
     reason="only works on regtest",
+)
+@pytest.mark.skipif(
+    is_cln_backend,
+    reason="CLN pathfinding is randomized, the exact fee is not deterministic",
 )
 async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(1024)
