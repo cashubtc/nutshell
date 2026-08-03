@@ -238,7 +238,10 @@ class LedgerVerification(
 
         from coincurve import PublicKeyXOnly
 
-        from ..core.crypto.taproot import is_taproot_point_secret
+        from ..core.crypto.taproot import (
+            is_taproot_point_secret,
+            verify_script_path_spend,
+        )
         from ..core.crypto.transcript import (
             TransactionShape,
             TranscriptBlindedOutput,
@@ -283,7 +286,23 @@ class LedgerVerification(
                 # every legitimate spender of a point secret can sign.
                 raise TransactionError("missing taproot transaction witness.")
             try:
-                signatures = json.loads(proof.witness).get("signatures")
+                witness = json.loads(proof.witness)
+            except Exception:
+                raise TransactionError("invalid taproot transaction witness.")
+            if isinstance(witness, dict) and "leaf" in witness:
+                # Script path: leaf -> root -> tweak -> P, then evaluate (spec 2.3.2).
+                try:
+                    verify_script_path_spend(
+                        bytes.fromhex(proof.secret), digest, witness
+                    )
+                except Exception as e:
+                    raise TransactionError(
+                        f"invalid taproot script path witness: {e}"
+                    )
+                continue
+            # Key path: one BIP-340 signature by the secret's key.
+            try:
+                signatures = witness.get("signatures")
                 assert isinstance(signatures, list) and signatures
                 signature = bytes.fromhex(signatures[0])
                 pubkey = PublicKeyXOnly(bytes.fromhex(proof.secret)[1:])
