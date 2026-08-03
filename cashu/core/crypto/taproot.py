@@ -313,3 +313,18 @@ def verify_taproot_commitment(
         raise ValueError("Secret must be 33 bytes")
     root = taproot_root_from_path(taproot_leaf_hash(serialized_leaf), merkle_path)
     return taproot_tweak_pubkey(internal_key, root) == secret
+
+
+def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
+    """True when a v3 keyset proof's secret is a 33-byte compressed point hex."""
+    from .keys import is_bls_keyset
+
+    if not is_bls_keyset(keyset_id):
+        return False
+    if len(secret) != 66 or secret[:2] not in ("02", "03"):
+        return False
+    try:
+        bytes.fromhex(secret)
+    except ValueError:
+        return False
+    return True
