@@ -101,5 +101,75 @@
         "blinding_factor": "236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9"
       }
     ]
+  },
+  "transcript": {
+    "comment": "Transaction transcript (spec 2.2.1). msg = domain_tag utf8 bytes || TLV stream; digest = SHA256(msg); each input signs the digest (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 secret P, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes. swap_signature is by nut13_v3 counter 0 secret_key over the swap digest.",
+    "domain_tag": "Cashu_Transaction_v1",
+    "swap": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd",
+            "secret": "02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075",
+            "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 4,
+            "keyset_id": "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          },
+          {
+            "amount": 4,
+            "keyset_id": "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "01007f0100010802002102abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd03002102595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b35807504003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332703005b0100010402002102abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010402002102abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "8d25659160d10dd8b8ef2228f114ffd800efb93cc19db7c64600bbb06df2ff1c",
+      "signature": "7bf9e1042e0ec1dbbb4ee025ffe93fb7cdc1e90ba6ffbc5787b02e82afcccb43077c75c1d5ca14be1a90d9f60fa9c2b3b04cead6be2d205e9c0922aa4d2c6ff7"
+    },
+    "mint": {
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-mint-0001"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "0200160100010802000f71756f74652d6d696e742d3030303103005b0100010802002102abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "a145f70ab4069902ab45838b0d37a21404bfdb1e98aedeca593b284e7fc70789"
+    },
+    "melt": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd",
+            "secret": "02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075",
+            "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+          }
+        ],
+        "melt_quote_outputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-melt-0001"
+          }
+        ]
+      },
+      "transcript": "01007f0100010802002102abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd03002102595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b35807504003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270400160100010802000f71756f74652d6d656c742d30303031",
+      "digest": "0affbf753b10bd29c9ae4aabcb7f878b7e513e622e55d8cf14833194eab5348f"
+    }
   }
 }
