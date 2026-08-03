@@ -202,18 +202,36 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
     ) -> Tuple[bytes, bytes, str]:
         """
         Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "02".
-        NUT-13:
-        - message = b"Cashu_KDF_HMAC_SHA256" || keyset_id_bytes || counter_bytes || 0x01 || u32_BE(attempt)
+        NUT-13 (taproot secrets, spec 2.4.2):
+        - 0x00 branch: message = base || 0x00 || u32_BE(attempt); the first digest that is a
+          valid secp256k1 private key is the internal key k; the secret is K = k*G compressed.
+        - 0x01 branch: message = base || 0x01 || u32_BE(attempt); BLS Fr rejection sampling.
         """
         assert self.seed, "Seed not initialized yet."
         keyset_id_bytes = bytes.fromhex(keyset_id)
         counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
         base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
-        secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
         
-        # BLS12-381 G1 group order
+        # secp256k1 group order
+        SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+        # BLS12-381 Fr group order
         BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513
         
+        secret_key = b""
+        for attempt in range(65536):
+            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
+            msg = base + b"\x00" + attempt_bytes
+            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
+            x = int.from_bytes(digest, "big")
+            if x != 0 and x < SECP256K1_N:
+                secret_key = digest
+                break
+
+        if not secret_key:
+            raise RuntimeError("V3 secret key derivation failed")
+
+        secret = SecpPrivateKey(secret_key).public_key.format()
+
         r = b""
         for attempt in range(65536):
             attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
