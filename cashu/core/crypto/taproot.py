@@ -24,7 +24,6 @@ TAPROOT_LEAF_TYPE: Dict[str, int] = {
     "threshold": 0x01,
     "after": 0x02,
     "hashlock": 0x03,
-    "melt_to": 0x04,
 }
 _LEAF_TYPE_NAME = {v: k for k, v in TAPROOT_LEAF_TYPE.items()}
 
@@ -34,7 +33,6 @@ _FIELD_N = 0x02
 _FIELD_KEYS = 0x04
 _FIELD_TIME = 0x06
 _FIELD_HASH = 0x08
-_FIELD_DESTINATION = 0x0A
 
 # Suggested caps from spec 2.6, pending confirmation.
 TAPROOT_MAX_LEAF_BYTES = 1024
@@ -48,7 +46,7 @@ class TaprootLeaf:
     """A parsed declarative leaf (version 0x00).
 
     Keys are 33-byte compressed SEC1. `time` is unix seconds; `hash` is 32
-    bytes; `destination` a 33-byte node key.
+    bytes.
     """
 
     type: str
@@ -56,7 +54,6 @@ class TaprootLeaf:
     keys: List[bytes]
     time: Optional[int] = None
     hash: Optional[bytes] = None
-    destination: Optional[bytes] = None
 
 
 def tagged_hash(tag: str, *messages: bytes) -> bytes:
@@ -146,10 +143,6 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
         if leaf.hash is None or len(leaf.hash) != 32:
             raise ValueError("hashlock leaf requires a 32-byte hash")
         fields += tlv_record(_FIELD_HASH, leaf.hash)
-    if leaf.type == "melt_to":
-        if leaf.destination is None or len(leaf.destination) != 33:
-            raise ValueError("melt_to leaf requires a 33-byte destination key")
-        fields += tlv_record(_FIELD_DESTINATION, leaf.destination)
     out = bytes([TAPROOT_LEAF_VERSION, TAPROOT_LEAF_TYPE[leaf.type]]) + fields
     if len(out) > TAPROOT_MAX_LEAF_BYTES:
         raise ValueError(f"Leaf exceeds {TAPROOT_MAX_LEAF_BYTES} bytes")
@@ -176,7 +169,6 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
     keys: Optional[List[bytes]] = None
     time: Optional[int] = None
     hash_: Optional[bytes] = None
-    destination: Optional[bytes] = None
     for record_type, value in read_tlv_records(data[2:], unique_ascending=True):
         if record_type == _FIELD_N:
             if len(value) != 1 or value[0] == 0:
@@ -192,10 +184,6 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
             if len(value) != 32:
                 raise ValueError("hash field must be 32 bytes")
             hash_ = value
-        elif record_type == _FIELD_DESTINATION:
-            if len(value) != 33:
-                raise ValueError("destination field must be 33 bytes")
-            destination = value
         elif record_type % 2 == 0:
             raise ValueError(f"Unknown constraint field: {record_type}")
         # Odd = annotation, safe to ignore.
@@ -205,11 +193,7 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
         raise ValueError("after leaf missing time field")
     if type_name == "hashlock" and hash_ is None:
         raise ValueError("hashlock leaf missing hash field")
-    if type_name == "melt_to" and destination is None:
-        raise ValueError("melt_to leaf missing destination field")
-    return TaprootLeaf(
-        type=type_name, n=n, keys=keys, time=time, hash=hash_, destination=destination
-    )
+    return TaprootLeaf(type=type_name, n=n, keys=keys, time=time, hash=hash_)
 
 
 def taproot_leaf_hash(serialized_leaf: bytes) -> bytes:
