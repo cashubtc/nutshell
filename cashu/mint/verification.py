@@ -5,6 +5,7 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    MeltQuote,
     Method,
     MintQuote,
     Proof,
@@ -48,6 +49,8 @@ class LedgerVerification(
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]] = None,
         conn: Optional[Connection] = None,
+        transcript_outputs: Optional[List[BlindedMessage]] = None,
+        melt_quote: Optional[MeltQuote] = None,
     ):
         """Checks all proofs and outputs for validity.
 
@@ -66,18 +69,22 @@ class LedgerVerification(
         # 1. Verify inputs
         await self._verify_inputs(proofs)
 
-        # If no outputs are provided, no further checks are needed
-        if outputs is None:
-            return
+        if outputs is not None:
+            # 2. Verify outputs
+            await self._verify_outputs(outputs, conn=conn)
 
-        # 2. Verify outputs
-        await self._verify_outputs(outputs, conn=conn)
+            # 3. Verify inputs and outputs together
+            self._verify_inputs_and_outputs_together(proofs, outputs)
 
-        # 3. Verify inputs and outputs together
-        self._verify_inputs_and_outputs_together(proofs, outputs)
-
-        # 4. Verify taproot transaction witnesses (v3 point secrets)
-        self._verify_taproot_transaction_witnesses(proofs, outputs)
+        # 4. Verify taproot transaction witnesses (v3 point secrets).
+        # For melt, `outputs` is None here (change blanks are verified earlier)
+        # and the request's outputs arrive as `transcript_outputs`.
+        if outputs is not None or transcript_outputs is not None or melt_quote is not None:
+            self._verify_taproot_transaction_witnesses(
+                proofs,
+                outputs if outputs is not None else (transcript_outputs or []),
+                melt_quote,
+            )
 
     async def _verify_transaction(
         self,
@@ -215,7 +222,9 @@ class LedgerVerification(
 
     @staticmethod
     def _verify_taproot_transaction_witnesses(
-        proofs: List[Proof], outputs: List[BlindedMessage]
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        melt_quote: Optional[MeltQuote] = None,
     ) -> None:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
@@ -234,10 +243,11 @@ class LedgerVerification(
             TransactionShape,
             TranscriptBlindedOutput,
             TranscriptProofInput,
+            TranscriptQuote,
             transaction_digest,
         )
 
-        if not proofs or not outputs:
+        if not proofs or (not outputs and melt_quote is None):
             return
         if not all(is_taproot_point_secret(p.secret, p.id) for p in proofs):
             return
@@ -260,6 +270,11 @@ class LedgerVerification(
                     )
                     for o in outputs
                 ],
+                melt_quote_outputs=(
+                    [TranscriptQuote(amount=melt_quote.amount, quote_id=melt_quote.quote)]
+                    if melt_quote is not None
+                    else None
+                ),
             )
         )
         for proof in proofs:
