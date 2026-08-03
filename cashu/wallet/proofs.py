@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 
 from ..core.base import (
+    SpendInfo,
     Proof,
     TokenV3,
     TokenV3Token,
@@ -219,6 +220,36 @@ class WalletProofs(SupportsDb, SupportsKeysets):
 
         return token
 
+    def _attach_bearer_spend_info(self, proofs: List[Proof]) -> None:
+        """Attach bearer spend info (`k`) to v3 point-secret proofs (spec 2.5.2).
+
+        The key re-derives from each proof's stored derivation path; proofs
+        without one (or non-v3) are left untouched. The receiver needs `k` to
+        run the receive cascade and sign the sweep's transaction witness.
+        """
+        from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+        from ..core.crypto.taproot import is_taproot_point_secret
+
+        derive = getattr(self, "derive_v3_secret_key", None)
+        if derive is None:
+            return
+        for proof in proofs:
+            if proof.spend_info is not None:
+                continue
+            if not is_taproot_point_secret(proof.secret, proof.id):
+                continue
+            path = proof.derivation_path or ""
+            if not path.startswith("HMAC-SHA256:"):
+                continue
+            try:
+                _, path_keyset_id, counter_str = path.split(":")
+                secret_key = derive(int(counter_str), path_keyset_id)
+                pub = SecpPrivateKey(secret_key).public_key
+                assert pub and pub.format().hex() == proof.secret
+            except Exception:
+                continue
+            proof.spend_info = SpendInfo(k=secret_key.hex())
+
     async def _make_tokenv4(
         self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
     ) -> TokenV4:
@@ -256,6 +287,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         manager = KeysetManager()
         for keyset_id in keyset_ids:
             proofs_keyset = [p for p in proofs if p.id == keyset_id]
+            self._attach_bearer_spend_info(proofs_keyset)
             tokenv4_proofs = []
             for proof in proofs_keyset:
                 tokenv4_proofs.append(TokenV4Proof.from_proof(proof, include_dleq))
