@@ -76,6 +76,9 @@ class LedgerVerification(
         # 3. Verify inputs and outputs together
         self._verify_inputs_and_outputs_together(proofs, outputs)
 
+        # 4. Verify taproot transaction witnesses (v3 point secrets)
+        self._verify_taproot_transaction_witnesses(proofs, outputs)
+
     async def _verify_transaction(
         self,
         *,
@@ -209,6 +212,71 @@ class LedgerVerification(
                 raise OutputsArePendingError()
 
         logger.trace(f"Verified {len(outputs)} outputs.")
+
+    @staticmethod
+    def _verify_taproot_transaction_witnesses(
+        proofs: List[Proof], outputs: List[BlindedMessage]
+    ) -> None:
+        """Verify v3 point-secret input witnesses over the transaction transcript.
+
+        Applies when every input is a v3 point secret (single transcript per
+        transaction). Absent witnesses are tolerated during migration; a
+        present witness must carry a valid BIP-340 signature over the
+        transcript digest by the input's secret key, else the transaction
+        rejects.
+        """
+        import json
+
+        from coincurve import PublicKeyXOnly
+
+        from ..core.crypto.taproot import is_taproot_point_secret
+        from ..core.crypto.transcript import (
+            TransactionShape,
+            TranscriptBlindedOutput,
+            TranscriptProofInput,
+            transaction_digest,
+        )
+
+        if not proofs or not outputs:
+            return
+        if not all(is_taproot_point_secret(p.secret, p.id) for p in proofs):
+            return
+        digest = transaction_digest(
+            TransactionShape(
+                proof_inputs=[
+                    TranscriptProofInput(
+                        amount=p.amount,
+                        keyset_id=bytes.fromhex(p.id),
+                        secret=bytes.fromhex(p.secret),
+                        C=bytes.fromhex(p.C),
+                    )
+                    for p in proofs
+                ],
+                blinded_outputs=[
+                    TranscriptBlindedOutput(
+                        amount=o.amount,
+                        keyset_id=bytes.fromhex(o.id),
+                        B_=bytes.fromhex(o.B_),
+                    )
+                    for o in outputs
+                ],
+            )
+        )
+        for proof in proofs:
+            if proof.witness is None:
+                # ponytail: tolerated until every wallet flow attaches witnesses,
+                # then this becomes a rejection (M2 gate).
+                continue
+            try:
+                signatures = json.loads(proof.witness).get("signatures")
+                assert isinstance(signatures, list) and signatures
+                signature = bytes.fromhex(signatures[0])
+                pubkey = PublicKeyXOnly(bytes.fromhex(proof.secret)[1:])
+                valid = pubkey.verify(signature, digest)
+            except Exception:
+                raise TransactionError("invalid taproot transaction witness.")
+            if not valid:
+                raise TransactionError("invalid taproot transaction witness.")
 
     def _verify_inputs_and_outputs_together(
         self,
