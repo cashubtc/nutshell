@@ -1,0 +1,73 @@
+{
+  "description": "Shared taproot-v3 test vectors from taproot-secrets.md worked examples 6.1 and 6.2. Canonical copy: cashu-ts test/vectors/taproot-v3.json; nutshell copy: tests/taproot_v3_vectors.json. If vectors change, update both copies in the same commit set. All signatures are BIP-340 with aux randomness = 32 zero bytes.",
+  "tags": {
+    "leaf": "Cashu_TapLeaf",
+    "branch": "Cashu_TapBranch",
+    "tweak": "Cashu_TapTweak",
+    "p2bk": "Cashu_P2BK_v1"
+  },
+  "example_6_1": {
+    "comment": "Alice pays Carol 8 sats, refundable to Alice after time t. Receiver-keyed (P2BK slot 0) internal key, one after leaf.",
+    "carol_priv": "0000000000000000000000000000000000000000000000000000000000000003",
+    "carol_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "alice_refund_priv": "0000000000000000000000000000000000000000000000000000000000000004",
+    "alice_refund_pub": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "ephemeral_priv": "0000000000000000000000000000000000000000000000000000000000000005",
+    "ephemeral_pub": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+    "p2bk_slot": 0,
+    "p2bk_r": "7dfb649b0edda814f7cf0feb889e5657eb2083a528aa60a3a943fe0cea066181",
+    "internal_key": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
+    "refund_time": 1755561600,
+    "leaf_after": "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80",
+    "merkle_root": "e59092b6ae00f7af3dfb2c5d3b4080a61b593ac9da75a8dd5769d5b2e72bce9b",
+    "tweak": "5549241190e37631886b3122e53551ab86cb487337809bad749f93884f72d78d",
+    "secret": "03c222ef6dec2bec02ab0d6508e4f8302948021875a267f14e0854325d819bf823",
+    "keypath_priv": "d34488ac9fc11e46803a410e6dd3a80371ebcc18602afc511de3919539793911",
+    "transcript_digest_preimage": "illustrative transaction transcript",
+    "transcript_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd",
+    "keypath_signature": "59428dc63ae76fc01c819bbe368e4c5582d5ad7da80dfdb585637459716d020ce92f4f5f74791c1d28f89e6692217a9ddad8a41929d19b2f0b8821d6fc17792c",
+    "scriptpath_witness": {
+      "leaf": "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80",
+      "control": {
+        "K": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
+        "path": []
+      },
+      "signatures": [
+        "0b2ea247bfca1264db86907aef4cb19935ed9a5b2043a757259dcdb5c599372c230602f2cfc0cd8b11aa98ff17fbed91f38f07db817263fcc7c50c846715873e"
+      ]
+    },
+    "bearer_contrast": {
+      "k": "0000000000000000000000000000000000000000000000000000000000000007",
+      "secret": "025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc"
+    }
+  },
+  "example_6_2": {
+    "comment": "Allowance covenant: kid may melt toward family node until vesting, parent holds key path. Two leaves, one branch.",
+    "kid_priv": "0000000000000000000000000000000000000000000000000000000000000003",
+    "kid_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "parent_priv": "0000000000000000000000000000000000000000000000000000000000000006",
+    "internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+    "node_pub": "03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+    "vest_time": 1758240000,
+    "leaf_melt_to": "00040200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+    "leaf_after": "00020200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f906000468cc9d00",
+    "leaf_hash_melt_to": "b2a5853a34fb233d543c15b4f1511f2e88e7b057b663dacc5bd4eff2914c06c7",
+    "leaf_hash_after": "71fe4dfbac73f21b0c084febba39a1b1f5adc5afe8dadaeceaa35055cb21df03",
+    "merkle_root": "a01a34e050b5f0146445dc537d3245d441d9dfe72a5057c60301c9e4984d47a1",
+    "tweak": "afef4965d84f8ad2ecae202acad1c3b4292901b6c130abd6bcb1e5751436e4be",
+    "secret": "0254c9b4c1281656f5bdacf5e6ffce7a3c3659f9fd4f46aa00af0d77cc93057424",
+    "transcript_digest_preimage": "illustrative melt transcript",
+    "transcript_digest": "c3530da6be5c8425076a9235228d3ffd24998b9595a5b548b6ee6a4342361765",
+    "melt_witness": {
+      "leaf": "00040200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+      "control": {
+        "K": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+        "path": ["71fe4dfbac73f21b0c084febba39a1b1f5adc5afe8dadaeceaa35055cb21df03"]
+      },
+      "signatures": [
+        "27f53ffb8fe7bae5da0a754fd63aeb04fbfc7ee16c865fb5af3fb4411785b784df09a810c470386602fab69c450dc249efb465cff27f5322d1305e3eaec4d6fb"
+      ]
+    },
+    "after_witness_path": ["b2a5853a34fb233d543c15b4f1511f2e88e7b057b663dacc5bd4eff2914c06c7"]
+  }
+}
