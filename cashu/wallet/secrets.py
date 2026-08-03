@@ -197,6 +197,27 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
+    def derive_v3_secret_key(self, counter: int, keyset_id: str) -> bytes:
+        """Derive the internal private key behind a v3 point secret (0x00 branch).
+
+        Same attempt-counter pattern as the blinding branch: append u32_BE(attempt)
+        and take the first digest that is a valid secp256k1 key (spec 2.4.2).
+        """
+        assert self.seed, "Seed not initialized yet."
+        # secp256k1 group order
+        SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+        keyset_id_bytes = bytes.fromhex(keyset_id)
+        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
+        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+        for attempt in range(65536):
+            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
+            msg = base + b"\x00" + attempt_bytes
+            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
+            x = int.from_bytes(digest, "big")
+            if x != 0 and x < SECP256K1_N:
+                return digest
+        raise RuntimeError("V3 secret key derivation failed")
+
     async def _derive_secret_hmac_sha256_v3(
         self, counter: int, keyset_id: str
     ) -> Tuple[bytes, bytes, str]:
@@ -212,24 +233,10 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
         base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
         
-        # secp256k1 group order
-        SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
         # BLS12-381 Fr group order
         BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513
         
-        secret_key = b""
-        for attempt in range(65536):
-            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
-            msg = base + b"\x00" + attempt_bytes
-            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
-            x = int.from_bytes(digest, "big")
-            if x != 0 and x < SECP256K1_N:
-                secret_key = digest
-                break
-
-        if not secret_key:
-            raise RuntimeError("V3 secret key derivation failed")
-
+        secret_key = self.derive_v3_secret_key(counter, keyset_id)
         secret = SecpPrivateKey(secret_key).public_key.format()
 
         r = b""
