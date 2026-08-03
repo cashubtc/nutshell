@@ -71,7 +71,7 @@
     "after_witness_path": ["b2a5853a34fb233d543c15b4f1511f2e88e7b057b663dacc5bd4eff2914c06c7"]
   },
   "nut13_v3": {
-    "comment": "NUT-13 v3 secret derivation (spec 2.4.2): HMAC(seed, base || branch || u32_be(attempt)); 0x00 branch derives the internal private key k with valid-key retry, secret is K = k*G compressed; 0x01 branch unchanged (BLS Fr rejection sampling). base = \"Cashu_KDF_HMAC_SHA256\" || keyset_id_bytes || u64_be(counter). All outputs here succeed at attempt 0.",
+    "comment": "NUT-13 v3 secret derivation (spec 2.4.2): HMAC(seed, base || branch || u32_be(attempt)); 0x00 branch derives the internal private key k with valid-key retry, secret is K = k*G compressed; 0x01 branch unchanged (BLS Fr rejection sampling). base = \"Cashu_KDF_HMAC_SHA256\" || keyset_id_bytes || u64_be(counter). All outputs here succeed at attempt 0. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
     "seed_utf8": "nut13 v3 test seed",
     "keyset_id": "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd",
     "outputs": [
@@ -79,7 +79,8 @@
         "counter": 0,
         "secret_key": "38b91aa1635556d47ce92d99c1a92a2ffb82e57bc292c039d1d7b84c13bd75c6",
         "secret": "02595a333ef377a29f6756365bd46bf3b5e571dd7a44081822f3bd0bf03b358075",
-        "blinding_factor": "1e2cb8919eaf44fa998b67541cc49aa94dffee2da4d65f7d9a7512e63e42468d"
+        "blinding_factor": "1e2cb8919eaf44fa998b67541cc49aa94dffee2da4d65f7d9a7512e63e42468d",
+        "Y": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
       },
       {
         "counter": 1,
