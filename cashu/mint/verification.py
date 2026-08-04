@@ -525,4 +525,10 @@ class LedgerVerification(
             return True
         if not signature:
             return False
+        if outputs and is_bls_keyset(outputs[0].id):
+            # V3: the quote is a transaction input; its lock key signs the
+            # transaction digest (key or script path).
+            return nut20.verify_mint_quote_v3(
+                quote.quote, quote.amount, outputs, quote.pubkey, signature
+            )
         return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)
