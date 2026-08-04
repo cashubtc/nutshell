@@ -527,6 +527,13 @@ class LedgerVerification(
     ) -> bool:
         """Verify signature on quote id and outputs"""
         if not quote.pubkey:
+            if outputs and is_bls_keyset(outputs[0].id):
+                # A quote is a transaction input and inputs sign (spec 2.2.2), so an
+                # unlocked quote has no key to sign with: minting onto a v3 keyset
+                # requires a locked quote (spec 5).
+                raise TransactionError(
+                    "minting on a v3 keyset requires a locked quote."
+                )
             return True
         if not signature:
             return False

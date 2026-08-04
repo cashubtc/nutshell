@@ -17,6 +17,7 @@ from cashu.core.errors import (
     OutputsAlreadySignedError,
     OutputsArePendingError,
 )
+from cashu.core.nuts import nut20
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResponse, PaymentResult
@@ -589,9 +590,12 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
 
     amount = 32
 
-    # mint quote in sat
+    # mint quote in sat, locked: a v3 mint quote is a transaction input and inputs sign
+    quote_privkey, quote_pubkey = nut20.generate_keypair()
     sat_mint_quote = await ledger.mint_quote(
-        quote_request=PostMintQuoteRequest(amount=amount, unit="sat")
+        quote_request=PostMintQuoteRequest(
+            amount=amount, unit="sat", pubkey=quote_pubkey
+        )
     )
     sat_invoice = sat_mint_quote.request
     assert sat_mint_quote.state != MintQuoteState.paid
@@ -611,7 +615,13 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs(output_amounts, secrets, rs)
 
     # mint in sat
-    mint_resp = await ledger.mint(outputs=outputs, quote_id=sat_mint_quote.quote)
+    mint_resp = await ledger.mint(
+        outputs=outputs,
+        quote_id=sat_mint_quote.quote,
+        signature=nut20.sign_mint_quote_v3(
+            sat_mint_quote.quote, sat_mint_quote.amount, outputs, quote_privkey
+        ),
+    )
 
     assert len(mint_resp) == len(outputs)
 
