@@ -143,6 +143,7 @@ class SparkL2Wallet(LightningBackend):
         amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
+        unhashed_description: Optional[bytes] = None,
         **kwargs,
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)

@@ -1,6 +1,8 @@
+import hashlib
 import time
 from typing import List
 
+import bolt11
 import pytest
 
 from cashu.core.base import BlindedMessage, Proof, Unit
@@ -85,6 +87,34 @@ async def test_mint(ledger: Ledger):
         promises[0].C_
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
     )
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_plaintext_description(ledger: Ledger):
+    description = "Cashu deposit"
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", description=description)
+    )
+
+    invoice = bolt11.decode(quote.request)
+    assert invoice.description == description
+    assert invoice.description_hash is None
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_description_hash(ledger: Ledger, monkeypatch):
+    description = '{"kind":9734,"content":"zap"}'
+    monkeypatch.setattr(settings, "mint_bolt11_hash_descriptions", True)
+
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", description=description)
+    )
+
+    invoice = bolt11.decode(quote.request)
+    assert invoice.description is None
+    assert invoice.description_hash == hashlib.sha256(
+        description.encode()
+    ).hexdigest()
 
 
 @pytest.mark.asyncio

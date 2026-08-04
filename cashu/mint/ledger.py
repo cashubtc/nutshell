@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -349,11 +350,20 @@ class Ledger(
                 raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
+        description = quote_request.description
+        unhashed_description = None
+        description_hash = None
+        if settings.mint_bolt11_hash_descriptions and description:
+            unhashed_description = description.encode("utf-8")
+            description_hash = hashlib.sha256(unhashed_description).digest()
+
         invoice_response: InvoiceResponse = await self.backends[method][
             unit
         ].create_invoice(
             amount=Amount(unit=unit, amount=quote_request.amount),
-            memo=quote_request.description,
+            memo=None if description_hash else description,
+            description_hash=description_hash,
+            unhashed_description=unhashed_description,
         )
         logger.trace(
             f"got invoice {invoice_response.payment_request} with checking id"
@@ -365,6 +375,10 @@ class Ledger(
 
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
+        if description_hash and invoice_obj.description_hash != description_hash.hex():
+            raise LightningError(
+                "backend returned an invoice with an invalid description hash"
+            )
 
         # NOTE: we normalize the request to lowercase to avoid case sensitivity
         # This works with Lightning but might not work with other methods

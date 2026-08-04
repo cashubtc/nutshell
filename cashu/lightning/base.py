@@ -133,6 +133,7 @@ class LightningBackend(ABC):
         amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
+        unhashed_description: Optional[bytes] = None,
     ) -> Coroutine[None, None, InvoiceResponse]:
         pass
 
