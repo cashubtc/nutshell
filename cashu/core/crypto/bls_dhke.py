@@ -6,6 +6,7 @@ from loguru import logger
 
 from ..errors import TransactionError
 from .bls import G2, PrivateKey, PublicKey, curve_order
+from .secp import PublicKey as SecpPublicKey
 
 # Cashu specific domain separation tag for BLS12-381 G1
 DST = b"CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_"
@@ -33,8 +34,10 @@ def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
         return secret_msg
     if len(secret_msg) == 66 and secret_msg[:2] in ("02", "03"):
         try:
-            return bytes.fromhex(secret_msg)
-        except ValueError:
+            raw = bytes.fromhex(secret_msg)
+            SecpPublicKey(raw)  # on-curve check, not just the shape
+            return raw
+        except (ValueError, TypeError):
             pass
     raise TransactionError("v3 keysets take point secrets only.")
 
