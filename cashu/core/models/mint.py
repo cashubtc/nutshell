@@ -3,7 +3,7 @@ from typing import Annotated, List, Optional
 from pydantic import BaseModel, Field
 
 from cashu.core.base import BlindedMessage, BlindedSignature
-from cashu.core.constants import MAX_QUOTE_ID_LEN, MAX_SIG_LEN
+from cashu.core.constants import MAX_QUOTE_ID_LEN, MAX_WITNESS_LEN
 from cashu.core.settings import settings
 
 
@@ -13,7 +13,9 @@ class PostMintRequest(BaseModel):
         ..., max_length=settings.mint_max_request_length
     )
     signature: Optional[str] = Field(
-        default=None, max_length=MAX_SIG_LEN
+        # Taproot (v3): a script-path quote witness is a JSON object (leaf,
+        # control block, signatures), far larger than one hex signature.
+        default=None, max_length=MAX_WITNESS_LEN
     )  # NUT-20 quote signature
 
 
