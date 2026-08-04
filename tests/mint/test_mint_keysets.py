@@ -94,8 +94,11 @@ async def test_keyset_0_15_0_encrypted():
 
 @pytest.mark.asyncio
 async def test_keyset_rotation(ledger: Ledger):
-    keyset_sat = next(
-        filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values())
+    # Rotation derives from the highest counter for the unit, so compare against
+    # that keyset rather than whichever active one comes first.
+    keyset_sat = max(
+        (k for k in ledger.keysets.values() if k.unit == Unit["sat"] and k.active),
+        key=lambda k: int(k.derivation_path.split("/")[-1].replace("'", "")),
     )
     new_keyset_sat = await ledger.rotate_next_keyset(
         unit=Unit["sat"], max_order=20, input_fee_ppk=1
