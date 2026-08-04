@@ -4,13 +4,14 @@ import os
 import pytest
 import pytest_asyncio
 
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.models import PostMintBatchRequest, PostMintQuoteCheckRequest
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import pay_if_regtest
+from tests.helpers import pay_if_regtest, use_v2_keyset
 
 BASE_URL = "http://localhost:3337"
 
@@ -85,6 +86,34 @@ async def test_ledger_mint_batch_success(ledger: Ledger, wallet: Wallet):
     quote2 = await ledger.get_mint_quote(mint_quote2.quote)
     assert quote1.issued_time is not None
     assert quote2.issued_time is not None
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_unlocked_quote_rejected_on_v3(
+    ledger: Ledger, wallet: Wallet
+):
+    """On a v3 keyset every quote input signs, so an unlocked quote is refused."""
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.mint_quote(32, wallet.unit)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10200, 10201)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+    assert is_bls_keyset(outputs[0].id), "wallet should be on the v3 keyset"
+    assert mint_quote1.privkey
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+
+    with pytest.raises(Exception, match="requires a locked quote"):
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[mint_quote1.quote, mint_quote2.quote],
+                quote_amounts=[64, 32],
+                outputs=outputs,
+                signatures=[sig1, None],
+            )
+        )
 
 
 @pytest.mark.asyncio
@@ -451,8 +480,11 @@ async def test_ledger_mint_batch_invalid_signature(ledger: Ledger, wallet: Walle
 
 @pytest.mark.asyncio
 async def test_ledger_mint_batch_mixed_locked_unlocked(ledger: Ledger, wallet: Wallet):
-    """Batch with one locked and one unlocked quote should succeed."""
+    """Batch with one locked and one unlocked quote should succeed on a pre-v3 keyset."""
     await wallet.load_mint()
+    # v3 quotes must be locked (they are transaction inputs), so mixed locking is a
+    # pre-v3 behaviour and this mints onto the v2 keyset.
+    await use_v2_keyset(wallet)
     # locked quote (NUT-20 pubkey set)
     mint_quote1 = await wallet.request_mint(64)
     # unlocked quote (no pubkey -> no signature required)
@@ -466,7 +498,8 @@ async def test_ledger_mint_batch_mixed_locked_unlocked(ledger: Ledger, wallet: W
 
     assert mint_quote1.privkey
 
-    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    # Pre-v3 keyset, so the locked quote signs NUT-20's own message.
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
 
     promises = await ledger.mint_batch(
         PostMintBatchRequest(

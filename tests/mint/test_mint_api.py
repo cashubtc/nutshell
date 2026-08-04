@@ -28,6 +28,7 @@ from tests.helpers import (
     is_regtest,
     is_spark_backend,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 BASE_URL = "http://localhost:3337"
@@ -282,8 +283,10 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
     """
     For backwards compatibility, we do not require a NUT-20 signature
-    for minting with bolt11.
+    for minting with bolt11 on pre-v3 keysets. A v3 quote must be locked,
+    so this mints onto the v2 keyset.
     """
+    await use_v2_keyset(wallet)
 
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
