@@ -690,7 +690,13 @@ class Wallet(
             raise Exception("Quote not found.")
         signature: str | None = None
         if quote.privkey:
-            signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
+            if is_bls_keyset(outputs[0].id):
+                # V3: sign the transaction digest (quote input + outputs).
+                signature = nut20.sign_mint_quote_v3(
+                    quote_id, quote.amount, outputs, quote.privkey
+                )
+            else:
+                signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
 
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, quote_id, signature)
