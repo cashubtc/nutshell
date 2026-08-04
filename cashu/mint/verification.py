@@ -123,7 +123,6 @@ class LedgerVerification(
         expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
     ):
-
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         if not outputs:
@@ -140,6 +139,12 @@ class LedgerVerification(
             raise TransactionError(
                 f"output unit {self.keysets[outputs[0].id].unit.name} does not match quote unit {expected_unit.name}"
             )
+        # Verify that all blinded messages are valid curve points
+        for output in outputs:
+            try:
+                PublicKey(bytes.fromhex(output.B_))
+            except ValueError:
+                raise TransactionError("invalid blinded message.")
         # Verify amounts of outputs
         # we skip the amount check for NUT-8 change outputs (which can have amount 0)
         if not skip_amount_check:
