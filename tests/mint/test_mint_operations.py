@@ -36,6 +36,25 @@ async def wallet1(ledger: Ledger):
     yield wallet1
 
 
+async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **kwargs):
+    """ledger.melt with client-side taproot witnesses attached (spec 2.2.2)."""
+    quote_obj = await ledger.crud.get_melt_quote(quote_id=quote, db=ledger.db)
+    if quote_obj is not None:
+        signer_wallet._attach_taproot_witnesses(
+            proofs,
+            outputs or [],
+            melt_quote_id=quote,
+            melt_quote_amount=quote_obj.amount,
+        )
+    return await ledger.melt(proofs=proofs, quote=quote, outputs=outputs, **kwargs)
+
+
+async def swap_signed(ledger, signer_wallet, *, proofs, outputs):
+    """ledger.swap with client-side taproot witnesses attached (spec 2.2.2)."""
+    signer_wallet._attach_taproot_witnesses(proofs, outputs)
+    return await ledger.swap(proofs=proofs, outputs=outputs)
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
@@ -73,7 +92,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+    await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.state == MeltQuoteState.paid, (
@@ -119,7 +138,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+    await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.state == MeltQuoteState.paid, (
@@ -147,8 +166,8 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert wallet_mint_quote.privkey
-    signature = nut20.sign_mint_quote(
-        mint_quote.quote, outputs, wallet_mint_quote.privkey
+    signature = nut20.sign_mint_quote_v3(
+        mint_quote.quote, mint_quote.amount, outputs, wallet_mint_quote.privkey
     )
     await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
@@ -192,7 +211,7 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert quote.privkey
-    signature = nut20.sign_mint_quote(quote.quote, outputs, quote.privkey)
+    signature = nut20.sign_mint_quote_v3(quote.quote, quote.amount, outputs, quote.privkey)
     await ledger.mint(outputs=outputs, quote_id=quote.quote, signature=signature)
 
     mint_quote_after_payment = await ledger.get_mint_quote(quote.quote)
@@ -211,7 +230,7 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
         [p.amount for p in send_proofs], secrets, rs
     )
 
-    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
+    promises = await swap_signed(ledger, wallet1, proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
@@ -230,7 +249,7 @@ async def test_verify_inputs_rejects_double_spent_proofs(
     outputs, rs = wallet1._construct_outputs(
         [p.amount for p in send_proofs], secrets, rs
     )
-    await ledger.swap(proofs=send_proofs, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=send_proofs, outputs=outputs)
 
     with pytest.raises(ProofsAlreadySpentError):
         await ledger._verify_inputs(send_proofs)
@@ -320,11 +339,11 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.swap(proofs=inputs1, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=inputs1, outputs=outputs)
 
     # try to spend other proofs with the same outputs again
     await assert_err(
-        ledger.swap(proofs=inputs2, outputs=outputs),
+        swap_signed(ledger, wallet1, proofs=inputs2, outputs=outputs),
         OutputsAlreadySignedError.detail,
     )
 
@@ -335,7 +354,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.swap(proofs=inputs2, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=inputs2, outputs=outputs)
 
 
 @pytest.mark.asyncio
@@ -348,7 +367,9 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert mint_quote.privkey
-    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    signature = nut20.sign_mint_quote_v3(
+        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
+    )
     await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     # now try to mint with the same outputs again
@@ -356,7 +377,9 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     await pay_if_regtest(mint_quote_2.request)
 
     assert mint_quote_2.privkey
-    signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
+    signature = nut20.sign_mint_quote_v3(
+        mint_quote_2.quote, mint_quote_2.amount, outputs, mint_quote_2.privkey
+    )
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature),
         OutputsAlreadySignedError.detail,
@@ -379,7 +402,9 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     mint_quote_2 = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote_2.request)
     assert mint_quote_2.privkey
-    signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
+    signature = nut20.sign_mint_quote_v3(
+        mint_quote_2.quote, mint_quote_2.amount, outputs, mint_quote_2.privkey
+    )
     await ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature)
 
     # use the same outputs for melting
@@ -388,7 +413,9 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
     )
     await assert_err(
-        ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
+        melt_signed(
+            ledger, wallet1, proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+        ),
         OutputsAlreadySignedError.detail,
     )
 
@@ -446,8 +473,8 @@ async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledge
 
     # make sure we have more inputs than the melt quote needs
     assert sum_proofs(wallet1.proofs) >= melt_quote.amount + melt_quote.fee_reserve
-    melt_resp = await ledger.melt(
-        proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+    melt_resp = await melt_signed(
+        ledger, wallet1, proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
     )
     # we get 2 sats back because we overpaid
     assert melt_resp.change
@@ -506,7 +533,7 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
     settings.fakewallet_payment_state_exception = False
     
     # Call melt with outputs
-    melt_response = await ledger.melt(proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
+    melt_response = await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
     assert melt_response.state == MeltQuoteState.pending.value
     
     # Now fake that payment settled

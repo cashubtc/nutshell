@@ -189,6 +189,7 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
+    wallet._attach_taproot_witnesses(wallet.proofs, outputs)
     inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.model_dump() for o in outputs]
     payload = {"inputs": inputs_payload, "outputs": outputs_payload}
@@ -279,7 +280,9 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     assert mint_quote.privkey
-    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    signature = nut20.sign_mint_quote_v3(
+        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
+    )
     outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
@@ -428,11 +431,13 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert quote.amount == 64
     assert quote.fee_reserve == 0
 
-    inputs_payload = [p.to_dict() for p in wallet.proofs]
-
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    wallet._attach_taproot_witnesses(
+        wallet.proofs, outputs, melt_quote_id=quote.quote, melt_quote_amount=quote.amount
+    )
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
@@ -627,9 +632,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    # Signatures covering all outputs
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    # Signatures over the one batch transaction digest (all quote inputs + outputs)
+    batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
+    sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey)
 
     outputs_payload = [o.model_dump() for o in outputs]
 
