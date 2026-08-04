@@ -288,6 +288,20 @@ async def test_nut13_v3_secret_derivation_vectors():
         assert expected_pub and expected_pub.format() == secret
 
 
+def test_threshold_leaf_rejects_parity_twin_keys():
+    """A key and its parity twin share an x coordinate, so one signature would
+    satisfy both entries and an n-of-m would need fewer signatures than it names."""
+    from cashu.core.crypto.taproot import serialize_taproot_leaf
+
+    priv = PrivateKey()
+    assert priv.public_key
+    pub = priv.public_key.format()
+    twin = (b"\x03" if pub[0] == 2 else b"\x02") + pub[1:]
+    leaf = TaprootLeaf(type="threshold", n=2, keys=[pub, twin])
+    with pytest.raises(ValueError, match="distinct keys"):
+        parse_taproot_leaf(serialize_taproot_leaf(leaf))
+
+
 def test_point_secret_hashes_as_raw_bytes():
     """JSON carries hex; the hash input is the raw 33 bytes (shared Y vector pin)."""
     from cashu.core.crypto.bls_dhke import hash_to_curve, secret_to_hash_input
