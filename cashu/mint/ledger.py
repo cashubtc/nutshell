@@ -341,6 +341,15 @@ class Ledger(
             and not self.backends[method][unit].supports_description
         ):
             raise NotAllowedError("Backend does not support descriptions.")
+        if quote_request.description_hash and not quote_request.description:
+            raise TransactionError(
+                "description is required when description_hash is true"
+            )
+        if (
+            quote_request.description_hash
+            and not self.backends[method][unit].supports_description_hash
+        ):
+            raise NotAllowedError("Backend does not support description hashes.")
 
         # Check maximum balance.
         # TODO: Allow setting MINT_MAX_BALANCE per unit
@@ -353,7 +362,7 @@ class Ledger(
         description = quote_request.description
         unhashed_description = None
         description_hash = None
-        if settings.mint_bolt11_hash_descriptions and description:
+        if quote_request.description_hash and description:
             unhashed_description = description.encode("utf-8")
             description_hash = hashlib.sha256(unhashed_description).digest()
 

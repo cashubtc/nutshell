@@ -63,6 +63,7 @@ async def test_info(ledger: Ledger):
     assert setting.unit == "sat"
     assert setting.options
     assert setting.options.description is True
+    assert setting.options.description_hash is True
 
 
 @pytest.mark.asyncio

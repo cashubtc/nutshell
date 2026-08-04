@@ -190,14 +190,6 @@ class MintLimits(MintSettings):
         title="Disable melting tokens with bolt11",
         description="Mint allows no bolt11 melting operations.",
     )
-    mint_bolt11_hash_descriptions: bool = Field(
-        default=False,
-        title="Use description hashes for bolt11 mint quotes",
-        description=(
-            "Encode NUT-23 mint quote descriptions as BOLT11 description hashes "
-            "instead of plaintext descriptions."
-        ),
-    )
 
     mint_max_peg_in: Optional[int] = Field(  # deprecated for mint_max_mint_bolt11_sat
         default=None,

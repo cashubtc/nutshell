@@ -102,12 +102,16 @@ async def test_mint_quote_plaintext_description(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_mint_quote_description_hash(ledger: Ledger, monkeypatch):
+async def test_mint_quote_description_hash(ledger: Ledger):
     description = '{"kind":9734,"content":"zap"}'
-    monkeypatch.setattr(settings, "mint_bolt11_hash_descriptions", True)
 
     quote = await ledger.mint_quote(
-        PostMintQuoteRequest(amount=8, unit="sat", description=description)
+        PostMintQuoteRequest(
+            amount=8,
+            unit="sat",
+            description=description,
+            description_hash=True,
+        )
     )
 
     invoice = bolt11.decode(quote.request)
@@ -115,6 +119,16 @@ async def test_mint_quote_description_hash(ledger: Ledger, monkeypatch):
     assert invoice.description_hash == hashlib.sha256(
         description.encode()
     ).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_description_hash_requires_description(ledger: Ledger):
+    await assert_err(
+        ledger.mint_quote(
+            PostMintQuoteRequest(amount=8, unit="sat", description_hash=True)
+        ),
+        "description is required when description_hash is true",
+    )
 
 
 @pytest.mark.asyncio

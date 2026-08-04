@@ -113,6 +113,7 @@ class LightningBackend(ABC):
     supports_incoming_payment_stream: bool = False
     supported_units: set[Unit]
     supports_description: bool = False
+    supports_description_hash: bool = False
     unit: Unit
 
     def assert_unit_supported(self, unit: Unit):
