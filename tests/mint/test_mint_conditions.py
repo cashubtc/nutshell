@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import TransactionError
 from cashu.core.p2pk import schnorr_sign
@@ -15,7 +16,9 @@ from tests.mint.spending_conditions_test_helpers import proof, secret_str
 async def test_verify_inputs_and_outputs_p2pk_custom_sigflag_fails_without_outputs(
     ledger: Ledger,
 ):
-    kid = next(iter(ledger.keysets.keys()))
+    """Unsupported sigflag must not pass melt-style verification (outputs=None)."""
+    # NUT-10 secret: use a pre-v3 keyset.
+    kid = next(k for k in ledger.keysets if not is_bls_keyset(k))
     signer = PrivateKey()
     pub = signer.public_key.format().hex()
     raw_secret = secret_str(
@@ -39,7 +42,9 @@ async def test_verify_inputs_and_outputs_p2pk_custom_sigflag_fails_without_outpu
 async def test_verify_inputs_and_outputs_htlc_custom_sigflag_fails_without_outputs(
     ledger: Ledger,
 ):
-    kid = next(iter(ledger.keysets.keys()))
+    """Unsupported sigflag must not pass melt-style verification (outputs=None)."""
+    # NUT-10 secret: use a pre-v3 keyset.
+    kid = next(k for k in ledger.keysets if not is_bls_keyset(k))
     preimage = "22" * 32
     digest = sha256(bytes.fromhex(preimage)).hexdigest()
     raw_secret = secret_str(
