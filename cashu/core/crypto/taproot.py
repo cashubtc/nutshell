@@ -178,6 +178,11 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
             if len(value) == 0 or len(value) % 33 != 0:
                 raise ValueError("keys field length must be a positive multiple of 33")
             keys = [value[i : i + 33] for i in range(0, len(value), 33)]
+            # Signatures verify against the x-only key, so two entries sharing an
+            # x coordinate are one signer wearing two hats: a threshold counting
+            # them separately would be satisfied by fewer signatures than it names.
+            if len({k[1:] for k in keys}) != len(keys):
+                raise ValueError("keys field must list distinct keys")
         elif record_type == _FIELD_TIME:
             time = read_minimal_be(value)
         elif record_type == _FIELD_HASH:
