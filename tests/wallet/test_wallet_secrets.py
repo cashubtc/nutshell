@@ -55,7 +55,7 @@ async def test_wallet_bls_signature_verification():
     wallet = MockWallet()
     
     # v3 keysets take point secrets, and Y hashes the raw 33 bytes.
-    secret_msg = "02" + "cd" * 32
+    secret_msg = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
     Y = bls_dhke.hash_to_curve(bytes.fromhex(secret_msg))
     C = Y * priv_key
     
