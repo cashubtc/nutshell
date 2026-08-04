@@ -6,7 +6,7 @@ from cashu.core.nuts import nut11
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import pay_if_regtest
+from tests.helpers import pay_if_regtest, use_v2_keyset
 
 
 async def assert_err(f, msg):
@@ -28,6 +28,8 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
+    # P2PK is a NUT-10 secret, so it belongs on a pre-v3 keyset.
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 

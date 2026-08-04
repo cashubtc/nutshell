@@ -196,6 +196,26 @@ def get_unconnected_node_uri() -> str:
     return f"{pubkey}@lnd-2:9735"
 
 
+async def use_v2_keyset(wallet) -> str:
+    """Bind a wallet to the mint's v2 keyset and return its id.
+
+    NUT-10 well-known secrets (P2PK, HTLC) and plain text secrets are only valid
+    on pre-v3 keysets, and a mint at this version generates v3 keysets by
+    default. conftest gives the test mint a v2 keyset to bind to.
+    """
+    from cashu.core.crypto.keys import is_bls_keyset
+
+    await wallet.load_mint_keysets()
+    v2_ids = [
+        kid
+        for kid, ks in wallet.keysets.items()
+        if ks.unit == wallet.unit and ks.active and not is_bls_keyset(kid)
+    ]
+    assert v2_ids, "mint serves no pre-v3 keyset: check mint_v2_keyset_derivation_path"
+    await wallet.activate_keyset(v2_ids[-1])
+    return v2_ids[-1]
+
+
 async def pay_if_regtest(bolt11: str) -> None:
     if is_regtest:
         pay_real_invoice(bolt11)

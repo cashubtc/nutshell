@@ -45,6 +45,11 @@ assert settings.mint_test_database != settings.mint_database, (
 settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = ["m/0'/2'/0'"]  # USD
+# A v2 keyset next to the v3 ones: NUT-10 well-known secrets (P2PK, HTLC) and
+# plain text secrets are only valid on pre-v3 keysets. Suites that use them
+# bind to it with tests.helpers.use_v2_keyset; everything else keeps the v3
+# keyset, which stays first in selection order.
+settings.mint_v2_keyset_derivation_path = "m/0'/0'/1'"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0

@@ -61,7 +61,9 @@ async def wallet(ledger: Ledger):
 async def test_init_keysets(ledger: Ledger):
     ledger.keysets = {}
     await ledger.init_keysets()
-    assert len(ledger.keysets) == 2
+    # sat and usd on v3, plus the v2 sat keyset conftest activates for the
+    # pre-v3 secret formats.
+    assert len(ledger.keysets) == 3
 
 
 @pytest.mark.asyncio
