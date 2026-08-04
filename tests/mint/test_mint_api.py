@@ -105,18 +105,12 @@ async def test_api_keysets(ledger: Ledger):
         "keysets": [
             {
                 "final_expiry": None,
-                "id": ledger.keyset.id,
-                "unit": "sat",
+                "id": keyset.id,
+                "unit": keyset.unit.name,
                 "active": True,
                 "input_fee_ppk": 0,
-            },
-            {
-                "final_expiry": None,
-                "id": list(ledger.keysets.keys())[1],
-                "unit": "usd",
-                "active": True,
-                "input_fee_ppk": 0,
-            },
+            }
+            for keyset in ledger.keysets.values()
         ]
     }
     assert response.json() == expected
