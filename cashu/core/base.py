@@ -170,7 +170,15 @@ class Proof(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
+        if is_bls_keyset(self.id):
+            # V3: Y lives on BLS G1, hashed over the secret's raw bytes for
+            # point secrets (taproot) with utf8 fallback for legacy secrets.
+            from .crypto.bls_dhke import hash_to_curve as bls_hash_to_curve
+            from .crypto.bls_dhke import secret_to_hash_input
+
+            self.Y = bls_hash_to_curve(secret_to_hash_input(self.secret)).format().hex()
+        else:
+            self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
