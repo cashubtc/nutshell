@@ -11,6 +11,7 @@ import os
 import pytest
 from coincurve import PublicKeyXOnly
 
+from cashu.core.errors import TransactionError
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.crypto.taproot import (
     TAPROOT_BRANCH_TAG,
@@ -294,9 +295,12 @@ def test_point_secret_hashes_as_raw_bytes():
     output = VECTORS["nut13_v3"]["outputs"][0]
     y = hash_to_curve(secret_to_hash_input(output["secret"]))
     assert y.format().hex() == output["Y"]
-    # Non-point strings still hash as utf8 (legacy NUT-10 secrets on v3 keysets).
-    assert secret_to_hash_input("not-a-point") == b"not-a-point"
     assert secret_to_hash_input(output["secret"]) == bytes.fromhex(output["secret"])
+    # v3 takes point secrets only: NUT-10 well-known and plain text secrets are
+    # for legacy/v1/v2 keysets and must be refused here.
+    for rejected in ("not-a-point", '["P2PK", {"data": "02" + "aa" * 32}]', "ab" * 33):
+        with pytest.raises(TransactionError):
+            secret_to_hash_input(rejected)
 
 
 def _tx_from_vector(tx: dict):

@@ -487,7 +487,8 @@ def test_nut29_test_vector():
 
 
 def test_bls_step1():
-    secret_msg = "test_message"
+    # Bytes: a raw hash input for the primitive's vector, not a proof secret.
+    secret_msg = b"test_message"
     B_, blinding_factor = bls_dhke.step1_alice(
         secret_msg,
         blinding_factor=bls.PrivateKey(
@@ -496,7 +497,7 @@ def test_bls_step1():
             )
         ),
     )
-    Y = bls_dhke.hash_to_curve(secret_msg.encode("utf-8"))
+    Y = bls_dhke.hash_to_curve(secret_msg)
     assert Y.format().hex() == "860d58e5aeda1376185436ed96412313424cc079e056d1dab595e6db4c2c9685fec7da052c8db68d88985b75a42388ad"
     assert (
         B_.format().hex()
@@ -506,7 +507,7 @@ def test_bls_step1():
 
 def test_bls_step2():
     B_, _ = bls_dhke.step1_alice(
-        "test_message",
+        b"test_message",
         blinding_factor=bls.PrivateKey(
             bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000003"
@@ -549,9 +550,9 @@ def test_bls_step3():
 
 def test_bls_batch_verification_vector():
     K = bls.PublicKey(bytes.fromhex("aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053"), group="G2")
-    secret_1 = "batch_proof_1"
+    secret_1 = b"batch_proof_1"
     C_1 = bls.PublicKey(bytes.fromhex("acebf797506a7031cef3189904715cb22792528f1ea0e6ab25341401d245539438ed97122f00e38ee6185cc20b09ba11"), group="G1")
-    secret_2 = "batch_proof_2"
+    secret_2 = b"batch_proof_2"
     C_2 = bls.PublicKey(bytes.fromhex("9776497ad47a00f8a56233fb88f939b0572cf174a4c6d2446c0b1060434e305fae6845fd1f68b70376ba53ffe67f0414"), group="G1")
 
     # verify batch verification passes

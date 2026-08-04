@@ -1,9 +1,10 @@
 import hashlib
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import pyblst
 from loguru import logger
 
+from ..errors import TransactionError
 from .bls import G2, PrivateKey, PublicKey, curve_order
 
 # Cashu specific domain separation tag for BLS12-381 G1
@@ -17,25 +18,29 @@ def hash_to_curve(message: bytes) -> PublicKey:
     pt = pyblst.BlstP1Element().hash_to_group(message, DST)
     return PublicKey(point=pt, group="G1")
 
-def secret_to_hash_input(secret_msg: str) -> bytes:
+def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
     """Map a v3 secret string to its hash-to-curve input.
 
-    Taproot secrets are 33-byte compressed points carried as 66-char hex in
-    JSON; they hash as the raw 33 bytes. Anything else (legacy NUT-10 JSON
-    secrets on v3 keysets, pre-taproot hex) hashes as its utf8 bytes until
-    those flows migrate to leaves. The dispatch is unambiguous: no JSON or
-    64-char secret is 66 chars of hex with an 02/03 prefix.
+    v3 keysets carry taproot point secrets only: 33-byte compressed points,
+    written as 66-char hex in JSON, hashed as the raw bytes. NUT-10 well-known
+    secrets and plain text secrets belong to legacy/v1/v2 keysets and are
+    refused here. Only BLS (v3) code paths reach this function.
+
+    Bytes pass through as an already-mapped hash input, which is how the
+    primitive's own test vectors drive it.
     """
+    if isinstance(secret_msg, bytes):
+        return secret_msg
     if len(secret_msg) == 66 and secret_msg[:2] in ("02", "03"):
         try:
             return bytes.fromhex(secret_msg)
         except ValueError:
             pass
-    return secret_msg.encode("utf-8")
+    raise TransactionError("v3 keysets take point secrets only.")
 
 
 def step1_alice(
-    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
+    secret_msg: Union[str, bytes], blinding_factor: Optional[PrivateKey] = None
 ) -> tuple[PublicKey, PrivateKey]:
     """
     Alice blinds the message: B' = Y * r
