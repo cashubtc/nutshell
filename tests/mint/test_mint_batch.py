@@ -32,6 +32,14 @@ def setup_settings():
     yield
 
 
+
+def sign_batch_v3(quote_list, outputs, privkey):
+    """Sign the v3 batch transaction digest (all quote inputs + outputs)."""
+    return nut20.sign_mint_quote_batch_v3(
+        [(q.quote, q.amount) for q in quote_list], outputs, privkey
+    )
+
+
 @pytest.mark.asyncio
 async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
     await wallet.load_mint()
@@ -65,8 +73,8 @@ async def test_ledger_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey)
 
     promises = await ledger.mint_batch(
         PostMintBatchRequest(
@@ -98,7 +106,7 @@ async def test_ledger_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
 
     assert mint_quote1.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig1 = sign_batch_v3([mint_quote1], outputs, mint_quote1.privkey)
 
     try:
         await ledger.mint_batch(
@@ -148,8 +156,8 @@ async def test_ledger_mint_batch_race(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey)
 
     req = PostMintBatchRequest(
         quotes=[mint_quote1.quote, mint_quote2.quote],
@@ -187,8 +195,8 @@ async def test_ledger_mint_batch_race_permutations(ledger: Ledger, wallet: Walle
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey)
 
     req1 = PostMintBatchRequest(
         quotes=[mint_quote1.quote, mint_quote2.quote],
@@ -197,12 +205,15 @@ async def test_ledger_mint_batch_race_permutations(ledger: Ledger, wallet: Walle
         signatures=[sig1, sig2],
     )
     
-    # Different permutation
+    # Different permutation: the transaction digest covers the quote inputs in
+    # request order, so req2 carries signatures over its own ordering.
+    sig2_p = sign_batch_v3([mint_quote2, mint_quote1], outputs, mint_quote2.privkey)
+    sig1_p = sign_batch_v3([mint_quote2, mint_quote1], outputs, mint_quote1.privkey)
     req2 = PostMintBatchRequest(
         quotes=[mint_quote2.quote, mint_quote1.quote],
         quote_amounts=[32, 64],
         outputs=outputs,
-        signatures=[sig2, sig1],
+        signatures=[sig2_p, sig1_p],
     )
 
     results = await asyncio.gather(
@@ -236,8 +247,8 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey)
 
     req_batch = PostMintBatchRequest(
         quotes=[mint_quote1.quote, mint_quote2.quote],
@@ -247,7 +258,9 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
     )
 
     outputs_normal, _ = wallet._construct_outputs([64], [secrets[2]], [rs_gen[2]])
-    sig_normal = nut20.sign_mint_quote(mint_quote1.quote, outputs_normal, mint_quote1.privkey)
+    sig_normal = nut20.sign_mint_quote_v3(
+        mint_quote1.quote, mint_quote1.amount, outputs_normal, mint_quote1.privkey
+    )
 
     results = await asyncio.gather(
         ledger.mint_batch(req_batch),
@@ -317,8 +330,8 @@ async def test_ledger_mint_batch_post_sign_failure_leaves_pending(ledger: Ledger
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey)
 
     original_unset_mint_quotes_pending = ledger.db_write._unset_mint_quotes_pending
 
@@ -358,8 +371,8 @@ async def test_ledger_mint_batch_post_sign_failure_leaves_pending(ledger: Ledger
     
     secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(10002, 10003)
     outputs2, rs2 = wallet._construct_outputs([64, 32], secrets2, rs2)
-    sig1_2 = nut20.sign_mint_quote(mint_quote1.quote, outputs2, mint_quote1.privkey)
-    sig2_2 = nut20.sign_mint_quote(mint_quote2.quote, outputs2, mint_quote2.privkey)
+    sig1_2 = sign_batch_v3([mint_quote1, mint_quote2], outputs2, mint_quote1.privkey)
+    sig2_2 = sign_batch_v3([mint_quote1, mint_quote2], outputs2, mint_quote2.privkey)
 
     req2 = PostMintBatchRequest(
         quotes=[mint_quote1.quote, mint_quote2.quote],
@@ -390,7 +403,7 @@ async def test_ledger_mint_batch_missing_signature_for_locked_quote(
 
     assert mint_quote1.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
 
     try:
         await ledger.mint_batch(
@@ -423,9 +436,7 @@ async def test_ledger_mint_batch_invalid_signature(ledger: Ledger, wallet: Walle
     assert mint_quote1.privkey
 
     wrong_privkey = PrivateKey(os.urandom(32))
-    wrong_sig = nut20.sign_mint_quote(
-        mint_quote1.quote, outputs, wrong_privkey.secret.hex()
-    )
+    wrong_sig = sign_batch_v3([mint_quote1], outputs, wrong_privkey.secret.hex())
 
     try:
         await ledger.mint_batch(
@@ -458,7 +469,7 @@ async def test_ledger_mint_batch_mixed_locked_unlocked(ledger: Ledger, wallet: W
 
     assert mint_quote1.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
 
     promises = await ledger.mint_batch(
         PostMintBatchRequest(
@@ -490,8 +501,8 @@ async def test_ledger_mint_batch_already_issued(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey)
 
     await ledger.mint_batch(
         PostMintBatchRequest(
@@ -507,8 +518,8 @@ async def test_ledger_mint_batch_already_issued(ledger: Ledger, wallet: Wallet):
     )
     outputs2, rs2 = wallet._construct_outputs([64, 32], secrets2, rs2)
 
-    sig1_2 = nut20.sign_mint_quote(mint_quote1.quote, outputs2, mint_quote1.privkey)
-    sig2_2 = nut20.sign_mint_quote(mint_quote2.quote, outputs2, mint_quote2.privkey)
+    sig1_2 = sign_batch_v3([mint_quote1, mint_quote2], outputs2, mint_quote1.privkey)
+    sig2_2 = sign_batch_v3([mint_quote1, mint_quote2], outputs2, mint_quote2.privkey)
 
     try:
         await ledger.mint_batch(
@@ -556,7 +567,7 @@ async def test_ledger_mint_batch_single_quote(ledger: Ledger, wallet: Wallet):
 
     assert mint_quote1.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig1 = sign_batch_v3([mint_quote1], outputs, mint_quote1.privkey)
 
     promises = await ledger.mint_batch(
         PostMintBatchRequest(
@@ -603,10 +614,10 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey)
     # quote2 is locked but receives an invalid signature, so the whole batch must fail
     wrong_privkey = PrivateKey(os.urandom(32))
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, wrong_privkey.secret.hex())
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, wrong_privkey.secret.hex())
 
     try:
         await ledger.mint_batch(
@@ -632,7 +643,9 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
         10002, 10002
     )
     outputs2, rs2 = wallet._construct_outputs([64], secrets2, rs2)
-    sig1_2 = nut20.sign_mint_quote(mint_quote1.quote, outputs2, mint_quote1.privkey)
+    sig1_2 = nut20.sign_mint_quote_v3(
+        mint_quote1.quote, mint_quote1.amount, outputs2, mint_quote1.privkey
+    )
 
     promises = await ledger.mint(
         outputs=outputs2,

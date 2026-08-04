@@ -519,6 +519,7 @@ class LedgerVerification(
         quote: MintQuote,
         outputs: List[BlindedMessage],
         signature: Optional[str],
+        batch_quotes: "Optional[List[tuple]]" = None,
     ) -> bool:
         """Verify signature on quote id and outputs"""
         if not quote.pubkey:
@@ -527,8 +528,14 @@ class LedgerVerification(
             return False
         if outputs and is_bls_keyset(outputs[0].id):
             # V3: the quote is a transaction input; its lock key signs the
-            # transaction digest (key or script path).
+            # transaction digest (key or script path). For batch mints the
+            # digest covers every quote input.
             return nut20.verify_mint_quote_v3(
-                quote.quote, quote.amount, outputs, quote.pubkey, signature
+                quote.quote,
+                quote.amount,
+                outputs,
+                quote.pubkey,
+                signature,
+                batch_quotes=batch_quotes,
             )
         return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)

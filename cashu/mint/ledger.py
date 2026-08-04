@@ -634,7 +634,14 @@ class Ledger(
 
             # The spec says msg_to_sign = quote_id[i] || B_0 || B_1 || ... || B_(n-1)
             # This logic is inside self._verify_mint_quote_witness, let's reuse it.
-            if not self._verify_mint_quote_witness(quote, payload.outputs, sig):
+            # V3: the batch is one transaction; every witness signs the digest
+            # covering all quote inputs and outputs.
+            if not self._verify_mint_quote_witness(
+                quote,
+                payload.outputs,
+                sig,
+                batch_quotes=[(q.quote, q.amount) for q in quotes],
+            ):
                 raise QuoteSignatureInvalidError()
 
         # Set all quotes to pending
