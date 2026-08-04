@@ -27,7 +27,7 @@ _CONTAINER_MELT_QUOTE_OUTPUT = 0x04
 class TranscriptProofInput:
     amount: int
     keyset_id: bytes
-    secret: bytes  # 33-byte compressed point P
+    secret: bytes  # v3: the 33-byte compressed point P; v0-v2: the secret's raw bytes
     C: bytes
 
 
@@ -59,8 +59,10 @@ def _amount_record(amount: int) -> bytes:
 
 
 def _proof_input_container(p: TranscriptProofInput) -> bytes:
-    if len(p.secret) != 33:
-        raise ValueError("Transcript proof secret must be 33 bytes")
+    # Mixed transactions are normative (spec 5), so a v0-v2 input appears here
+    # with its secret's raw bytes next to a v3 input's 33-byte point.
+    if not p.secret:
+        raise ValueError("Transcript proof secret must be non-empty")
     return tlv_record(
         _CONTAINER_PROOF_INPUT,
         _amount_record(p.amount)
