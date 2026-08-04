@@ -315,6 +315,20 @@ def verify_taproot_commitment(
     return taproot_tweak_pubkey(internal_key, root) == secret
 
 
+def secret_transcript_bytes(secret: str) -> bytes:
+    """Bytes a proof secret contributes to the transaction transcript (spec 2.2.1).
+
+    A v3 point secret contributes its raw 33 bytes; a v0-v2 secret contributes
+    its utf8 bytes, which is what mixed transactions need.
+    """
+    if len(secret) == 66 and secret[:2] in ("02", "03"):
+        try:
+            return bytes.fromhex(secret)
+        except ValueError:
+            pass
+    return secret.encode("utf-8")
+
+
 def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
     """True when a v3 keyset proof's secret is a 33-byte compressed point hex."""
     from .keys import is_bls_keyset
