@@ -77,3 +77,77 @@ def verify_mint_quote(
         return pubkey.verify(sig, msgbytes_legacy)
     except Exception:
         return False
+
+
+def construct_transaction_message(
+    quote_id: str, amount: int, outputs: List[BlindedMessage]
+) -> bytes:
+    """V3 (taproot secrets): the quote is a transaction input signing the
+    transaction digest (spec 2.2.2 / 5); NUT-20's separate message retires."""
+    from ..crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptQuote,
+        transaction_digest,
+    )
+
+    return transaction_digest(
+        TransactionShape(
+            mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote_id)],
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=o.amount,
+                    keyset_id=bytes.fromhex(o.id),
+                    B_=bytes.fromhex(o.B_),
+                )
+                for o in outputs
+            ],
+        )
+    )
+
+
+def sign_mint_quote_v3(
+    quote_id: str, amount: int, outputs: List[BlindedMessage], private_key: str
+) -> str:
+    privkey = PrivateKey(bytes.fromhex(private_key))
+    return privkey.sign_schnorr(
+        construct_transaction_message(quote_id, amount, outputs)
+    ).hex()
+
+
+def verify_mint_quote_v3(
+    quote_id: str,
+    amount: int,
+    outputs: List[BlindedMessage],
+    public_key: str,
+    signature: str,
+) -> bool:
+    """Verify a v3 locked-quote witness: key path (hex sig or {"signatures"})
+    or script path ({"leaf", "control", ...}) against the quote lock point."""
+    import json
+
+    from ..crypto.taproot import verify_script_path_spend
+
+    digest = construct_transaction_message(quote_id, amount, outputs)
+    witness = None
+    if signature.strip().startswith("{"):
+        try:
+            witness = json.loads(signature)
+        except ValueError:
+            return False
+    if isinstance(witness, dict) and "leaf" in witness:
+        try:
+            verify_script_path_spend(bytes.fromhex(public_key), digest, witness)
+            return True
+        except Exception:
+            return False
+    sig_hex = (
+        witness.get("signatures", [None])[0] if isinstance(witness, dict) else signature
+    )
+    if not isinstance(sig_hex, str):
+        return False
+    try:
+        pubkey = PublicKeyXOnly(bytes.fromhex(public_key)[1:])
+        return pubkey.verify(bytes.fromhex(sig_hex), digest)
+    except Exception:
+        return False
