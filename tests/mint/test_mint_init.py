@@ -159,7 +159,13 @@ async def create_pending_melts(
         quote=quote,
         db=ledger.db,
     )
-    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=ledger.keyset.id)
+    # v3 keysets take point secrets, so the placeholder is a compressed point.
+    pending_proof = Proof(
+        amount=123,
+        C="asdasd",
+        secret="02" + "ab" * 32,
+        id=ledger.keyset.id,
+    )
     await ledger.crud.set_proof_pending(
         db=ledger.db,
         proof=pending_proof,
