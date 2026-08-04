@@ -228,11 +228,12 @@ class LedgerVerification(
     ) -> None:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
-        Applies when every input is a v3 point secret (single transcript per
-        transaction). Every such input must carry a witness: a key path
-        signature is a BIP-340 signature over the transcript digest by the
-        secret's key, a script path witness resolves leaf to root to tweak
-        and evaluates. Anything missing or invalid rejects the transaction.
+        One transcript per transaction, checked per input (spec 5): every v3
+        input must carry a witness, a key path signature being a BIP-340
+        signature over the digest by the secret's key and a script path witness
+        resolving leaf to root to tweak before evaluating. Anything missing or
+        invalid rejects the transaction. v0-v2 inputs keep their own rules and
+        are skipped here, so mixed transactions verify per input as specified.
         """
         import json
 
@@ -240,6 +241,7 @@ class LedgerVerification(
 
         from ..core.crypto.taproot import (
             is_taproot_point_secret,
+            secret_transcript_bytes,
             verify_script_path_spend,
         )
         from ..core.crypto.transcript import (
@@ -252,7 +254,7 @@ class LedgerVerification(
 
         if not proofs or (not outputs and melt_quote is None):
             return
-        if not all(is_taproot_point_secret(p.secret, p.id) for p in proofs):
+        if not any(is_taproot_point_secret(p.secret, p.id) for p in proofs):
             return
         digest = transaction_digest(
             TransactionShape(
@@ -260,7 +262,7 @@ class LedgerVerification(
                     TranscriptProofInput(
                         amount=p.amount,
                         keyset_id=bytes.fromhex(p.id),
-                        secret=bytes.fromhex(p.secret),
+                        secret=secret_transcript_bytes(p.secret),
                         C=bytes.fromhex(p.C),
                     )
                     for p in proofs
@@ -281,6 +283,8 @@ class LedgerVerification(
             )
         )
         for proof in proofs:
+            if not is_taproot_point_secret(proof.secret, proof.id):
+                continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
             if proof.witness is None:
                 # Inputs sign (spec 2.2.2): with spend_info live in both wallets,
                 # every legitimate spender of a point secret can sign.
