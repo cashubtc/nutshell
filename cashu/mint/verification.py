@@ -229,10 +229,10 @@ class LedgerVerification(
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
         Applies when every input is a v3 point secret (single transcript per
-        transaction). Absent witnesses are tolerated during migration; a
-        present witness must carry a valid BIP-340 signature over the
-        transcript digest by the input's secret key, else the transaction
-        rejects.
+        transaction). Every such input must carry a witness: a key path
+        signature is a BIP-340 signature over the transcript digest by the
+        secret's key, a script path witness resolves leaf to root to tweak
+        and evaluates. Anything missing or invalid rejects the transaction.
         """
         import json
 
