@@ -338,6 +338,7 @@ class Ledger(
 
         if (
             quote_request.description
+            and not quote_request.description_hash
             and not self.backends[method][unit].supports_description
         ):
             raise NotAllowedError("Backend does not support descriptions.")
