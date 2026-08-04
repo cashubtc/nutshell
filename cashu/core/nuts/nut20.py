@@ -84,6 +84,15 @@ def construct_transaction_message(
 ) -> bytes:
     """V3 (taproot secrets): the quote is a transaction input signing the
     transaction digest (spec 2.2.2 / 5); NUT-20's separate message retires."""
+    return construct_batch_transaction_message([(quote_id, amount)], outputs)
+
+
+def construct_batch_transaction_message(
+    quotes: List[tuple], outputs: List[BlindedMessage]
+) -> bytes:
+    """The one transaction digest for a (batch) mint: every quote input
+    (quote_id, amount) in request order plus all blinded outputs. Every
+    quote's witness signs this same message (spec 2.2.2)."""
     from ..crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -93,7 +102,10 @@ def construct_transaction_message(
 
     return transaction_digest(
         TransactionShape(
-            mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote_id)],
+            mint_quote_inputs=[
+                TranscriptQuote(amount=amount, quote_id=quote_id)
+                for (quote_id, amount) in quotes
+            ],
             blinded_outputs=[
                 TranscriptBlindedOutput(
                     amount=o.amount,
@@ -121,14 +133,19 @@ def verify_mint_quote_v3(
     outputs: List[BlindedMessage],
     public_key: str,
     signature: str,
+    batch_quotes: "List[tuple] | None" = None,
 ) -> bool:
     """Verify a v3 locked-quote witness: key path (hex sig or {"signatures"})
-    or script path ({"leaf", "control", ...}) against the quote lock point."""
+    or script path ({"leaf", "control", ...}) against the quote lock point.
+    For batch mints, pass every quote as `batch_quotes`; the digest covers
+    them all and `quote_id`/`amount` are ignored."""
     import json
 
     from ..crypto.taproot import verify_script_path_spend
 
-    digest = construct_transaction_message(quote_id, amount, outputs)
+    digest = construct_batch_transaction_message(
+        batch_quotes if batch_quotes is not None else [(quote_id, amount)], outputs
+    )
     witness = None
     if signature.strip().startswith("{"):
         try:
@@ -151,3 +168,13 @@ def verify_mint_quote_v3(
         return pubkey.verify(bytes.fromhex(sig_hex), digest)
     except Exception:
         return False
+
+
+def sign_mint_quote_batch_v3(
+    quotes: List[tuple], outputs: List[BlindedMessage], private_key: str
+) -> str:
+    """Sign the batch transaction digest (all quote inputs + outputs)."""
+    privkey = PrivateKey(bytes.fromhex(private_key))
+    return privkey.sign_schnorr(
+        construct_batch_transaction_message(quotes, outputs)
+    ).hex()
