@@ -218,5 +218,12 @@
         "token_nutshell": "cashuBo2F0gaJhaVghAqvQLrwf9EZSFTN1FiQH3q8LMOWQhEzKC25IlKCKiCjdYXCBpGFhCGFzeEIwM2MyMjJlZjZkZWMyYmVjMDJhYjBkNjUwOGU0ZjgzMDI5NDgwMjE4NzVhMjY3ZjE0ZTA4NTQzMjVkODE5YmY4MjNhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpomFpWCEDo-EswHflYF82RBBG9QwRT8yIOweaNAKL7WZzLjpBnlFhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoBhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA"
       }
     }
+  },
+  "empty_tweak": {
+    "comment": "Empty tweak (spec 3.8): an aggregated key commits to having no script path by tweaking with the key alone. t = tagged_hash(\"Cashu_TapTweak\", K) with no merkle root, secret = K + t*G. The key is example_6_1.carol_priv, so the internal key is example_6_1.carol_pub. keypath_priv is (k + t) mod n, the key that signs a spend.",
+    "internal_key": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "tweak": "93ee8d8b880c6aa1d858f816e16ad46e53ae3ce0d08ea2b4454b69732f75de94",
+    "secret": "0284f13903124432d5013cf5b7c1dd7353127bd70129b9495591bbd406eaceeaa6",
+    "keypath_priv": "93ee8d8b880c6aa1d858f816e16ad46e53ae3ce0d08ea2b4454b69732f75de97"
   }
 }
