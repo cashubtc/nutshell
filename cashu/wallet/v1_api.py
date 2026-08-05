@@ -13,6 +13,7 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MeltQuoteState,
+    Method,
     Proof,
     ProofSpentState,
     ProofState,
@@ -560,8 +561,8 @@ class LedgerAPI(SupportsAuth):
             return PostMeltQuoteResponse(
                 quote=quote,
                 amount=0,
-                unit="sat",
-                method="bolt11",
+                unit=Unit.sat.name,
+                method=Method.bolt11.name,
                 request="lnbc0",
                 fee_reserve=0,
                 state=(

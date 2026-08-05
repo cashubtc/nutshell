@@ -14,6 +14,7 @@ from ..core.base import (
     DLEQWallet,
     MeltQuote,
     MeltQuoteState,
+    Method,
     MintQuote,
     MintQuoteState,
     Proof,
@@ -832,7 +833,9 @@ class Wallet(
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
-        if amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
+        if amount_msat and not self.mint_info.supports_mpp(
+            Method.bolt11.name, self.unit
+        ):
             raise Exception("Mint does not support MPP, cannot specify amount.")
         melt_quote_resp = await super().melt_quote(invoice, self.unit, amount_msat)
         logger.debug(
