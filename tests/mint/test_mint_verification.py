@@ -542,6 +542,17 @@ async def test_verify_outputs_rejects_inactive_keyset(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("blinded_message", ["not-hex", "deadbeefcafe"])
+async def test_verify_outputs_rejects_invalid_blinded_message(
+    ledger: Ledger, blinded_message: str
+):
+    output = _blinded_output(ledger).model_copy(update={"B_": blinded_message})
+
+    with pytest.raises(TransactionError, match="invalid blinded message"):
+        await ledger._verify_outputs([output], skip_amount_check=True)
+
+
+@pytest.mark.asyncio
 async def test_verify_outputs_rejects_duplicate_blinds(ledger: Ledger):
     o = _blinded_output(ledger, label="dupb")
     with pytest.raises(TransactionDuplicateOutputsError):
