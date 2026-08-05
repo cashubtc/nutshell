@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import BlindedMessage, P2PKWitness
+from cashu.core.errors import TransactionError
 from cashu.core.migrations import migrate_databases
 from cashu.core.nuts import nut11
 from cashu.core.p2pk import P2PKSecret, SigFlags
@@ -96,7 +97,7 @@ async def test_p2pk_sig_inputs_basic(wallet1: Wallet, wallet2: Wallet, ledger: L
         ledger.swap(
             proofs=unsigned_proofs, outputs=await create_test_outputs(wallet2, 16)
         ),
-        "Witness is missing for p2pk signature",
+        "no signatures in proof",
     )
 
     # Redeem with proper signatures
@@ -349,7 +350,7 @@ async def test_p2pk_timelock(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
     )
 
     # Store current time to check if locktime passed
-    locktime = 0
+    locktime: int | None = 0
     for proof in send_proofs:
         secret = Secret.deserialize(proof.secret)
         p2pk_secret = P2PKSecret.from_secret(secret)
@@ -360,9 +361,9 @@ async def test_p2pk_timelock(wallet1: Wallet, wallet2: Wallet, ledger: Ledger):
 
     # Verify that current time is past the locktime
     assert locktime is not None, "Locktime should not be None"
-    assert (
-        int(time.time()) > locktime
-    ), f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
+    assert int(time.time()) > locktime, (
+        f"Current time ({int(time.time())}) should be greater than locktime ({locktime})"
+    )
 
     # ensure wallet1 doesn't reuse already swapped proofs later in the test suite
     await wallet1.invalidate(send_proofs)
@@ -409,7 +410,7 @@ async def test_p2pk_timelock_with_refund_before_locktime(
 
     await assert_err(
         ledger.swap(proofs=unsigned_proofs, outputs=outputs),
-        "Witness is missing for p2pk signature",
+        "no signatures in proof",
     )
 
     # Try to redeem with refund key signature before locktime (should fail)
@@ -638,39 +639,12 @@ async def test_p2pk_n_sigs_refund(
 
 
 @pytest.mark.asyncio
-async def test_p2pk_invalid_pubkey_check(
-    wallet1: Wallet, wallet2: Wallet, ledger: Ledger
-):
+async def test_p2pk_invalid_pubkey_check(wallet1: Wallet):
     """Test that an invalid public key is properly rejected."""
-    # Mint tokens to wallet1
-    mint_quote = await wallet1.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
-
-    # Create an invalid pubkey string (too short)
     invalid_pubkey = "03aaff"
 
-    # Try to create a P2PK lock with invalid pubkey
-    # This should fail in create_p2pk_lock, but if it doesn't, let's handle it gracefully
-    try:
-        secret_lock = await wallet1.create_p2pk_lock(invalid_pubkey)
-        _, send_proofs = await wallet1.swap_to_send(
-            wallet1.proofs, 16, secret_lock=secret_lock
-        )
-
-        # Create outputs
-        outputs = await create_test_outputs(wallet1, 16)
-
-        # Verify it fails during validation
-        await assert_err(
-            ledger.swap(proofs=send_proofs, outputs=outputs),
-            "failed to deserialize pubkey",  # Generic error for pubkey issues
-        )
-    except Exception as e:
-        # If it fails during creation, that's fine too
-        assert (
-            "pubkey" in str(e).lower() or "key" in str(e).lower()
-        ), f"Expected error about invalid public key, got: {str(e)}"
+    with pytest.raises(TransactionError, match="invalid compressed public key"):
+        await wallet1.create_p2pk_lock(invalid_pubkey)
 
 
 @pytest.mark.asyncio
@@ -710,7 +684,9 @@ async def test_p2pk_sig_all_with_multiple_pubkeys(
     signature2 = wallet2.schnorr_sign_message(message_to_sign)
 
     # Add both signatures to the first proof only (SIG_ALL)
-    send_proofs[0].witness = P2PKWitness(signatures=[signature1, signature2]).model_dump_json()
+    send_proofs[0].witness = P2PKWitness(
+        signatures=[signature1, signature2]
+    ).model_dump_json()
 
     # This should succeed with 2 valid signatures
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)

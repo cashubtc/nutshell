@@ -47,7 +47,6 @@ from ..core.models import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
 )
-from ..core.nuts import nut11
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -1104,16 +1103,14 @@ class Ledger(
         # make sure that the proofs are in the same unit as the quote
         self._verify_proofs_unit(proofs, expected_unit=unit)
 
-        # make sure that the outputs (for fee return) are in the same unit as the quote
-        if outputs:
-            # _verify_outputs checks if all outputs have the same unit
-            await self._verify_outputs(
-                outputs, skip_amount_check=True, expected_unit=unit
-            )
-
-        # verify SIG_ALL signatures
-        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs or []) + quote
-        self._verify_sigall_spending_conditions(proofs, outputs or [], message_to_sign)
+        await self._verify_transaction(
+            proofs=proofs,
+            outputs=outputs,
+            quote=quote,
+            skip_output_amount_check=True,
+            expected_output_unit=unit,
+            verify_input_output_balance=False,
+        )
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
@@ -1129,11 +1126,6 @@ class Ledger(
             raise TransactionError(
                 f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
-
-        # verify inputs and their spending conditions
-        # note, we do not verify outputs here, as they are only used for returning overpaid fees
-        # We must have called _verify_outputs here already! (see above)
-        await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set quote and proofs to pending to avoid race conditions
         melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
@@ -1329,8 +1321,10 @@ class Ledger(
             List[BlindedSignature]: New promises (signatures) for the outputs.
         """
         logger.trace("swap called")
-        # verify spending inputs, outputs, and spending conditions
-        await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
+        await self._verify_transaction(
+            proofs=proofs,
+            outputs=outputs,
+        )
         await self.db_write._verify_spent_proofs_and_set_pending(
             proofs, keysets=self.keysets
         )
