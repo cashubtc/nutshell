@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import random
 import secrets
 import time
 import uuid
@@ -219,14 +218,14 @@ def is_supported_keyset_version(keyset_id: str) -> bool:
 
 
 def is_bls_keyset(keyset_id: str) -> bool:
-    """Check if a keyset ID uses BLS12-381 cryptography (version >= 02)."""
-    version = get_keyset_id_version(keyset_id)
-    if version == "base64":
-        return False
-    try:
-        return int(version) >= 2
-    except ValueError:
-        return False
+    """Check if a keyset ID is a v3 BLS12-381 keyset (version 02)."""
+    return (
+        len(keyset_id) in (16, 66)
+        and keyset_id.startswith("02")
+        and all(c in "0123456789abcdefABCDEF" for c in keyset_id)
+    )
+
+
 def is_keyset_id_v2(keyset_id: str) -> bool:
     """Check if a keyset ID is version 2 (starts with '01')."""
     return get_keyset_id_version(keyset_id) == "01"
@@ -256,9 +255,7 @@ def generate_uuid_v7() -> str:
 
 def random_hash() -> str:
     """Returns a base64-urlsafe encoded random hash."""
-    return base64.urlsafe_b64encode(
-        bytes([random.getrandbits(8) for i in range(30)])
-    ).decode()
+    return base64.urlsafe_b64encode(secrets.token_bytes(30)).decode()
 
 def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
     """
