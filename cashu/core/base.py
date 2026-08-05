@@ -130,12 +130,15 @@ class SpendInfo(BaseModel):
     """Taproot spend info (spec 2.5): a key and, when conditions exist, the leaf tree.
 
     `k` (32-byte scalar hex, bearer) and `E` (33-byte point hex, receiver-keyed)
-    are mutually exclusive. `tree` lists serialized leaves (hex) in slot-map order.
-    Local-only: never sent to the mint.
+    are mutually exclusive. `K` (33-byte point hex) is the internal key, needed
+    when neither yields one: a script-only proof discloses its tree and `K` so
+    the tree can be checked complete. `tree` lists serialized leaves (hex) in
+    slot-map order. Local-only: never sent to the mint.
     """
 
     k: Optional[str] = None
     E: Optional[str] = None
+    K: Optional[str] = None
     tree: Optional[List[str]] = None
 
 
@@ -1396,10 +1399,11 @@ class TokenV4DLEQ(BaseModel):
 
 
 class TokenV4SpendInfo(BaseModel):
-    """Taproot spend info in a V4 token: bearer key, DH ephemeral, leaf tree."""
+    """Taproot spend info in a V4 token: bearer key, DH ephemeral, internal key, leaf tree."""
 
     k: Optional[bytes] = None
     e: Optional[bytes] = None
+    i: Optional[bytes] = None
     t: Optional[List[bytes]] = None
 
 
@@ -1437,6 +1441,7 @@ class TokenV4Proof(BaseModel):
                 TokenV4SpendInfo(
                     k=bytes.fromhex(proof.spend_info.k) if proof.spend_info.k else None,
                     e=bytes.fromhex(proof.spend_info.E) if proof.spend_info.E else None,
+                    i=bytes.fromhex(proof.spend_info.K) if proof.spend_info.K else None,
                     t=(
                         [bytes.fromhex(leaf) for leaf in proof.spend_info.tree]
                         if proof.spend_info.tree
@@ -1521,6 +1526,7 @@ class TokenV4(Token):
                     SpendInfo(
                         k=p.si.k.hex() if p.si.k else None,
                         E=p.si.e.hex() if p.si.e else None,
+                        K=p.si.i.hex() if p.si.i else None,
                         tree=[leaf.hex() for leaf in p.si.t] if p.si.t else None,
                     )
                     if p.si
