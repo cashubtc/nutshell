@@ -943,3 +943,81 @@ def test_mint_accepts_script_path_witness_on_swap():
     proofs[0].witness = json.dumps({"signatures": [_sign_digest(4, digest)]})
     with pytest.raises(TransactionError, match="invalid taproot transaction witness"):
         verify(proofs, outputs)
+
+
+def test_leaf_time_is_bounded():
+    """Bounded so both implementations read the same leaf: unbounded here means
+    a leaf a mint commits and spends that a wallet cannot parse, which strands
+    the proof with its holder."""
+    from cashu.core.crypto.taproot import TAPROOT_MAX_LEAF_TIME
+
+    huge = (
+        b"\x00\x02"
+        + tlv_record(0x02, b"\x01")
+        + tlv_record(0x04, bytes.fromhex(V61["carol_pub"]))
+        + tlv_record(0x06, bytes.fromhex("0fffffffffffffff"))
+    )
+    with pytest.raises(ValueError, match="time out of range"):
+        parse_taproot_leaf(huge)
+    with pytest.raises(ValueError, match="time out of range"):
+        serialize_taproot_leaf(
+            TaprootLeaf(
+                type="after",
+                n=1,
+                keys=[bytes.fromhex(V61["carol_pub"])],
+                time=TAPROOT_MAX_LEAF_TIME + 1,
+            )
+        )
+
+
+def test_tree_depth_cap_applies_to_the_tree():
+    """Past 2^8 leaves every merkle path is longer than a verifier accepts, so
+    the fallbacks a holder was told they had do not exist (spec 2.6)."""
+    from cashu.core.crypto.taproot import TAPROOT_MAX_TREE_DEPTH
+
+    hashes = [
+        taproot_leaf_hash(i.to_bytes(32, "big"))
+        for i in range(2**TAPROOT_MAX_TREE_DEPTH)
+    ]
+    taproot_merkle_root(hashes)
+    with pytest.raises(ValueError, match="depth"):
+        taproot_merkle_root(hashes + [hashes[0]])
+
+
+def test_keyset_id_transcript_bytes_falls_back_to_utf8():
+    """Mixed transactions are normative (spec 5) and a pre-v1 keyset id is
+    base64, so hex-decoding it unconditionally makes such a transaction
+    impossible to sign or verify rather than merely unusual."""
+    from cashu.core.crypto.taproot import keyset_id_transcript_bytes
+
+    assert keyset_id_transcript_bytes("0088553333aabbcc") == bytes.fromhex(
+        "0088553333aabbcc"
+    )
+    assert keyset_id_transcript_bytes("I2yN+iRYfkzT") == b"I2yN+iRYfkzT"
+    with pytest.raises(ValueError, match="non-empty"):
+        keyset_id_transcript_bytes("")
+
+
+def test_v3_witness_does_not_travel_in_a_token():
+    """A v3 witness signs one transaction's digest, so a token cannot carry a
+    usable one; keeping it would sit where the new owner's signature must go."""
+    from cashu.core.base import Proof, TokenV4, TokenV4Proof, TokenV4Token
+
+    v3_keyset = "029e18e63831fcf4764b1f1b574a2b415b07e6f86aa263b8948aae772e92fd3f70"
+    proof = Proof(
+        id=v3_keyset,
+        amount=8,
+        secret=V61["carol_pub"],
+        C="aa" * 48,
+        witness='{"signatures":["' + "00" * 64 + '"]}',
+    )
+    assert TokenV4Proof.from_proof(proof).w is None
+
+    carried = TokenV4Proof.from_proof(proof)
+    carried.w = '{"signatures":["' + "00" * 64 + '"]}'  # as a hostile sender would send it
+    token = TokenV4(
+        m="https://m.example",
+        u="sat",
+        t=[TokenV4Token(i=bytes.fromhex(v3_keyset), p=[carried])],
+    )
+    assert token.proofs[0].witness is None
