@@ -544,6 +544,51 @@ def test_spend_info_roundtrips_through_tokenv4():
     assert out.spend_info.E is None
 
 
+def test_shared_token_vectors_same_spend_info_from_either_encoder():
+    """Cross-implementation pin, mirrored in cashu-ts against the same vector file.
+
+    The two encoders differ on what NUT-00 leaves free (cashu-ts writes the
+    short keyset id, this one the full id), so what must agree is the
+    spend_info: both strings decode to the same fields on both sides.
+    """
+    from cashu.core.base import Proof, SpendInfo, TokenV4, TokenV4Proof, TokenV4Token
+
+    v = VECTORS["tokens_v4"]
+    full_id = VECTORS["nut13_v3"]["keyset_id"]
+    for name, shape in v["shapes"].items():
+        si = shape["spend_info"]
+        proof = Proof(
+            id=full_id,
+            amount=v["amount"],
+            secret=shape["secret"],
+            C=v["C"],
+            spend_info=SpendInfo(**si),
+        )
+        token = TokenV4(
+            m=v["mint"],
+            u=v["unit"],
+            t=[
+                TokenV4Token(
+                    i=bytes.fromhex(full_id), p=[TokenV4Proof.from_proof(proof)]
+                )
+            ],
+        )
+        # Our own encoding is pinned, so a change to this encoder is visible, not silent.
+        assert token.serialize() == shape["token_nutshell"], name
+        for encoded in (shape["token_nutshell"], shape["token_cashu_ts"]):
+            out = TokenV4.deserialize(encoded).proofs[0]
+            assert out.secret == shape["secret"], name
+            assert out.spend_info is not None, name
+            assert out.spend_info.k == si.get("k"), name
+            assert out.spend_info.E == si.get("E"), name
+            assert out.spend_info.K == si.get("K"), name
+            assert out.spend_info.tree == si.get("tree"), name
+        # The cashu-ts string carries the short keyset id; expanding it is the wallet's job
+        # (`_expand_short_keyset_ids`), not the token codec's.
+        assert TokenV4.deserialize(shape["token_cashu_ts"]).proofs[0].id == full_id[:16]
+        assert TokenV4.deserialize(shape["token_nutshell"]).proofs[0].id == full_id
+
+
 def test_resolve_v3_secret_key_prefers_spend_info():
     from cashu.core.base import Proof, SpendInfo
     from cashu.wallet.wallet import Wallet
