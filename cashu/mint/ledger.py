@@ -653,7 +653,7 @@ class Ledger(
                 quote,
                 payload.outputs,
                 sig,
-                batch_quotes=[(q.quote, q.amount) for q in quotes],
+                batch_quotes=list(zip(payload.quotes, quote_amounts)),
             ):
                 raise QuoteSignatureInvalidError()
 
