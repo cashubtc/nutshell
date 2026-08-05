@@ -34,7 +34,7 @@ _FIELD_KEYS = 0x04
 _FIELD_TIME = 0x06
 _FIELD_HASH = 0x08
 
-# Suggested caps from spec 2.6, pending confirmation.
+# Normative caps from spec 2.6. The leaf body excludes the leading version byte.
 TAPROOT_MAX_LEAF_BYTES = 1024
 TAPROOT_MAX_TREE_DEPTH = 8
 
@@ -132,6 +132,9 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
     for key in leaf.keys:
         if len(key) != 33:
             raise ValueError(f"Leaf key must be 33 bytes, got {len(key)}")
+        PublicKey(key)
+    if len({key[1:] for key in leaf.keys}) != len(leaf.keys):
+        raise ValueError("Leaf must list distinct keys")
     fields = tlv_record(_FIELD_N, bytes([leaf.n])) + tlv_record(
         _FIELD_KEYS, b"".join(leaf.keys)
     )
@@ -139,13 +142,17 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
         if leaf.time is None or leaf.time < 0:
             raise ValueError("after leaf requires a unix time")
         fields += tlv_record(_FIELD_TIME, minimal_be(leaf.time))
+    elif leaf.time is not None:
+        raise ValueError(f"{leaf.type} leaf must not carry a time field")
     if leaf.type == "hashlock":
         if leaf.hash is None or len(leaf.hash) != 32:
             raise ValueError("hashlock leaf requires a 32-byte hash")
         fields += tlv_record(_FIELD_HASH, leaf.hash)
+    elif leaf.hash is not None:
+        raise ValueError(f"{leaf.type} leaf must not carry a hash field")
     out = bytes([TAPROOT_LEAF_VERSION, TAPROOT_LEAF_TYPE[leaf.type]]) + fields
-    if len(out) > TAPROOT_MAX_LEAF_BYTES:
-        raise ValueError(f"Leaf exceeds {TAPROOT_MAX_LEAF_BYTES} bytes")
+    if len(out) - 1 > TAPROOT_MAX_LEAF_BYTES:
+        raise ValueError(f"Leaf body exceeds {TAPROOT_MAX_LEAF_BYTES} bytes")
     return out
 
 
@@ -158,8 +165,8 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
     """
     if len(data) < 2:
         raise ValueError("Leaf too short")
-    if len(data) > TAPROOT_MAX_LEAF_BYTES:
-        raise ValueError(f"Leaf exceeds {TAPROOT_MAX_LEAF_BYTES} bytes")
+    if len(data) - 1 > TAPROOT_MAX_LEAF_BYTES:
+        raise ValueError(f"Leaf body exceeds {TAPROOT_MAX_LEAF_BYTES} bytes")
     if data[0] != TAPROOT_LEAF_VERSION:
         raise ValueError(f"Unknown leaf version: {data[0]}")
     type_name = _LEAF_TYPE_NAME.get(data[1])
@@ -178,6 +185,13 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
             if len(value) == 0 or len(value) % 33 != 0:
                 raise ValueError("keys field length must be a positive multiple of 33")
             keys = [value[i : i + 33] for i in range(0, len(value), 33)]
+            for key in keys:
+                try:
+                    PublicKey(key)
+                except ValueError:
+                    raise ValueError(
+                        "Leaf key must be a valid compressed secp256k1 point"
+                    )
             # Signatures verify against the x-only key, so two entries sharing an
             # x coordinate are one signer wearing two hats: a threshold counting
             # them separately would be satisfied by fewer signatures than it names.
@@ -198,6 +212,10 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
         raise ValueError("after leaf missing time field")
     if type_name == "hashlock" and hash_ is None:
         raise ValueError("hashlock leaf missing hash field")
+    if type_name != "after" and time is not None:
+        raise ValueError(f"{type_name} leaf must not carry a time field")
+    if type_name != "hashlock" and hash_ is not None:
+        raise ValueError(f"{type_name} leaf must not carry a hash field")
     return TaprootLeaf(type=type_name, n=n, keys=keys, time=time, hash=hash_)
 
 
@@ -257,6 +275,8 @@ def taproot_root_from_path(leaf_hash: bytes, path: List[bytes]) -> bytes:
     """Recompute a root from a leaf hash and its merkle path."""
     if len(path) > TAPROOT_MAX_TREE_DEPTH:
         raise ValueError(f"Merkle path exceeds depth {TAPROOT_MAX_TREE_DEPTH}")
+    if len(leaf_hash) != 32 or any(len(sibling) != 32 for sibling in path):
+        raise ValueError("Merkle hashes must be 32 bytes")
     acc = leaf_hash
     for sibling in path:
         acc = taproot_branch_hash(acc, sibling)
@@ -282,6 +302,8 @@ def taproot_tweak_pubkey(
 ) -> bytes:
     """Tweaked output key P = K + t*G as compressed SEC1 bytes."""
     t = taproot_tweak(internal_key, merkle_root)
+    if t == 0:
+        return PublicKey(internal_key).format()
     tweak_point = PrivateKey(t.to_bytes(32, "big")).public_key
     assert tweak_point
     P = PublicKey.combine_keys([PublicKey(internal_key), tweak_point])
@@ -320,17 +342,16 @@ def verify_taproot_commitment(
     return taproot_tweak_pubkey(internal_key, root) == secret
 
 
-def secret_transcript_bytes(secret: str) -> bytes:
+def secret_transcript_bytes(secret: str, keyset_id: str) -> bytes:
     """Bytes a proof secret contributes to the transaction transcript (spec 2.2.1).
 
     A v3 point secret contributes its raw 33 bytes; a v0-v2 secret contributes
     its utf8 bytes, which is what mixed transactions need.
     """
-    if len(secret) == 66 and secret[:2] in ("02", "03"):
-        try:
-            return bytes.fromhex(secret)
-        except ValueError:
-            pass
+    from .keys import is_bls_keyset
+
+    if is_bls_keyset(keyset_id):
+        return bytes.fromhex(secret)
     return secret.encode("utf-8")
 
 
@@ -345,8 +366,8 @@ def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
     if secret != secret.lower():
         return False  # non-canonical spelling: not a point secret
     try:
-        bytes.fromhex(secret)
-    except ValueError:
+        PublicKey(bytes.fromhex(secret))
+    except (ValueError, TypeError):
         return False
     return True
 

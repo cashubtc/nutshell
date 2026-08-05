@@ -575,3 +575,25 @@ def test_dleq_step2_bob_dleq_invalid_key_type():
     bls_key = bls.PrivateKey()
     with pytest.raises(TypeError, match="Expected SecpPrivateKey"):
         step2_bob_dleq(B_, bls_key)  # type: ignore
+
+
+def test_bls_random_private_key_rejection_samples(monkeypatch):
+    samples = iter([b"\xff" * 32, b"\x00" * 32, b"\x00" * 31 + b"\x01"])
+    monkeypatch.setattr(bls.os, "urandom", lambda _: next(samples))
+    assert bls.PrivateKey().scalar == 1
+
+
+def test_bls_private_key_rejects_modulo_aliases():
+    with pytest.raises(ValueError, match="Fr"):
+        bls.PrivateKey((bls.curve_order + 1).to_bytes(32, "big"))
+    with pytest.raises(ValueError, match="Fr"):
+        bls.PrivateKey(scalar=bls.curve_order)
+
+
+def test_bls_keyset_version_gate_is_exact():
+    from cashu.core.crypto.keys import is_bls_keyset
+
+    assert is_bls_keyset("02" + "11" * 32)
+    assert is_bls_keyset("02" + "11" * 7)
+    assert not is_bls_keyset("03" + "11" * 32)
+    assert not is_bls_keyset("02not-a-keyset")
