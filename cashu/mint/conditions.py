@@ -46,7 +46,7 @@ class LedgerSpendingConditions:
         """
 
         p2pk_secret = secret
-        message_to_sign = message_to_sign or proof.secret
+        messages_to_sign = [(message_to_sign or proof.secret).encode("utf-8")]
 
         # if a sigflag other than SIG_INPUTS is present, we return True
         if (
@@ -76,7 +76,7 @@ class LedgerSpendingConditions:
             if main_pubkeys:
                 try:
                     if self._verify_p2pk_signatures(
-                        message_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
+                        messages_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
                     ):
                         logger.trace("Spending condition satisfied via main pubkeys.")
                         return True
@@ -101,7 +101,7 @@ class LedgerSpendingConditions:
             if refund_pubkeys:
                 try:
                     if self._verify_p2pk_signatures(
-                        message_to_sign,
+                        messages_to_sign,
                         refund_pubkeys,
                         proof.p2pksigs.copy(),
                         refund_n_sigs,
@@ -121,9 +121,30 @@ class LedgerSpendingConditions:
             # if no pubkeys are present, anyone can spend
             return True
 
+    @staticmethod
+    def _verify_signature_any_message(
+        messages_to_sign: List[bytes], pubkey: str, signature: str
+    ) -> bool:
+        """True if the signature verifies under any accepted message format.
+
+        Malformed signatures are ignored (treated as invalid) per NUT-11
+        signature validation.
+        """
+        for message in messages_to_sign:
+            try:
+                if verify_schnorr_signature(
+                    message=message,
+                    pubkey=PublicKey(bytes.fromhex(pubkey)),
+                    signature=bytes.fromhex(signature),
+                ):
+                    return True
+            except Exception:
+                continue
+        return False
+
     def _verify_p2pk_signatures(
         self,
-        message_to_sign: str,
+        messages_to_sign: List[bytes],
         pubkeys: List[str],
         signatures: List[str],
         n_sigs_required: int,
@@ -165,11 +186,8 @@ class LedgerSpendingConditions:
         for pubkey in unique_pubkeys:
             for i, input_sig in enumerate(signatures):
                 logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
-                logger.trace(f"Message: {message_to_sign}")
-                if verify_schnorr_signature(
-                    message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(pubkey)),
-                    signature=bytes.fromhex(input_sig),
+                if self._verify_signature_any_message(
+                    messages_to_sign, pubkey, input_sig
                 ):
                     n_pubkeys_with_valid_sigs += 1
                     logger.trace(
@@ -284,7 +302,7 @@ class LedgerSpendingConditions:
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
-        message_to_sign: Optional[str] = None,
+        quote_id: Optional[str] = None,
     ) -> bool:
         """
         If sigflag==SIG_ALL in any proof.secret, perform a signature check on all
@@ -335,10 +353,18 @@ class LedgerSpendingConditions:
         main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
         main_n_sigs = secret_lock.n_sigs or 1
 
-        message_to_sign = message_to_sign or nut11.sigall_message_to_sign(
-            proofs, outputs
-        )
-
+        # All SIG_ALL message formats this mint accepts. Signatures that do not
+        # verify under any of them are ignored (NUT-11 signature validation);
+        # only unique pubkeys with valid signatures count towards the threshold.
+        # The legacy format is signed by wallets for older mints but is never
+        # accepted here: it does not commit to C values or output amounts.
+        quote_suffix = quote_id or ""
+        messages_to_sign = [
+            nut11.sigall_message_to_sign_v1(proofs, outputs, quote_id),
+            (nut11.sigall_message_to_sign(proofs, outputs) + quote_suffix).encode(
+                "utf-8"
+            ),
+        ]
 
         first_proof = proofs[0]
         if not first_proof.witness:
@@ -357,7 +383,7 @@ class LedgerSpendingConditions:
             if main_pubkeys:
                 try:
                     if self._verify_p2pk_signatures(
-                        message_to_sign, main_pubkeys, signatures.copy(), main_n_sigs
+                        messages_to_sign, main_pubkeys, signatures.copy(), main_n_sigs
                     ):
                         logger.trace("Spending condition satisfied via main pubkeys.")
                         return True
@@ -382,7 +408,7 @@ class LedgerSpendingConditions:
             if refund_pubkeys:
                 try:
                     if self._verify_p2pk_signatures(
-                        message_to_sign,
+                        messages_to_sign,
                         refund_pubkeys,
                         signatures.copy(),
                         refund_n_sigs,
@@ -406,7 +432,7 @@ class LedgerSpendingConditions:
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
-        message_to_sign: Optional[str] = None,
+        quote_id: Optional[str] = None,
     ) -> bool:
         """
         Verify spending conditions:
@@ -423,4 +449,4 @@ class LedgerSpendingConditions:
         # verify that all secrets are of the same kind, raise an error if not
         _ = self._verify_all_secrets_equal_and_return(proofs)
 
-        return self._verify_sigall_spending_conditions(proofs, outputs, message_to_sign)
+        return self._verify_sigall_spending_conditions(proofs, outputs, quote_id)
