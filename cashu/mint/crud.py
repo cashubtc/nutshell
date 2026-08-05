@@ -884,6 +884,13 @@ class LedgerCrudSqlite(LedgerCrud):
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
     ) -> None:
+        if not keyset.valid_from:
+            keyset.valid_from = db.timestamp_now_str()
+        if not keyset.valid_to:
+            keyset.valid_to = db.timestamp_now_str()
+        if not keyset.first_seen:
+            keyset.first_seen = db.timestamp_now_str()
+
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("keysets")}
@@ -896,13 +903,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
-                "valid_from": db.to_timestamp(
-                    keyset.valid_from or db.timestamp_now_str()
-                ),
-                "valid_to": db.to_timestamp(keyset.valid_to or db.timestamp_now_str()),
-                "first_seen": db.to_timestamp(
-                    keyset.first_seen or db.timestamp_now_str()
-                ),
+                "valid_from": db.to_timestamp(keyset.valid_from),
+                "valid_to": db.to_timestamp(keyset.valid_to),
+                "first_seen": db.to_timestamp(keyset.first_seen),
                 "active": True,
                 "version": keyset.version,
                 "unit": keyset.unit.name,
@@ -1042,7 +1045,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 "version": keyset.version,
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
-                "balance": keyset.balance,
                 "final_expiry": keyset.final_expiry,  # NEW: Update final expiry
             },
         )
