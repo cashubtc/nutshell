@@ -885,7 +885,8 @@ async def receive_cli(
         mint_url = token_obj.mint
         mint_wallet = await Wallet.with_db(
             mint_url,
-            os.path.join(settings.cashu_dir, wallet.name),
+            wallet.db.db_location,
+            name=wallet.name,
             unit=token_obj.unit,
             auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
