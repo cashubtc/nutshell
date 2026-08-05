@@ -342,6 +342,8 @@ def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
         return False
     if len(secret) != 66 or secret[:2] not in ("02", "03"):
         return False
+    if secret != secret.lower():
+        return False  # non-canonical spelling: not a point secret
     try:
         bytes.fromhex(secret)
     except ValueError:

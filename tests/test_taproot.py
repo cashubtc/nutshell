@@ -288,6 +288,21 @@ async def test_nut13_v3_secret_derivation_vectors():
         assert expected_pub and expected_pub.format() == secret
 
 
+def test_v3_secret_must_be_lowercase_hex():
+    """One spelling per secret: upper-case hex names the same point but the two
+    sides hash it differently, so it is refused rather than accepted twice."""
+    from cashu.core.crypto.bls_dhke import secret_to_hash_input
+    from cashu.core.crypto.taproot import is_taproot_point_secret
+
+    low = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    assert secret_to_hash_input(low) == bytes.fromhex(low)
+    with pytest.raises(TransactionError, match="lowercase"):
+        secret_to_hash_input(low.upper())
+    v3_keyset = "029e18e63831fcf4764b1f1b574a2b415b07e6f86aa263b8948aae772e92fd3f70"
+    assert is_taproot_point_secret(low, v3_keyset)
+    assert not is_taproot_point_secret(low.upper(), v3_keyset)
+
+
 def test_threshold_leaf_rejects_parity_twin_keys():
     """A key and its parity twin share an x coordinate, so one signature would
     satisfy both entries and an n-of-m would need fewer signatures than it names."""

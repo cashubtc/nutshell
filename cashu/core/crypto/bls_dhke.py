@@ -32,6 +32,11 @@ def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
     """
     if isinstance(secret_msg, bytes):
         return secret_msg
+    # Lowercase is the canonical wire form (one spelling per secret): the wallet
+    # side hashes upper-case hex differently, so accepting both here would let a
+    # proof verify at the mint while its owner computes another Y for it.
+    if secret_msg != secret_msg.lower():
+        raise TransactionError("v3 point secrets must be lowercase hex.")
     if len(secret_msg) == 66 and secret_msg[:2] in ("02", "03"):
         try:
             raw = bytes.fromhex(secret_msg)
