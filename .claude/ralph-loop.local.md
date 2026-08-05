@@ -1,10 +1,10 @@
 ---
 active: true
-iteration: 16
-session_id: 48d209fc-4483-4e98-992b-8d30e893a5d9
-max_iterations: 100
-completion_promise: null
-started_at: "2026-07-24T07:08:14Z"
+iteration: 6
+session_id: 1e7a9591-fabc-45e1-807a-beda3e17fb88
+max_iterations: 10
+completion_promise: "TAPROOT V3 ALL MILESTONES GREEN"
+started_at: "2026-07-24T19:54:57Z"
 ---
 
-Read taproot-v3/PROMPT.md and execute it: one task per iteration, following its rules exactly. --completion-promis TAPROOT V3 ALL MILESTONES GREEN
+Read taproot-v3/PROMPT.md and execute it: one task per iteration, following its rules exactly.
