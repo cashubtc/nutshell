@@ -544,6 +544,24 @@ def test_spend_info_roundtrips_through_tokenv4():
     assert out.spend_info.E is None
 
 
+def test_empty_tweak_matches_the_shared_vector():
+    """Empty tweak (spec 3.8), the form an aggregated key MUST use.
+
+    cashu-ts asserts the same vector. This side has the primitive but no
+    receive cascade (that is a wallet-side check and this wallet does not run
+    one), so what has to agree across implementations is the math.
+    """
+    from cashu.core.crypto.taproot import taproot_tweak, taproot_tweak_pubkey
+
+    v = VECTORS["empty_tweak"]
+    K = bytes.fromhex(v["internal_key"])
+    assert taproot_tweak_pubkey(K).hex() == v["secret"]
+    assert f"{taproot_tweak(K):064x}" == v["tweak"]
+    # With a root it is a different tweak entirely, which is what stops an empty-tweak secret
+    # being mistaken for a tree-committed one.
+    assert taproot_tweak(K, bytes(32)) != taproot_tweak(K)
+
+
 def test_shared_token_vectors_same_spend_info_from_either_encoder():
     """Cross-implementation pin, mirrored in cashu-ts against the same vector file.
 
