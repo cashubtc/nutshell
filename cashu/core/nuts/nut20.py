@@ -93,6 +93,7 @@ def construct_batch_transaction_message(
     """The one transaction digest for a (batch) mint: every quote input
     (quote_id, amount) in request order plus all blinded outputs. Every
     quote's witness signs this same message (spec 2.2.2)."""
+    from ..crypto.taproot import keyset_id_transcript_bytes
     from ..crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -109,7 +110,7 @@ def construct_batch_transaction_message(
             blinded_outputs=[
                 TranscriptBlindedOutput(
                     amount=o.amount,
-                    keyset_id=bytes.fromhex(o.id),
+                    keyset_id=keyset_id_transcript_bytes(o.id),
                     B_=bytes.fromhex(o.B_),
                 )
                 for o in outputs
