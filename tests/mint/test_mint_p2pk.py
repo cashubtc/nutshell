@@ -314,3 +314,41 @@ async def test_ledger_swap_p2pk_with_signature(wallet1: Wallet1, ledger: Ledger)
     # Verify the result
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [o.amount for o in outputs]
+
+
+@pytest.mark.asyncio
+async def test_melt_sigall_requires_uniform_secrets(
+    wallet1: Wallet1, ledger: Ledger
+):
+    """A melt whose input secrets are not all the same NUT-10 secret is refused.
+
+    SIG_ALL commits to one shared spending condition across the inputs, so a mixed
+    input set cannot be evaluated together and is a transaction error.
+    """
+    from cashu.core.crypto.secp import PrivateKey
+
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await ledger.get_mint_quote(mint_quote.quote)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    # A proof locked SIG_ALL to another party's key.
+    other_party = PrivateKey()
+    lock = await wallet1.create_p2pk_lock(
+        other_party.public_key.format().hex(), sig_all=True
+    )
+    keep, locked = await wallet1.swap_to_send(wallet1.proofs, 16, secret_lock=lock)
+    assert locked, "expected a locked proof"
+
+    # A plain proof, whose secret is not a NUT-10 secret at all.
+    plain = [p for p in (keep or wallet1.proofs) if not p.secret.startswith("[")]
+    assert plain, "expected a plain-secret proof to pair it with"
+
+    from cashu.core.models import PostMeltQuoteRequest as _MQR
+
+    melt_quote_req = _MQR(request=(await wallet1.request_mint(8)).request, unit="sat")
+    melt_quote = await ledger.melt_quote(melt_quote_req)
+    await assert_err(
+        ledger.melt(proofs=locked + plain[:1], quote=melt_quote.quote),
+        "not all secrets are equal",
+    )
