@@ -34,6 +34,7 @@ from .crypto.keys import (
 )
 from .crypto.secp import PrivateKey as SecpPrivateKey
 from .crypto.secp import PublicKey as SecpPublicKey
+from .crypto.taproot import is_taproot_point_secret
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
 
@@ -1435,7 +1436,11 @@ class TokenV4Proof(BaseModel):
                 if proof.dleq
                 else None
             ),
-            w=proof.witness,
+            # A v3 witness signs one transaction's digest, so it means nothing
+            # outside that transaction and a token carries no transaction.
+            # Emitting one would hand the next owner a witness that can never
+            # verify, in place of the signature they have to produce.
+            w=None if is_taproot_point_secret(proof.secret, proof.id) else proof.witness,
             pe=bytes.fromhex(proof.p2pk_e) if proof.p2pk_e else None,
             si=(
                 TokenV4SpendInfo(
@@ -1520,7 +1525,15 @@ class TokenV4(Token):
                     if p.d
                     else None
                 ),
-                witness=p.w,
+                # A v3 witness signs one transaction's digest, so a token
+                # cannot carry a usable one. Keeping it would leave a stranger's
+                # witness in place of the signature the new owner must produce,
+                # and their sweep would be refused for it.
+                witness=(
+                    None
+                    if is_taproot_point_secret(p.s, token.i.hex())
+                    else p.w
+                ),
                 p2pk_e=p.pe.hex() if p.pe else None,
                 spend_info=(
                     SpendInfo(

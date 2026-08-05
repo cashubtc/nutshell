@@ -37,6 +37,9 @@ _FIELD_HASH = 0x08
 # Normative caps from spec 2.6. The leaf body excludes the leading version byte.
 TAPROOT_MAX_LEAF_BYTES = 1024
 TAPROOT_MAX_TREE_DEPTH = 8
+# Largest unix time an `after` leaf may name (2^53 - 1), the point where
+# implementations built on IEEE-754 integers stop counting exactly.
+TAPROOT_MAX_LEAF_TIME = 2**53 - 1
 
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
@@ -141,6 +144,8 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
     if leaf.type == "after":
         if leaf.time is None or leaf.time < 0:
             raise ValueError("after leaf requires a unix time")
+        if leaf.time > TAPROOT_MAX_LEAF_TIME:
+            raise ValueError("time out of range")
         fields += tlv_record(_FIELD_TIME, minimal_be(leaf.time))
     elif leaf.time is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a time field")
@@ -199,6 +204,11 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
                 raise ValueError("keys field must list distinct keys")
         elif record_type == _FIELD_TIME:
             time = read_minimal_be(value)
+            # Bounded so every implementation reads the same leaf. Without a
+            # bound a leaf is valid here and unparsable in a wallet whose
+            # integers stop earlier, which strands the proof with its holder.
+            if time > TAPROOT_MAX_LEAF_TIME:
+                raise ValueError("time out of range")
         elif record_type == _FIELD_HASH:
             if len(value) != 32:
                 raise ValueError("hash field must be 32 bytes")
@@ -231,9 +241,17 @@ def taproot_branch_hash(a: bytes, b: bytes) -> bytes:
 
 
 def taproot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
-    """Fold leaf hashes to a root: pairwise per level, odd hash promoted."""
+    """Fold leaf hashes to a root: pairwise per level, odd hash promoted.
+
+    The depth cap of 2.6 is enforced here, not only on a witness path,
+    because it is a property of the tree: past 2^8 leaves every merkle path
+    is longer than a verifier will accept, so the script paths a holder was
+    told they had do not exist.
+    """
     if not leaf_hashes:
         raise ValueError("Merkle root of zero leaves")
+    if len(leaf_hashes) > 2**TAPROOT_MAX_TREE_DEPTH:
+        raise ValueError(f"Tree exceeds depth {TAPROOT_MAX_TREE_DEPTH}")
     level = list(leaf_hashes)
     while len(level) > 1:
         nxt = [
@@ -353,6 +371,22 @@ def secret_transcript_bytes(secret: str, keyset_id: str) -> bytes:
     if is_bls_keyset(keyset_id):
         return bytes.fromhex(secret)
     return secret.encode("utf-8")
+
+
+def keyset_id_transcript_bytes(keyset_id: str) -> bytes:
+    """A keyset id as transcript bytes: raw bytes when hex, utf8 otherwise.
+
+    Legacy (pre-v1) keyset ids are base64, and a mixed transaction may carry
+    one beside a v3 input. Decoding as hex unconditionally raises instead of
+    producing a transcript, so such a transaction could be neither signed nor
+    verified. Falling back to utf8 is the rule the secret already follows.
+    """
+    if not keyset_id:
+        raise ValueError("Transcript keyset id must be non-empty")
+    try:
+        return bytes.fromhex(keyset_id)
+    except ValueError:
+        return keyset_id.encode("utf-8")
 
 
 def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:

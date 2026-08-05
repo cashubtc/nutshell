@@ -241,6 +241,7 @@ class LedgerVerification(
 
         from ..core.crypto.taproot import (
             is_taproot_point_secret,
+            keyset_id_transcript_bytes,
             secret_transcript_bytes,
             verify_script_path_spend,
         )
@@ -261,7 +262,7 @@ class LedgerVerification(
                 proof_inputs=[
                     TranscriptProofInput(
                         amount=p.amount,
-                        keyset_id=bytes.fromhex(p.id),
+                        keyset_id=keyset_id_transcript_bytes(p.id),
                         secret=secret_transcript_bytes(p.secret, p.id),
                         C=bytes.fromhex(p.C),
                     )
@@ -270,7 +271,7 @@ class LedgerVerification(
                 blinded_outputs=[
                     TranscriptBlindedOutput(
                         amount=o.amount,
-                        keyset_id=bytes.fromhex(o.id),
+                        keyset_id=keyset_id_transcript_bytes(o.id),
                         B_=bytes.fromhex(o.B_),
                     )
                     for o in outputs

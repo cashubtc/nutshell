@@ -755,7 +755,10 @@ class Wallet(
         """
         import json as _json
 
-        from ..core.crypto.taproot import is_taproot_point_secret
+        from ..core.crypto.taproot import (
+            is_taproot_point_secret,
+            keyset_id_transcript_bytes,
+        )
         from ..core.crypto.transcript import (
             TransactionShape,
             TranscriptBlindedOutput,
@@ -773,7 +776,7 @@ class Wallet(
                 proof_inputs=[
                     TranscriptProofInput(
                         amount=p.amount,
-                        keyset_id=bytes.fromhex(p.id),
+                        keyset_id=keyset_id_transcript_bytes(p.id),
                         secret=bytes.fromhex(p.secret),
                         C=bytes.fromhex(p.C),
                     )
@@ -782,7 +785,7 @@ class Wallet(
                 blinded_outputs=[
                     TranscriptBlindedOutput(
                         amount=o.amount,
-                        keyset_id=bytes.fromhex(o.id),
+                        keyset_id=keyset_id_transcript_bytes(o.id),
                         B_=bytes.fromhex(o.B_),
                     )
                     for o in outputs
