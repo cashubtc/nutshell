@@ -142,9 +142,63 @@ def test_leaf_parsing_fails_closed():
     assert parsed.n == 1
     assert parsed.keys == [bytes.fromhex(V61["carol_pub"])]
 
+    at_limit = (
+        b"\x00\x01"
+        + base_fields
+        + tlv_record(0x0D, bytes(1024 - 1 - len(base_fields) - 3))
+    )
+    assert len(at_limit) == 1025
+    assert parse_taproot_leaf(at_limit).type == "threshold"
+    over_limit = (
+        b"\x00\x01"
+        + base_fields
+        + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
+    )
+    with pytest.raises(ValueError, match="body exceeds"):
+        parse_taproot_leaf(over_limit)
+
     bad_keys = b"\x00\x01" + tlv_record(0x02, b"\x01") + tlv_record(0x04, b"\x02" * 32)
     with pytest.raises(ValueError, match="multiple of 33"):
         parse_taproot_leaf(bad_keys)
+
+    threshold_with_time = (
+        b"\x00\x01"
+        + base_fields
+        + tlv_record(0x06, b"\x01")
+    )
+    with pytest.raises(ValueError, match="must not carry a time"):
+        parse_taproot_leaf(threshold_with_time)
+
+    after_with_hash = (
+        b"\x00\x02"
+        + base_fields
+        + tlv_record(0x06, b"\x01")
+        + tlv_record(0x08, b"\x00" * 32)
+    )
+    with pytest.raises(ValueError, match="must not carry a hash"):
+        parse_taproot_leaf(after_with_hash)
+    with pytest.raises(ValueError, match="must not carry a time"):
+        serialize_taproot_leaf(
+            TaprootLeaf(
+                type="threshold",
+                n=1,
+                keys=[bytes.fromhex(V61["carol_pub"])],
+                time=1,
+            )
+        )
+
+    invalid_key = b"\x02" + b"\xff" * 32
+    invalid_point = (
+        b"\x00\x01"
+        + tlv_record(0x02, b"\x01")
+        + tlv_record(0x04, invalid_key)
+    )
+    with pytest.raises(ValueError, match="valid compressed"):
+        parse_taproot_leaf(invalid_point)
+    with pytest.raises(ValueError):
+        serialize_taproot_leaf(
+            TaprootLeaf(type="threshold", n=1, keys=[invalid_key])
+        )
 
 
 def test_merkle_tree_6_2():
@@ -263,6 +317,16 @@ def test_script_path_commitment():
     filler = hashlib.sha256(b"\x09").digest()
     with pytest.raises(ValueError, match="depth"):
         taproot_root_from_path(filler, [filler] * 9)
+    with pytest.raises(ValueError, match="32 bytes"):
+        taproot_root_from_path(filler, [filler[1:]])
+
+
+def test_zero_tweak_keeps_internal_key(monkeypatch):
+    from cashu.core.crypto import taproot as taproot_crypto
+
+    internal_key = bytes.fromhex(V61["internal_key"])
+    monkeypatch.setattr(taproot_crypto, "taproot_tweak", lambda *_: 0)
+    assert taproot_crypto.taproot_tweak_pubkey(internal_key) == internal_key
 
 
 def test_bearer_contrast():
@@ -301,6 +365,7 @@ def test_v3_secret_must_be_lowercase_hex():
     v3_keyset = "029e18e63831fcf4764b1f1b574a2b415b07e6f86aa263b8948aae772e92fd3f70"
     assert is_taproot_point_secret(low, v3_keyset)
     assert not is_taproot_point_secret(low.upper(), v3_keyset)
+    assert not is_taproot_point_secret("02" + "ff" * 32, v3_keyset)
 
 
 def test_threshold_leaf_rejects_parity_twin_keys():
@@ -314,7 +379,7 @@ def test_threshold_leaf_rejects_parity_twin_keys():
     twin = (b"\x03" if pub[0] == 2 else b"\x02") + pub[1:]
     leaf = TaprootLeaf(type="threshold", n=2, keys=[pub, twin])
     with pytest.raises(ValueError, match="distinct keys"):
-        parse_taproot_leaf(serialize_taproot_leaf(leaf))
+        serialize_taproot_leaf(leaf)
 
 
 def test_point_secret_hashes_as_raw_bytes():
@@ -330,6 +395,12 @@ def test_point_secret_hashes_as_raw_bytes():
     for rejected in ("not-a-point", '["P2PK", {"data": "02" + "aa" * 32}]', "ab" * 33):
         with pytest.raises(TransactionError):
             secret_to_hash_input(rejected)
+
+    from cashu.core.crypto.taproot import secret_transcript_bytes
+
+    point = output["secret"]
+    assert secret_transcript_bytes(point, VECTORS["nut13_v3"]["keyset_id"]) == bytes.fromhex(point)
+    assert secret_transcript_bytes(point, "01" + "11" * 32) == point.encode()
 
 
 def _tx_from_vector(tx: dict):

@@ -11,11 +11,17 @@ G2 = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
 class PrivateKey:
     def __init__(self, privkey: bytes = b"", scalar: Optional[int] = None):
         if scalar is not None:
-            self.scalar = scalar % curve_order
+            if not 0 < scalar < curve_order:
+                raise ValueError("BLS scalar must be in Fr*")
+            self.scalar = scalar
         elif privkey:
-            self.scalar = int.from_bytes(privkey, "big") % curve_order
+            self.scalar = int.from_bytes(privkey, "big")
+            if len(privkey) != 32 or not 0 < self.scalar < curve_order:
+                raise ValueError("BLS private key must be 32 bytes in Fr*")
         else:
-            self.scalar = int.from_bytes(os.urandom(32), "big") % curve_order
+            self.scalar = 0
+            while not 0 < self.scalar < curve_order:
+                self.scalar = int.from_bytes(os.urandom(32), "big")
 
     @property
     def private_key(self) -> bytes:

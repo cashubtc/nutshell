@@ -279,7 +279,7 @@ class LedgerVerification(
                     TranscriptProofInput(
                         amount=p.amount,
                         keyset_id=bytes.fromhex(p.id),
-                        secret=secret_transcript_bytes(p.secret),
+                        secret=secret_transcript_bytes(p.secret, p.id),
                         C=bytes.fromhex(p.C),
                     )
                     for p in proofs
