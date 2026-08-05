@@ -544,6 +544,44 @@ def test_spend_info_roundtrips_through_tokenv4():
     assert out.spend_info.E is None
 
 
+def test_leaf_forms_match_the_shared_vectors():
+    """The leaf types and tree shapes section 6 never shows.
+
+    Includes the odd-count fold: three leaves means leaf 2 is promoted
+    unchanged, so its merkle path is a single sibling. A builder and a
+    verifier that fold differently reject each other's valid proofs, so this
+    has to agree across implementations.
+    """
+    from cashu.core.crypto.taproot import (
+        TaprootLeaf,
+        serialize_taproot_leaf,
+        taproot_leaf_hash,
+        taproot_merkle_path,
+        taproot_merkle_root,
+    )
+
+    lf = VECTORS["leaf_forms"]
+    v = VECTORS["example_6_1"]
+    carol = bytes.fromhex(v["carol_pub"])
+    alice = bytes.fromhex(v["alice_refund_pub"])
+
+    assert serialize_taproot_leaf(TaprootLeaf(type="threshold", n=1, keys=[carol])).hex() == lf["threshold_1of1"]
+    assert (
+        serialize_taproot_leaf(TaprootLeaf(type="threshold", n=2, keys=[carol, alice])).hex()
+        == lf["threshold_2of2"]
+    )
+    assert (
+        serialize_taproot_leaf(
+            TaprootLeaf(type="hashlock", n=1, keys=[carol], hash=bytes.fromhex(lf["hashlock_hash"]))
+        ).hex()
+        == lf["hashlock"]
+    )
+
+    hashes = [taproot_leaf_hash(bytes.fromhex(x)) for x in lf["three_leaf_tree"]]
+    assert taproot_merkle_root(hashes).hex() == lf["three_leaf_root"]
+    assert [h.hex() for h in taproot_merkle_path(hashes, 2)] == lf["three_leaf_path_index_2"]
+
+
 def test_empty_tweak_matches_the_shared_vector():
     """Empty tweak (spec 3.8), the form an aggregated key MUST use.
 

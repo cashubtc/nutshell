@@ -225,5 +225,24 @@
     "tweak": "93ee8d8b880c6aa1d858f816e16ad46e53ae3ce0d08ea2b4454b69732f75de94",
     "secret": "0284f13903124432d5013cf5b7c1dd7353127bd70129b9495591bbd406eaceeaa6",
     "keypath_priv": "93ee8d8b880c6aa1d858f816e16ad46e53ae3ce0d08ea2b4454b69732f75de97"
+  },
+  "leaf_forms": {
+    "comment": "The leaf types and tree shapes the worked examples of section 6 never show. Keys are example_6_1's, so everything ties back to it. three_leaf_* exercises the odd-count fold of 2.3.4: leaves 0 and 1 pair, leaf 2 is promoted unchanged, then the two hashes at the next level pair, so the path for leaf 2 is a single sibling. blind_slot1_* is the positional slot map of 2.7: alice_refund_pub blinded at slot 1 under example_6_1's ephemeral.",
+    "threshold_1of1": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "threshold_2of2": "00010200010204004202f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f902e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "hashlock_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "hashlock": "00030200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9080020a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "three_leaf_tree": [
+      "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80",
+      "00030200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9080020a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+    ],
+    "three_leaf_root": "c4fb3d4ccca2ddff6d756e1fdab834d459b0449f706233a3e82bad2409380513",
+    "three_leaf_path_index_2": ["1b5196405f3404af4c9eff23612852b37325c59ca0c254c8293b294b150113e7"],
+    "three_leaf_secret": "033d319c858e0b102a922588d033aa9afda993b8c5a8559478b75fb01b7156b6ff",
+    "nums_key": "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
+    "blind_slot1_key": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "blind_slot1_result": "039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca81",
+    "blind_slot1_leaf": "000202000101040021039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca8106000468a3be80"
   }
 }
