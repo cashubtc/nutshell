@@ -53,6 +53,7 @@ class LndRestWallet(LightningBackend):
     supports_incoming_payment_stream = True
     supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True
+    supports_description_hash: bool = True
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):

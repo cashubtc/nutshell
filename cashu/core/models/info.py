@@ -5,6 +5,7 @@ from pydantic import BaseModel, model_validator
 
 class MintMethodBolt11OptionSetting(BaseModel):
     description: Optional[bool] = None
+    description_hash: Optional[bool] = None
 
 
 class MintMethodSetting(BaseModel):

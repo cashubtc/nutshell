@@ -91,7 +91,8 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
                     mint_setting.min_amount = 0
                 mint_setting.options = MintMethodBolt11OptionSetting(
-                    description=unit_dict[unit].supports_description
+                    description=unit_dict[unit].supports_description,
+                    description_hash=unit_dict[unit].supports_description_hash,
                 )
                 mint_method_settings.append(mint_setting)
         melt_method_settings: List[MeltMethodSetting] = []
