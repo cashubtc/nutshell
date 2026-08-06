@@ -16,6 +16,7 @@ from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.bls_dhke import keyed_verification
 from ..core.crypto.keys import PublicKey, is_bls_keyset
 from ..core.crypto.secp import PublicKey as SecpPublicKey
+from ..core.crypto.taproot import TAPROOT_MAX_WITNESS_LENGTH
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
@@ -364,12 +365,14 @@ class LedgerVerification(
 
     def _verify_input_witness_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies max length of input witness data"""
-        if (
-            proof.witness is not None
-            and len(proof.witness) > settings.mint_max_witness_length
-        ):
+        max_length = (
+            TAPROOT_MAX_WITNESS_LENGTH
+            if is_bls_keyset(proof.id)
+            else settings.mint_max_witness_length
+        )
+        if proof.witness is not None and len(proof.witness) > max_length:
             raise WitnessTooLongError(
-                f"input witness data too long. max: {settings.mint_max_witness_length}"
+                f"input witness data too long. max: {max_length}"
             )
         return True
 

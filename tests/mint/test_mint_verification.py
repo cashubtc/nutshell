@@ -16,6 +16,7 @@ from cashu.core.base import (
 )
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.crypto.taproot import TAPROOT_MAX_WITNESS_LENGTH
 from cashu.core.errors import (
     InvalidProofsError,
     NoSecretInProofsError,
@@ -138,14 +139,18 @@ def test_verify_input_witness_criteria_accepts_short_witness(ledger: Ledger):
     assert ledger._verify_input_witness_criteria(p) is True
 
 
-def test_verify_input_witness_criteria_rejects_long_witness(ledger: Ledger):
+def test_verify_input_witness_criteria_uses_v3_protocol_bound(ledger: Ledger):
+    # A v3 keyset takes point secrets only (M5), so this proof needs one: with a
+    # plain secret the constructor raises and the bound below is never reached.
     p = Proof(
         id=ledger.keyset.id,
         amount=8,
-        secret="s",
+        secret="02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
         C="02" + "ab" * 32,
-        witness="w" * (settings.mint_max_witness_length + 1),
+        witness="w" * TAPROOT_MAX_WITNESS_LENGTH,
     )
+    assert ledger._verify_input_witness_criteria(p) is True
+    p.witness += "w"
     with pytest.raises(WitnessTooLongError):
         ledger._verify_input_witness_criteria(p)
 
@@ -774,6 +779,7 @@ async def test_verify_inputs_secret_too_long_raises(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_verify_inputs_witness_too_long_raises(ledger: Ledger):
     p = _proof_plain(ledger)
+    p.id = "009a1f293253e41e"
     p.witness = "w" * (settings.mint_max_witness_length + 1)
     with pytest.raises(WitnessTooLongError):
         await ledger._verify_inputs([p])

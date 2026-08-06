@@ -37,6 +37,9 @@ _FIELD_HASH = 0x08
 # Normative caps from spec 2.6. The leaf body excludes the leading version byte.
 TAPROOT_MAX_LEAF_BYTES = 1024
 TAPROOT_MAX_TREE_DEPTH = 8
+# A maximal leaf (hex), 30 Schnorr signatures, an eight-node control path,
+# a preimage, and JSON framing fit below this protocol-specific DoS ceiling.
+TAPROOT_MAX_WITNESS_LENGTH = 8192
 # Largest unix time an `after` leaf may name (2^53 - 1), the point where
 # implementations built on IEEE-754 integers stop counting exactly.
 TAPROOT_MAX_LEAF_TIME = 2**53 - 1
@@ -138,6 +141,8 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
         PublicKey(key)
     if len({key[1:] for key in leaf.keys}) != len(leaf.keys):
         raise ValueError("Leaf must list distinct keys")
+    if leaf.n > len(leaf.keys):
+        raise ValueError("Threshold exceeds leaf key count")
     fields = tlv_record(_FIELD_N, bytes([leaf.n])) + tlv_record(
         _FIELD_KEYS, b"".join(leaf.keys)
     )
@@ -218,6 +223,8 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
         # Odd = annotation, safe to ignore.
     if n is None or keys is None:
         raise ValueError("Leaf missing required n or keys field")
+    if n > len(keys):
+        raise ValueError("Threshold exceeds leaf key count")
     if type_name == "after" and time is None:
         raise ValueError("after leaf missing time field")
     if type_name == "hashlock" and hash_ is None:
