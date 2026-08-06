@@ -29,6 +29,7 @@ from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
+    get_real_invoice_routed,
     is_deprecated_api_only,
     is_fake,
     is_github_actions,
@@ -374,6 +375,36 @@ async def test_melt(wallet1: Wallet):
     # the payment was without fees so we need to remove it from the total amount
     assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
     assert wallet1.balance == 64, "Wrong balance"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only works on regtest")
+async def test_melt_routed_invoice(wallet1: Wallet):
+    topup_mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    await wallet1.mint(128, quote_id=topup_mint_quote.quote)
+    assert wallet1.balance == 128
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(64)
+
+    quote = await wallet1.melt_quote(invoice_payment_request)
+    total_amount = quote.amount + quote.fee_reserve
+    assert quote.fee_reserve == 2
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
+
+    melt_response = await wallet1.melt(
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
+    )
+    assert melt_response.state == MeltQuoteState.paid.value, "Melt not paid"
+    assert melt_response.payment_preimage is not None, "No payment preimage"
+
+    # the payment had a routing fee, so we get back less than the full fee reserve
+    assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
 
 
 @pytest.mark.asyncio
