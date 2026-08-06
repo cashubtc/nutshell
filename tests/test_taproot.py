@@ -200,6 +200,22 @@ def test_leaf_parsing_fails_closed():
             TaprootLeaf(type="threshold", n=1, keys=[invalid_key])
         )
 
+    impossible_threshold = (
+        b"\x00\x01"
+        + tlv_record(0x02, b"\x02")
+        + tlv_record(0x04, bytes.fromhex(V61["carol_pub"]))
+    )
+    with pytest.raises(ValueError, match="key count"):
+        parse_taproot_leaf(impossible_threshold)
+    with pytest.raises(ValueError, match="key count"):
+        serialize_taproot_leaf(
+            TaprootLeaf(
+                type="threshold",
+                n=2,
+                keys=[bytes.fromhex(V61["carol_pub"])],
+            )
+        )
+
 
 def test_merkle_tree_6_2():
     h_melt = bytes.fromhex(V62["leaf_hash_melt_to"])
