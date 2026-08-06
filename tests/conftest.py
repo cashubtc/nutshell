@@ -2,6 +2,7 @@ import importlib
 import multiprocessing
 import os
 import shutil
+import sqlite3
 import time
 from pathlib import Path
 
@@ -52,7 +53,10 @@ settings.mint_transaction_rate_limit_per_minute = 60
 settings.mint_lnd_enable_mpp = True
 settings.mint_clnrest_enable_mpp = True
 settings.mint_input_fee_ppk = 0
-settings.db_connection_pool = True
+os.environ["DB_CONNECTION_POOL"] = "False"
+os.environ["MINT_REDIS_CACHE_ENABLED"] = "False"
+settings.db_connection_pool = False
+settings.mint_redis_cache_enabled = False
 settings.mint_require_auth = False
 settings.mint_watchdog_enabled = False
 
@@ -79,9 +83,85 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
+def _mint_config() -> Config:
+    return uvicorn.Config(
+        "cashu.mint.app:app",
+        port=settings.mint_listen_port,
+        host=settings.mint_listen_host,
+        log_level="trace",
+    )
+
+
+def _wait_for_mint_ready() -> None:
+    # Wait until the server has completed lifespan startup. Max out after 10s.
+    assert settings.mint_url is not None
+    tries = 0
+    last_error: Exception | None = None
+    while tries < 100:
+        try:
+            response = httpx.get(f"{settings.mint_url}/v1/info")
+            if response.status_code == 200:
+                return
+        except httpx.ConnectError as exc:
+            last_error = exc
+        tries += 1
+        time.sleep(0.1)
+    raise AssertionError(f"Mint server did not become ready: {last_error}")
+
+
+class MintServer:
+    server: UvicornServer | None
+
+    def __init__(self) -> None:
+        self.server = None
+
+    def start(self) -> None:
+        self.stop()
+        self.server = UvicornServer(config=_mint_config())
+        self.server.start()
+        _wait_for_mint_ready()
+
+    def ensure_running(self) -> None:
+        if self.server and self.server.is_alive():
+            try:
+                _wait_for_mint_ready()
+                return
+            except AssertionError:
+                pass
+        self.start()
+
+    def stop(self) -> None:
+        if not self.server:
+            return
+        if self.server.is_alive():
+            self.server.stop()
+        self.server.join(timeout=5)
+        self.server = None
+
+
+def _reset_sqlite_database(db_file: str) -> None:
+    if not os.path.exists(db_file):
+        return
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF;")
+        rows = conn.execute(
+            """
+            SELECT type, name
+            FROM sqlite_master
+            WHERE type IN ('table', 'view')
+            AND name NOT LIKE 'sqlite_%'
+            """
+        ).fetchall()
+        for object_type, name in sorted(rows, key=lambda row: row[0] != "view"):
+            escaped_name = name.replace('"', '""')
+            conn.execute(f'DROP {object_type.upper()} IF EXISTS "{escaped_name}";')
+        conn.commit()
+
+
 # This fixture is used for all other tests
 @pytest_asyncio.fixture(scope="function")
-async def ledger():
+async def ledger(mint: MintServer):
     async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
         await ledger.startup_ledger()
@@ -90,8 +170,7 @@ async def ledger():
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database
         db_file = os.path.join(settings.mint_database, "mint.sqlite3")
-        if os.path.exists(db_file):
-            os.remove(db_file)
+        _reset_sqlite_database(db_file)
     else:
         # clear postgres database
         db = Database("mint", settings.mint_database)
@@ -123,6 +202,7 @@ async def ledger():
         crud=LedgerCrudSqlite(),
     )
     ledger = await start_mint_init(ledger)
+    mint.ensure_running()
     yield ledger
     print("teardown")
     await ledger.shutdown_ledger()
@@ -131,26 +211,7 @@ async def ledger():
 # # This fixture is used for tests that require API access to the mint
 @pytest.fixture(autouse=True, scope="session")
 def mint():
-    config = uvicorn.Config(
-        "cashu.mint.app:app",
-        port=settings.mint_listen_port,
-        host=settings.mint_listen_host,
-        log_level="trace",
-    )
-
-    server = UvicornServer(config=config)
+    server = MintServer()
     server.start()
-
-    # Wait until the server has bound to the localhost socket. Max out after 10s.
-    assert settings.mint_url is not None
-    tries = 0
-    while tries < 100:
-        try:
-            httpx.get(settings.mint_url)
-            break
-        except httpx.ConnectError:
-            tries += 1
-            time.sleep(0.1)
-
     yield server
     server.stop()
