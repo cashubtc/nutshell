@@ -123,7 +123,6 @@ class LedgerVerification(
         expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
     ):
-
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         if not outputs:
@@ -140,6 +139,9 @@ class LedgerVerification(
             raise TransactionError(
                 f"output unit {self.keysets[outputs[0].id].unit.name} does not match quote unit {expected_unit.name}"
             )
+        # Verify that all blinded messages are valid curve points
+        if not all([self._verify_blinded_message(o) for o in outputs]):
+            raise TransactionError("invalid blinded message.")
         # Verify amounts of outputs
         # we skip the amount check for NUT-8 change outputs (which can have amount 0)
         if not skip_amount_check:
@@ -257,6 +259,14 @@ class LedgerVerification(
     def _verify_no_duplicate_outputs(self, outputs: List[BlindedMessage]) -> bool:
         B_s = [od.B_ for od in outputs]
         if len(B_s) != len(list(set(B_s))):
+            return False
+        return True
+
+    def _verify_blinded_message(self, output: BlindedMessage) -> bool:
+        """Verifies that a blinded message is a valid curve point."""
+        try:
+            PublicKey(bytes.fromhex(output.B_))
+        except ValueError:
             return False
         return True
 
