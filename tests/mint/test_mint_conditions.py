@@ -343,7 +343,8 @@ def test_verify_sigall_spending_conditions_ignores_legacy_only_witness():
         kind=SecretKind.P2PK, data=signer_pub, sigflag=SigFlags.SIG_ALL
     )
     proofs = [_proof(fixed_secret), _proof(fixed_secret)]
-    legacy_msg = nut11.sigall_message_to_sign_legacy(proofs, outputs)
+    # Pre-0.21 message format: secrets then B_ fields
+    legacy_msg = "".join(p.secret for p in proofs) + "".join(o.B_ for o in outputs)
     signature = schnorr_sign(legacy_msg.encode("utf-8"), signer).hex()
     proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
 

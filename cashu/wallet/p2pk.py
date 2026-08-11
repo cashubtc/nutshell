@@ -162,14 +162,13 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
             secrets = set([Secret.deserialize(p.secret) for p in proofs])
             if not len(secrets) == 1:
                 raise Exception("Secrets not identical")
-            # Sign every known SIG_ALL message format so the transaction verifies
-            # on mints that have not (or have already) upgraded. Mints ignore
-            # signatures that do not verify and count unique pubkeys.
+            # Sign every accepted SIG_ALL message format so the transaction
+            # verifies on mints that have not (or have already) upgraded. Mints
+            # ignore signatures that do not verify and count unique pubkeys.
             quote_suffix = quote_id or ""
             messages_to_sign: List[Union[str, bytes]] = [
                 nut11.sigall_message_to_sign_v1(proofs, outputs, quote_id),
                 nut11.sigall_message_to_sign(proofs, outputs) + quote_suffix,
-                nut11.sigall_message_to_sign_legacy(proofs, outputs) + quote_suffix,
             ]
             # For P2BK proofs, use the derived blinded signing keys; None falls
             # back to the wallet's private key in schnorr_sign_message

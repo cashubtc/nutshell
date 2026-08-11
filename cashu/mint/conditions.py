@@ -356,8 +356,8 @@ class LedgerSpendingConditions:
         # All SIG_ALL message formats this mint accepts. Signatures that do not
         # verify under any of them are ignored (NUT-11 signature validation);
         # only unique pubkeys with valid signatures count towards the threshold.
-        # The legacy format is signed by wallets for older mints but is never
-        # accepted here: it does not commit to C values or output amounts.
+        # The pre-0.21 format (secrets then B_ fields) is not accepted: it does
+        # not commit to C values or output amounts.
         quote_suffix = quote_id or ""
         messages_to_sign = [
             nut11.sigall_message_to_sign_v1(proofs, outputs, quote_id),

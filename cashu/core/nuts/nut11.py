@@ -44,14 +44,3 @@ def sigall_message_to_sign(proofs: List[Proof], outputs: List[BlindedMessage]) -
     message += "".join([str(o.amount) + o.B_ for o in outputs])
 
     return message
-
-
-def sigall_message_to_sign_legacy(
-    proofs: List[Proof], outputs: List[BlindedMessage]
-) -> str:
-    """
-    SIG_ALL message as verified by releases <= 0.20.2: secrets then B_ fields.
-
-    Kept so upgraded mints keep accepting witnesses from older wallets.
-    """
-    return "".join([p.secret for p in proofs]) + "".join([o.B_ for o in outputs])
