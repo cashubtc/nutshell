@@ -306,9 +306,14 @@ class LndRPCWallet(LightningBackend):
                     break
         except AioRpcError as e:
             logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
+            err_msg = str(e)
+            if settings.mint_lnd_allow_self_payment and (
+                "target not found" in err_msg.lower() or "no route" in err_msg.lower()
+            ):
+                err_msg += " (Note: partial self-payments are unsupported by LND's QueryRoutes API)"
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                error_message=str(e),
+                error_message=err_msg,
             )
 
         assert route and response
