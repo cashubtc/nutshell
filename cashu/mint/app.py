@@ -117,12 +117,21 @@ async def catch_exceptions(request: Request, call_next):
 # Add exception handlers
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore
 
+def include_mint_routers(app: FastAPI) -> None:
+    if settings.debug_mint_only_deprecated and not settings.mint_require_auth:
+        app.include_router(
+            router=router_deprecated, tags=["Deprecated"], deprecated=True
+        )
+    else:
+        app.include_router(router=router, tags=["Mint"])
+        if not settings.mint_require_auth:
+            app.include_router(
+                router=router_deprecated, tags=["Deprecated"], deprecated=True
+            )
+
+
 # Add routers
-if settings.debug_mint_only_deprecated:
-    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
-else:
-    app.include_router(router=router, tags=["Mint"])
-    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+include_mint_routers(app)
 
 if settings.mint_require_auth:
     app.include_router(auth_router, tags=["Auth"])
