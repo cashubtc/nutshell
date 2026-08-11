@@ -114,10 +114,7 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
-    mint_lnbits_endpoint: Optional[str] = Field(default=None)
-    mint_lnbits_key: Optional[str] = Field(default=None)
     mint_strike_key: Optional[str] = Field(default=None)
-    mint_blink_key: Optional[str] = Field(default=None)
 
     mint_spark_network: str = Field(default="TESTNET")
     mint_spark_api_key: Optional[str] = Field(default=None)
