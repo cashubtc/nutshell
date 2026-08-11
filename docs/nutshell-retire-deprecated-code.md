@@ -412,13 +412,13 @@ This is not old Nutshell compatibility. `cashu/lightning/lnbits.py` starts with 
 - Generated protobufs, Lightning backends, historical mint/wallet migrations, Keycloak fixtures, and `pyproject.toml` have no net changes in this milestone series.
 - All 42 tracked files changed since the branch merge base map to the implementation plan or Milestones 1–4; unrelated untracked files remain untouched.
 - `make format` was not needed because repository-wide Ruff checking was already clean and no auto-fix was required.
-- `make check`: passed; Ruff passed and mypy reported no issues in 133 source files.
-- Complete clean-snapshot regression suite, isolated by test family to avoid a cross-session async SQLite leak: 760 passed, 48 skipped.
-  - Non-wallet tests: 509 passed, 27 skipped.
-  - Wallet tests: 251 passed, 21 skipped.
-- A preliminary single-process run completed 759 tests with 48 skips and one transient `GeneratorExit` during wallet SQLite fixture setup; the exact test and the complete wallet family passed in fresh processes.
+- Post-merge Ruff and mypy validation passed; mypy reported no issues in 131 source files on current `main`.
+- Complete post-merge regression suite, isolated by test family to avoid a cross-session async SQLite leak: 966 passed, 49 skipped.
+  - Non-wallet tests: 667 passed, 28 skipped.
+  - Wallet tests: 299 passed, 21 skipped.
+- The focused wallet API, mint router/API/melt, migration, and quote-persistence regression set passed: 126 passed, 3 skipped.
 - `git -c core.whitespace=cr-at-eol diff --check`: passed.
-- Synthetic integration with current `main` reports one test-only content conflict in `tests/mint/test_mint_api.py`, where `main` added a landing-page test adjacent to v0-only skip decorators removed here. No production-source conflict was found; target-branch integration is intentionally not mixed into this removal milestone.
+- Current `main` was merged on 2026-08-11. Conflicts in quote conversion, mint router registration, wallet melt parsing, current mint API tests, and the deleted v0 router were resolved by retaining new current behavior while removing the deprecated fallbacks and router. Two new `main` tests that referenced the removed deprecated-only mode were reconciled with the permanent v1-only router.
 - No final runtime cleanup was justified, so the Milestone 7 commit changes only this plan.
 - Milestone commit: completed with this plan update.
 

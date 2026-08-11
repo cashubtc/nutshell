@@ -325,6 +325,30 @@ def get_quote_ttl(ctx: Context, quote_id: str):
         click.echo(f"Error: {e.details()}", err=True)
 
 
+@get.command("keyset", help="Get a keyset by id.")
+@click.argument("keyset_id")
+@click.pass_context
+def get_keyset(ctx: Context, keyset_id: str):
+    stub = ctx.obj['STUB']
+    try:
+        keyset = stub.GetKeyset(management_pb2.GetKeysetRequest(id=keyset_id))
+        click.echo(f"keyset:\n{keyset}")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+
+@get.command("keysets", help="Get all keysets.")
+@click.pass_context
+def get_keysets(ctx: Context):
+    stub = ctx.obj['STUB']
+    try:
+        response = stub.GetKeysets(management_pb2.GetKeysetsRequest())
+        for keyset in response.keysets:
+            click.echo(f"keyset:\n{keyset}")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+
 @cli.command("next-keyset", help="Rotate to the next keyset for the specified unit.")
 @click.argument("unit")
 @click.argument("input_fee_ppk", required=False, type=int)

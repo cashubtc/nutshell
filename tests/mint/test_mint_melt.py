@@ -4,10 +4,13 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
+    Amount,
     MeltQuote,
     MeltQuoteState,
+    Method,
     MintQuoteState,
     Proof,
+    Unit,
 )
 from cashu.core.errors import (
     LightningPaymentFailedError,
@@ -16,7 +19,7 @@ from cashu.core.errors import (
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResponse, PaymentResult
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -249,7 +252,7 @@ async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    (ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),)
+    await ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs)
 
     await assert_err(
         ledger.melt(
@@ -403,29 +406,27 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     except LightningPaymentFailedError:
         pass
 
-    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
-    settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
-    try:
-        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
 
-    settings.fakewallet_payment_state = PaymentResult.FAILED.name
-    settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
-    try:
-        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_melt_lightning_unknown_status_keeps_proofs_pending(
+    ledger: Ledger, wallet: Wallet
+):
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    invoice = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    quote_id = (
+        await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice))
+    ).quote
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
-    try:
-        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
+    response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+
+    assert response.state == MeltQuoteState.pending.value
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.pending for state in states)
 
 
 @pytest.mark.asyncio
@@ -907,3 +908,82 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
     assert melt_quote is not None
     assert melt_quote.state == MeltQuoteState.unpaid, "Quote state should be unpaid"
     assert not melt_quote.pending, "Quote should not be pending"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake,
+    reason="only fakewallet",
+)
+@pytest.mark.parametrize(
+    "fee_paid_sat_offset",
+    [
+        pytest.param(0, id="overpaid_fee_zero"),
+        pytest.param(1, id="overpaid_fee_negative"),
+    ],
+)
+async def test_melt_early_return_leaves_no_orphan_blank_outputs(
+    wallet, ledger: Ledger, monkeypatch, fee_paid_sat_offset: int
+):
+    """When `_generate_change_promises` takes its early-return branch
+    (overpaid_fee <= 0), the wallet's blank NUT-08 outputs — already
+    inserted into `promises` with c_ IS NULL before the LN payment —
+    must not be left behind as orphans. Later operations that re-derive
+    the same B_ (e.g. NUT-13 seed restore) collide with them and surface
+    as `OutputsArePendingError`.
+
+    Both parametrize cases hit the same early-return branch:
+      - offset == 0  → overpaid_fee == 0  (fee exactly matched reserve)
+      - offset > 0   → overpaid_fee < 0   (backend took more than the
+        reserve, e.g. an LNbits backend skimming a service fee on top
+        of the routing fee)
+    """
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_pay_invoice_state = ""
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+
+    mint_quote = await wallet.request_mint(100)
+    proofs = await wallet.mint(amount=100, quote_id=mint_quote.quote)
+
+    melt_quote = await wallet.melt_quote(invoice_64_sat)
+
+    total_provided = sum(p.amount for p in proofs)
+    input_fees = ledger.get_fees_for_proofs(proofs)
+    fee_reserve_provided = total_provided - melt_quote.amount - input_fees
+    fee_paid_sat = fee_reserve_provided + fee_paid_sat_offset
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def patched_pay_invoice(quote: MeltQuote, fee_limit_msat: int):
+        return PaymentResponse(
+            result=PaymentResult.SETTLED,
+            checking_id=quote.checking_id or "fake_checking_id",
+            fee=Amount(unit=Unit.sat, amount=fee_paid_sat),
+            preimage="0" * 64,
+        )
+
+    monkeypatch.setattr(backend, "pay_invoice", patched_pay_invoice)
+
+    n_change_outputs = 4
+    change_secrets, change_rs, _ = await wallet.generate_n_secrets(
+        n_change_outputs, skip_bump=True
+    )
+    change_outputs, _ = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+
+    response = await ledger.melt(
+        proofs=proofs, quote=melt_quote.quote, outputs=change_outputs
+    )
+
+    assert response.state == MeltQuoteState.paid.value
+    assert not response.change
+
+    orphans = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_quote.quote
+    )
+    assert orphans == [], (
+        f"Expected no orphan blank outputs for melt {melt_quote.quote}, "
+        f"got {len(orphans)} with B_s {[o.B_ for o in orphans]}"
+    )

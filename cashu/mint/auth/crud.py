@@ -124,8 +124,6 @@ class AuthLedgerCrud(ABC):
         b_: str,
         c_: str,
         id: str,
-        e: str = "",
-        s: str = "",
         conn: Optional[Connection] = None,
     ) -> None: ...
 
@@ -214,22 +212,18 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         b_: str,
         c_: str,
         id: str,
-        e: str = "",
-        s: str = "",
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('promises')}
-            (amount, b_, c_, dleq_e, dleq_s, id, created)
-            VALUES (:amount, :b_, :c_, :dleq_e, :dleq_s, :id, :created)
+            (amount, b_, c_, id, created)
+            VALUES (:amount, :b_, :c_, :id, :created)
             """,
             {
                 "amount": amount,
                 "b_": b_,
                 "c_": c_,
-                "dleq_e": e,
-                "dleq_s": s,
                 "id": id,
                 "created": db.to_timestamp(db.timestamp_now_str()),
             },

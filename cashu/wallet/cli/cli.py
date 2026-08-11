@@ -575,7 +575,7 @@ async def invoice(
     # user requests an invoice
     if amount and not id:
         mint_supports_websockets = wallet.mint_info.supports_websocket_mint_quote(
-            Method["bolt11"], wallet.unit
+            Method.bolt11, wallet.unit
         )
         if mint_supports_websockets and not no_check:
             mint_quote, subscription = await wallet.request_mint_with_callback(
@@ -821,6 +821,13 @@ async def balance(ctx: Context, verbose):
     help="Force swap token.",
     type=bool,
 )
+@click.option(
+    "--timelock",
+    "-t",
+    default=None,
+    help="Locktime in seconds after which the refund pubkey can claim the tokens.",
+    type=int,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
@@ -835,6 +842,7 @@ async def send_command(
     offline: bool,
     include_fees: bool,
     force_swap: bool,
+    timelock: Optional[int],
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(
@@ -850,6 +858,7 @@ async def send_command(
         memo=memo,
         force_swap=force_swap,
         refund_pubkeys=list(refund) if refund else None,
+        timelock_seconds=timelock,
     )
     await print_balance(ctx)
 
@@ -876,7 +885,8 @@ async def receive_cli(
         mint_url = token_obj.mint
         mint_wallet = await Wallet.with_db(
             mint_url,
-            os.path.join(settings.cashu_dir, wallet.name),
+            wallet.db.db_location,
+            name=wallet.name,
             unit=token_obj.unit,
             auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
@@ -1196,6 +1206,8 @@ async def lock_p2pk(ctx: Context, timelock: Optional[int], refund: tuple):
         print("")
 
     send_cmd = f"cashu send <amount> --lock {lock_str}"
+    if timelock:
+        send_cmd += f" --timelock {timelock}"
     if refund:
         for r in refund:
             send_cmd += f" --refund {r}"

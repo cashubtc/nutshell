@@ -36,6 +36,14 @@ async def wallet(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_landing_page():
+    response = httpx.get(f"{BASE_URL}/")
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "Cashu Mint" in response.text
+
+
+@pytest.mark.asyncio
 async def test_info(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -503,6 +511,10 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
         secret_counter - 1, secret_counter - 1
     )
     outputs, rs = wallet._construct_outputs([64], secrets, rs)
+    original_proof = next(
+        proof for proof in wallet.proofs if proof.secret == secrets[0]
+    )
+    assert original_proof.dleq
 
     payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
@@ -518,6 +530,9 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert len(restore_response.signatures) == 1
     assert len(restore_response.outputs) == 1
     assert restore_response.outputs == outputs
+    assert restore_response.signatures[0].dleq
+    assert restore_response.signatures[0].dleq.e == original_proof.dleq.e
+    assert restore_response.signatures[0].dleq.s == original_proof.dleq.s
 
 
 @pytest.mark.asyncio
@@ -574,9 +589,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert (
-        response.status_code == 200
-    ), f"{response.url} {response.status_code} {response.text}"
+    assert response.status_code == 200, (
+        f"{response.url} {response.status_code} {response.text}"
+    )
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64
@@ -625,3 +640,13 @@ async def test_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
 
     assert response.status_code == 400
     assert "does not match quote" in response.text
+
+
+def test_format_limit():
+    from cashu.mint.router import format_limit
+
+    assert format_limit(1_500_000, "sat") == "1.5M sat"
+    assert format_limit(1_000_000, "sat") == "1M sat"
+    assert format_limit(1_500, "sat") == "1.5K sat"
+    assert format_limit(1_000, "sat") == "1K sat"
+    assert format_limit(500, "sat") == "500 sat"

@@ -225,6 +225,11 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.state == MintQuoteState.paid
 
+    # Legacy paid quotes may not have a payment timestamp. Moving through
+    # PENDING and back to PAID must not invent one during rollback.
+    quote.paid_time = None
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
     previous_state = MintQuoteState.paid
     await ledger.db_write._set_mint_quote_pending(quote.quote)
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
@@ -243,6 +248,7 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     assert quote is not None
     assert quote.state == previous_state
     assert quote.state == MintQuoteState.paid
+    assert quote.paid_time is None
 
     # # set paid and mint again
     # quote.state = MintQuoteState.paid
@@ -287,7 +293,8 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump()
+            subId="subId",
+            payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).model_dump(),
         ).model_dump(),
     )
 
@@ -489,9 +496,10 @@ async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Led
 @pytest.mark.asyncio
 async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     import time
+
     # Create a mint quote
     mint_quote = await wallet.request_mint(128)
-    
+
     # Check that paid_time is None initially
     quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
@@ -501,7 +509,7 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
 
     # Simulate payment
     await pay_if_regtest(mint_quote.request)
-    
+
     # Trigger check at mint (this updates the state in DB)
     _ = await ledger.get_mint_quote(mint_quote.quote)
     # Check that paid_time is now set

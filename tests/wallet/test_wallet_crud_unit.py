@@ -61,6 +61,7 @@ def _proof(
     id: str = "keyset-id",
     mint_id: str | None = None,
     melt_id: str | None = None,
+    p2pk_e: str | None = None,
 ):
     return Proof(
         id=id,
@@ -69,6 +70,7 @@ def _proof(
         secret=secret,
         mint_id=mint_id,
         melt_id=melt_id,
+        p2pk_e=p2pk_e,
     )
 
 
@@ -156,6 +158,19 @@ async def test_proof_crud_update_and_invalidate_flow(wallet_db: Database):
     used = await get_proofs(db=wallet_db, table="proofs_used")
     assert len(used) == 1
     assert used[0].secret == proof.secret
+
+
+@pytest.mark.asyncio
+async def test_invalidate_proof_persists_p2pk_e(wallet_db: Database):
+    ephemeral_pubkey = PrivateKey().public_key.format(compressed=True).hex()
+    proof = _proof("secret-p2bk", p2pk_e=ephemeral_pubkey)
+    await store_proof(proof, db=wallet_db)
+
+    await invalidate_proof(proof, db=wallet_db)
+
+    used = await get_proofs(db=wallet_db, table="proofs_used")
+    assert len(used) == 1
+    assert used[0].p2pk_e == ephemeral_pubkey
 
 
 @pytest.mark.asyncio

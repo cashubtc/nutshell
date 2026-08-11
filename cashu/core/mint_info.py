@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 from .base import Method, Unit
+from .json_rpc.base import JSONRPCSubscriptionKinds
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
 from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
 
@@ -76,7 +77,10 @@ class MintInfo(BaseModel):
         websocket_supported = websocket_settings["supported"]
         for entry in websocket_supported:
             if entry["method"] == method.name and entry["unit"] == unit.name:
-                if "bolt11_mint_quote" in entry["commands"]:
+                if (
+                    JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value
+                    in entry["commands"]
+                ):
                     return True
         return False
 

@@ -184,9 +184,10 @@ async def test_request_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
+    mint_request = mint_quote.request
     await pay_if_regtest(mint_quote.request)
     mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
-    assert mint_quote.request == mint_quote.request
+    assert mint_quote.request == mint_request
     assert mint_quote.state == MintQuoteState.paid
 
     expected_proof_amounts = wallet1.split_wallet_state(64)

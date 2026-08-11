@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
-VERSION = "0.20.2"
+VERSION = "0.20.3"
 
 
 def find_env_file():
@@ -117,6 +117,10 @@ class MintBackends(MintSettings):
     mint_lnbits_key: Optional[str] = Field(default=None)
     mint_strike_key: Optional[str] = Field(default=None)
     mint_blink_key: Optional[str] = Field(default=None)
+
+    mint_spark_network: str = Field(default="TESTNET")
+    mint_spark_api_key: Optional[str] = Field(default=None)
+    mint_spark_mnemonic: Optional[str] = Field(default=None)
 
 
 class MintLimits(MintSettings):
@@ -284,7 +288,6 @@ class WalletSettings(CashuSettings):
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
-    wallet_use_deprecated_h2c: bool = Field(default=False)
     wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
@@ -312,12 +315,14 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=True)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rpc_cert: Optional[str] = Field(default=None)
     mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class CLNRestFundingSource(MintSettings):
