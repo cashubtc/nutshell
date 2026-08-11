@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Tuple
 
 import bolt11
@@ -6,12 +7,12 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import TokenV4
+from cashu.core.p2pk import P2PKSecret
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 from tests.helpers import (
     get_real_invoice,
-    is_deprecated_api_only,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -57,6 +58,7 @@ async def reset_invoices(wallet: Wallet):
 
 async def init_wallet():
     settings.debug = False
+    assert settings.mint_url
     wallet = await Wallet.with_db(
         url=settings.mint_url,
         db="test_data/test_cli_wallet",
@@ -135,9 +137,6 @@ def test_pay_invoice_regtest(mint, cli_prefix):
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 def test_invoice(mint, cli_prefix):
-    if settings.debug_mint_only_deprecated:
-        pytest.skip("only works with v1 API")
-
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -151,9 +150,6 @@ def test_invoice(mint, cli_prefix):
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 def test_invoice_verbose(mint, cli_prefix):
-    if settings.debug_mint_only_deprecated:
-        pytest.skip("only works with v1 API")
-
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -189,7 +185,6 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.skipif(is_deprecated_api_only, reason="only works with v1 API")
 def test_invoice_with_memo(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -514,7 +509,9 @@ def test_send_too_much(mint, cli_prefix):
     assert "Balance too low" in str(result.exception)
 
 
-@pytest.mark.skip(reason="Test uses hardcoded token that doesn't match current mint keysets. Should be rewritten to generate token dynamically.")
+@pytest.mark.skip(
+    reason="Test uses hardcoded token that doesn't match current mint keysets. Should be rewritten to generate token dynamically."
+)
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICI0NzlkY2E0MzUzNzU4MTM4N2Q1ODllMDU1MGY0Y2Q2MjFmNjE0MDM1MGY5M2Q4ZmI1OTA2YjJlMGRiNmRjYmI3IiwgIkMiOiAiMDM1MGQ0ZmI0YzdiYTMzNDRjMWRjYWU1ZDExZjNlNTIzZGVkOThmNGY4ODdkNTQwZmYyMDRmNmVlOWJjMjkyZjQ1In0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIjZjNjAzNDgwOGQyNDY5N2IyN2YxZTEyMDllNjdjNjVjNmE2MmM2Zjc3NGI4NWVjMGQ5Y2Y3MjE0M2U0NWZmMDEiLCAiQyI6ICIwMjZkNDlhYTE0MmFlNjM1NWViZTJjZGQzYjFhOTdmMjE1MDk2NTlkMDE3YWU0N2FjNDY3OGE4NWVkY2E4MGMxYmQifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyJ9XX0="  # noqa
@@ -687,6 +684,76 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
 
 
+def test_send_with_lock_and_timelock(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    lock = None
+    for word in result.output.split(" "):
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+
+    before = int(time.time())
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--lock", lock, "--timelock", "5"],
+    )
+    after = int(time.time())
+    assert result.exception is None
+    print("test_send_with_lock_and_timelock", result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    secret = P2PKSecret.from_secret(
+        P2PKSecret.deserialize(token.token[0].proofs[0].secret)
+    )
+    assert secret.locktime is not None
+    assert before + 5 <= secret.locktime <= after + 5
+
+
+def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    lock = None
+    for word in result.output.split(" "):
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+
+    before = int(time.time())
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--lock", lock],
+    )
+    after = int(time.time())
+    assert result.exception is None
+    print("test_send_with_lock_uses_locktime_delta_seconds_by_default", result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    secret = P2PKSecret.from_secret(
+        P2PKSecret.deserialize(token.token[0].proofs[0].secret)
+    )
+    assert secret.locktime is not None
+    assert (
+        before + settings.locktime_delta_seconds
+        <= secret.locktime
+        <= after + settings.locktime_delta_seconds
+    )
+
+
 def mint_tokens(runner, cli_prefix, amount: str):
     result = runner.invoke(
         cli,
@@ -705,7 +772,9 @@ def mint_tokens(runner, cli_prefix, amount: str):
 
 def test_proofs_basic(cli_prefix):
     """Test basic proofs command functionality"""
-    runner = CliRunner(mix_stderr=False)  # Separate stdout/stderr, as we want to verify only stdout
+    runner = CliRunner(
+        mix_stderr=False
+    )  # Separate stdout/stderr, as we want to verify only stdout
 
     # First create some tokens like other tests do
     mint_tokens(runner, cli_prefix, "64")
@@ -724,6 +793,7 @@ def test_proofs_basic(cli_prefix):
 
     # Should be valid JSON
     import json
+
     proofs = json.loads(json_output)
     assert isinstance(proofs, list)
     assert len(proofs) > 0, "Should have proofs after minting tokens"
@@ -731,7 +801,7 @@ def test_proofs_basic(cli_prefix):
 
     # Each proof should have the expected fields
     for proof in proofs:
-        assert sorted(proof.keys()) == ['C', 'amount', 'dleq', 'id', 'secret']
+        assert sorted(proof.keys()) == ["C", "amount", "dleq", "id", "secret"]
 
 
 def test_proofs_json_structure(cli_prefix):
@@ -802,9 +872,9 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
         assert isinstance(proof["amount"], int), "'amount' should be integer"
         assert isinstance(proof["secret"], str), "'secret' should be string"
         assert isinstance(proof["C"], str), "'C' should be string"
-        assert (
-            "dleq" not in proof
-        ), "proof should not contain 'dleq' field with --no-dleq"
+        assert "dleq" not in proof, (
+            "proof should not contain 'dleq' field with --no-dleq"
+        )
 
 
 def test_proofs_with_keyset_filter(cli_prefix):
@@ -842,9 +912,9 @@ def test_proofs_with_keyset_filter(cli_prefix):
 
     # All filtered proofs should have the same keyset ID
     for proof in filtered_proofs:
-        assert (
-            proof["id"] == test_keyset
-        ), f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+        assert proof["id"] == test_keyset, (
+            f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+        )
 
     # Filter with a non-existent keyset, to make sure nothing is returned
     import secrets
@@ -893,9 +963,9 @@ def test_proofs_with_all_flag(cli_prefix):
     all_proofs = json.loads(result_all.stdout.strip())
 
     # All proofs should include at least the same number as available proofs
-    assert len(all_proofs) > len(
-        available_proofs
-    ), "--all should have more proofs, as it includes the reserved proofs"
+    assert len(all_proofs) > len(available_proofs), (
+        "--all should have more proofs, as it includes the reserved proofs"
+    )
 
     print(f"Available proofs: {len(available_proofs)}, All proofs: {len(all_proofs)}")
 
@@ -903,6 +973,6 @@ def test_proofs_with_all_flag(cli_prefix):
     available_secrets = {proof["secret"] for proof in available_proofs}
     all_secrets = {proof["secret"] for proof in all_proofs}
 
-    assert available_secrets.issubset(
-        all_secrets
-    ), "all available proofs should be included in --all"
+    assert available_secrets.issubset(all_secrets), (
+        "all available proofs should be included in --all"
+    )

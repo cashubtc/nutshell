@@ -3,9 +3,8 @@ from typing import List
 import pytest
 
 from cashu.core.base import BlindedMessage, Proof
+from cashu.core.errors import TransactionError
 from cashu.core.nuts import nut11
-from cashu.core.p2pk import P2PKSecret
-from cashu.core.secret import Secret
 from cashu.mint.conditions import LedgerSpendingConditions
 
 
@@ -36,12 +35,8 @@ def test_sig_inputs_valid_signature():
         "witness": '{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}',
     }
     proof = _proof_from_dict(proof_dict)
-
-    secret = Secret.deserialize(proof.secret)
-    p2pk_secret = P2PKSecret.from_secret(secret)
-
     cond = LedgerSpendingConditions()
-    assert cond._verify_p2pk_sig_inputs(proof, p2pk_secret) is True
+    assert cond._verify_input_spending_conditions(proof) is True
 
 
 def test_sig_inputs_invalid_signature_different_secret():
@@ -53,11 +48,9 @@ def test_sig_inputs_invalid_signature_different_secret():
         "witness": '{"signatures":["83564aca48c668f50d022a426ce0ed19d3a9bdcffeeaee0dc1e7ea7e98e9eff1840fcc821724f623468c94f72a8b0a7280fa9ef5a54a1b130ef3055217f467b3"]}',
     }
     proof = _proof_from_dict(proof_dict)
-    secret = Secret.deserialize(proof.secret)
-    p2pk_secret = P2PKSecret.from_secret(secret)
     cond = LedgerSpendingConditions()
-    with pytest.raises(Exception):
-        cond._verify_p2pk_sig_inputs(proof, p2pk_secret)
+    with pytest.raises(TransactionError):
+        cond._verify_input_spending_conditions(proof)
 
 
 def test_sig_inputs_multisig_two_signatures_valid():
@@ -69,10 +62,8 @@ def test_sig_inputs_multisig_two_signatures_valid():
         "witness": '{"signatures":["83564aca48c668f50d022a426ce0ed19d3a9bdcffeeaee0dc1e7ea7e98e9eff1840fcc821724f623468c94f72a8b0a7280fa9ef5a54a1b130ef3055217f467b3","9a72ca2d4d5075be5b511ee48dbc5e45f259bcf4a4e8bf18587f433098a9cd61ff9737dc6e8022de57c76560214c4568377792d4c2c6432886cc7050487a1f22"]}',
     }
     proof = _proof_from_dict(proof_dict)
-    secret = Secret.deserialize(proof.secret)
-    p2pk_secret = P2PKSecret.from_secret(secret)
     cond = LedgerSpendingConditions()
-    assert cond._verify_p2pk_sig_inputs(proof, p2pk_secret) is True
+    assert cond._verify_input_spending_conditions(proof) is True
 
 
 def test_sig_inputs_multisig_one_signature_invalid():
@@ -84,11 +75,9 @@ def test_sig_inputs_multisig_one_signature_invalid():
         "witness": '{"signatures":["83564aca48c668f50d022a426ce0ed19d3a9bdcffeeaee0dc1e7ea7e98e9eff1840fcc821724f623468c94f72a8b0a7280fa9ef5a54a1b130ef3055217f467b3"]}',
     }
     proof = _proof_from_dict(proof_dict)
-    secret = Secret.deserialize(proof.secret)
-    p2pk_secret = P2PKSecret.from_secret(secret)
     cond = LedgerSpendingConditions()
-    with pytest.raises(Exception):
-        cond._verify_p2pk_sig_inputs(proof, p2pk_secret)
+    with pytest.raises(TransactionError):
+        cond._verify_input_spending_conditions(proof)
 
 
 def test_sig_inputs_refund_after_locktime_valid():
@@ -100,10 +89,8 @@ def test_sig_inputs_refund_after_locktime_valid():
         "witness": '{"signatures":["710507b4bc202355c91ea3c147c0d0189c75e179d995e566336afd759cb342bcad9a593345f559d9b9e108ac2c9b5bd9f0b4b6a295028a98606a0a2e95eb54f7"]}',
     }
     proof = _proof_from_dict(proof_dict)
-    secret = Secret.deserialize(proof.secret)
-    p2pk_secret = P2PKSecret.from_secret(secret)
     cond = LedgerSpendingConditions()
-    assert cond._verify_p2pk_sig_inputs(proof, p2pk_secret) is True
+    assert cond._verify_input_spending_conditions(proof) is True
 
 
 def test_sig_inputs_refund_before_locktime_invalid():
@@ -115,11 +102,9 @@ def test_sig_inputs_refund_before_locktime_invalid():
         "witness": '{"signatures":["f661d3dc046d636d47cb3d06586da42c498f0300373d1c2a4f417a44252cdf3809bce207c8888f934dba0d2b1671f1b8622d526840f2d5883e571b462630c1ff"]}',
     }
     proof = _proof_from_dict(proof_dict)
-    secret = Secret.deserialize(proof.secret)
-    p2pk_secret = P2PKSecret.from_secret(secret)
     cond = LedgerSpendingConditions()
-    with pytest.raises(Exception):
-        cond._verify_p2pk_sig_inputs(proof, p2pk_secret)
+    with pytest.raises(TransactionError):
+        cond._verify_input_spending_conditions(proof)
 
 
 # --- SIG_ALL (Swap) Test Vectors ---
@@ -143,7 +128,7 @@ def test_sig_all_swap_valid_single_signature():
     proofs = [_proof_from_dict(input_dict)]
     outputs = _outputs_from_list(output_dicts)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outputs) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outputs) is True
 
 
 def test_sig_all_swap_invalid_pubkeys_and_refund_mixed():
@@ -169,8 +154,8 @@ def test_sig_all_swap_invalid_pubkeys_and_refund_mixed():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    with pytest.raises(Exception):
-        cond._verify_sigall_spending_conditions(proofs, outs)
+    with pytest.raises(TransactionError):
+        cond._verify_input_output_spending_conditions(proofs, outs)
 
 
 def test_sig_all_swap_refund_after_locktime_valid():
@@ -191,7 +176,7 @@ def test_sig_all_swap_refund_after_locktime_valid():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outs) is True
 
 
 # --- SIG_ALL (HTLC) Test Vectors ---
@@ -215,7 +200,7 @@ def test_sig_all_htlc_valid_pubkey():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outs) is True
 
 
 def test_sig_all_swap_message_example():
@@ -285,8 +270,8 @@ def test_sig_all_htlc_refund_before_locktime_invalid():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    with pytest.raises(Exception):
-        cond._verify_sigall_spending_conditions(proofs, outs)
+    with pytest.raises(TransactionError):
+        cond._verify_input_output_spending_conditions(proofs, outs)
 
 
 def test_sig_all_htlc_multisig_refund_after_locktime_valid():
@@ -307,7 +292,7 @@ def test_sig_all_htlc_multisig_refund_after_locktime_valid():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outs) is True
 
 
 # --- SIG_ALL (Melt) Test Vectors ---
@@ -332,7 +317,7 @@ def test_sig_all_melt_valid_single_signature():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs, quote_id=quote_id) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outs, quote_id) is True
 
 
 def test_sig_all_melt_multisig_valid():
@@ -354,7 +339,7 @@ def test_sig_all_melt_multisig_valid():
     proofs = [_proof_from_dict(input_dict)]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs, quote_id=quote_id) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outs, quote_id) is True
 
 
 def test_sig_all_swap_invalid_multiple_secrets():
@@ -393,7 +378,8 @@ def test_sig_all_swap_invalid_multiple_secrets():
     proofs = [_proof_from_dict(i) for i in inputs]
     outs = _outputs_from_list(outputs)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outs) is False
+    with pytest.raises(TransactionError, match="not all secrets are equal"):
+        cond._verify_input_output_spending_conditions(proofs, outs)
 
 
 def test_sig_all_swap_multisig_valid():
@@ -414,7 +400,7 @@ def test_sig_all_swap_multisig_valid():
     proofs = [_proof_from_dict(input_dict)]
     outputs = _outputs_from_list(output_dicts)
     cond = LedgerSpendingConditions()
-    assert cond._verify_sigall_spending_conditions(proofs, outputs) is True
+    assert cond._verify_input_output_spending_conditions(proofs, outputs) is True
 
 
 # --- SIG_ALL v1 (length-framed) message vectors ---

@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
-VERSION = "0.20.2"
+VERSION = "0.20.3"
 
 
 def find_env_file():
@@ -43,7 +43,6 @@ class EnvSettings(CashuSettings):
     log_level: str = Field(default="INFO")
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
-    debug_mint_only_deprecated: bool = Field(default=False)
     db_backup_path: Optional[str] = Field(default=None)
     db_connection_pool: bool = Field(default=True)
 
@@ -316,12 +315,14 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=True)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rpc_cert: Optional[str] = Field(default=None)
     mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class CLNRestFundingSource(MintSettings):

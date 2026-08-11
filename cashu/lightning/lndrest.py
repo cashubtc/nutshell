@@ -210,6 +210,7 @@ class LndRestWallet(LightningBackend):
             "fee_limit_msat": str(fee_limit_msat),
             "timeout_seconds": PAYMENT_TIMEOUT_SECONDS,
             "no_inflight_updates": True,
+            "allow_self_payment": settings.mint_lnd_allow_self_payment,
         }
 
         async with self.client.stream(

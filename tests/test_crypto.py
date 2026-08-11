@@ -443,7 +443,7 @@ def test_nut29_test_vector():
     from cashu.core.base import BlindedMessage
     from cashu.core.nuts import nut20
 
-    quote_id = "locked-quote"
+    quote_id = "019e6d5a-2347-7000-8c81-a1e0dbf3299f"
     outputs = [
         BlindedMessage(
             amount=1,
@@ -460,12 +460,12 @@ def test_nut29_test_vector():
     privkey_hex = "0000000000000000000000000000000000000000000000000000000000000001"
     expected_msg_to_sign = bytes.fromhex(
         "43617368755f4d696e7451756f74655369675f7631"
-        "0000000c6c6f636b65642d71756f7465"
+        "0000002430313965366435612d323334372d373030302d386338312d613165306462663332393966"
         "000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2"
         "000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59"
     )
-    expected_hash = "03dc68d6617bba502d8648efd0965bf393841082cf04fd03e5de4bcb5777cdfc"
-    expected_sig = "a913e48177027d87e0e38c6f2021763c46997ff4866a4b63ebca800b0776b28519eab37377cf9bc1869e489d7b25747b7a998eaa1c33c2cac7fa168449d8267a"
+    expected_hash = "dad25acc587637206d73398894d337f983a0ca644746e8673727eaa0b29fa9b4"
+    expected_sig = "0c39431338a0202568b9a1d4215c99f179cbb8ee5472ac5ae7133fbb8f99cafbb9e425ad33c60224c96b8f9f984f004379a18e9558468d129b6b03f0da6de162"
 
     msg_hash = nut20.construct_message(quote_id, outputs)
     assert sha256(expected_msg_to_sign).hexdigest() == expected_hash

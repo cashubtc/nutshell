@@ -183,8 +183,6 @@ class LedgerCrud(ABC):
         amount: int,
         b_: str,
         c_: str,
-        e: str = "",
-        s: str = "",
         conn: Optional[Connection] = None,
     ) -> None: ...
 
@@ -194,6 +192,7 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         melt_id: str,
+        signed: bool = False,
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]: ...
 
@@ -372,12 +371,14 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         melt_id: str,
+        signed: bool = False,
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema("promises")}
-            WHERE melt_quote = :melt_id AND c_ IS NULL
+            WHERE melt_quote = :melt_id
+                AND c_ IS {'NOT NULL' if signed else 'NULL'}
             ORDER BY order_index ASC
             """,
             {"melt_id": melt_id},
@@ -426,8 +427,6 @@ class LedgerCrudSqlite(LedgerCrud):
         amount: int,
         b_: str,
         c_: str,
-        e: str = "",
-        s: str = "",
         conn: Optional[Connection] = None,
     ) -> None:
         existing = await (conn or db).fetchone(
@@ -443,15 +442,13 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             UPDATE {db.table_with_schema("promises")}
-            SET amount = :amount, c_ = :c_, dleq_e = :dleq_e, dleq_s = :dleq_s, signed_at = :signed_at
+            SET amount = :amount, c_ = :c_, signed_at = :signed_at
             WHERE b_ = :b_;
             """,
             {
                 "b_": b_,
                 "amount": amount,
                 "c_": c_,
-                "dleq_e": e,
-                "dleq_s": s,
                 "signed_at": db.to_timestamp(db.timestamp_now_str()),
             },
         )
