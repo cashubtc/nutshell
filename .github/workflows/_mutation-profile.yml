@@ -42,8 +42,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          timeout --signal=INT --kill-after=2m 340m \
-            make mutation MUTATION_TARGET='${{ inputs.target }}' 2>&1 \
+          PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+            MUTATION_TESTING=true TOR=false \
+            timeout --signal=INT --kill-after=2m 340m \
+            poetry run mutmut run '${{ inputs.target }}' 2>&1 \
             | tee 'mutation-${{ inputs.profile }}.log'
 
       - name: Create mutation report

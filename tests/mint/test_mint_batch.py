@@ -26,12 +26,6 @@ async def wallet(ledger: Ledger):
     yield wallet1
 
 
-@pytest.fixture(autouse=True)
-def setup_settings():
-    settings.debug_mint_only_deprecated = False
-    yield
-
-
 @pytest.mark.asyncio
 async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
     await wallet.load_mint()
@@ -159,9 +153,7 @@ async def test_ledger_mint_batch_race(ledger: Ledger, wallet: Wallet):
     )
 
     results = await asyncio.gather(
-        ledger.mint_batch(req),
-        ledger.mint_batch(req),
-        return_exceptions=True
+        ledger.mint_batch(req), ledger.mint_batch(req), return_exceptions=True
     )
 
     successes = [r for r in results if not isinstance(r, Exception)]
@@ -196,7 +188,7 @@ async def test_ledger_mint_batch_race_permutations(ledger: Ledger, wallet: Walle
         outputs=outputs,
         signatures=[sig1, sig2],
     )
-    
+
     # Different permutation
     req2 = PostMintBatchRequest(
         quotes=[mint_quote2.quote, mint_quote1.quote],
@@ -206,9 +198,7 @@ async def test_ledger_mint_batch_race_permutations(ledger: Ledger, wallet: Walle
     )
 
     results = await asyncio.gather(
-        ledger.mint_batch(req1),
-        ledger.mint_batch(req2),
-        return_exceptions=True
+        ledger.mint_batch(req1), ledger.mint_batch(req2), return_exceptions=True
     )
 
     successes = [r for r in results if not isinstance(r, Exception)]
@@ -216,9 +206,11 @@ async def test_ledger_mint_batch_race_permutations(ledger: Ledger, wallet: Walle
 
     assert len(successes) == 1, f"Expected 1 success, got {len(successes)}"
     assert len(exceptions) == 1, f"Expected 1 exception, got {len(exceptions)}"
-    
+
     # Ensure the exception is not a timeout or deadlock error but a transaction error
-    assert any("already pending" in str(e) or "already issued" in str(e) for e in exceptions), f"Unexpected exception: {exceptions}"
+    assert any(
+        "already pending" in str(e) or "already issued" in str(e) for e in exceptions
+    ), f"Unexpected exception: {exceptions}"
 
 
 @pytest.mark.asyncio
@@ -230,7 +222,9 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
     await pay_if_regtest(mint_quote1.request)
     await pay_if_regtest(mint_quote2.request)
 
-    secrets, rs_gen, derivation_paths = await wallet.generate_secrets_from_to(10000, 10002)
+    secrets, rs_gen, derivation_paths = await wallet.generate_secrets_from_to(
+        10000, 10002
+    )
     outputs, _ = wallet._construct_outputs([64, 32], secrets[:2], rs_gen[:2])
 
     assert mint_quote1.privkey
@@ -247,12 +241,16 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
     )
 
     outputs_normal, _ = wallet._construct_outputs([64], [secrets[2]], [rs_gen[2]])
-    sig_normal = nut20.sign_mint_quote(mint_quote1.quote, outputs_normal, mint_quote1.privkey)
+    sig_normal = nut20.sign_mint_quote(
+        mint_quote1.quote, outputs_normal, mint_quote1.privkey
+    )
 
     results = await asyncio.gather(
         ledger.mint_batch(req_batch),
-        ledger.mint(outputs=outputs_normal, quote_id=mint_quote1.quote, signature=sig_normal),
-        return_exceptions=True
+        ledger.mint(
+            outputs=outputs_normal, quote_id=mint_quote1.quote, signature=sig_normal
+        ),
+        return_exceptions=True,
     )
 
     successes = [r for r in results if not isinstance(r, Exception)]
@@ -301,7 +299,9 @@ def test_mint_batch_and_check_validation():
 
 
 @pytest.mark.asyncio
-async def test_ledger_mint_batch_post_sign_failure_leaves_pending(ledger: Ledger, wallet: Wallet, monkeypatch):
+async def test_ledger_mint_batch_post_sign_failure_leaves_pending(
+    ledger: Ledger, wallet: Wallet, monkeypatch
+):
     from cashu.core.base import MintQuoteState
 
     await wallet.load_mint()
@@ -355,8 +355,10 @@ async def test_ledger_mint_batch_post_sign_failure_leaves_pending(ledger: Ledger
 
     # Re-minting with the same quotes should fail because they are PENDING (which prevents double-issuance)
     monkeypatch.undo()  # restore original unset_mint_quotes_pending so we can attempt a normal mint, but it should fail on pending check
-    
-    secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(10002, 10003)
+
+    secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
+        10002, 10003
+    )
     outputs2, rs2 = wallet._construct_outputs([64, 32], secrets2, rs2)
     sig1_2 = nut20.sign_mint_quote(mint_quote1.quote, outputs2, mint_quote1.privkey)
     sig2_2 = nut20.sign_mint_quote(mint_quote2.quote, outputs2, mint_quote2.privkey)
@@ -624,9 +626,9 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     q1_after = await ledger.crud.get_mint_quote(
         quote_id=mint_quote1.quote, db=ledger.db
     )
-    assert (
-        q1_after.state.value == "PAID"
-    ), f"Quote1 should still be PAID, got {q1_after.state.value}"
+    assert q1_after.state.value == "PAID", (
+        f"Quote1 should still be PAID, got {q1_after.state.value}"
+    )
 
     secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
         10002, 10002

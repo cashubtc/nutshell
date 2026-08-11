@@ -43,29 +43,6 @@ test-mint:
 	DEBUG=true \
 	poetry run pytest tests/mint --cov-report xml --cov cashu
 
-mutation:
-	PYTHONUNBUFFERED=1 \
-	DEBUG=true \
-	MINT_BACKEND_BOLT11_SAT=FakeWallet \
-	MUTATION_TESTING=true \
-	TOR=false \
-	poetry run mutmut run $(if $(MUTATION_TARGET),"$(MUTATION_TARGET)")
-
-mutation-results:
-	poetry run mutmut results
-
-mutation-stats:
-	poetry run mutmut export-cicd-stats
-
-test-lndrest:
-	PYTHONUNBUFFERED=1 \
-	DEBUG=true \
-	MINT_BACKEND_BOLT11_SAT=LndRestWallet \
-	MINT_LND_REST_ENDPOINT=https://localhost:8081/ \
-	MINT_LND_REST_CERT=../cashu-regtest-enviroment/data/lnd-3/tls.cert \
-	MINT_LND_REST_MACAROON=../cashu-regtest-enviroment/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon \
-	poetry run pytest tests/test_cli.py --cov-report xml --cov cashu
-
 install:
 	make clean
 	python setup.py sdist bdist_wheel

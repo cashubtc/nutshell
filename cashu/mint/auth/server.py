@@ -13,6 +13,7 @@ from ...core.errors import (
     BlindAuthRateLimitExceededError,
     ClearAuthFailedError,
 )
+from ...core.nuts import nut10
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
@@ -231,6 +232,13 @@ class AuthLedger(Ledger):
         """
         try:
             proof = AuthProof.from_base64(blind_auth_token).to_proof()
+            condition = nut10.parse_spending_condition(proof.secret)
+            if condition is not None:
+                logger.warning(
+                    "Blind-auth token uses a NUT-10-style secret, but blind-auth "
+                    "does not enforce spending conditions in this path. Treating it "
+                    "as a plain secret."
+                )
             await self.verify_inputs_and_outputs(proofs=[proof])
             await self.db_write._verify_spent_proofs_and_set_pending(
                 [proof], self.keysets

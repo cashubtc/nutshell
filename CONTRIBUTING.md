@@ -44,7 +44,8 @@ to the production code. Nutshell uses
 Run the mutation-testing pilot with:
 
 ```bash
-make mutation
+PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+  MUTATION_TESTING=true TOR=false poetry run mutmut run
 ```
 
 The profiles cover each complete production subsystem: core, mint, wallet,
@@ -55,12 +56,15 @@ For a function-specific rerun within the configured scope, pass a Mutmut
 wildcard:
 
 ```bash
-make mutation MUTATION_TARGET='cashu.core.split*'
+PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+  MUTATION_TESTING=true TOR=false \
+  poetry run mutmut run 'cashu.core.split*'
 ```
 
 Mutmut stores incremental results in the ignored `mutants/` directory. View
-surviving mutants with `make mutation-results`, or create the machine-readable
-`mutants/mutmut-cicd-stats.json` report with `make mutation-stats`. Use
+surviving mutants with `poetry run mutmut results`, or create the machine-readable
+`mutants/mutmut-cicd-stats.json` report with
+`poetry run mutmut export-cicd-stats`. Use
 `poetry run mutmut show <mutant-name>` to inspect a mutant and
 `poetry run mutmut apply <mutant-name>` to apply it temporarily for debugging.
 Only apply mutants in a clean worktree.
@@ -140,7 +144,3 @@ MINT_CORELIGHTNING_REST_CERT=../cashu-regtest-enviroment/data/clightning-2-rest/
 ### Profiling
 
 If you'd like to profile your code (measure how long steps take to execute), run the mint using `DEBUG_PROFILING=TRUE`. Make sure to turn this off again, as your application will be significantly slower with profiling enabled.
-
-### V0 API only
-
-To run the mint with only V0 API support (deprecated), use `DEBUG_MINT_ONLY_DEPRECATED=TRUE`
