@@ -316,12 +316,14 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=True)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rpc_cert: Optional[str] = Field(default=None)
     mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class CLNRestFundingSource(MintSettings):

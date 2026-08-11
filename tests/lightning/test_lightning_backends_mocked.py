@@ -425,6 +425,51 @@ async def test_lndrest_pay_invoice_settled_reads_stream_result(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("enabled, expected", [(True, True), (False, False)])
+async def test_lndrest_pay_invoice_sends_allow_self_payment(
+    monkeypatch, enabled, expected
+):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    captured: dict[str, Any] = {}
+
+    lines = [
+        json.dumps(
+            {
+                "result": {
+                    "status": "SUCCEEDED",
+                    "payment_hash": "11" * 32,
+                    "fee_msat": "7",
+                    "payment_preimage": "ab" * 32,
+                }
+            }
+        )
+    ]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            captured["json"] = json
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.settings.mint_lnd_allow_self_payment",
+        enabled,
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.SETTLED
+    assert captured["json"]["allow_self_payment"] is expected
+
+
+@pytest.mark.asyncio
 async def test_lndrest_pay_invoice_returns_failed_on_payment_failure(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat
