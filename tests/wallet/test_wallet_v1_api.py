@@ -303,7 +303,7 @@ async def test_init_sets_tor_proxy_when_enabled(monkeypatch, api: LedgerAPI):
 
     await api._init_s()
 
-    assert created_kwargs["proxies"] == {"all://": "socks5://localhost:9050"}
+    assert created_kwargs["proxy"] == "socks5://localhost:9050"
     assert FakeTorProxy.run_calls == 1
 
 
@@ -322,7 +322,7 @@ async def test_init_uses_configured_socks_proxy(monkeypatch, api: LedgerAPI):
 
     await api._init_s()
 
-    assert created_kwargs["proxies"] == {"all://": "socks5://127.0.0.1:19050"}
+    assert created_kwargs["proxy"] == "socks5://127.0.0.1:19050"
 
 
 @pytest.mark.asyncio
@@ -564,7 +564,9 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(
+    monkeypatch, api: LedgerAPI
+):
     async def fake_request(self, method, path, **kwargs):
         if path == "keysets":
             return _response(

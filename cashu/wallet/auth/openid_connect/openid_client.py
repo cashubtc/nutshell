@@ -139,8 +139,9 @@ class OpenIDClient:
             if "error_description" in params:
                 error_str += f": {params['error_description']}"
             return self.templates.TemplateResponse(
+                request,
                 "error.html",
-                {"request": request, "error": error_str},
+                {"error": error_str},
             )
         elif "code" in params and "state" in params:
             code: str = params["code"]
@@ -154,8 +155,9 @@ class OpenIDClient:
             return response
         else:
             return self.templates.TemplateResponse(
+                request,
                 "error.html",
-                {"request": request, "error": "Missing 'code' or 'state' parameter"},
+                {"error": "Missing 'code' or 'state' parameter"},
             )
 
     async def exchange_code_for_token(self, code: str) -> Dict[str, Any]:
@@ -352,8 +354,8 @@ class OpenIDClient:
         self, request: Request, token_data: Dict[str, Any]
     ) -> HTMLResponse:
         """Render an HTML page with a green check mark and user information."""
-        context = {"request": request, "token_data": token_data}
-        return self.templates.TemplateResponse("success.html", context)
+        context = {"token_data": token_data}
+        return self.templates.TemplateResponse(request, "success.html", context)
 
     async def authenticate_with_device_code(self) -> None:
         """Authenticate using the device code flow."""
