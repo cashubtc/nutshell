@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from types import SimpleNamespace
 from typing import List, Union
@@ -111,7 +112,7 @@ async def test_get_keys(wallet1: Wallet):
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
     assert (
         keyset.id
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+        == "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
     )
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
@@ -466,8 +467,6 @@ async def test_split_race_condition(wallet1: Wallet):
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     # run two splits in parallel
-    import asyncio
-
     await assert_err_multiple(
         asyncio.gather(
             wallet1.split(wallet1.proofs, 20),
@@ -558,11 +557,11 @@ async def test_token_state(wallet1: Wallet):
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
     assert list(wallet1.keysets.keys()) == [
-        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+        "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
     ]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
     await wallet1.activate_keyset(
-        keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+        keyset_id="022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
     )
     # expect deprecated keyset id to be present
     await assert_err(
@@ -620,7 +619,7 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     real_keyset_id = list(wallet1.keysets.keys())[0]
 
     # Seed a second fake keyset in the DB so we have 2 keysets
-    fake_keyset_id = "01" + "f" * 62
+    fake_keyset_id = real_keyset_id[:2] + "f" * (len(real_keyset_id) - 2)
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,
@@ -676,7 +675,7 @@ async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
     """
 
     real_keyset_id = list(wallet1.keysets.keys())[0]
-    fake_keyset_id = "01" + "e" * 62
+    fake_keyset_id = real_keyset_id[:2] + "e" * (len(real_keyset_id) - 2)
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,
