@@ -40,17 +40,11 @@ class PostMeltQuoteRequest(BaseModel):
 class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
-    unit: Optional[
-        str
-    ]  # input unit (optional for BACKWARDS COMPAT mint response < 0.17.0)
-    method: Optional[str] = (
-        None  # payment method (optional for BACKWARDS COMPAT mint response < 0.20.1)
-    )
-    request: Optional[
-        str
-    ]  # output payment request (optional for BACKWARDS COMPAT mint response < 0.17.0)
+    unit: str  # input unit
+    method: str  # payment method
+    request: str  # output payment request
     fee_reserve: int  # input fee reserve
-    state: Optional[str]  # state of the quote
+    state: str  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None  # NUT-08 change
