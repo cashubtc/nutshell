@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import re
 import secrets
 import time
 import uuid
@@ -280,21 +281,34 @@ def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> D
 def derive_keyset_id_v3(
     keys: Dict[int, BlsPublicKey], 
     unit: str, 
-    final_expiry: Optional[int] = None,
     input_fee_ppk: int = 0,
 ) -> str:
     """
     Deterministic derivation keyset_id v3 from set of BLS public keys (version 02).
+
+    Length-framed preimage per NUT-02: framed(keys) || framed(unit) || framed(fee),
+    with keys = framed(minimal-BE amount) || framed(G2 bytes) per ascending amount.
+    final_expiry is keyset metadata and not part of the preimage.
     """
-    sorted_keys = dict(sorted(keys.items()))
-    keyset_id_bytes = b",".join([f"{a}:{p.format().hex()}".encode("utf-8") for (a, p) in sorted_keys.items()])
     unit_str = unit if isinstance(unit, str) else getattr(unit, "name", str(unit))
-    keyset_id_bytes += f"|unit:{unit_str.lower()}".encode("utf-8")
-    if input_fee_ppk > 0:
-        keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
-    if final_expiry is not None:
-        keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
-    hash_digest = hashlib.sha256(keyset_id_bytes).hexdigest()
-    keyset_id = f"02{hash_digest}"
+    if not re.fullmatch(r"[a-z0-9_-]+", unit_str):
+        raise ValueError(f"invalid keyset unit: {unit_str!r}")
+
+    def minimal_be(n: int) -> bytes:
+        return n.to_bytes((n.bit_length() + 7) // 8, "big")
+
+    def framed(b: bytes) -> bytes:
+        return len(b).to_bytes(4, "big") + b
+
+    sorted_keys = dict(sorted(keys.items()))
+    keys_bytes = b"".join(
+        framed(minimal_be(a)) + framed(p.format()) for (a, p) in sorted_keys.items()
+    )
+    preimage = (
+        framed(keys_bytes)
+        + framed(unit_str.encode("utf-8"))
+        + framed(minimal_be(input_fee_ppk or 0))
+    )
+    keyset_id = "02" + hashlib.sha256(preimage).hexdigest()
     logger.trace(f"Derived v3 keyset_id: {keyset_id} from {len(keys)} keys")
     return keyset_id
