@@ -592,12 +592,41 @@ async def test_secret_initialized_with_arguments(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("n_sigs", [0, -1, 2])
-async def test_create_p2pk_lock_rejects_invalid_threshold(wallet1: Wallet, n_sigs: int):
+@pytest.mark.parametrize("n_sigs", [0, -1])
+async def test_create_p2pk_lock_rejects_nonpositive_threshold(
+    wallet1: Wallet, n_sigs: int
+):
     pubkey = await wallet1.create_p2pk_pubkey()
 
-    with pytest.raises(TransactionError, match="n_sigs"):
+    with pytest.raises(TransactionError, match="n_sigs must be a positive integer"):
         await wallet1.create_p2pk_lock(pubkey, n_sigs=n_sigs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n_sigs", [0, -1])
+async def test_create_p2pk_lock_rejects_nonpositive_threshold_with_available_keys(
+    wallet1: Wallet, n_sigs: int
+):
+    pubkey = await wallet1.create_p2pk_pubkey()
+    additional_pubkey = PrivateKey().public_key
+    assert additional_pubkey
+
+    with pytest.raises(TransactionError, match="n_sigs must be a positive integer"):
+        await wallet1.create_p2pk_lock(
+            pubkey,
+            tags=Tags([["pubkeys", additional_pubkey.format().hex()]]),
+            n_sigs=n_sigs,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_p2pk_lock_rejects_threshold_above_available_keys(
+    wallet1: Wallet,
+):
+    pubkey = await wallet1.create_p2pk_pubkey()
+
+    with pytest.raises(TransactionError, match="n_sigs exceeds available pubkeys"):
+        await wallet1.create_p2pk_lock(pubkey, n_sigs=2)
 
 
 @pytest.mark.asyncio

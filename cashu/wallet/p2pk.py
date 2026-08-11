@@ -11,6 +11,7 @@ from ..core.base import (
 )
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
+from ..core.errors import TransactionError
 from ..core.htlc import HTLCSecret
 from ..core.nuts import nut10, nut11
 from ..core.p2pk import (
@@ -55,6 +56,9 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         Returns:
             P2PKSecret: P2PK secret with the given pubkeys, locktime, tags, and signature flag.
         """
+        if n_sigs <= 0:
+            raise TransactionError("n_sigs must be a positive integer.")
+
         logger.debug(f"Provided tags: {tags}")
         if not tags:
             tags = Tags()
