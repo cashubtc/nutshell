@@ -1228,7 +1228,7 @@ class MintKeyset:
                 self.id = id_in_db
             else:
                 assert self.public_keys is not None
-                self.id = derive_keyset_id_v3(self.public_keys, self.unit.name, self.final_expiry, self.input_fee_ppk)  # type: ignore[arg-type]
+                self.id = derive_keyset_id_v3(self.public_keys, self.unit.name, self.input_fee_ppk)  # type: ignore[arg-type]
                 logger.info(f"Generated keyset v3 (BLS) ID: {self.id}")
 
 

@@ -538,7 +538,7 @@ async def test_keyset_id_v3_test_vectors():
         2: BlsPublicKey(bytes.fromhex("8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"), group="G2"),
     }
     keyset_id_v3_vec1 = derive_keyset_id_v3(keys_v3_vec1, Unit.sat)
-    assert keyset_id_v3_vec1 == "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd", \
+    assert keyset_id_v3_vec1 == "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", \
         "V3 vector 1 keyset ID mismatch"
 
     # V3 Vector 2
@@ -548,6 +548,6 @@ async def test_keyset_id_v3_test_vectors():
         4: BlsPublicKey(bytes.fromhex("8c60dae92451206390e30b5daa7151d63624dee496753c87dd54eadc92dc9602081fae02a1a53bac97e984a571923a5d0a29e38da2d42fd4712052800c7c8dd6e94fd9f506e946068aaac799d60b94c2d7515769ffdd32ea95d3910330ec47de"), group="G2"),
         8: BlsPublicKey(bytes.fromhex("a55dafcdf339360f74e3fd32296d062d5e36db3c2570e13a889b38502c0ff71864b19e324bc9c661c29b07c9cc378b5919c1656979648d7c3ef4bd6501fcc96490a34e47fe25afc8b14d60f1c3772138acaf8a0a5e4f940f57206eba74fdc973"), group="G2"),
     }
-    keyset_id_v3_vec2 = derive_keyset_id_v3(keys_v3_vec2, Unit.sat, input_fee_ppk=100, final_expiry=2000000000)
-    assert keyset_id_v3_vec2 == "020c5210bbb16757130c7e26061df3ea3f97a47046d2cebb54a21b3b4c370f42d8", \
+    keyset_id_v3_vec2 = derive_keyset_id_v3(keys_v3_vec2, Unit.sat, input_fee_ppk=100)
+    assert keyset_id_v3_vec2 == "027f0dcd008156363a8418b88f38ddd5155a38c46a3f27c15c7eb40ec5f04cb4b3", \
         "V3 vector 2 keyset ID mismatch"

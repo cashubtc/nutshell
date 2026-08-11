@@ -19,23 +19,23 @@ async def test_nut13_v3_secret_derivation():
     seed = b"nut13 v3 test seed"
     ms = MockWalletSecrets(seed)
     
-    keyset_id = "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
+    keyset_id = "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6"
     counter = 3
-    
+
     secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(counter, keyset_id)
 
     # Taproot secrets (spec 2.4.2): the 0x00 branch derives the internal key k with the
     # attempt-counter retry; the secret is K = k*G compressed. Pinned by the shared vectors
     # in tests/taproot_v3_vectors.json (nut13_v3, counter 3).
-    assert secret_bytes.hex() == "03c687c9ed32e92b1a6301c07e30b433b2c810d0185b3c14f9c2c0851503da0932"
+    assert secret_bytes.hex() == "02cc8d2b280ca8e46846159d8918409a0820d664a4223060024fc6f489140e8368"
 
     r = BlsPrivateKey(r_bytes)
-    assert r.to_hex() == "236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9"
+    assert r.to_hex() == "3d625b8869fc030e126f0a6d8109fc6c48b00ab6a8bd50a68dbd100e3cbb40de"
 
 
 @pytest.mark.asyncio
 async def test_wallet_bls_signature_verification():
-    keyset_id = "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
+    keyset_id = "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6"
     amount = 1
     
     priv_key = BlsPrivateKey()
