@@ -7,6 +7,7 @@ from ..core.db import Database
 from ..core.htlc import (
     HTLCSecret,
 )
+from ..core.nuts import nut10
 from ..core.secret import SecretKind, Tags
 from .protocols import SupportsDb
 
@@ -33,7 +34,7 @@ class WalletHTLC(SupportsDb):
         if locktime_pubkeys:
             tags["refund"] = locktime_pubkeys
 
-        if locktime_n_sigs:
+        if locktime_n_sigs is not None:
             tags["n_sigs_refund"] = str(locktime_n_sigs)
 
         if not preimage_hash and preimage:
@@ -44,14 +45,16 @@ class WalletHTLC(SupportsDb):
         if hashlock_pubkeys:
             tags["pubkeys"] = hashlock_pubkeys
 
-        if hashlock_n_sigs:
+        if hashlock_n_sigs is not None:
             tags["n_sigs"] = str(hashlock_n_sigs)
 
-        return HTLCSecret(
+        secret = HTLCSecret(
             kind=SecretKind.HTLC.value,
             data=preimage_hash,
             tags=tags,
         )
+        nut10.parse_spending_condition(secret.serialize())
+        return secret
 
     async def add_htlc_preimage_to_proofs(
         self, proofs: List[Proof], preimage: str
