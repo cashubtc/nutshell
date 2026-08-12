@@ -473,9 +473,12 @@ class Ledger(
         """
         quotes: List[MintQuote] = []
         for quote_id in payload.quotes:
+            stored_quote = await self.crud.get_mint_quote(
+                quote_id=quote_id, db=self.db
+            )
+            if not stored_quote:
+                continue
             quote = await self.get_mint_quote(quote_id)
-            if not quote:
-                raise TransactionError(f"quote {quote_id} not found")
             quotes.append(quote)
         return quotes
 
@@ -596,9 +599,13 @@ class Ledger(
         for quote in quotes:
             if quote.pending:
                 raise TransactionError("mint quote already pending")
-            if quote.issued:
-                raise QuoteAlreadyIssuedError()
-            if quote.state != MintQuoteState.paid:
+            if (
+                quote.amount_paid is None
+                or quote.amount_issued is None
+                or quote.amount_paid - quote.amount_issued <= 0
+            ):
+                if quote.issued:
+                    raise QuoteAlreadyIssuedError()
                 raise QuoteNotPaidError()
 
         # Check amount balance

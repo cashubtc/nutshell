@@ -45,6 +45,47 @@ async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_ledger_mint_quote_check_omits_unknown_quotes(
+    ledger: Ledger, wallet: Wallet
+):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    quotes = await ledger.mint_quote_check(
+        PostMintQuoteCheckRequest(
+            quotes=[
+                mint_quote1.quote,
+                "not-a-valid-quote-id",
+                "01989999-9999-7999-8999-999999999999",
+                mint_quote2.quote,
+            ]
+        )
+    )
+
+    assert [quote.quote for quote in quotes] == [
+        mint_quote1.quote,
+        mint_quote2.quote,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_quote_check_returns_empty_for_unknown_quotes(
+    ledger: Ledger,
+):
+    quotes = await ledger.mint_quote_check(
+        PostMintQuoteCheckRequest(
+            quotes=[
+                "not-a-valid-quote-id",
+                "01989999-9999-7999-8999-999999999999",
+            ]
+        )
+    )
+
+    assert quotes == []
+
+
+@pytest.mark.asyncio
 async def test_ledger_mint_batch_success(ledger: Ledger, wallet: Wallet):
     await wallet.load_mint()
     mint_quote1 = await wallet.request_mint(64)
@@ -577,16 +618,14 @@ async def test_ledger_mint_batch_single_quote(ledger: Ledger, wallet: Wallet):
 async def test_ledger_mint_quote_check_nonexistent_quote(
     ledger: Ledger, wallet: Wallet
 ):
-    """Checking nonexistent quote should fail."""
+    """Checking nonexistent quotes should return an empty list."""
     await wallet.load_mint()
 
-    try:
-        await ledger.mint_quote_check(
-            PostMintQuoteCheckRequest(quotes=["nonexistent_quote_id"])
-        )
-        assert False, "Expected Exception"
-    except Exception as e:
-        assert "not found" in str(e)
+    quotes = await ledger.mint_quote_check(
+        PostMintQuoteCheckRequest(quotes=["nonexistent_quote_id"])
+    )
+
+    assert quotes == []
 
 
 @pytest.mark.asyncio

@@ -675,6 +675,43 @@ async def test_mint_quote_check(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_mint_quote_check_omits_unknown_quotes(ledger: Ledger, wallet: Wallet):
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={
+            "quotes": [
+                mint_quote1.quote,
+                "not-a-valid-quote-id",
+                "01989999-9999-7999-8999-999999999999",
+                mint_quote2.quote,
+            ]
+        },
+    )
+
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert [quote["quote"] for quote in response.json()] == [
+        mint_quote1.quote,
+        mint_quote2.quote,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_returns_empty_for_unknown_quotes(
+    ledger: Ledger,
+):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": ["not-a-valid-quote-id"]},
+    )
+
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
 async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(32)
