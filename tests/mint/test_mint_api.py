@@ -667,15 +667,17 @@ async def test_mint_quote_check(ledger: Ledger, wallet: Wallet):
     assert result[0]["quote"] == mint_quote1.quote
     assert result[0]["amount"] == 64
     assert result[0]["method"] == "bolt11"
-    assert result[0]["state"] in ["UNPAID", "PAID"]
+    assert "state" not in result[0]
     assert result[1]["quote"] == mint_quote2.quote
     assert result[1]["amount"] == 32
     assert result[1]["method"] == "bolt11"
-    assert result[1]["state"] in ["UNPAID", "PAID"]
+    assert "state" not in result[1]
 
 
 @pytest.mark.asyncio
-async def test_mint_quote_check_omits_unknown_quotes(ledger: Ledger, wallet: Wallet):
+async def test_mint_quote_check_returns_positional_unknown_quotes(
+    ledger: Ledger, wallet: Wallet
+):
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(32)
 
@@ -692,14 +694,19 @@ async def test_mint_quote_check_omits_unknown_quotes(ledger: Ledger, wallet: Wal
     )
 
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    assert [quote["quote"] for quote in response.json()] == [
-        mint_quote1.quote,
-        mint_quote2.quote,
-    ]
+    result = response.json()
+    assert len(result) == 4
+    assert result[0]["quote"] == mint_quote1.quote
+    assert result[1] == {"quote": "not-a-valid-quote-id", "unknown": True}
+    assert result[2] == {
+        "quote": "01989999-9999-7999-8999-999999999999",
+        "unknown": True,
+    }
+    assert result[3]["quote"] == mint_quote2.quote
 
 
 @pytest.mark.asyncio
-async def test_mint_quote_check_returns_empty_for_unknown_quotes(
+async def test_mint_quote_check_returns_unknown_for_unknown_quotes(
     ledger: Ledger,
 ):
     response = httpx.post(
@@ -708,7 +715,7 @@ async def test_mint_quote_check_returns_empty_for_unknown_quotes(
     )
 
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    assert response.json() == []
+    assert response.json() == [{"quote": "not-a-valid-quote-id", "unknown": True}]
 
 
 @pytest.mark.asyncio

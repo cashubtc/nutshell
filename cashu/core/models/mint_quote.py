@@ -1,4 +1,4 @@
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,24 @@ class PostMintQuoteCheckRequest(BaseModel):
     quotes: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]] = Field(
         ..., max_length=settings.mint_max_request_length
     )
+
+
+class PostMintQuoteCheckUnknownResponse(BaseModel):
+    quote: str
+    unknown: Literal[True] = True
+
+
+class PostMintQuoteCheckResponse(BaseModel):
+    quote: str
+    request: str
+    amount: int
+    unit: str
+    method: str
+    amount_paid: int
+    amount_issued: int
+    updated_at: int
+    expiry: Optional[int] = None
+    pubkey: Optional[str] = None
 
 
 class PostMintQuoteResponse(BaseModel):

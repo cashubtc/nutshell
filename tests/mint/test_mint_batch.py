@@ -45,7 +45,7 @@ async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_ledger_mint_quote_check_omits_unknown_quotes(
+async def test_ledger_mint_quote_check_returns_positional_unknown_quotes(
     ledger: Ledger, wallet: Wallet
 ):
     await wallet.load_mint()
@@ -63,14 +63,14 @@ async def test_ledger_mint_quote_check_omits_unknown_quotes(
         )
     )
 
-    assert [quote.quote for quote in quotes] == [
-        mint_quote1.quote,
-        mint_quote2.quote,
-    ]
+    assert quotes[0] and quotes[0].quote == mint_quote1.quote
+    assert quotes[1] is None
+    assert quotes[2] is None
+    assert quotes[3] and quotes[3].quote == mint_quote2.quote
 
 
 @pytest.mark.asyncio
-async def test_ledger_mint_quote_check_returns_empty_for_unknown_quotes(
+async def test_ledger_mint_quote_check_returns_none_for_unknown_quotes(
     ledger: Ledger,
 ):
     quotes = await ledger.mint_quote_check(
@@ -82,7 +82,7 @@ async def test_ledger_mint_quote_check_returns_empty_for_unknown_quotes(
         )
     )
 
-    assert quotes == []
+    assert quotes == [None, None]
 
 
 @pytest.mark.asyncio
@@ -618,14 +618,14 @@ async def test_ledger_mint_batch_single_quote(ledger: Ledger, wallet: Wallet):
 async def test_ledger_mint_quote_check_nonexistent_quote(
     ledger: Ledger, wallet: Wallet
 ):
-    """Checking nonexistent quotes should return an empty list."""
+    """Checking nonexistent quotes should return positional unknowns."""
     await wallet.load_mint()
 
     quotes = await ledger.mint_quote_check(
         PostMintQuoteCheckRequest(quotes=["nonexistent_quote_id"])
     )
 
-    assert quotes == []
+    assert quotes == [None]
 
 
 @pytest.mark.asyncio

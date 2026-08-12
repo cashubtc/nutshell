@@ -462,21 +462,23 @@ class Ledger(
 
     async def mint_quote_check(
         self, payload: PostMintQuoteCheckRequest
-    ) -> List[MintQuote]:
+    ) -> List[Optional[MintQuote]]:
         """Batch check mint quotes.
 
         Args:
             payload (PostMintQuoteCheckRequest): Request payload containing quote IDs.
 
         Returns:
-            List[MintQuote]: List of mint quotes matching the request.
+            List[Optional[MintQuote]]: Mint quotes or ``None`` for unknown IDs,
+                in request order.
         """
-        quotes: List[MintQuote] = []
+        quotes: List[Optional[MintQuote]] = []
         for quote_id in payload.quotes:
             stored_quote = await self.crud.get_mint_quote(
                 quote_id=quote_id, db=self.db
             )
             if not stored_quote:
+                quotes.append(None)
                 continue
             quote = await self.get_mint_quote(quote_id)
             quotes.append(quote)

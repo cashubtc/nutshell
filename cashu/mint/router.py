@@ -2,6 +2,7 @@ import asyncio
 import html
 import os
 import time
+from typing import Union
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -23,6 +24,8 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintBatchResponse,
     PostMintQuoteCheckRequest,
+    PostMintQuoteCheckResponse,
+    PostMintQuoteCheckUnknownResponse,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -419,30 +422,35 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     "/v1/mint/quote/bolt11/check",
     name="Batch check mint quotes",
     summary="Batch check mint quotes",
-    response_model=list[PostMintQuoteResponse],
+    response_model=list[
+        Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]
+    ],
     response_description="A list of mint quotes",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_quote_check(
     request: Request, payload: PostMintQuoteCheckRequest
-) -> list[PostMintQuoteResponse]:
+) -> list[Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]]:
     logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
     quotes = await ledger.mint_quote_check(payload)
     resp = [
-        PostMintQuoteResponse(
-            quote=quote.quote,
-            request=quote.request,
-            amount=quote.amount,
-            unit=quote.unit,
-            method=quote.method,
-            state=str(quote.state.value),
-            expiry=quote.expiry,
-            pubkey=quote.pubkey,
-            amount_paid=quote.amount_paid,
-            amount_issued=quote.amount_issued,
-            updated_at=quote.updated_at,
+        (
+            PostMintQuoteCheckResponse(
+                quote=quote.quote,
+                request=quote.request,
+                amount=quote.amount,
+                unit=quote.unit,
+                method=quote.method,
+                expiry=quote.expiry,
+                pubkey=quote.pubkey,
+                amount_paid=quote.amount_paid or 0,
+                amount_issued=quote.amount_issued or 0,
+                updated_at=quote.updated_at or quote.created_time or int(time.time()),
+            )
+            if quote
+            else PostMintQuoteCheckUnknownResponse(quote=quote_id)
         )
-        for quote in quotes
+        for quote_id, quote in zip(payload.quotes, quotes)
     ]
     logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")
     return resp
