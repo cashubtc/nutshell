@@ -42,6 +42,18 @@ async def test_check_balances_and_abort(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_dispatch_watchdogs_starts_abort_monitor(ledger: Ledger):
+    tasks = await ledger.dispatch_watchdogs()
+    assert any(
+        task.get_coro().__qualname__ == "LedgerWatchdog.monitor_abort_queue"
+        for task in tasks
+    )
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_check_balances_and_abort_insolvency(ledger: Ledger):
     ledger.abort_queue = asyncio.Queue()
     ok = await ledger.check_balances_and_abort(
