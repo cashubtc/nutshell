@@ -10,7 +10,7 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.mint_info import MintInfo
-from cashu.core.nuts.nut18 import deserialize, serialize
+from cashu.core.nuts.nut18 import deserialize, method_fee, serialize
 from cashu.core.nuts.nut26 import _tlv_entry as nut26_tlv_entry
 from cashu.core.nuts.nut26 import bech32m_decode, bech32m_encode
 from cashu.core.nuts.nut26 import serialize as serialize_bech32m
@@ -432,7 +432,8 @@ _MELT_BOLT11_SAT = [{"method": "bolt11", "unit": "sat"}]
 def test_method_fee_rejects_when_melting_is_disabled():
     """`sm` requires the mint to melt the request unit; a disabled NUT-05 cannot."""
     info = _mint_info({"methods": _MELT_BOLT11_SAT, "disabled": True})
-    assert info.payment_request_method_fee([SupportedMethod(mn="bolt11")], Unit.sat) is None
+    assert info.supports_melt_method("bolt11", Unit.sat) is False
+    assert method_fee([SupportedMethod(mn="bolt11")], info, Unit.sat) is None
 
 
 @pytest.mark.parametrize(
@@ -445,10 +446,32 @@ def test_method_fee_rejects_when_melting_is_disabled():
 def test_method_fee_allows_when_melting_is_enabled(nut_05):
     """Melting enabled, or the flag absent, still resolves a fee."""
     info = _mint_info(nut_05)
-    assert info.payment_request_method_fee([SupportedMethod(mn="bolt11")], Unit.sat) == 0
+    assert info.supports_melt_method("bolt11", Unit.sat) is True
+    assert method_fee([SupportedMethod(mn="bolt11")], info, Unit.sat) == 0
 
 
 def test_method_fee_zero_when_request_has_no_method_requirement():
     """An unset `sm` means no requirement, which is distinct from `None`."""
     info = _mint_info({"methods": _MELT_BOLT11_SAT})
-    assert info.payment_request_method_fee(None, Unit.sat) == 0
+    assert method_fee(None, info, Unit.sat) == 0
+
+
+def test_method_fee_takes_lowest_among_supported_methods():
+    """The payer owes the lowest `mf` among the methods their mint can melt."""
+    info = _mint_info({"methods": _MELT_BOLT11_SAT})
+    fee = method_fee(
+        [
+            SupportedMethod(mn="bolt11", mf=7),
+            SupportedMethod(mn="onchain", mf=1),
+        ],
+        info,
+        Unit.sat,
+    )
+    # `onchain` is cheaper but this mint cannot melt it, so bolt11's fee applies
+    assert fee == 7
+
+
+def test_method_fee_ignores_melt_methods_for_other_units():
+    """A method the mint melts in another unit does not satisfy the request."""
+    info = _mint_info({"methods": _MELT_BOLT11_SAT})
+    assert method_fee([SupportedMethod(mn="bolt11")], info, Unit.usd) is None

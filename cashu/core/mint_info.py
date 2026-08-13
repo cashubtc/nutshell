@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from .base import Method, SupportedMethod, Unit
+from .base import Method, Unit
 from .json_rpc.base import JSONRPCSubscriptionKinds
 from .models import (
     MeltMethodSetting,
@@ -73,37 +73,19 @@ class MintInfo(BaseModel):
 
         return False
 
-    def payment_request_method_fee(
-        self, sm: Optional[List[SupportedMethod]], unit: Unit
-    ) -> Optional[int]:
-        """
-        Given the `sm` (supported methods) list from a NUT-18/26 payment request,
-        return the lowest per-method fee this mint owes for melting via one of the
-        listed methods in `unit`. Returns 0 when `sm` is unset, i.e. the request
-        makes no method requirement, and `None` when this mint cannot melt via any
-        of the listed methods.
-        """
-        if not sm:
-            return 0
+    def supports_melt_method(self, method: str, unit: Unit) -> bool:
         if not self.nuts:
-            return None
+            return False
         nut_05 = self.nuts.get(MELT_NUT)
         if not nut_05 or not nut_05.get("methods") or nut_05.get("disabled"):
-            return None
+            return False
 
-        melt_methods = [MeltMethodSetting.model_validate(e) for e in nut_05["methods"]]
+        for entry in nut_05["methods"]:
+            entry_obj = MeltMethodSetting.model_validate(entry)
+            if entry_obj.method == method and entry_obj.unit == unit.name:
+                return True
 
-        lowest_fee: Optional[int] = None
-        for entry in sm:
-            supported = any(
-                m.method == entry.mn and m.unit == unit.name for m in melt_methods
-            )
-            if supported:
-                fee = entry.mf or 0
-                if lowest_fee is None or fee < lowest_fee:
-                    lowest_fee = fee
-
-        return lowest_fee
+        return False
 
     def supports_websocket_mint_quote(self, method: Method, unit: Unit) -> bool:
         if not self.nuts or not self.supports_nut(WEBSOCKETS_NUT):

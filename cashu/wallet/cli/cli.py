@@ -35,6 +35,7 @@ from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
 from ...core.nuts.nut18 import deserialize as deserialize_payment_request
+from ...core.nuts.nut18 import method_fee as payment_request_method_fee
 from ...core.nuts.nut18 import serialize as serialize_payment_request
 from ...core.nuts.nut26 import serialize as serialize_payment_request_bech32
 from ...core.settings import settings
@@ -322,7 +323,7 @@ async def pay(
             return
 
         # The sending mint must support (melt via) one of the requested methods
-        method_fee = wallet.mint_info.payment_request_method_fee(pr.sm, wallet.unit)
+        method_fee = payment_request_method_fee(pr.sm, wallet.mint_info, wallet.unit)
         if method_fee is None:
             print(f"Error: Current mint does not support a requested method: {pr.sm}")
             return
