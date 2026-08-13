@@ -70,7 +70,6 @@ is_cln_backend: bool = WALLET.__class__.__name__ in [
     "CLNRestWallet",
     "CoreLightningRestWallet",
 ]
-is_deprecated_api_only = settings.debug_mint_only_deprecated
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 is_postgres = settings.mint_database.startswith("postgres")
 SLEEP_TIME = 1 if not is_github_actions else 2
