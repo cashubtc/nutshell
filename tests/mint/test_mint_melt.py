@@ -191,8 +191,9 @@ async def test_settled_melt_quote_outputs_registration_regression(
         change_rs,
         change_derivation_paths,
     ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    # amount 0 is what wallets send for blank outputs; the mint must accept it
     change_outputs, change_rs = wallet._construct_outputs(
-        n_change_outputs * [1], change_secrets, change_rs
+        n_change_outputs * [0], change_secrets, change_rs
     )
     await assert_err(
         ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
