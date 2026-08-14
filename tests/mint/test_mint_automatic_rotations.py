@@ -11,15 +11,12 @@ from cashu.mint.startup import ledger as global_ledger
 
 
 @pytest.fixture(autouse=True)
-def disable_global_ledger_rotation():
-    original_method = global_ledger.rotate_keysets_if_needed
-
+def disable_global_ledger_rotation(monkeypatch: pytest.MonkeyPatch):
     async def noop_rotate(*args, **kwargs):
         pass
 
-    global_ledger.rotate_keysets_if_needed = noop_rotate
+    monkeypatch.setattr(global_ledger, "rotate_keysets_if_needed", noop_rotate)
     yield
-    global_ledger.rotate_keysets_if_needed = original_method
 
 
 @pytest.mark.asyncio
@@ -280,6 +277,7 @@ async def test_regression_non_atomic_rotation(ledger: Ledger):
     keyset.valid_from = (
         datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=365)
     ).strftime("%Y-%m-%d %H:%M:%S")
+    await ledger.crud.update_keyset(keyset=keyset, db=ledger.db)
 
     original_update_keyset = ledger.crud.update_keyset
 
@@ -306,12 +304,29 @@ async def test_regression_non_atomic_rotation(ledger: Ledger):
         ]
 
         # There should be exactly ONE active keyset for this unit (the old one)
-        assert (
-            len(active_db_keysets) == 1
-        ), f"Expected exactly 1 active keyset in DB, found: {len(active_db_keysets)}"
-        assert (
-            active_db_keysets[0].id == keyset.id
-        ), "The active keyset should be the original one"
+        assert len(active_db_keysets) == 1, (
+            f"Expected exactly 1 active keyset in DB, found: {len(active_db_keysets)}"
+        )
+        assert active_db_keysets[0].id == keyset.id, (
+            "The active keyset should be the original one"
+        )
+
+        # The failed transaction must not leak into the live ledger state.
+        active_memory_keysets = [
+            k for k in ledger.keysets.values() if k.active and k.unit == keyset.unit
+        ]
+        assert len(active_memory_keysets) == 1
+        assert active_memory_keysets[0].id == keyset.id
+        assert ledger.should_rotate_keyset(keyset)
+
+        # The live keyset remains eligible for a later retry.
+        ledger.crud.update_keyset = original_update_keyset
+        await ledger.rotate_keysets_if_needed()
+        active_memory_keysets = [
+            k for k in ledger.keysets.values() if k.active and k.unit == keyset.unit
+        ]
+        assert len(active_memory_keysets) == 1
+        assert active_memory_keysets[0].id != keyset.id
 
     finally:
         ledger.crud.update_keyset = original_update_keyset
@@ -353,13 +368,15 @@ async def test_regression_concurrent_rotation_race(ledger: Ledger):
         )
 
         # Neither of them should raise an exception (both return a valid MintKeyset)
-        exceptions = [res for res in results if isinstance(res, Exception)]
+        exceptions = [res for res in results if isinstance(res, BaseException)]
         assert len(exceptions) == 0, f"Expected no exceptions, but got: {exceptions}"
 
         # Both results should be MintKeysets and they should be identical (the same rotated keyset)
-        assert (
-            results[0].id == results[1].id
-        ), "Expected both parallel tasks to return the same rotated keyset ID"
+        assert isinstance(results[0], MintKeyset)
+        assert isinstance(results[1], MintKeyset)
+        assert results[0].id == results[1].id, (
+            "Expected both parallel tasks to return the same rotated keyset ID"
+        )
 
     finally:
         keyset.valid_from = original_valid_from
@@ -507,9 +524,9 @@ async def test_regression_highest_counter_selection_incomplete(ledger: Ledger):
             rotated_counter = int(
                 rotated_keyset.derivation_path.split("/")[-1].replace("'", "")
             )
-            assert (
-                rotated_counter == 6
-            ), f"Expected rotated counter to be 6, got {rotated_counter}"
+            assert rotated_counter == 6, (
+                f"Expected rotated counter to be 6, got {rotated_counter}"
+            )
 
         finally:
             ledger.crud.store_keyset = original_store
