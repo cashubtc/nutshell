@@ -117,7 +117,8 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         keyset_fees_paid: Amount,
     ) -> bool:
         """Check if the backend balance and the mint balance match.
-        If the mint issued more ecash than the backend can pay out, signal
+        If the mint issued more ecash than the backend can pay out, or the
+        reserve gap between backend and issued balances is shrinking, signal
         the abort queue to shut down the mint.
         Returns True if the balances check succeeded, False otherwise.
 
@@ -155,5 +156,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
                 logger.warning(
                     f"Balances now: backend: {backend_balance}, issued ecash: {keyset_balance}, fees earned: {keyset_fees_paid}"
                 )
+                await self.abort_queue.put(True)
+                return False
 
         return True

@@ -68,7 +68,7 @@ async def test_check_balances_and_abort_insolvency(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_check_balances_and_abort_delta_shrink_no_abort(ledger: Ledger):
+async def test_check_balances_and_abort_delta_shrink_aborts(ledger: Ledger):
     ledger.abort_queue = asyncio.Queue()
     last_balance_log_entry = MintBalanceLogEntry(
         unit=Unit.sat,
@@ -84,8 +84,8 @@ async def test_check_balances_and_abort_delta_shrink_no_abort(ledger: Ledger):
         Amount(Unit.sat, 964),
         Amount(Unit.sat, 0),
     )
-    assert ok
-    assert ledger.abort_queue.empty()
+    assert not ok
+    assert not ledger.abort_queue.empty()
 
 
 @pytest.mark.asyncio
