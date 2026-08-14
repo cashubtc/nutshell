@@ -127,7 +127,14 @@ async def test_update_quote_ttl(rpc_servicer):
         await rpc_servicer.UpdateQuoteTtl(request_empty, None)
 
 @pytest.mark.asyncio
-async def test_update_lightning_fee(rpc_servicer):
+async def test_update_lightning_fee(rpc_servicer, monkeypatch):
+    monkeypatch.setattr(
+        settings, "lightning_fee_percent", settings.lightning_fee_percent
+    )
+    monkeypatch.setattr(
+        settings, "lightning_reserve_fee_min", settings.lightning_reserve_fee_min
+    )
+
     request = management_pb2.UpdateLightningFeeRequest(fee_percent=1.5)
     await rpc_servicer.UpdateLightningFee(request, None)
     assert settings.lightning_fee_percent == 1.5
@@ -309,4 +316,3 @@ async def test_get_keysets(rpc_servicer):
     assert list(first_keyset.amounts)
     assert first_keyset.balance >= 0
     assert first_keyset.fees_paid >= 0
-
