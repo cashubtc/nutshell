@@ -887,6 +887,8 @@ class LedgerCrudSqlite(LedgerCrud):
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
     ) -> None:
+        # NOTE: back-fills timestamps on the caller's keyset object (mutation is
+        # intentional) so in-memory copies stay consistent with the stored row.
         if not keyset.valid_from:
             keyset.valid_from = db.timestamp_now_str()
         if not keyset.valid_to:

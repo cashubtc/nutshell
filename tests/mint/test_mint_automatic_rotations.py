@@ -48,6 +48,18 @@ async def test_should_rotate_keyset_behavior(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_should_not_rotate_on_unparseable_valid_from(ledger: Ledger):
+    """Fail closed: an unparseable valid_from must not trigger rotation."""
+    keyset = next(k for k in ledger.keysets.values() if k.active)
+    original_valid_from = keyset.valid_from
+    try:
+        keyset.valid_from = "not-a-timestamp"
+        assert not ledger.should_rotate_keyset(keyset)
+    finally:
+        keyset.valid_from = original_valid_from
+
+
+@pytest.mark.asyncio
 async def test_automatic_keyset_rotation_flow(ledger: Ledger):
     # Cancel background tasks to avoid race conditions with manual triggering
     for task in ledger.regular_tasks:

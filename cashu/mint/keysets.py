@@ -310,6 +310,9 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         # different types (PostgreSQL returns datetime.datetime, SQLite stores/returns
         # stringified timestamp integers/floats), while test mocks or JSON payloads
         # may supply formatted datetime strings.
+        # NOTE: naive datetimes and "%Y-%m-%d %H:%M:%S" strings are interpreted in
+        # server-local time, matching db.timestamp_from_seconds. This round-trips
+        # correctly only as long as writer and reader share a timezone.
         if not keyset.valid_from:
             raise ValueError("keyset.valid_from is None")
         try:
@@ -328,10 +331,14 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         try:
             valid_from_ts = self._parse_valid_from(keyset)
         except Exception:
-            logger.warning(
-                f"Could not parse valid_from: {keyset.valid_from}. Forcing rotation."
+            # Fail closed: if we cannot determine the keyset's age we must not
+            # rotate. A systemic parsing failure would otherwise rotate every
+            # active keyset on every regular-tasks tick, growing the keyset
+            # table unboundedly.
+            logger.error(
+                f"Could not parse valid_from: {keyset.valid_from}. Skipping rotation."
             )
-            return True
+            return False
 
         return (
             time.time() - valid_from_ts
