@@ -67,7 +67,7 @@ You can choose one of the nodes as a backend for nutshell using the `.env` varia
 
 ```
 # Choose one from:
-# LndRPCWallet, LndRestWallet, CLNRestWallet, CoreLightningRestWallet, LNbitsWallet
+# LndRPCWallet, LndRestWallet, CLNRestWallet, CoreLightningRestWallet
 
 MINT_BACKEND_BOLT11_SAT=LndRestWallet
 ```

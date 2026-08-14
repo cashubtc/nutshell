@@ -936,8 +936,7 @@ async def test_melt_early_return_leaves_no_orphan_blank_outputs(
     Both parametrize cases hit the same early-return branch:
       - offset == 0  → overpaid_fee == 0  (fee exactly matched reserve)
       - offset > 0   → overpaid_fee < 0   (backend took more than the
-        reserve, e.g. an LNbits backend skimming a service fee on top
-        of the routing fee)
+        reserve due to a service fee on top of the routing fee)
     """
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = ""

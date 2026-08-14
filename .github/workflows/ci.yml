@@ -66,7 +66,7 @@ jobs:
         python-version: ["3.12"]
         poetry-version: ["2.3.2"]
         backend-wallet-class:
-          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
+          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
@@ -82,7 +82,7 @@ jobs:
         python-version: ["3.12"]
         poetry-version: ["2.3.2"]
         backend-wallet-class:
-          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
+          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
