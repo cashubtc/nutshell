@@ -45,6 +45,7 @@ MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
 FEE_PROBE_TIMEOUT_SECONDS = 5
+FAILURE_REASON_NONE = "FAILURE_REASON_NONE"
 
 
 class LndRestWallet(LightningBackend):
@@ -532,7 +533,7 @@ class LndRestWallet(LightningBackend):
                 response.raise_for_status()
                 data = response.json()
                 failure_reason = data.get("failure_reason")
-                if failure_reason in (None, 0, "FAILURE_REASON_NONE"):
+                if failure_reason in (None, 0, FAILURE_REASON_NONE):
                     # The probe is a lower bound; add the configured base reserve
                     # to allow for a more expensive route at payment time.
                     fees_msat = settings.lightning_reserve_fee_min + int(
