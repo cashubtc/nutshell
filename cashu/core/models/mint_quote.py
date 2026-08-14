@@ -18,6 +18,7 @@ class PostMintQuoteRequest(BaseModel):
     description: Optional[str] = Field(
         default=None, max_length=MAX_INVOICE_DESC_LEN
     )  # invoice description
+    description_hash: bool = False  # commit to description with a BOLT11 h tag
     pubkey: Optional[str] = Field(
         default=None, max_length=MAX_PUBKEY_LEN
     )  # NUT-20 quote lock pubkey

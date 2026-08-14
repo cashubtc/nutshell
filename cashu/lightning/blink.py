@@ -63,6 +63,7 @@ class BlinkWallet(LightningBackend):
 
     supported_units = {Unit.sat, Unit.msat, Unit.usd}
     supports_description: bool = True
+    supports_description_hash: bool = True
     unit = Unit.sat
 
     def _fee_unit(self) -> Unit:

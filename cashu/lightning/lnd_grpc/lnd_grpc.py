@@ -55,6 +55,7 @@ class LndRPCWallet(LightningBackend):
     supports_incoming_payment_stream = True
     supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True
+    supports_description_hash: bool = True
 
     unit = Unit.sat
 
