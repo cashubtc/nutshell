@@ -211,6 +211,7 @@ class LndRestWallet(LightningBackend):
             "fee_limit_msat": str(fee_limit_msat),
             "timeout_seconds": PAYMENT_TIMEOUT_SECONDS,
             "no_inflight_updates": True,
+            "allow_self_payment": settings.mint_lnd_allow_self_payment,
         }
 
         async with self.client.stream(
@@ -321,6 +322,11 @@ class LndRestWallet(LightningBackend):
             route_data = route.json()
             if route.is_error or route_data.get("message"):
                 error_message = route_data.get("message") or route.text
+                if settings.mint_lnd_allow_self_payment and (
+                    "target not found" in error_message.lower()
+                    or "no route" in error_message.lower()
+                ):
+                    error_message += " (Note: partial self-payments are unsupported by LND's QueryRoutes API)"
                 return PaymentResponse(
                     result=PaymentResult.FAILED, error_message=error_message
                 )

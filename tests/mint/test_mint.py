@@ -116,7 +116,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     ]
     await assert_err(
         ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
-        "The public key could not be parsed or is invalid.",
+        "invalid blinded message.",
     )
 
 

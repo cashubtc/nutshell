@@ -1,18 +1,20 @@
 import copy
 import hashlib
 import secrets
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 from coincurve import PublicKeyXOnly
 
-from cashu.core.base import P2PKWitness
+from cashu.core.base import P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.nuts import nut11
 from cashu.core.p2pk import P2PKSecret, SigFlags
-from cashu.core.secret import SecretKind, Tags
+from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.wallet import migrations
+from cashu.wallet.p2pk import WalletP2PK
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import pay_if_regtest
@@ -69,12 +71,19 @@ async def test_create_p2pk_lock_default(wallet1: Wallet):
 async def test_create_p2pk_lock_with_options(wallet1: Wallet):
     """Test creating a P2PK lock with all options specified."""
     pubkey = await wallet1.create_p2pk_pubkey()
+    additional_pubkey = PrivateKey().public_key
+    assert additional_pubkey is not None
     secret_lock = await wallet1.create_p2pk_lock(
         pubkey,
         locktime_seconds=3600,
         sig_all=True,
         n_sigs=2,
-        tags=Tags([["custom_tag", "custom_value"]]),
+        tags=Tags(
+            [
+                ["custom_tag", "custom_value"],
+                ["pubkeys", additional_pubkey.format().hex()],
+            ]
+        ),
     )
 
     # Verify created lock properties
@@ -138,9 +147,7 @@ async def test_schnorr_sign_message(wallet1: Wallet):
     # Make sure wallet has a pubkey
     assert wallet1.private_key.public_key is not None
     xonly_pub = PublicKeyXOnly(wallet1.private_key.public_key.format()[1:])
-    assert xonly_pub.verify(
-        sig_bytes, hashlib.sha256(message.encode("utf-8")).digest()
-    )
+    assert xonly_pub.verify(sig_bytes, hashlib.sha256(message.encode("utf-8")).digest())
 
 
 @pytest.mark.asyncio
@@ -174,6 +181,19 @@ async def test_inputs_require_sigall_detection(wallet1: Wallet):
     # Test mixed list of proofs
     mixed_proofs = proofs_sig_inputs + proofs_sig_all
     assert wallet1._inputs_require_sigall(mixed_proofs)
+
+
+def test_inputs_require_sigall_ignores_unknown_secret_kind():
+    unknown_secret = Secret(
+        kind="FUTURE",
+        data="unknown",
+        tags=Tags(),
+        nonce="0" * 32,
+    ).serialize()
+    proof = Proof(id="keyset", amount=1, secret=unknown_secret, C="00")
+
+    wallet = MagicMock(spec=WalletP2PK)
+    assert not WalletP2PK._inputs_require_sigall(wallet, [proof])
 
 
 @pytest.mark.asyncio

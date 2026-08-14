@@ -163,6 +163,25 @@ def test_create_app_sets_metadata():
     assert app.version == settings.version
 
 
+def test_app_does_not_mount_v0_mint_routes():
+    paths = {route.path for route in app_module.app.routes}
+    assert "/v1/info" in paths
+    assert not paths.intersection(
+        {
+            "/info",
+            "/keys",
+            "/keys/{idBase64Urlsafe}",
+            "/keysets",
+            "/mint",
+            "/melt",
+            "/checkfees",
+            "/split",
+            "/check",
+            "/restore",
+        }
+    )
+
+
 def test_catch_exceptions_maps_cashu_errors_to_json():
     app = FastAPI()
     app.middleware("http")(app_module.catch_exceptions)

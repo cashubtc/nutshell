@@ -12,7 +12,7 @@ from bech32 import (
     bech32_encode as _bech32_encode,
 )
 
-from ..base import NUT10Option, PaymentRequest, Transport
+from ..base import NUT10Option, PaymentRequest, Transport, Unit
 
 BECH32M_CONST = 0x2BC830A3
 HRP = "creqb"
@@ -257,7 +257,7 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
     if pr.a is not None:
         out += _tlv_entry(0x02, struct.pack(">Q", pr.a))
     if pr.u is not None:
-        if pr.u == "sat":
+        if pr.u == Unit.sat.name:
             out += _tlv_entry(0x03, bytes([0x00]))
         else:
             out += _tlv_entry(0x03, pr.u.encode())
@@ -292,7 +292,7 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
             kwargs["a"] = struct.unpack(">Q", val)[0]
         elif tag == 0x03:
             if len(val) == 1 and val[0] == 0x00:
-                kwargs["u"] = "sat"
+                kwargs["u"] = Unit.sat.name
             else:
                 kwargs["u"] = val.decode()
         elif tag == 0x04:

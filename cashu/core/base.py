@@ -241,23 +241,6 @@ class BlindedMessage(BaseModel):
         return cls(amount=row["amount"], B_=row["b_"], id=row["id"], C_=row.get("c_"))
 
 
-class BlindedMessage_Deprecated(BaseModel):
-    """
-    Deprecated: BlindedMessage for v0 protocol (deprecated api routes) have no id field.
-
-    Blinded message or blinded secret or "output" which is to be signed by the mint
-    """
-
-    amount: int
-    B_: str  # Hex-encoded blinded message
-    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
-
-    @property
-    def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness missing in output"
-        return P2PKWitness.from_witness(self.witness).signatures
-
-
 class BlindedSignature(BaseModel):
     """
     Blinded signature or "promise" which is the signature on a `BlindedMessage`
@@ -303,7 +286,6 @@ class MeltQuote(LedgerEvent):
     fee_paid: int = 0
     payment_preimage: Optional[str] = None
     expiry: Optional[int] = None
-    outputs: Optional[List[BlindedMessage]] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
 
@@ -322,10 +304,6 @@ class MeltQuote(LedgerEvent):
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
 
-        outputs = None
-        if "outputs" in row.keys() and row["outputs"]:
-            outputs = json.loads(row["outputs"])
-
         return cls(
             quote=row["quote"],
             method=row["method"],
@@ -338,22 +316,19 @@ class MeltQuote(LedgerEvent):
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
-            outputs=outputs,
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
         )
 
     @classmethod
-    def from_resp_wallet(cls, melt_quote_resp, mint: str, unit: str, request: str):
+    def from_resp_wallet(cls, melt_quote_resp, mint: str):
         return cls(
             quote=melt_quote_resp.quote,
-            method="bolt11",
-            request=melt_quote_resp.request
-            or request,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            method=Method.bolt11.name,
+            request=melt_quote_resp.request,
             checking_id="",
-            unit=melt_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            unit=melt_quote_resp.unit,
             amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
@@ -452,11 +427,7 @@ class MintQuote(LedgerEvent):
                 if "last_checked" in row.keys() and row["last_checked"]
                 else None
             )
-            updated_at = (
-                int(row["updated_at"])
-                if "updated_at" in row.keys() and row["updated_at"]
-                else None
-            )
+            updated_at = int(row["updated_at"]) if row["updated_at"] else None
         except Exception:
             # POSTGRES: row is datetime.datetime
             created_time = (
@@ -474,9 +445,7 @@ class MintQuote(LedgerEvent):
                 else None
             )
             updated_at = (
-                int(row["updated_at"].timestamp())
-                if "updated_at" in row.keys() and row["updated_at"]
-                else None
+                int(row["updated_at"].timestamp()) if row["updated_at"] else None
             )
         return cls(
             quote=row["quote"],
@@ -492,12 +461,10 @@ class MintQuote(LedgerEvent):
             last_checked=last_checked,
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
-            amount_paid=row["amount_paid"]
-            if "amount_paid" in row.keys() and row["amount_paid"] is not None
-            else None,
-            amount_issued=row["amount_issued"]
-            if "amount_issued" in row.keys() and row["amount_issued"] is not None
-            else None,
+            amount_paid=row["amount_paid"] if row["amount_paid"] is not None else None,
+            amount_issued=(
+                row["amount_issued"] if row["amount_issued"] is not None else None
+            ),
             updated_at=updated_at
             if updated_at is not None
             else (issued_time or paid_time or created_time or int(time.time())),
@@ -508,8 +475,6 @@ class MintQuote(LedgerEvent):
         cls,
         mint_quote_resp,
         mint: str,
-        amount: int,
-        unit: str,
         paid_time: Optional[int] = None,
         issued_time: Optional[int] = None,
     ):
@@ -532,10 +497,8 @@ class MintQuote(LedgerEvent):
                 state = MintQuoteState.issued
             else:
                 state = MintQuoteState.unpaid
-        elif mint_quote_resp.state:
-            state = MintQuoteState(mint_quote_resp.state)
         else:
-            state = MintQuoteState.unpaid
+            state = MintQuoteState(mint_quote_resp.state)
 
         if paid_time is None and mint_quote_resp.updated_at is not None:
             if state in [MintQuoteState.paid, MintQuoteState.issued]:
@@ -547,13 +510,11 @@ class MintQuote(LedgerEvent):
 
         return cls(
             quote=mint_quote_resp.quote,
-            method="bolt11",
+            method=Method.bolt11.name,
             request=mint_quote_resp.request,
             checking_id="",
-            unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
-            amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
+            unit=mint_quote_resp.unit,
+            amount=mint_quote_resp.amount,
             state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -572,8 +533,6 @@ class MintQuote(LedgerEvent):
         mint_quote_resp,
         mint: str,
         mint_quote_local: Optional["MintQuote"] = None,
-        default_amount: int = 0,
-        default_unit: str = "sat",
     ) -> "MintQuote":
         # Check if the response from the mint is stale compared to the local quote
         is_stale = False
@@ -607,25 +566,12 @@ class MintQuote(LedgerEvent):
         if is_stale and mint_quote_local:
             return mint_quote_local
 
-        amount = (
-            (mint_quote_resp.amount or mint_quote_local.amount)
-            if mint_quote_local
-            else default_amount
-        )
-        unit = (
-            (mint_quote_resp.unit or mint_quote_local.unit)
-            if mint_quote_local
-            else default_unit
-        )
-
         paid_time = mint_quote_local.paid_time if mint_quote_local else None
         issued_time = mint_quote_local.issued_time if mint_quote_local else None
 
         return cls.from_resp_wallet(
             mint_quote_resp,
             mint=mint,
-            amount=amount,
-            unit=unit,
             paid_time=paid_time,
             issued_time=issued_time,
         )
@@ -991,8 +937,6 @@ class MintKeyset:
     amounts: List[int]
     balance: int
     final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
-
-    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
     def __init__(
         self,

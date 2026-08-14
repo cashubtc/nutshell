@@ -66,7 +66,10 @@ wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class(unit=Unit.sat)
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake
-is_deprecated_api_only = settings.debug_mint_only_deprecated
+is_cln_backend: bool = WALLET.__class__.__name__ in [
+    "CLNRestWallet",
+    "CoreLightningRestWallet",
+]
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 is_postgres = settings.mint_database.startswith("postgres")
 SLEEP_TIME = 1 if not is_github_actions else 2
@@ -81,17 +84,7 @@ docker_lightning_cli = [
     "--rpcserver=lnd-1",
 ]
 
-docker_bitcoin_cli = [
-    "docker",
-    "exec",
-    "cashu-bitcoind-1-1bitcoin-cli",
-    "-rpcuser=lnbits",
-    "-rpcpassword=lnbits",
-    "-regtest",
-]
-
-
-docker_lightning_unconnected_cli = [
+docker_lightning_routed_cli = [
     "docker",
     "exec",
     "cashu-lnd-2-1",
@@ -99,6 +92,17 @@ docker_lightning_unconnected_cli = [
     "--network",
     "regtest",
     "--rpcserver=lnd-2",
+]
+
+
+docker_lightning_mint_cli = [
+    "docker",
+    "exec",
+    "cashu-lnd-3-1",
+    "lncli",
+    "--network",
+    "regtest",
+    "--rpcserver=lnd-3",
 ]
 
 
@@ -198,31 +202,41 @@ def get_real_invoice_cln(sats: int, node: int = 1) -> str:
     return result["bolt11"]
 
 
-def mine_blocks(blocks: int = 1) -> str:
-    cmd = docker_bitcoin_cli.copy()
-    cmd.extend(["-generate", str(blocks)])
-    return run_cmd(cmd)
+def _wait_for_route(cmd: list, key: str, timeout: int = 60) -> None:
+    """Wait until the route query in `cmd` returns a result under `key`."""
+    start = time.time()
+    while time.time() - start < timeout:
+        if run_cmd_json(cmd).get(key):
+            return
+        time.sleep(SLEEP_TIME)
+    raise TimeoutError(f"no route found after {timeout} seconds")
 
 
-def get_unconnected_node_uri() -> str:
-    cmd = docker_lightning_unconnected_cli.copy()
+def get_real_invoice_routed(sats: int) -> str:
+    """Get an invoice from a node the mint has no direct channel to."""
+    # the mint pays a routed invoice through lnd-1, which charges a routing fee
+    if is_cln_backend:
+        # the mint is clightning-2, whose direct peers are lnd-1 and lnd-2 – so we use cln-1
+        cmd = docker_clightning_cli(1)
+        cmd.append("getinfo")
+        destination = run_cmd_json(cmd)["id"]
+        cmd = docker_clightning_cli(2)
+        cmd.extend(["getroute", destination, str(sats * 1000), "10"])
+        # channel policies take a while to gossip after the regtest environment started
+        _wait_for_route(cmd, "route")
+        return get_real_invoice_cln(sats)
+
+    # the mint is lnd-3, whose direct peers are lnd-1, cln-1 and cln-3 – so we use lnd-2
+    cmd = docker_lightning_routed_cli.copy()
     cmd.append("getinfo")
-    info = run_cmd_json(cmd)
-    pubkey = info["identity_pubkey"]
-    return f"{pubkey}@lnd-2:9735"
-
-
-def create_onchain_address(address_type: str = "bech32") -> str:
-    cmd = docker_bitcoin_cli.copy()
-    cmd.extend(["getnewaddress", address_type])
-    return run_cmd(cmd)
-
-
-def pay_onchain(address: str, sats: int) -> str:
-    btc = sats * 0.00000001
-    cmd = docker_bitcoin_cli.copy()
-    cmd.extend(["sendtoaddress", address, str(btc)])
-    return run_cmd(cmd)
+    destination = run_cmd_json(cmd)["identity_pubkey"]
+    cmd = docker_lightning_mint_cli.copy()
+    cmd.extend(["queryroutes", "--dest", destination, "--amt", str(sats)])
+    # channel policies take a while to gossip after the regtest environment started
+    _wait_for_route(cmd, "routes")
+    cmd = docker_lightning_routed_cli.copy()
+    cmd.extend(["addinvoice", str(sats)])
+    return run_cmd_json(cmd)["payment_request"]
 
 
 async def pay_if_regtest(bolt11: str) -> None:

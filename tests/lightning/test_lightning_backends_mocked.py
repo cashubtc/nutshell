@@ -14,10 +14,8 @@ from cashu.core.models import (
     PostMeltRequestOptions,
 )
 from cashu.lightning.base import PaymentResult, Unsupported
-from cashu.lightning.blink import BlinkWallet
 from cashu.lightning.clnrest import CLNRestWallet
 from cashu.lightning.corelightningrest import CoreLightningRestWallet
-from cashu.lightning.lnbits import LNbitsWallet  # type: ignore[attr-defined]
 from cashu.lightning.lnd_grpc.lnd_grpc import (
     FEE_PROBE_TIMEOUT_SECONDS,
     LndRPCWallet,
@@ -59,109 +57,6 @@ class _StreamResponse:
     async def aiter_lines(self):
         for line in self.lines:
             yield line
-
-
-@pytest.mark.asyncio
-async def test_lnbits_status_returns_error_on_detail():
-    wallet = object.__new__(LNbitsWallet)
-    wallet.unit = Unit.sat
-    wallet.endpoint = "https://lnbits.test"
-
-    class Client:
-        async def get(self, url, timeout=None):
-            return _response(200, {"detail": "bad key"})
-
-    cast(Any, wallet).client = Client()
-
-    status = await wallet.status()
-    assert status.error_message == "LNbits error: bad key"
-    assert status.balance.amount == 0
-
-
-@pytest.mark.asyncio
-async def test_lnbits_create_invoice_http_error_returns_failure():
-    wallet = object.__new__(LNbitsWallet)
-    wallet.unit = Unit.sat
-    wallet.endpoint = "https://lnbits.test"
-
-    class Client:
-        async def post(self, url, json=None):
-            return _response(500, {"detail": "bad"})
-
-    cast(Any, wallet).client = Client()
-
-    invoice = await wallet.create_invoice(Amount(Unit.sat, 2))
-    assert not invoice.ok
-    assert "HTTP status" in str(invoice.error_message)
-
-
-@pytest.mark.asyncio
-async def test_lnbits_pay_invoice_without_hash_is_unknown():
-    wallet = object.__new__(LNbitsWallet)
-    wallet.unit = Unit.sat
-    wallet.endpoint = "https://lnbits.test"
-
-    class Client:
-        async def post(self, url, json=None, timeout=None):
-            return _response(200, {"paid": True})
-
-    cast(Any, wallet).client = Client()
-    result = await wallet.pay_invoice(_quote("lnbc1fake"), 1000)
-    assert result.result == PaymentResult.UNKNOWN
-    assert result.error_message == "No payment_hash received"
-
-
-@pytest.mark.asyncio
-async def test_lnbits_get_payment_status_rejects_invalid_response():
-    wallet = object.__new__(LNbitsWallet)
-    wallet.unit = Unit.sat
-    wallet.endpoint = "https://lnbits.test"
-
-    class Client:
-        async def get(self, url):
-            return _response(200, {"foo": "bar"})
-
-    cast(Any, wallet).client = Client()
-    status = await wallet.get_payment_status("hash")
-    assert status.result == PaymentResult.UNKNOWN
-    assert status.error_message == "invalid response"
-
-
-@pytest.mark.asyncio
-async def test_lnbits_get_invoice_status_maps_pending_and_failed():
-    wallet = object.__new__(LNbitsWallet)
-    wallet.unit = Unit.sat
-    wallet.endpoint = "https://lnbits.test"
-
-    class Client:
-        calls = 0
-
-        async def get(self, url):
-            Client.calls += 1
-            if Client.calls == 1:
-                return _response(
-                    200,
-                    {
-                        "paid": False,
-                        "details": {"status": "pending", "fee": -2},
-                        "preimage": None,
-                    },
-                )
-            return _response(
-                200,
-                {
-                    "paid": False,
-                    "details": {"status": "failed", "fee": -3},
-                    "preimage": None,
-                },
-            )
-
-    cast(Any, wallet).client = Client()
-    pending = await wallet.get_invoice_status("hash")
-    failed = await wallet.get_invoice_status("hash")
-
-    assert pending.result == PaymentResult.PENDING
-    assert failed.result == PaymentResult.FAILED
 
 
 @pytest.mark.asyncio
@@ -429,6 +324,51 @@ async def test_lndrest_pay_invoice_settled_reads_stream_result(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("enabled, expected", [(True, True), (False, False)])
+async def test_lndrest_pay_invoice_sends_allow_self_payment(
+    monkeypatch, enabled, expected
+):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    captured: dict[str, Any] = {}
+
+    lines = [
+        json.dumps(
+            {
+                "result": {
+                    "status": "SUCCEEDED",
+                    "payment_hash": "11" * 32,
+                    "fee_msat": "7",
+                    "payment_preimage": "ab" * 32,
+                }
+            }
+        )
+    ]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            captured["json"] = json
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.settings.mint_lnd_allow_self_payment",
+        enabled,
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.SETTLED
+    assert captured["json"]["allow_self_payment"] is expected
+
+
+@pytest.mark.asyncio
 async def test_lndrest_pay_invoice_returns_failed_on_payment_failure(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat
@@ -690,55 +630,6 @@ async def test_lndgrpc_get_payment_quote_sets_rpc_deadline(monkeypatch):
 
     assert quote.fee == Amount(Unit.sat, 3)
     assert rpc_timeouts == [FEE_PROBE_TIMEOUT_SECONDS]
-
-
-@pytest.mark.asyncio
-async def test_blink_get_payment_status_send_receive_pair_is_failed(monkeypatch):
-    wallet = object.__new__(BlinkWallet)
-    wallet.unit = Unit.sat
-    wallet.wallet_ids = {Unit.sat: "wbtc"}
-    wallet.endpoint = "https://blink.test"
-
-    class Client:
-        async def post(self, *args, **kwargs):
-            return _response(
-                200,
-                {
-                    "data": {
-                        "me": {
-                            "defaultAccount": {
-                                "walletById": {
-                                    "transactionsByPaymentHash": [
-                                        {"direction": "SEND", "status": "FAILURE"},
-                                        {"direction": "RECEIVE", "status": "FAILURE"},
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                },
-            )
-
-    cast(Any, wallet).client = Client()
-    invoice = "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsssp575z0n39w2j7zgnpqtdlrgz9rycner4eptjm3lz363dzylnrm3h4s9qyyssqfz8jglcshnlcf0zkw4qu8fyr564lg59x5al724kms3h6gpuhx9xrfv27tgx3l3u3cyf63r52u0xmac6max8mdupghfzh84t4hfsvrfsqwnuszf"
-    status = await wallet.get_payment_status(invoice)
-    assert status.result == PaymentResult.FAILED
-    assert status.error_message == "Payment failed"
-
-
-@pytest.mark.asyncio
-async def test_blink_get_sats_per_usd_raises_on_missing_conversion():
-    wallet = object.__new__(BlinkWallet)
-    wallet.unit = Unit.usd
-    wallet.endpoint = "https://blink.test"
-
-    class Client:
-        async def post(self, *args, **kwargs):
-            return _response(200, {"data": {"currencyConversionEstimation": None}})
-
-    cast(Any, wallet).client = Client()
-    with pytest.raises(Exception, match="Currency conversion service unavailable"):
-        await wallet._get_sats_per_usd()
 
 
 @pytest.mark.asyncio

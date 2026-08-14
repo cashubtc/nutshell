@@ -31,8 +31,6 @@ for key, value in settings.model_dump().items():
     if key in [
         "mint_private_key",
         "mint_seed_decryption_key",
-        "mint_lnbits_key",
-        "mint_blink_key",
         "mint_strike_key",
         "mint_spark_api_key",
         "mint_spark_mnemonic",
