@@ -50,9 +50,6 @@ MAX_ROUTE_RETRIES = 50
 PAYMENT_TIMEOUT_SECONDS = 60
 FEE_PROBE_TIMEOUT_SECONDS = 5
 
-LND_FEE_PROBE_FAILED_LOG = "LND fee probe failed: "
-LND_FEE_PROBE_FAILED_USING_RESERVE_LOG = "LND fee probe failed, using configured reserve: "
-
 
 class LndRPCWallet(LightningBackend):
     supports_mpp = settings.mint_lnd_enable_mpp
@@ -471,11 +468,11 @@ class LndRPCWallet(LightningBackend):
                     )
                 else:
                     logger.debug(
-                        f"{LND_FEE_PROBE_FAILED_LOG}"
+                        "LND fee probe failed: "
                         f"{lnrpc.PaymentFailureReason.Name(response.failure_reason)}"
                     )
             except AioRpcError as exc:
-                logger.debug(f"{LND_FEE_PROBE_FAILED_USING_RESERVE_LOG}{exc}")
+                logger.debug(f"LND fee probe failed, using configured reserve: {exc}")
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
 

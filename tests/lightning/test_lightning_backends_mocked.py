@@ -20,12 +20,7 @@ from cashu.lightning.lnd_grpc.lnd_grpc import (
     FEE_PROBE_TIMEOUT_SECONDS,
     LndRPCWallet,
 )
-from cashu.lightning.lndrest import (
-    LND_ESTIMATE_FEE_FAILURE_REASON_KEY,
-    LND_ESTIMATE_FEE_FAILURE_REASON_NONE,
-    LND_ESTIMATE_FEE_ROUTING_FEE_MSAT_KEY,
-    LndRestWallet,
-)
+from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
 
 
@@ -573,8 +568,8 @@ async def test_lndrest_get_payment_quote_adds_base_reserve(monkeypatch):
             return _response(
                 200,
                 {
-                    LND_ESTIMATE_FEE_FAILURE_REASON_KEY: LND_ESTIMATE_FEE_FAILURE_REASON_NONE,
-                    LND_ESTIMATE_FEE_ROUTING_FEE_MSAT_KEY: "1001",
+                    "failure_reason": "FAILURE_REASON_NONE",
+                    "routing_fee_msat": "1001",
                 },
             )
 

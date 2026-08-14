@@ -45,15 +45,7 @@ MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
 FEE_PROBE_TIMEOUT_SECONDS = 5
-
-LND_ESTIMATE_FEE_ENDPOINT = "/v2/router/route/estimatefee"
-LND_ESTIMATE_FEE_PAYMENT_REQUEST_KEY = "payment_request"
-LND_ESTIMATE_FEE_TIMEOUT_KEY = "timeout"
-LND_ESTIMATE_FEE_FAILURE_REASON_KEY = "failure_reason"
-LND_ESTIMATE_FEE_ROUTING_FEE_MSAT_KEY = "routing_fee_msat"
-LND_ESTIMATE_FEE_FAILURE_REASON_NONE = "FAILURE_REASON_NONE"
-LND_FEE_PROBE_FAILED_LOG = "LND fee probe failed: "
-LND_FEE_PROBE_FAILED_USING_RESERVE_LOG = "LND fee probe failed, using configured reserve: "
+FAILURE_REASON_NONE = "FAILURE_REASON_NONE"
 
 
 class LndRestWallet(LightningBackend):
@@ -531,26 +523,26 @@ class LndRestWallet(LightningBackend):
         if not melt_quote.is_mpp:
             try:
                 response = await self.client.post(
-                    LND_ESTIMATE_FEE_ENDPOINT,
+                    "/v2/router/route/estimatefee",
                     json={
-                        LND_ESTIMATE_FEE_PAYMENT_REQUEST_KEY: melt_quote.request,
-                        LND_ESTIMATE_FEE_TIMEOUT_KEY: FEE_PROBE_TIMEOUT_SECONDS,
+                        "payment_request": melt_quote.request,
+                        "timeout": FEE_PROBE_TIMEOUT_SECONDS,
                     },
                     timeout=FEE_PROBE_TIMEOUT_SECONDS,
                 )
                 response.raise_for_status()
                 data = response.json()
-                failure_reason = data.get(LND_ESTIMATE_FEE_FAILURE_REASON_KEY)
-                if failure_reason in (None, 0, LND_ESTIMATE_FEE_FAILURE_REASON_NONE):
+                failure_reason = data.get("failure_reason")
+                if failure_reason in (None, 0, FAILURE_REASON_NONE):
                     # The probe is a lower bound; add the configured base reserve
                     # to allow for a more expensive route at payment time.
                     fees_msat = settings.lightning_reserve_fee_min + int(
-                        data[LND_ESTIMATE_FEE_ROUTING_FEE_MSAT_KEY]
+                        data["routing_fee_msat"]
                     )
                 else:
-                    logger.debug(f"{LND_FEE_PROBE_FAILED_LOG}{failure_reason}")
+                    logger.debug(f"LND fee probe failed: {failure_reason}")
             except Exception as exc:
-                logger.debug(f"{LND_FEE_PROBE_FAILED_USING_RESERVE_LOG}{exc}")
+                logger.debug(f"LND fee probe failed, using configured reserve: {exc}")
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
 
