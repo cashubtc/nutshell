@@ -27,7 +27,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         mint_info_dict = self.ledger.mint_info.dict()
         del mint_info_dict["nuts"]
         # not in the management proto; operators set it in the mint config
-        del mint_info_dict["max_request_length"]
+        del mint_info_dict["max_array_length"]
         mint_info_dict["long_description"] = mint_info_dict["description_long"]
         del mint_info_dict["description_long"]
         response = management_pb2.GetInfoResponse(**mint_info_dict)
