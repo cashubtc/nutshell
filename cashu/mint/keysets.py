@@ -1,4 +1,5 @@
 import base64
+import copy
 import datetime
 import time
 from typing import Dict, List, Optional
@@ -154,21 +155,24 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             await self.crud.store_keyset(keyset=new_keyset, db=self.db, conn=conn)
 
             logger.debug(f"De-activating keyset {selected_keyset.id}...")
-            selected_keyset.active = False
-            await self.crud.update_keyset(keyset=selected_keyset, db=self.db, conn=conn)
+            inactive_keyset = copy.copy(selected_keyset)
+            inactive_keyset.active = False
+            await self.crud.update_keyset(keyset=inactive_keyset, db=self.db, conn=conn)
 
-            self.keysets[new_keyset.id] = new_keyset
-            self.keysets[selected_keyset.id] = selected_keyset
+        # Update live state only after the database transaction has committed.
+        selected_keyset.active = False
+        self.keysets[new_keyset.id] = new_keyset
+        self.keysets[selected_keyset.id] = selected_keyset
 
-            if self.keyset and self.keyset.id == selected_keyset.id:
-                self.keyset = new_keyset
-                self.derivation_path = new_keyset.derivation_path
-                logger.info(
-                    f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}"
-                )
+        if self.keyset and self.keyset.id == selected_keyset.id:
+            self.keyset = new_keyset
+            self.derivation_path = new_keyset.derivation_path
+            logger.info(
+                f"Updated default keyset to {new_keyset.id} with derivation path {new_keyset.derivation_path}"
+            )
 
-            logger.debug(f"Keyset {selected_keyset.id} was de-activated")
-            return new_keyset
+        logger.debug(f"Keyset {selected_keyset.id} was de-activated")
+        return new_keyset
 
     async def activate_keyset(
         self,
