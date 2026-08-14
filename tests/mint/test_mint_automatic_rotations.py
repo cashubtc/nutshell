@@ -48,6 +48,18 @@ async def test_should_rotate_keyset_behavior(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_should_not_rotate_on_unparseable_valid_from(ledger: Ledger):
+    """Fail closed: an unparseable valid_from must not trigger rotation."""
+    keyset = next(k for k in ledger.keysets.values() if k.active)
+    original_valid_from = keyset.valid_from
+    try:
+        keyset.valid_from = "not-a-timestamp"
+        assert not ledger.should_rotate_keyset(keyset)
+    finally:
+        keyset.valid_from = original_valid_from
+
+
+@pytest.mark.asyncio
 async def test_automatic_keyset_rotation_flow(ledger: Ledger):
     # Cancel background tasks to avoid race conditions with manual triggering
     for task in ledger.regular_tasks:
@@ -304,12 +316,12 @@ async def test_regression_non_atomic_rotation(ledger: Ledger):
         ]
 
         # There should be exactly ONE active keyset for this unit (the old one)
-        assert len(active_db_keysets) == 1, (
-            f"Expected exactly 1 active keyset in DB, found: {len(active_db_keysets)}"
-        )
-        assert active_db_keysets[0].id == keyset.id, (
-            "The active keyset should be the original one"
-        )
+        assert (
+            len(active_db_keysets) == 1
+        ), f"Expected exactly 1 active keyset in DB, found: {len(active_db_keysets)}"
+        assert (
+            active_db_keysets[0].id == keyset.id
+        ), "The active keyset should be the original one"
 
         # The failed transaction must not leak into the live ledger state.
         active_memory_keysets = [
@@ -374,9 +386,9 @@ async def test_regression_concurrent_rotation_race(ledger: Ledger):
         # Both results should be MintKeysets and they should be identical (the same rotated keyset)
         assert isinstance(results[0], MintKeyset)
         assert isinstance(results[1], MintKeyset)
-        assert results[0].id == results[1].id, (
-            "Expected both parallel tasks to return the same rotated keyset ID"
-        )
+        assert (
+            results[0].id == results[1].id
+        ), "Expected both parallel tasks to return the same rotated keyset ID"
 
     finally:
         keyset.valid_from = original_valid_from
@@ -524,9 +536,9 @@ async def test_regression_highest_counter_selection_incomplete(ledger: Ledger):
             rotated_counter = int(
                 rotated_keyset.derivation_path.split("/")[-1].replace("'", "")
             )
-            assert rotated_counter == 6, (
-                f"Expected rotated counter to be 6, got {rotated_counter}"
-            )
+            assert (
+                rotated_counter == 6
+            ), f"Expected rotated counter to be 6, got {rotated_counter}"
 
         finally:
             ledger.crud.store_keyset = original_store
