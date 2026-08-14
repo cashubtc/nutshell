@@ -465,7 +465,7 @@ def test_transaction_transcript_vectors():
 
     tv = VECTORS["transcript"]
     assert tv["domain_tag"] == TRANSCRIPT_DOMAIN_TAG
-    for name in ("swap", "mint", "melt"):
+    for name in ("swap", "mint", "melt", "melt_with_change"):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
         assert build_transaction_transcript(tx).hex() == example["transcript"]
