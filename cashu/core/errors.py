@@ -176,6 +176,14 @@ class KeysetNotFoundError(KeysetError):
         super().__init__(self.detail, code=self.code)
 
 
+class KeysetInactiveError(KeysetError):
+    detail = "keyset is inactive, cannot sign messages"
+    code = 12002
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
 class LightningError(CashuError):
     detail = "Lightning error"
     code = 20000

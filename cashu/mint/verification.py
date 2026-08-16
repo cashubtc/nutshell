@@ -15,6 +15,7 @@ from ..core.crypto.secp import PublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
+    KeysetInactiveError,
     NoSecretInProofsError,
     NotAllowedError,
     OutputsAlreadySignedError,
@@ -178,7 +179,7 @@ class LedgerVerification(
         if outputs[0].id not in self.keysets:
             raise TransactionError("keyset id unknown.")
         if not self.keysets[outputs[0].id].active:
-            raise TransactionError("keyset id inactive.")
+            raise KeysetInactiveError()
         if expected_unit and self.keysets[outputs[0].id].unit != expected_unit:
             raise TransactionError(
                 f"output unit {self.keysets[outputs[0].id].unit.name} does not match quote unit {expected_unit.name}"
