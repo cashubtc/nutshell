@@ -1,7 +1,11 @@
+import asyncio
+import datetime
+import signal
+
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Amount, MeltQuoteState, Method, Unit
+from cashu.core.base import Amount, MeltQuoteState, Method, MintBalanceLogEntry, Unit
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -35,6 +39,100 @@ async def test_check_balances_and_abort(ledger: Ledger):
         Amount(Unit.sat, 0),
     )
     assert ok
+
+
+@pytest.mark.asyncio
+async def test_dispatch_watchdogs_starts_abort_monitor(ledger: Ledger):
+    tasks = await ledger.dispatch_watchdogs()
+    assert any(
+        task.get_coro().__qualname__ == "LedgerWatchdog.monitor_abort_queue"
+        for task in tasks
+    )
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_check_balances_and_abort_insolvency(ledger: Ledger):
+    ledger.abort_queue = asyncio.Queue()
+    ok = await ledger.check_balances_and_abort(
+        ledger.backends[Method.bolt11][Unit.sat],
+        None,
+        Amount(Unit.sat, 100),
+        Amount(Unit.sat, 1000),
+        Amount(Unit.sat, 0),
+    )
+    assert not ok
+    assert not ledger.abort_queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_check_balances_and_abort_delta_shrink_aborts(ledger: Ledger):
+    ledger.abort_queue = asyncio.Queue()
+    last_balance_log_entry = MintBalanceLogEntry(
+        unit=Unit.sat,
+        backend_balance=Amount(Unit.sat, 1064),
+        keyset_balance=Amount(Unit.sat, 900),
+        keyset_fees_paid=Amount(Unit.sat, 0),
+        time=datetime.datetime.now(),
+    )
+    ok = await ledger.check_balances_and_abort(
+        ledger.backends[Method.bolt11][Unit.sat],
+        last_balance_log_entry,
+        Amount(Unit.sat, 1064),
+        Amount(Unit.sat, 964),
+        Amount(Unit.sat, 0),
+    )
+    assert not ok
+    assert not ledger.abort_queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_monitor_abort_queue_signals_sigterm(ledger: Ledger, monkeypatch):
+    ledger.abort_queue = asyncio.Queue()
+    signals = []
+
+    class _Abort(Exception):
+        pass
+
+    def fake_raise_signal(sig):
+        signals.append(sig)
+        raise _Abort()
+
+    monkeypatch.setattr(signal, "raise_signal", fake_raise_signal)
+    monkeypatch.setattr(settings, "mint_watchdog_ignore_mismatch", False)
+
+    await ledger.abort_queue.put(True)
+    with pytest.raises(_Abort):
+        await ledger.monitor_abort_queue()
+    assert signals == [signal.SIGTERM]
+
+
+@pytest.mark.asyncio
+async def test_monitor_abort_queue_ignores_mismatch(ledger: Ledger, monkeypatch):
+    ledger.abort_queue = asyncio.Queue()
+    signals = []
+
+    def fake_raise_signal(sig):
+        signals.append(sig)
+
+    monkeypatch.setattr(signal, "raise_signal", fake_raise_signal)
+    monkeypatch.setattr(settings, "mint_watchdog_ignore_mismatch", True)
+
+    await ledger.abort_queue.put(True)
+    task = asyncio.create_task(ledger.monitor_abort_queue())
+    for _ in range(100):
+        if ledger.abort_queue.empty():
+            break
+        await asyncio.sleep(0.01)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert signals == []
 
 
 @pytest.mark.asyncio
