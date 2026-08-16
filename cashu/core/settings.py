@@ -325,6 +325,7 @@ class LndRPCFundingSource(MintSettings):
 class CLNRestFundingSource(MintSettings):
     mint_clnrest_url: Optional[str] = Field(default=None)
     mint_clnrest_cert: Optional[str] = Field(default=None)
+    mint_clnrest_cert_verify: bool = Field(default=True)
     mint_clnrest_rune: Optional[str] = Field(default=None)
     mint_clnrest_enable_mpp: bool = Field(default=True)
 
@@ -333,6 +334,7 @@ class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_url: Optional[str] = Field(default=None)
     mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
+    mint_corelightning_rest_cert_verify: bool = Field(default=True)
 
 
 class AuthSettings(MintSettings):
