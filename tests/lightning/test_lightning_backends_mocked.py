@@ -16,6 +16,10 @@ from cashu.core.models import (
 from cashu.lightning.base import PaymentResult, Unsupported
 from cashu.lightning.clnrest import CLNRestWallet
 from cashu.lightning.corelightningrest import CoreLightningRestWallet
+from cashu.lightning.lnd_grpc.lnd_grpc import (
+    FEE_PROBE_TIMEOUT_SECONDS,
+    LndRPCWallet,
+)
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
 
@@ -545,6 +549,87 @@ async def test_lndrest_get_payment_quote_uses_mpp_amount(monkeypatch):
     quote = await wallet.get_payment_quote(request)
     assert quote.amount == Amount(Unit.sat, 2)
     assert quote.fee == Amount(Unit.sat, fee_reserve(1500) // 1000)
+
+
+@pytest.mark.asyncio
+async def test_lndrest_get_payment_quote_adds_base_reserve(monkeypatch):
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.decode",
+        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="ph"),
+    )
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.settings.lightning_reserve_fee_min", 2000
+    )
+
+    class Client:
+        async def post(self, *args, **kwargs):
+            return _response(
+                200,
+                {
+                    "failure_reason": "FAILURE_REASON_NONE",
+                    "routing_fee_msat": "1001",
+                },
+            )
+
+    cast(Any, wallet).client = Client()
+    quote = await wallet.get_payment_quote(
+        PostMeltQuoteRequest(unit="sat", request="lnbc1")
+    )
+
+    assert quote.fee == Amount(Unit.sat, 4)
+
+
+@pytest.mark.asyncio
+async def test_lndgrpc_get_payment_quote_sets_rpc_deadline(monkeypatch):
+    wallet = object.__new__(LndRPCWallet)
+    wallet.unit = Unit.sat
+    wallet.endpoint = "lnd.test"
+    wallet.combined_creds = object()
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="ph"),
+    )
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.settings.lightning_reserve_fee_min",
+        2000,
+    )
+
+    class Channel:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.grpc.aio.secure_channel",
+        lambda *args: Channel(),
+    )
+    rpc_timeouts = []
+
+    class RouterStub:
+        def __init__(self, channel):
+            pass
+
+        async def EstimateRouteFee(self, request, timeout=None):
+            rpc_timeouts.append(timeout)
+            return SimpleNamespace(
+                failure_reason=0,
+                routing_fee_msat=1000,
+            )
+
+    monkeypatch.setattr(
+        "cashu.lightning.lnd_grpc.lnd_grpc.routerstub.RouterStub", RouterStub
+    )
+
+    quote = await wallet.get_payment_quote(
+        PostMeltQuoteRequest(unit="sat", request="lnbc1")
+    )
+
+    assert quote.fee == Amount(Unit.sat, 3)
+    assert rpc_timeouts == [FEE_PROBE_TIMEOUT_SECONDS]
 
 
 @pytest.mark.asyncio
