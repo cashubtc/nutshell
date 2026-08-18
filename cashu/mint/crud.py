@@ -244,6 +244,16 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
+    async def get_mint_quotes_by_pubkeys(
+        self,
+        *,
+        pubkeys: List[str],
+        method: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]: ...
+
+    @abstractmethod
     async def get_mint_quote_by_request(
         self,
         *,
@@ -378,7 +388,7 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""
             SELECT * from {db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id
-                AND c_ IS {'NOT NULL' if signed else 'NULL'}
+                AND c_ IS {"NOT NULL" if signed else "NULL"}
             ORDER BY order_index ASC
             """,
             {"melt_id": melt_id},
@@ -680,6 +690,30 @@ class LedgerCrudSqlite(LedgerCrud):
         if row is None:
             return None
         return MintQuote.from_row(row) if row else None  # type: ignore
+
+    async def get_mint_quotes_by_pubkeys(
+        self,
+        *,
+        pubkeys: List[str],
+        method: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]:
+        if not pubkeys:
+            return []
+
+        placeholders = ",".join(f":pubkey_{i}" for i in range(len(pubkeys)))
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * from {db.table_with_schema("mint_quotes")}
+            WHERE method = :method AND pubkey IN ({placeholders})
+            """,
+            {
+                "method": method,
+                **{f"pubkey_{i}": pubkey for i, pubkey in enumerate(pubkeys)},
+            },
+        )
+        return [MintQuote.from_row(row) for row in rows] if rows else []
 
     async def get_mint_quote_by_request(
         self,

@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from cashu.core.nuts.nuts import NutKey
+
 
 class MintMethodBolt11OptionSetting(BaseModel):
     description: Optional[bool] = None
@@ -46,9 +48,9 @@ class GetInfoResponse(BaseModel):
     tos_url: Optional[str] = None
     urls: Optional[List[str]] = None
     time: Optional[int] = None
-    nuts: Optional[Dict[int, Any]] = None
+    nuts: Optional[Dict[NutKey, Any]] = None
 
-    def supports(self, nut: int) -> Optional[bool]:
+    def supports(self, nut: NutKey) -> Optional[bool]:
         return nut in self.nuts if self.nuts else None
 
 

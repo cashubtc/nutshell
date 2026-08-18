@@ -120,6 +120,19 @@ async def test_m038_remove_dleq_from_promises(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_m039_add_mint_quote_pubkey_index(tmp_path):
+    db = Database("mint", str(tmp_path / "mint"))
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        indexes = await conn.fetchall(
+            f"PRAGMA index_list({db.table_with_schema('mint_quotes')})"
+        )
+
+    assert "idx_mint_quotes_pubkey" in {index["name"] for index in indexes}
+
+
+@pytest.mark.asyncio
 async def test_m029_witness_cleanup():
     db = Database("mint", "./test_data/mig_witness_cleanup")
 
