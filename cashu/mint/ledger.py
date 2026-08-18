@@ -1,5 +1,6 @@
 import asyncio
 import time
+import traceback
 from typing import Dict, List, Mapping, Optional, Tuple
 
 import bolt11
@@ -57,6 +58,7 @@ from ..lightning.base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    StatusResponse,
 )
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
@@ -179,7 +181,16 @@ class Ledger(
                     f"Using {self.backends[method][unit].__class__.__name__} backend for"
                     f" method: '{method.name}' and unit: '{unit.name}'"
                 )
-                status = await self.backends[method][unit].status()
+                try:
+                    status = await self.backends[method][unit].status()
+                except Exception as e:
+                    logger.debug(
+                        f"Backend status check failed: {traceback.format_exc()}"
+                    )
+                    status = StatusResponse(
+                        error_message=f"{type(e).__name__}: {e}",
+                        balance=Amount(unit, 0),
+                    )
                 if status.error_message:
                     logger.error(
                         "The backend for"
