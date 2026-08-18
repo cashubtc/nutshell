@@ -26,11 +26,15 @@ from .base import (
     Unsupported,
 )
 
-# https://docs.corelightning.org/reference/lightning-pay
+CLN_PAYMENT_STATUS_COMPLETE = "complete"
+CLN_PAYMENT_STATUS_PENDING = "pending"
+CLN_PAYMENT_STATUS_FAILED = "failed"
+
+# https://docs.corelightning.org/reference/listpays
 PAYMENT_RESULT_MAP = {
-    "complete": PaymentResult.SETTLED,
-    "pending": PaymentResult.PENDING,
-    "failed": PaymentResult.FAILED,
+    CLN_PAYMENT_STATUS_COMPLETE: PaymentResult.SETTLED,
+    CLN_PAYMENT_STATUS_PENDING: PaymentResult.PENDING,
+    CLN_PAYMENT_STATUS_FAILED: PaymentResult.FAILED,
 }
 
 # https://docs.corelightning.org/reference/lightning-listinvoices
@@ -80,7 +84,10 @@ class CLNRestWallet(LightningBackend):
 
         self.cert = settings.mint_clnrest_cert or False
         self.client = httpx.AsyncClient(
-            base_url=self.url, verify=self.cert, headers=self.auth, timeout=None,
+            base_url=self.url,
+            verify=self.cert,
+            headers=self.auth,
+            timeout=None,
         )
         self.last_pay_index = 0
 
@@ -187,12 +194,9 @@ class CLNRestWallet(LightningBackend):
             )
 
         quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
-        fee_limit_percent = fee_limit_msat / quote_amount_msat * 100
         post_data = {
-            "bolt11": quote.request,
-            "maxfeepercent": f"{fee_limit_percent:.11}",
-            "exemptfee": 0,  # so fee_limit_percent is applied even on payments
-            # with fee < 5000 millisatoshi (which is default value of exemptfee)
+            "invstring": quote.request,
+            "maxfee": fee_limit_msat,
         }
 
         # Handle Multi-Mint payout where we must only pay part of the invoice amount
@@ -207,7 +211,7 @@ class CLNRestWallet(LightningBackend):
                 return PaymentResponse(
                     result=PaymentResult.FAILED, error_message=error_message
                 )
-        r = await self.client.post("/v1/pay", data=post_data, timeout=None)
+        r = await self.client.post("/v1/xpay", data=post_data, timeout=None)
 
         if r.is_error or "message" in r.json():
             try:
@@ -221,12 +225,12 @@ class CLNRestWallet(LightningBackend):
 
         data = r.json()
 
-        checking_id = data["payment_hash"]
+        checking_id = invoice.payment_hash
         preimage = data["payment_preimage"]
-        fee_msat = data["amount_sent_msat"] - data["amount_msat"]
+        fee_msat = int(data["amount_sent_msat"]) - int(data["amount_msat"])
 
         return PaymentResponse(
-            result=PAYMENT_RESULT_MAP[data["status"]],
+            result=PaymentResult.SETTLED,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
@@ -269,7 +273,25 @@ class CLNRestWallet(LightningBackend):
             message = data.get("message") or data
             raise Exception(f"error in clnrest response: {message}")
 
-        pay = data["pays"][0]
+        pays = data["pays"]
+        pay = next(
+            (pay for pay in pays if pay["status"] == CLN_PAYMENT_STATUS_PENDING),
+            None,
+        )
+        if pay is None:
+            pay = next(
+                (pay for pay in pays if pay["status"] == CLN_PAYMENT_STATUS_COMPLETE),
+                None,
+            )
+        if pay is None and all(
+            pay["status"] == CLN_PAYMENT_STATUS_FAILED for pay in pays
+        ):
+            pay = pays[-1]
+        if pay is None:
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN,
+                error_message="unknown payment status",
+            )
 
         fee_msat, preimage = None, None
         if PAYMENT_RESULT_MAP[pay["status"]] == PaymentResult.SETTLED:
@@ -298,10 +320,10 @@ class CLNRestWallet(LightningBackend):
             else 0
         )
         self.last_pay_index = last_pay_index
-        
+
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        
+
         while True:
             try:
                 url = "/v1/waitanyinvoice"
@@ -343,9 +365,12 @@ class CLNRestWallet(LightningBackend):
                     " seconds"
                 )
                 await asyncio.sleep(retry_delay)
-                
+
                 # Exponential backoff
-                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
+                retry_delay = max(
+                    settings.mint_retry_exponential_backoff_base_delay,
+                    min(retry_delay * 2, max_retry_delay),
+                )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

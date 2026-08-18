@@ -15,7 +15,12 @@ from cashu.core.models import (
 )
 from cashu.lightning.base import PaymentResult, Unsupported
 from cashu.lightning.blink import BlinkWallet
-from cashu.lightning.clnrest import CLNRestWallet
+from cashu.lightning.clnrest import (
+    CLN_PAYMENT_STATUS_COMPLETE,
+    CLN_PAYMENT_STATUS_FAILED,
+    CLN_PAYMENT_STATUS_PENDING,
+    CLNRestWallet,
+)
 from cashu.lightning.corelightningrest import CoreLightningRestWallet
 from cashu.lightning.lnbits import LNbitsWallet  # type: ignore[attr-defined]
 from cashu.lightning.lndrest import LndRestWallet
@@ -279,6 +284,83 @@ async def test_clnrest_pay_invoice_mpp_not_supported(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_clnrest_pay_invoice_uses_xpay(monkeypatch):
+    wallet = object.__new__(CLNRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = True
+    request_data = None
+
+    class Client:
+        async def post(self, url, data=None, timeout=None):
+            nonlocal request_data
+            assert url == "/v1/xpay"
+            assert timeout is None
+            request_data = data
+            return _response(
+                200,
+                {
+                    "payment_preimage": "preimage",
+                    "failed_parts": 0,
+                    "successful_parts": 1,
+                    "amount_msat": 1000,
+                    "amount_sent_msat": 1100,
+                },
+            )
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.clnrest.decode",
+        lambda request: SimpleNamespace(amount_msat=1000, payment_hash="hash"),
+    )
+
+    result = await wallet.pay_invoice(_quote("lnbc1fake", amount=1), fee_limit_msat=100)
+
+    assert request_data == {"invstring": "lnbc1fake", "maxfee": 100}
+    assert result.result == PaymentResult.SETTLED
+    assert result.checking_id == "hash"
+    assert result.fee == Amount(Unit.msat, 100)
+    assert result.preimage == "preimage"
+
+
+@pytest.mark.asyncio
+async def test_clnrest_xpay_uses_partial_msat_for_mpp(monkeypatch):
+    wallet = object.__new__(CLNRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = True
+    request_data = None
+
+    class Client:
+        async def post(self, url, data=None, timeout=None):
+            nonlocal request_data
+            request_data = data
+            return _response(
+                200,
+                {
+                    "payment_preimage": "preimage",
+                    "failed_parts": 0,
+                    "successful_parts": 1,
+                    "amount_msat": 1000,
+                    "amount_sent_msat": 1000,
+                },
+            )
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.clnrest.decode",
+        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="hash"),
+    )
+
+    result = await wallet.pay_invoice(_quote("lnbc1fake", amount=1), fee_limit_msat=100)
+
+    assert request_data == {
+        "invstring": "lnbc1fake",
+        "maxfee": 100,
+        "partial_msat": 1000,
+    }
+    assert result.result == PaymentResult.SETTLED
+
+
+@pytest.mark.asyncio
 async def test_clnrest_get_payment_status_not_found_is_unknown():
     wallet = object.__new__(CLNRestWallet)
     wallet.unit = Unit.sat
@@ -348,6 +430,88 @@ async def test_corelightningrest_get_payment_status_not_found_is_unknown():
     status = await wallet.get_payment_status("hash")
     assert status.result == PaymentResult.UNKNOWN
     assert status.error_message == "payment not found"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pays, expected_result, expected_fee, expected_preimage",
+    [
+        (
+            [
+                {"status": CLN_PAYMENT_STATUS_FAILED},
+                {"status": CLN_PAYMENT_STATUS_PENDING},
+            ],
+            PaymentResult.PENDING,
+            None,
+            None,
+        ),
+        (
+            [
+                {"status": CLN_PAYMENT_STATUS_FAILED},
+                {
+                    "status": CLN_PAYMENT_STATUS_COMPLETE,
+                    "amount_sent_msat": 1100,
+                    "amount_msat": 1000,
+                    "preimage": "preimage",
+                },
+            ],
+            PaymentResult.SETTLED,
+            100,
+            "preimage",
+        ),
+        (
+            [
+                {
+                    "status": CLN_PAYMENT_STATUS_COMPLETE,
+                    "amount_sent_msat": 1100,
+                    "amount_msat": 1000,
+                    "preimage": "preimage",
+                },
+                {"status": CLN_PAYMENT_STATUS_PENDING},
+            ],
+            PaymentResult.PENDING,
+            None,
+            None,
+        ),
+        (
+            [
+                {"status": CLN_PAYMENT_STATUS_FAILED},
+                {"status": CLN_PAYMENT_STATUS_FAILED},
+            ],
+            PaymentResult.FAILED,
+            None,
+            None,
+        ),
+        (
+            [
+                {"status": CLN_PAYMENT_STATUS_FAILED},
+                {"status": "unexpected"},
+            ],
+            PaymentResult.UNKNOWN,
+            None,
+            None,
+        ),
+    ],
+)
+async def test_cln_get_payment_status_aggregates_all_pay_attempts(
+    pays, expected_result, expected_fee, expected_preimage
+):
+    wallet = object.__new__(CLNRestWallet)
+    wallet.unit = Unit.sat
+
+    class Client:
+        async def get(self, *args, **kwargs):
+            return _response(200, {"pays": pays})
+
+        async def post(self, *args, **kwargs):
+            return _response(200, {"pays": pays})
+
+    cast(Any, wallet).client = Client()
+    status = await wallet.get_payment_status("hash")
+
+    assert status.result == expected_result
+    assert (status.fee.amount if status.fee else None) == expected_fee
+    assert status.preimage == expected_preimage
 
 
 @pytest.mark.asyncio
