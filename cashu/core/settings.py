@@ -331,12 +331,6 @@ class CLNRestFundingSource(MintSettings):
     mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
-class CoreLightningRestFundingSource(MintSettings):
-    mint_corelightning_rest_url: Optional[str] = Field(default=None)
-    mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
-    mint_corelightning_rest_cert: Optional[str] = Field(default=None)
-
-
 class AuthSettings(MintSettings):
     mint_auth_database: str = Field(default="data/mint")
     mint_require_auth: bool = Field(default=False)
@@ -371,7 +365,6 @@ class Settings(
     EnvSettings,
     LndRPCFundingSource,
     LndRestFundingSource,
-    CoreLightningRestFundingSource,
     CLNRestFundingSource,
     FakeWalletSettings,
     MintLimits,

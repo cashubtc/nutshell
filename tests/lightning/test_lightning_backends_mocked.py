@@ -21,7 +21,6 @@ from cashu.lightning.clnrest import (
     CLN_PAYMENT_STATUS_PENDING,
     CLNRestWallet,
 )
-from cashu.lightning.corelightningrest import CoreLightningRestWallet
 from cashu.lightning.lnbits import LNbitsWallet  # type: ignore[attr-defined]
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
@@ -410,29 +409,6 @@ async def test_clnrest_get_payment_quote_uses_mpp_amount(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_corelightningrest_create_invoice_description_hash_unsupported():
-    wallet = object.__new__(CoreLightningRestWallet)
-    wallet.unit = Unit.sat
-    with pytest.raises(Unsupported):
-        await wallet.create_invoice(Amount(Unit.sat, 1), description_hash=b"x")
-
-
-@pytest.mark.asyncio
-async def test_corelightningrest_get_payment_status_not_found_is_unknown():
-    wallet = object.__new__(CoreLightningRestWallet)
-    wallet.unit = Unit.sat
-
-    class Client:
-        async def get(self, *args, **kwargs):
-            return _response(200, {"pays": []})
-
-    cast(Any, wallet).client = Client()
-    status = await wallet.get_payment_status("hash")
-    assert status.result == PaymentResult.UNKNOWN
-    assert status.error_message == "payment not found"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "pays, expected_result, expected_fee, expected_preimage",
     [
@@ -512,22 +488,6 @@ async def test_cln_get_payment_status_aggregates_all_pay_attempts(
     assert status.result == expected_result
     assert (status.fee.amount if status.fee else None) == expected_fee
     assert status.preimage == expected_preimage
-
-
-@pytest.mark.asyncio
-async def test_corelightningrest_status_with_error_payload_returns_failure():
-    wallet = object.__new__(CoreLightningRestWallet)
-    wallet.unit = Unit.sat
-    wallet.url = "https://coreln.test"
-
-    class Client:
-        async def get(self, *args, **kwargs):
-            return _response(200, {"error": "denied"})
-
-    cast(Any, wallet).client = Client()
-    status = await wallet.status()
-    assert "Failed to connect" in str(status.error_message)
-    assert status.balance.amount == 0
 
 
 @pytest.mark.asyncio
