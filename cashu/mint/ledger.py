@@ -29,6 +29,7 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     BatchDuplicateQuotesError,
+    BatchSizeExceededError,
     CashuError,
     KeysetInactiveError,
     LightningError,
@@ -47,7 +48,9 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
+    PostMintQuotesByPubkeyRequest,
 )
+from ..core.nuts import nutxx
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -459,6 +462,41 @@ class Ledger(
                         await self.events.submit(quote)
 
         return quote
+
+    async def mint_quotes_by_pubkey(
+        self, payload: PostMintQuotesByPubkeyRequest
+    ) -> List[MintQuote]:
+        """Return NUT-20 mint quotes after proving control of every pubkey."""
+        if len(payload.pubkeys) > nutxx.MAX_LOOKUP_PUBKEYS:
+            raise BatchSizeExceededError(
+                f"Maximum number of pubkeys is {nutxx.MAX_LOOKUP_PUBKEYS}."
+            )
+        if len(payload.pubkeys) != len(payload.pubkey_signatures):
+            raise CashuError("Mint quote lookup signature missing or invalid.")
+        if not self.pubkey:
+            raise CashuError("Mint public key is not available.")
+
+        mint_pubkey = self.pubkey.format().hex()
+        verified_pubkeys: List[str] = []
+        for pubkey_hex, signature_hex in zip(
+            payload.pubkeys, payload.pubkey_signatures
+        ):
+            try:
+                pubkey = PublicKey(bytes.fromhex(pubkey_hex))
+                signature = bytes.fromhex(signature_hex)
+                if not nutxx.verify_signature(mint_pubkey, pubkey, signature):
+                    raise ValueError("invalid signature")
+            except Exception as exc:
+                raise CashuError(
+                    "Mint quote lookup signature missing or invalid."
+                ) from exc
+            verified_pubkeys.append(pubkey.format().hex())
+
+        return await self.crud.get_mint_quotes_by_pubkeys(
+            pubkeys=verified_pubkeys,
+            method=Method.bolt11.name,
+            db=self.db,
+        )
 
     async def mint_quote_check(
         self, payload: PostMintQuoteCheckRequest

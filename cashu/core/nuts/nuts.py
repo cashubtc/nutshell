@@ -1,3 +1,7 @@
+from typing import Literal, Union
+
+NutKey = Union[int, Literal["XX"]]
+
 SWAP_NUT = 3
 MINT_NUT = 4
 MELT_NUT = 5
@@ -18,3 +22,4 @@ CLEAR_AUTH_NUT = 21
 BLIND_AUTH_NUT = 22
 METHOD_BOLT11_NUT = 23
 BATCH_MINT_NUT = 29
+MINT_QUOTE_LOOKUP_NUT: Literal["XX"] = "XX"

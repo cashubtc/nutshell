@@ -9,6 +9,10 @@ from cashu.core.constants import (
     MAX_QUOTE_ID_LEN,
     MAX_UNIT_LEN,
 )
+from cashu.core.nuts.nutxx import (
+    MAX_LOOKUP_PUBKEYS,
+    SCHNORR_SIGNATURE_HEX_LENGTH,
+)
 from cashu.core.settings import settings
 
 
@@ -27,6 +31,24 @@ class PostMintQuoteCheckRequest(BaseModel):
     quotes: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]] = Field(
         ..., max_length=settings.mint_max_request_length
     )
+
+
+class PostMintQuotesByPubkeyRequest(BaseModel):
+    pubkeys: List[
+        Annotated[
+            str,
+            Field(min_length=MAX_PUBKEY_LEN, max_length=MAX_PUBKEY_LEN),
+        ]
+    ] = Field(..., max_length=MAX_LOOKUP_PUBKEYS)
+    pubkey_signatures: List[
+        Annotated[
+            str,
+            Field(
+                min_length=SCHNORR_SIGNATURE_HEX_LENGTH,
+                max_length=SCHNORR_SIGNATURE_HEX_LENGTH,
+            ),
+        ]
+    ] = Field(..., max_length=MAX_LOOKUP_PUBKEYS)
 
 
 class PostMintQuoteResponse(BaseModel):
@@ -51,3 +73,7 @@ class PostMintQuoteResponse(BaseModel):
         to_dict["amount_issued"] = mint_quote.amount_issued
         to_dict["updated_at"] = mint_quote.updated_at
         return cls.model_validate(to_dict)
+
+
+class PostMintQuotesByPubkeyResponse(BaseModel):
+    quotes: List[PostMintQuoteResponse]

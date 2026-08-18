@@ -1338,3 +1338,12 @@ async def m038_remove_dleq_from_promises(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
         )
+
+
+async def m039_add_mint_quote_pubkey_index(db: Database):
+    """Index NUT-20 mint quote ownership lookups."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_mint_quotes_pubkey "
+            f"ON {db.table_with_schema('mint_quotes')} (pubkey)"
+        )

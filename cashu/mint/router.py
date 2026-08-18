@@ -25,6 +25,8 @@ from ..core.models import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
+    PostMintQuotesByPubkeyRequest,
+    PostMintQuotesByPubkeyResponse,
     PostMintRequest,
     PostMintResponse,
     PostRestoreRequest,
@@ -40,6 +42,7 @@ from ..core.nuts.nuts import (
     DLEQ_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,
+    MINT_QUOTE_LOOKUP_NUT,
     MINT_QUOTE_SIGNATURE_NUT,
     MPP_NUT,
     P2PK_NUT,
@@ -47,6 +50,7 @@ from ..core.nuts.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
+    NutKey,
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
@@ -108,9 +112,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -126,10 +128,10 @@ async def index(request: Request) -> HTMLResponse:
         melt_limits.append(format_limit(settings.mint_max_melt_bolt11_sat, "sat"))
 
     # Features (NUTs)
-    supported_features = []
+    supported_features: list[tuple[NutKey, str]] = []
     nuts = mint_info.nuts or {}
 
-    def is_nut_supported(nut_num: int) -> bool:
+    def is_nut_supported(nut_num: NutKey) -> bool:
         if nut_num not in nuts:
             return False
         nut_val = nuts[nut_num]
@@ -161,6 +163,10 @@ async def index(request: Request) -> HTMLResponse:
         supported_features.append((CACHE_NUT, "Cached responses"))
     if is_nut_supported(MINT_QUOTE_SIGNATURE_NUT):
         supported_features.append((MINT_QUOTE_SIGNATURE_NUT, "Signed mint quotes"))
+    if is_nut_supported(MINT_QUOTE_LOOKUP_NUT):
+        supported_features.append(
+            (MINT_QUOTE_LOOKUP_NUT, "Mint quote lookup by public key")
+        )
     if is_nut_supported(CLEAR_AUTH_NUT):
         supported_features.append((CLEAR_AUTH_NUT, "Clear auth"))
     if is_nut_supported(BLIND_AUTH_NUT):
@@ -383,6 +389,26 @@ async def mint_quote(
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
+
+
+@router.post(
+    "/v1/mint/quote/bolt11/pubkey",
+    name="Get mint quotes by public key",
+    summary="Get NUT-20 locked mint quotes by public key",
+    response_model=PostMintQuotesByPubkeyResponse,
+    response_description="Mint quotes locked to the authenticated public keys",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_quotes_by_pubkey(
+    request: Request, payload: PostMintQuotesByPubkeyRequest
+) -> PostMintQuotesByPubkeyResponse:
+    logger.trace("> POST /v1/mint/quote/bolt11/pubkey")
+    quotes = await ledger.mint_quotes_by_pubkey(payload)
+    response = PostMintQuotesByPubkeyResponse(
+        quotes=[PostMintQuoteResponse.from_mint_quote(quote) for quote in quotes]
+    )
+    logger.trace(f"< POST /v1/mint/quote/bolt11/pubkey: {len(response.quotes)} quotes")
+    return response
 
 
 @router.get(
