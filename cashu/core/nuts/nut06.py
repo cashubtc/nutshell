@@ -20,7 +20,7 @@ def derive_mint_identity_key(seed: bytes) -> PrivateKey:
         scalar = int.from_bytes(digest, "big")
         if 0 < scalar < SECP256K1_ORDER:
             return PrivateKey(digest)
-    raise RuntimeError("could not derive a valid mint identity key")
+    raise Exception("could not derive a valid mint identity key")
 
 
 def canonicalize_mint_info(info: Mapping[str, Any]) -> bytes:
