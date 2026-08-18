@@ -296,9 +296,72 @@ class DbWriteHelper:
                     raise TransactionError(
                         f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot set as {state.value}."
                     )
-                # set the quote to previous state
-                self._set_mint_quote_state(quote, state)
+                # set the quote to the previous state without touching its
+                # accounting fields (amount_paid / amount_issued)
+                quote.state_val = state
+                quote.updated_at = int(time.time())
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
+                await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+                quotes.append(quote)
+
+        for quote in quotes:
+            await self.events.submit(quote)
+        return quotes
+
+    async def _issue_mint_quotes(
+        self, quote_ids: List[str], amounts: List[int]
+    ) -> List[MintQuote]:
+        """Issues multiple pending mint quotes (NUT-29 batch mint).
+
+        Atomically increases each quote's amount_issued by the corresponding
+        amount. The quote becomes ISSUED once amount_issued reaches
+        amount_paid, otherwise it returns to PAID with the remaining mintable
+        amount.
+
+        Args:
+            quote_ids (List[str]): List of mint quote IDs to issue.
+            amounts (List[int]): Amount issued per quote, in the same order as
+                quote_ids.
+        """
+        if not quote_ids:
+            return []
+
+        quotes: List[MintQuote] = []
+        lock_parameters = {f"quote_{i}": q for i, q in enumerate(quote_ids)}
+        lock_select_statement = (
+            "quote IN ("
+            + ", ".join([f":quote_{i}" for i in range(len(quote_ids))])
+            + ")"
+        )
+
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement=lock_select_statement,
+            lock_parameters=lock_parameters,
+        ) as conn:
+            for quote_id, amount in zip(quote_ids, amounts):
+                quote = await self.crud.get_mint_quote(
+                    quote_id=quote_id, db=self.db, conn=conn
+                )
+                if not quote:
+                    raise TransactionError(f"Mint quote {quote_id} not found.")
+                if quote.state != MintQuoteState.pending:
+                    raise TransactionError(
+                        f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot issue."
+                    )
+                now = int(time.time())
+                quote.amount_issued = (quote.amount_issued or 0) + amount
+                if (
+                    quote.amount_paid is not None
+                    and quote.amount_issued >= quote.amount_paid
+                ):
+                    quote.state_val = MintQuoteState.issued
+                    if not quote.issued_time:
+                        quote.issued_time = now
+                else:
+                    quote.state_val = MintQuoteState.paid
+                quote.updated_at = now
+                logger.trace(f"crud: issuing quote {quote_id} amount {amount}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
 
