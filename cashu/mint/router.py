@@ -32,6 +32,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts.nut06 import sign_mint_info
 from ..core.nuts.nuts import (
     BATCH_MINT_NUT,
     BLIND_AUTH_NUT,
@@ -242,7 +243,7 @@ async def index(request: Request) -> HTMLResponse:
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
     mint_info = ledger.mint_info
-    return GetInfoResponse(
+    response = GetInfoResponse(
         name=mint_info.name,
         pubkey=mint_info.pubkey,
         version=mint_info.version,
@@ -256,6 +257,10 @@ async def info() -> GetInfoResponse:
         motd=mint_info.motd,
         time=int(time.time()),
     )
+    response.signature = sign_mint_info(
+        response.model_dump(exclude_none=True), ledger.identity_key
+    ).hex()
+    return response
 
 
 @router.get(

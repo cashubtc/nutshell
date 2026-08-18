@@ -21,10 +21,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
-from ..core.crypto.keys import (
-    derive_pubkey,
-    generate_uuid_v7,
-)
+from ..core.crypto.keys import generate_uuid_v7
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -48,6 +45,7 @@ from ..core.models import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
 )
+from ..core.nuts.nut06 import derive_mint_identity_key
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -136,7 +134,8 @@ class Ledger(
         else:
             self.amounts = [2**n for n in range(settings.max_order)]
 
-        self.pubkey = derive_pubkey(self.seed)
+        self.identity_key = derive_mint_identity_key(self.seed.encode("utf-8"))
+        self.pubkey = self.identity_key.public_key
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
