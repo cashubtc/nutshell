@@ -298,10 +298,19 @@ class Ledger(
             outputs[i].amount = return_amounts_sorted[i]  # type: ignore
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate promises.")
-        return_promises = await self._sign_blinded_messages(outputs)
-        # delete remaining unsigned blank outputs from db
-        if melt_id:
-            await self.crud.delete_blinded_messages_melt_id(melt_id=melt_id, db=self.db)
+
+        async with self.db.get_connection(
+            lock_table="melt_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": melt_id},
+        ) as conn:
+            return_promises = await self._sign_blinded_messages(outputs, conn)
+            # delete remaining unsigned blank outputs from db
+            if melt_id:
+                await self.crud.delete_blinded_messages_melt_id(
+                    melt_id=melt_id, db=self.db, conn=conn
+                )
+
         return return_promises
 
     # ------- TRANSACTIONS -------
