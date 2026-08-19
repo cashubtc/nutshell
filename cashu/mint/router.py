@@ -255,6 +255,7 @@ async def info() -> GetInfoResponse:
         urls=settings.mint_info_urls,
         motd=mint_info.motd,
         time=int(time.time()),
+        max_array_length=mint_info.max_array_length,
     )
 
 

@@ -40,6 +40,7 @@ class MintInfo(BaseModel):
     urls: Optional[List[str]]
     tos_url: Optional[str]
     time: Optional[int]
+    max_array_length: Optional[int] = None
     nuts: Dict[int, Any]
 
     def __str__(self):

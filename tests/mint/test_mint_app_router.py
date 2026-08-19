@@ -58,6 +58,7 @@ def _dummy_ledger():
         icon_url="https://mint.test/icon.png",
         tos_url="https://mint.test/tos",
         motd="Hello",
+        max_array_length=1000,
     )
 
     async def mint_quote(payload):
