@@ -299,6 +299,9 @@ class Ledger(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate promises.")
 
+        if sum([b.amount for b in outputs]) > overpaid_fee:
+            raise TransactionError("change outputs exceed overpaid fee.")
+
         async with self.db.get_connection(
             lock_table="melt_quotes",
             lock_select_statement="quote = :quote",
