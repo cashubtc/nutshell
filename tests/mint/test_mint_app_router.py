@@ -14,6 +14,7 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.errors import NotAllowedError
+from cashu.core.nuts.nut06 import derive_mint_identity_key
 from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
@@ -143,6 +144,7 @@ def _dummy_ledger():
 
     db_read = SimpleNamespace(get_proofs_states=get_proofs_states)
     return SimpleNamespace(
+        identity_key=derive_mint_identity_key(b"test mint seed"),
         keyset=active,
         keysets={active.id: active, inactive.id: inactive},
         mint_info=mint_info,
