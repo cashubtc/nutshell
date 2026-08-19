@@ -329,7 +329,7 @@ def taproot_tweak(internal_key: bytes, merkle_root: Optional[bytes] = None) -> i
 def taproot_tweak_pubkey(
     internal_key: bytes, merkle_root: Optional[bytes] = None
 ) -> bytes:
-    """Tweaked output key P = K + t*G as compressed SEC1 bytes."""
+    """The v3 secret P = K + t*G as compressed SEC1 bytes."""
     t = taproot_tweak(internal_key, merkle_root)
     if t == 0:
         return PublicKey(internal_key).format()
