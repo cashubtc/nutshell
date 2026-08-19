@@ -118,7 +118,7 @@ You can choose one of the nodes as a backend for nutshell using the `.env` varia
 
 ```
 # Choose one from:
-# LndRPCWallet, LndRestWallet, CLNRestWallet, CoreLightningRestWallet
+# LndRPCWallet, LndRestWallet, CLNRestWallet
 
 MINT_BACKEND_BOLT11_SAT=LndRestWallet
 ```
@@ -136,9 +136,6 @@ MINT_CLNREST_URL=https://localhost:3010
 MINT_CLNREST_RUNE="../cashu-regtest-enviroment/data/clightning-2/rune"
 MINT_CLNREST_CERT="../cashu-regtest-enviroment/data/clightning-2/regtest/ca.pem"
 
-MINT_CORELIGHTNING_REST_URL=https://localhost:3001
-MINT_CORELIGHTNING_REST_MACAROON=../cashu-regtest-enviroment/data/clightning-2-rest/access.macaroon
-MINT_CORELIGHTNING_REST_CERT=../cashu-regtest-enviroment/data/clightning-2-rest/certificate.pem
 ```
 
 ### Profiling
