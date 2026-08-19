@@ -28,6 +28,7 @@ from .base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    PaymentStatusResult,
     StatusResponse,
 )
 
@@ -240,10 +241,10 @@ class FakeWallet(LightningBackend):
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
         if checking_id in paid_chceking_ids or settings.fakewallet_brr:
             await self.mark_invoice_paid(invoice, delay=False)
-            return PaymentStatus(result=PaymentResult.SETTLED)
+            return PaymentStatus(result=PaymentStatusResult.SETTLED)
         else:
             return PaymentStatus(
-                result=PaymentResult.ERROR, error_message="Invoice not found"
+                result=PaymentStatusResult.ERROR, error_message="Invoice not found"
             )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
@@ -251,9 +252,9 @@ class FakeWallet(LightningBackend):
             raise Exception("FakeWallet get_payment_status exception")
         if settings.fakewallet_payment_state:
             return PaymentStatus(
-                result=PaymentResult[settings.fakewallet_payment_state]
+                result=PaymentStatusResult[settings.fakewallet_payment_state]
             )
-        return PaymentStatus(result=PaymentResult.SETTLED)
+        return PaymentStatus(result=PaymentStatusResult.SETTLED)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

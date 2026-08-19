@@ -378,6 +378,7 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""
             SELECT * from {db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id
+                AND c_ IS {"NOT NULL" if signed else "NULL"}
             ORDER BY order_index ASC
             """,
             {"melt_id": melt_id},

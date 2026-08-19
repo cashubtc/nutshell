@@ -105,6 +105,7 @@ class DbWriteHelper:
         keysets: Dict[str, MintKeyset],
         spent=True,
         conn: Optional[Connection] = None,
+        emit_events: bool = True,
     ) -> None:
         """Deletes proofs from pending table.
 
@@ -128,7 +129,7 @@ class DbWriteHelper:
                     conn=conn,
                 )
 
-        if not spent:
+        if not spent and emit_events:
             for p in proofs:
                 await self.events.submit(
                     ProofState(Y=p.Y, state=ProofSpentState.unspent)
@@ -514,6 +515,7 @@ class DbWriteHelper:
         quote_id: Optional[str] = None,
         keyset_fees: Optional[Dict[str, int]] = None,
         conn: Optional[Connection] = None,
+        emit_events: bool = True,
     ) -> None:
         """Invalidates proofs (spends them) and updates keyset balances and fees.
 
@@ -538,11 +540,14 @@ class DbWriteHelper:
                     amount=-p.amount,
                     conn=conn,
                 )
-                await self.events.submit(
-                    ProofState(
-                        Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
+                if emit_events:
+                    await self.events.submit(
+                        ProofState(
+                            Y=p.Y,
+                            state=ProofSpentState.spent,
+                            witness=p.witness or None,
+                        )
                     )
-                )
 
             # Update fees
             if keyset_fees:
