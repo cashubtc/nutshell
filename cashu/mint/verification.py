@@ -97,6 +97,7 @@ class LedgerVerification(
         skip_output_amount_check: bool = False,
         expected_output_unit: Optional[Unit] = None,
         verify_input_output_balance: bool = True,
+        melt_quote: Optional[MeltQuote] = None,
     ) -> None:
         # 1. Verify the inputs generically: amounts, secret and witness
         # criteria, duplicate-input prevention, ECASH signature validity, and
@@ -107,26 +108,31 @@ class LedgerVerification(
         # SIG_ALL rules) at the transaction level.
         self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
 
-        # Melts can omit NUT-08 change outputs or provide an empty array.
-        if outputs is None or (not outputs and not verify_input_output_balance):
-            return
+        # Melts can omit NUT-08 change outputs or provide an empty array. Those
+        # skip the output checks but still carry a transaction the v3 witnesses
+        # sign, so this is a guard rather than an early return.
+        if outputs is not None and (outputs or verify_input_output_balance):
+            # 3. Verify the outputs generically: keyset consistency, amount rules,
+            # duplicate-output prevention, and that the blinded messages have not
+            # already been stored or signed by the mint.
+            await self._verify_outputs(
+                outputs,
+                skip_amount_check=skip_output_amount_check,
+                expected_unit=expected_output_unit,
+                conn=conn,
+            )
 
-        # 3. Verify the outputs generically: keyset consistency, amount rules,
-        # duplicate-output prevention, and that the blinded messages have not
-        # already been stored or signed by the mint.
-        await self._verify_outputs(
-            outputs,
-            skip_amount_check=skip_output_amount_check,
-            expected_unit=expected_output_unit,
-            conn=conn,
-        )
+            # 4. For transaction types that require normal input/output balance
+            # and unit checks (such as swaps), verify those combined invariants.
+            if verify_input_output_balance:
+                # This checks the amount equation and unit compatibility between
+                # the spent inputs and the created outputs.
+                self._verify_inputs_and_outputs_together(proofs, outputs)
 
-        # 4. For transaction types that require normal input/output balance and
-        # unit checks (such as swaps), verify those combined invariants now.
-        if verify_input_output_balance:
-            # This checks the amount equation and unit compatibility between the
-            # spent inputs and the created outputs.
-            self._verify_inputs_and_outputs_together(proofs, outputs)
+        # 5. Verify taproot transaction witnesses (v3 point secrets). One
+        # transcript per transaction, so this runs on every path, including a
+        # melt whose only output is the quote itself.
+        self._verify_taproot_transaction_witnesses(proofs, outputs or [], melt_quote)
 
     async def _verify_inputs(
         self,

@@ -1128,6 +1128,8 @@ class Ledger(
             skip_output_amount_check=True,
             expected_output_unit=unit,
             verify_input_output_balance=False,
+            # the melt quote is an output in the v3 transaction transcript
+            melt_quote=melt_quote,
         )
 
         # verify that the amount of the input proofs is equal to the amount of the quote
