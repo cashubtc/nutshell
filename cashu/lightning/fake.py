@@ -243,7 +243,7 @@ class FakeWallet(LightningBackend):
             return PaymentStatus(result=PaymentResult.SETTLED)
         else:
             return PaymentStatus(
-                result=PaymentResult.UNKNOWN, error_message="Invoice not found"
+                result=PaymentResult.ERROR, error_message="Invoice not found"
             )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:

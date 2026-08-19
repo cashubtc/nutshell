@@ -102,7 +102,7 @@ class LightningWallet(Wallet):
         """
         mint_quote = await get_bolt11_mint_quote(db=self.db, request=request)
         if not mint_quote:
-            return PaymentStatus(result=PaymentResult.UNKNOWN)
+            return PaymentStatus(result=PaymentResult.ERROR)
         if mint_quote.paid:
             return PaymentStatus(result=PaymentResult.SETTLED)
         try:
@@ -152,7 +152,7 @@ class LightningWallet(Wallet):
             return PaymentStatus(result=PaymentResult.SETTLED)  # "paid (with check)"
         if all([p.state.unspent for p in proofs_states.states]):
             return PaymentStatus(result=PaymentResult.FAILED)  # "failed (with check)"
-        return PaymentStatus(result=PaymentResult.UNKNOWN)  # "undefined state"
+        return PaymentStatus(result=PaymentResult.ERROR)  # "undefined state"
 
     async def get_balance(self) -> StatusResponse:
         """Get lightning balance

@@ -36,10 +36,10 @@ class InvoiceResponse(BaseModel):
 
 
 class PaymentResult(Enum):
-    SETTLED = auto()
-    FAILED = auto()
-    PENDING = auto()
-    UNKNOWN = auto()
+    SETTLED = auto()  # Payment settled, e.g. invoice paid, payment confirmed, etc.
+    FAILED = auto()  # Payment failed, e.g. invoice expired, payment rejected, etc.
+    PENDING = auto()  # Payment is still pending, e.g. invoice not yet paid, payment not yet confirmed, etc.
+    ERROR = auto()  # Error during payment, e.g. network error, backend error, etc.
 
     def __str__(self):
         return self.name
@@ -65,44 +65,67 @@ class PaymentResponse(BaseModel):
         return self.result == PaymentResult.FAILED
 
     @property
-    def unknown(self) -> bool:
-        return self.result == PaymentResult.UNKNOWN
+    def error(self) -> bool:
+        return self.result == PaymentResult.ERROR
+
+
+class PaymentStatusResult(Enum):
+    SETTLED = auto()  # Payment settled, e.g. invoice paid, payment confirmed, etc.
+    FAILED = auto()  # Payment failed, e.g. invoice expired, payment rejected, etc.
+    PENDING = auto()  # Payment is still pending, e.g. invoice not yet paid, payment not yet confirmed, etc.
+    NOT_FOUND = (
+        auto()
+    )  # Payment status not found, e.g. invoice not found, payment not found, etc.
+    ERROR = (
+        auto()
+    )  # Error during payment status check, e.g. network error, backend error, etc.
+
+    def __str__(self):
+        return self.name
 
 
 class PaymentStatus(BaseModel):
-    result: PaymentResult
+    result: PaymentStatusResult
     fee: Optional[Amount] = None
     preimage: Optional[str] = None
     error_message: Optional[str] = None
 
     @property
     def pending(self) -> bool:
-        return self.result == PaymentResult.PENDING
+        return self.result == PaymentStatusResult.PENDING
 
     @property
     def settled(self) -> bool:
-        return self.result == PaymentResult.SETTLED
+        return self.result == PaymentStatusResult.SETTLED
 
     @property
     def failed(self) -> bool:
-        return self.result == PaymentResult.FAILED
+        return self.result == PaymentStatusResult.FAILED
 
     @property
-    def unknown(self) -> bool:
-        return self.result == PaymentResult.UNKNOWN
+    def not_found(self) -> bool:
+        return self.result == PaymentStatusResult.NOT_FOUND
+
+    @property
+    def error(self) -> bool:
+        return self.result == PaymentStatusResult.ERROR
 
     def __str__(self) -> str:
-        if self.result == PaymentResult.SETTLED:
+        if self.result == PaymentStatusResult.SETTLED:
             return (
                 "settled"
                 + (f" (preimage: {self.preimage})" if self.preimage else "")
                 + (f" (fee: {self.fee})" if self.fee else "")
             )
-        elif self.result == PaymentResult.FAILED:
+        elif self.result == PaymentStatusResult.FAILED:
             return "failed"
-        elif self.result == PaymentResult.PENDING:
+        elif self.result == PaymentStatusResult.PENDING:
             return "still pending"
-        else:  # self.result == PaymentResult.UNKNOWN:
+        elif self.result == PaymentStatusResult.ERROR:
+            return "error" + (
+                f" (Error: {self.error_message})" if self.error_message else ""
+            )
+        else:  # self.result == PaymentStatusResult.UNKNOWN:
             return "unknown" + (
                 f" (Error: {self.error_message})" if self.error_message else ""
             )

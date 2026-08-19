@@ -244,7 +244,7 @@ class SparkL2Wallet(LightningBackend):
             send_res = await self.sdk.send_payment(send_req)
         except Exception as e:
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.ERROR,
                 checking_id=quote.checking_id,
                 error_message=f"Payment failed or unknown: {str(e)}",
             )
@@ -254,7 +254,7 @@ class SparkL2Wallet(LightningBackend):
             payment = send_res.payment
             if not payment:
                 return PaymentResponse(
-                    result=PaymentResult.UNKNOWN,
+                    result=PaymentResult.ERROR,
                     checking_id=checking_id,
                     error_message="No payment returned from Spark SDK",
                 )
@@ -288,7 +288,7 @@ class SparkL2Wallet(LightningBackend):
             )
         except Exception as e:
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.ERROR,
                 checking_id=checking_id,
                 error_message=f"Payment status unknown: {str(e)}",
             )
@@ -324,12 +324,12 @@ class SparkL2Wallet(LightningBackend):
                                 return PaymentStatus(result=PaymentResult.FAILED)
 
             return PaymentStatus(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.ERROR,
                 error_message="Invoice not found",
             )
 
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+            return PaymentStatus(result=PaymentResult.ERROR, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         await self._ensure_sdk()
@@ -342,7 +342,7 @@ class SparkL2Wallet(LightningBackend):
 
             if not res or not res.payment:
                 return PaymentStatus(
-                    result=PaymentResult.UNKNOWN, error_message="Payment not found"
+                    result=PaymentResult.ERROR, error_message="Payment not found"
                 )
 
             payment = res.payment
@@ -369,7 +369,7 @@ class SparkL2Wallet(LightningBackend):
                 return PaymentStatus(result=PaymentResult.PENDING)
 
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+            return PaymentStatus(result=PaymentResult.ERROR, error_message=str(e))
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

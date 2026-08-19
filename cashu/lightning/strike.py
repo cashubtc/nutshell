@@ -269,7 +269,7 @@ class StrikeWallet(LightningBackend):
             r = await self.client.get(url=f"{self.endpoint}/v1/invoices/{checking_id}")
             r.raise_for_status()
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+            return PaymentStatus(result=PaymentResult.ERROR, error_message=str(e))
         data = r.json()
         return PaymentStatus(result=INVOICE_RESULT_MAP[data.get("state")])
 
@@ -287,7 +287,7 @@ class StrikeWallet(LightningBackend):
             if exc.response.status_code != 404:
                 raise exc
             return PaymentStatus(
-                result=PaymentResult.UNKNOWN, error_message=exc.response.text
+                result=PaymentResult.ERROR, error_message=exc.response.text
             )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore

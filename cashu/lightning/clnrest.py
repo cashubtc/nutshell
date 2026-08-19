@@ -22,6 +22,7 @@ from .base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    PaymentStatusResult,
     StatusResponse,
     Unsupported,
 )
@@ -36,12 +37,17 @@ PAYMENT_RESULT_MAP = {
     CLN_PAYMENT_STATUS_PENDING: PaymentResult.PENDING,
     CLN_PAYMENT_STATUS_FAILED: PaymentResult.FAILED,
 }
+PAYMENT_STATUS_RESULT_MAP = {
+    "complete": PaymentStatusResult.SETTLED,
+    "pending": PaymentStatusResult.PENDING,
+    "failed": PaymentStatusResult.FAILED,
+}
 
 # https://docs.corelightning.org/reference/lightning-listinvoices
 INVOICE_RESULT_MAP = {
-    "paid": PaymentResult.SETTLED,
-    "unpaid": PaymentResult.PENDING,
-    "expired": PaymentResult.FAILED,
+    "paid": PaymentStatusResult.SETTLED,
+    "unpaid": PaymentStatusResult.PENDING,
+    "expired": PaymentStatusResult.FAILED,
 }
 
 
@@ -252,7 +258,7 @@ class CLNRestWallet(LightningBackend):
             )
         except Exception as e:
             logger.error(f"Error getting invoice status: {e}")
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+            return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         r = await self.client.post(
@@ -266,7 +272,7 @@ class CLNRestWallet(LightningBackend):
             # payment not found
             logger.error(f"payment not found: {data.get('pays')}")
             return PaymentStatus(
-                result=PaymentResult.UNKNOWN, error_message="payment not found"
+                result=PaymentStatusResult.ERROR, error_message="payment not found"
             )
 
         if r.is_error or "message" in data:
@@ -299,7 +305,7 @@ class CLNRestWallet(LightningBackend):
             preimage = pay["preimage"]
 
         return PaymentStatus(
-            result=PAYMENT_RESULT_MAP[pay["status"]],
+            result=PAYMENT_STATUS_RESULT_MAP[pay["status"]],
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
         )
