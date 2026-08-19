@@ -6,16 +6,12 @@ import bolt11
 import httpx
 from httpx import Response
 from loguru import logger
-from pydantic import ValidationError
 
 from ..core.base import (
     AuthProof,
     BlindedMessage,
     BlindedSignature,
-    MeltQuoteState,
     Proof,
-    ProofSpentState,
-    ProofState,
     Unit,
     WalletKeyset,
 )
@@ -36,7 +32,6 @@ from ..core.models import (
     PostMeltRequest,
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
-    PostMeltResponse_deprecated,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -544,36 +539,8 @@ class LedgerAPI(SupportsAuth):
             ),  # type: ignore
             timeout=None,
         )
-        try:
-            self.raise_on_error_request(resp)
-            return_dict = resp.json()
-            return PostMeltQuoteResponse.model_validate(return_dict)
-        except Exception as e:
-            # BEGIN backwards compatibility < 0.15.0
-            # before 0.16.0, mints return PostMeltResponse_deprecated
-            if isinstance(e, ValidationError):
-                # BEGIN backwards compatibility < 0.16.0
-                ret = PostMeltResponse_deprecated.model_validate(return_dict)
-                # END backwards compatibility < 0.16.0
-            else:
-                raise e
-            return PostMeltQuoteResponse(
-                quote=quote,
-                amount=0,
-                unit="sat",
-                method="bolt11",
-                request="lnbc0",
-                fee_reserve=0,
-                state=(
-                    MeltQuoteState.paid.value
-                    if ret.paid
-                    else MeltQuoteState.unpaid.value
-                ),
-                payment_preimage=ret.preimage,
-                change=ret.change,
-                expiry=None,
-            )
-            # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+        return PostMeltQuoteResponse.model_validate(resp.json())
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -635,23 +602,6 @@ class LedgerAPI(SupportsAuth):
 
         # fail if endpoint missing
         self.raise_on_unsupported_version(resp, "POST /v1/checkstate")
-
-        # BEGIN backwards compatibility < 0.16.0
-        # payload has "secrets" instead of "Ys"
-        if resp.status_code == 422:
-            logger.warning(
-                "Received HTTP Error 422. Attempting state check with < 0.16.0 compatibility."
-            )
-            payload_secrets = {"secrets": [p.secret for p in proofs]}
-            resp_secrets = await self._request(POST, "checkstate", json=payload_secrets)
-            self.raise_on_error_request(resp_secrets)
-            states = [
-                ProofState(Y=p.Y, state=ProofSpentState(s["state"]))
-                for p, s in zip(proofs, resp_secrets.json()["states"])
-            ]
-            return PostCheckStateResponse(states=states)
-        # END backwards compatibility < 0.16.0
-
         self.raise_on_error_request(resp)
         return PostCheckStateResponse.model_validate(resp.json())
 

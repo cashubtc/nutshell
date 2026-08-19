@@ -1,4 +1,5 @@
 import asyncio
+import signal
 from typing import List, Optional, Tuple
 
 from loguru import logger
@@ -42,8 +43,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
                 tasks.append(
                     asyncio.create_task(self.dispatch_backend_checker(unit, backend))
                 )
-        # We disable the abort queue for now
-        # tasks.append(asyncio.create_task(self.monitor_abort_queue()))
+        tasks.append(asyncio.create_task(self.monitor_abort_queue()))
         return tasks
 
     async def monitor_abort_queue(self):
@@ -57,7 +57,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             logger.error(
                 "Shutting down the mint due to balance mismatch. Fix the balance mismatch and restart the mint or set MINT_WATCHDOG_IGNORE_MISMATCH=True to ignore the mismatch."
             )
-            raise SystemExit
+            signal.raise_signal(signal.SIGTERM)
 
     async def get_balance(self, unit: Unit) -> Tuple[Amount, Amount]:
         """Returns the balance of the mint for this unit."""
@@ -117,7 +117,9 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         keyset_fees_paid: Amount,
     ) -> bool:
         """Check if the backend balance and the mint balance match.
-        If they don't match, log a warning and raise an exception that will shut down the mint.
+        If the mint issued more ecash than the backend can pay out, or the
+        reserve gap between backend and issued balances is shrinking, signal
+        the abort queue to shut down the mint.
         Returns True if the balances check succeeded, False otherwise.
 
         Args:

@@ -29,7 +29,7 @@ from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
-    is_deprecated_api_only,
+    get_real_invoice_routed,
     is_fake,
     is_github_actions,
     is_regtest,
@@ -185,11 +185,11 @@ async def test_request_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
+    mint_request = mint_quote.request
     await pay_if_regtest(mint_quote.request)
-    if not settings.debug_mint_only_deprecated:
-        mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
-        assert mint_quote.request == mint_quote.request
-        assert mint_quote.state == MintQuoteState.paid
+    mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
+    assert mint_quote.request == mint_request
+    assert mint_quote.state == MintQuoteState.paid
 
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, quote_id=mint_quote.quote)
@@ -325,10 +325,9 @@ async def test_melt(wallet1: Wallet):
         assert total_amount == 64
         assert quote.fee_reserve == 0
 
-    if not settings.debug_mint_only_deprecated:
-        quote_resp = await wallet1.get_melt_quote(quote.quote)
-        assert quote_resp
-        assert quote_resp.amount == quote.amount
+    quote_resp = await wallet1.get_melt_quote(quote.quote)
+    assert quote_resp
+    assert quote_resp.amount == quote.amount
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
@@ -354,15 +353,14 @@ async def test_melt(wallet1: Wallet):
     assert melt_quote_db, "No melt quote in db"
 
     # compare melt quote from API against db
-    if not settings.debug_mint_only_deprecated:
-        melt_quote_api_resp = await wallet1.get_melt_quote(melt_quote_db.quote)
-        assert melt_quote_api_resp, "No melt quote from API"
-        assert melt_quote_api_resp.quote == melt_quote_db.quote, "Wrong quote ID"
-        assert melt_quote_api_resp.amount == melt_quote_db.amount, "Wrong amount"
-        assert melt_quote_api_resp.fee_reserve == melt_quote_db.fee_reserve, "Wrong fee"
-        assert melt_quote_api_resp.request == melt_quote_db.request, "Wrong request"
-        assert melt_quote_api_resp.state == melt_quote_db.state, "Wrong state"
-        assert melt_quote_api_resp.unit == melt_quote_db.unit, "Wrong unit"
+    melt_quote_api_resp = await wallet1.get_melt_quote(melt_quote_db.quote)
+    assert melt_quote_api_resp, "No melt quote from API"
+    assert melt_quote_api_resp.quote == melt_quote_db.quote, "Wrong quote ID"
+    assert melt_quote_api_resp.amount == melt_quote_db.amount, "Wrong amount"
+    assert melt_quote_api_resp.fee_reserve == melt_quote_db.fee_reserve, "Wrong fee"
+    assert melt_quote_api_resp.request == melt_quote_db.request, "Wrong request"
+    assert melt_quote_api_resp.state == melt_quote_db.state, "Wrong state"
+    assert melt_quote_api_resp.unit == melt_quote_db.unit, "Wrong unit"
 
     proofs_used = await get_proofs(
         db=wallet1.db, melt_id=melt_quote_db.quote, table="proofs_used"
@@ -377,7 +375,36 @@ async def test_melt(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_deprecated_api_only, reason="Deprecated API only")
+@pytest.mark.skipif(is_fake, reason="only works on regtest")
+async def test_melt_routed_invoice(wallet1: Wallet):
+    topup_mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    await wallet1.mint(128, quote_id=topup_mint_quote.quote)
+    assert wallet1.balance == 128
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(64)
+
+    quote = await wallet1.melt_quote(invoice_payment_request)
+    total_amount = quote.amount + quote.fee_reserve
+    assert quote.fee_reserve == 2
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
+
+    melt_response = await wallet1.melt(
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
+    )
+    assert melt_response.state == MeltQuoteState.paid.value, "Melt not paid"
+    assert melt_response.payment_preimage is not None, "No payment preimage"
+
+    # the payment had a routing fee, so we get back less than the full fee reserve
+    assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
+
+
+@pytest.mark.asyncio
 async def test_get_melt_quote_state(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote.request)
@@ -404,8 +431,6 @@ async def test_get_melt_quote_state(wallet1: Wallet):
     melt_quote_wallet = MeltQuote.from_resp_wallet(
         melt_response,
         mint="test",
-        unit=quote.unit or "sat",
-        request=quote.request or invoice_payment_request,
     )
 
     # compare melt quote from API against db

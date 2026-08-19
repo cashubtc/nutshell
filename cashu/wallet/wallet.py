@@ -14,6 +14,7 @@ from ..core.base import (
     DLEQWallet,
     MeltQuote,
     MeltQuoteState,
+    Method,
     MintQuote,
     MintQuoteState,
     Proof,
@@ -534,7 +535,7 @@ class Wallet(
             filters=[mint_quote.quote],
             callback=callback,
         )
-        quote = MintQuote.from_resp_wallet(mint_quote, self.url, amount, self.unit.name)
+        quote = MintQuote.from_resp_wallet(mint_quote, self.url)
 
         # store the private key in the quote
         quote.privkey = privkey_hex
@@ -577,9 +578,7 @@ class Wallet(
         mint_quote_response = await super().mint_quote(
             amount, self.unit, memo, pubkey_hex
         )
-        quote = MintQuote.from_resp_wallet(
-            mint_quote_response, self.url, amount, self.unit.name
-        )
+        quote = MintQuote.from_resp_wallet(mint_quote_response, self.url)
 
         quote.privkey = privkey_hex
         await store_bolt11_mint_quote(db=self.db, quote=quote)
@@ -604,8 +603,6 @@ class Wallet(
             mint_quote_resp=mint_quote_response,
             mint=self.url,
             mint_quote_local=mint_quote_local,
-            default_amount=0,
-            default_unit=self.unit.name,
         )
 
         if mint_quote_local and mint_quote_local.privkey:
@@ -832,27 +829,16 @@ class Wallet(
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
-        if amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
+        if amount_msat and not self.mint_info.supports_mpp(
+            Method.bolt11.name, self.unit
+        ):
             raise Exception("Mint does not support MPP, cannot specify amount.")
         melt_quote_resp = await super().melt_quote(invoice, self.unit, amount_msat)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote_resp.fee_reserve)} as fee reserve."
         )
-        melt_quote = MeltQuote.from_resp_wallet(
-            melt_quote_resp,
-            self.url,
-            unit=self.unit.name,
-            request=invoice,
-        )
+        melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
         await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
-        melt_quote = MeltQuote.from_resp_wallet(
-            melt_quote_resp,
-            self.url,
-            unit=melt_quote_resp.unit
-            or self.unit.name,  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            request=melt_quote_resp.request
-            or invoice,  # BACKWARD COMPATIBILITY mint response < 0.17.0
-        )
         return melt_quote
 
     async def get_melt_quote(self, quote: str) -> Optional[MeltQuote]:
@@ -866,20 +852,7 @@ class Wallet(
         """
         melt_quote_resp = await super().get_melt_quote(quote)
         melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote)
-        melt_quote = MeltQuote.from_resp_wallet(
-            melt_quote_resp,
-            self.url,
-            unit=(
-                melt_quote_resp.unit or melt_quote_local.unit
-                if melt_quote_local
-                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
-            request=(
-                melt_quote_resp.request or melt_quote_local.request
-                if (melt_quote_local and melt_quote_local.request)
-                else "None"  # BACKWARD COMPATIBILITY mint response < 0.17.0
-            ),
-        )
+        melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
 
         # update database
         if not melt_quote_local:
@@ -943,7 +916,7 @@ class Wallet(
             change_derivation_paths,
         ) = await self.generate_n_secrets(n_change_outputs)
         change_outputs, change_rs = self._construct_outputs(
-            n_change_outputs * [1], change_secrets, change_rs
+            n_change_outputs * [0], change_secrets, change_rs
         )
 
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
@@ -958,12 +931,7 @@ class Wallet(
             await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
             raise Exception(f"could not pay invoice: {e}")
 
-        melt_quote = MeltQuote.from_resp_wallet(
-            melt_quote_resp,
-            self.url,
-            unit=self.unit.name,
-            request=invoice,
-        )
+        melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
         # if payment fails
         if melt_quote.state == MeltQuoteState.unpaid:
             # remove the melt_id in proofs and set reserved to False

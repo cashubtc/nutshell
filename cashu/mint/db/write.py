@@ -195,7 +195,11 @@ class DbWriteHelper:
         # Sort quote_ids to ensure consistent locking order
         sorted_quote_ids = sorted(quote_ids)
         lock_parameters = {f"quote_{i}": q for i, q in enumerate(sorted_quote_ids)}
-        lock_select_statement = "quote IN (" + ", ".join([f":quote_{i}" for i in range(len(sorted_quote_ids))]) + ")"
+        lock_select_statement = (
+            "quote IN ("
+            + ", ".join([f":quote_{i}" for i in range(len(sorted_quote_ids))])
+            + ")"
+        )
 
         async with self.db.get_connection(
             lock_table="mint_quotes",
@@ -214,7 +218,7 @@ class DbWriteHelper:
                     raise TransactionError(f"Mint quote {quote_id} is already issued.")
                 if not quote.paid:
                     raise TransactionError(f"Mint quote {quote_id} is not paid yet.")
-                
+
                 # set the quote as pending
                 self._set_mint_quote_state(quote, MintQuoteState.pending)
                 logger.trace(f"crud: setting quote {quote_id} as PENDING")
@@ -271,7 +275,11 @@ class DbWriteHelper:
 
         quotes: List[MintQuote] = []
         lock_parameters = {f"quote_{i}": q for i, q in enumerate(quote_ids)}
-        lock_select_statement = "quote IN (" + ", ".join([f":quote_{i}" for i in range(len(quote_ids))]) + ")"
+        lock_select_statement = (
+            "quote IN ("
+            + ", ".join([f":quote_{i}" for i in range(len(quote_ids))])
+            + ")"
+        )
 
         async with self.db.get_connection(
             lock_table="mint_quotes",
@@ -356,7 +364,7 @@ class DbWriteHelper:
             lock_table="melt_quotes",
             lock_select_statement="quote = :quote",
             lock_parameters={"quote": quote.quote},
-            conn=conn
+            conn=conn,
         ) as conn:
             # get melt quote from db and check if it is pending
             quote_db = await self.crud.get_melt_quote(
@@ -368,9 +376,6 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not pending.")
             # set the quote to previous state
             quote_copy.state = state
-
-            # unset outputs
-            quote_copy.outputs = None
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)

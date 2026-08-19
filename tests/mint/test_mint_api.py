@@ -16,11 +16,17 @@ from cashu.core.models import (
 )
 from cashu.core.nuts import nut20
 from cashu.core.nuts.nuts import MINT_NUT
-from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    get_real_invoice_routed,
+    is_cln_backend,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+)
 
 BASE_URL = "http://localhost:3337"
 
@@ -45,10 +51,6 @@ async def test_landing_page():
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_info(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -66,10 +68,6 @@ async def test_info(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_keys(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/keys")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -94,10 +92,6 @@ async def test_api_keys(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_keysets(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/keysets")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -123,10 +117,6 @@ async def test_api_keysets(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_keyset_keys(ledger: Ledger):
     response = httpx.get(
         f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
@@ -154,10 +144,6 @@ async def test_api_keyset_keys(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
     response = httpx.get(
         f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
@@ -185,10 +171,6 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_swap(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -216,10 +198,6 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint_quote(ledger: Ledger):
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
@@ -280,10 +258,6 @@ async def test_mint_quote(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -316,10 +290,6 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
     """
     For backwards compatibility, we do not require a NUT-20 signature
@@ -354,10 +324,6 @@ async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 @pytest.mark.skipif(
     is_regtest,
     reason="regtest",
@@ -399,10 +365,6 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
-@pytest.mark.skipif(
     is_fake,
     reason="only works on regtest",
 )
@@ -423,10 +385,6 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
     mint_quote = await wallet.request_mint(64)
@@ -477,10 +435,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 @pytest.mark.skipif(
     is_fake,
     reason="only works on regtest",
@@ -539,9 +493,115 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
+    is_fake,
+    reason="only works on regtest",
 )
+async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(62)
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 62
+    assert quote.fee_reserve == 2
+
+    keep, send = await wallet.swap_to_send(wallet.proofs, 64)
+    inputs_payload = [p.to_dict() for p in send]
+
+    # outputs for change
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote = PostMeltQuoteResponse(**response.json())
+    assert resp_quote.state == MeltQuoteState.paid.value
+    assert resp_quote.payment_preimage is not None
+
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert melt_quote, "No melt quote in db"
+    assert melt_quote.fee_paid > 0, "No routing fee paid"
+    # the mint passes the fee reserve to the backend as the fee limit
+    assert melt_quote.fee_paid <= quote.fee_reserve, "Fee exceeded the fee reserve"
+
+    # change must compensate exactly for the unspent part of the reserve
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    assert change_sat == quote.fee_reserve - melt_quote.fee_paid, (
+        "Wrong change returned"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+@pytest.mark.skipif(
+    is_cln_backend,
+    reason="CLN pathfinding is randomized, the exact fee is not deterministic",
+)
+async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(1024)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(1024, quote_id=mint_quote.quote)
+    assert wallet.balance == 1024
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(1000)
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 1000
+    # fee reserve is 2% of the amount
+    assert quote.fee_reserve == 20
+
+    keep, send = await wallet.swap_to_send(wallet.proofs, 1020)
+    inputs_payload = [p.to_dict() for p in send]
+
+    # 5 blank outputs for the change of the 20 sat fee reserve
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(5)
+    outputs, rs = wallet._construct_outputs([1, 1, 1, 1, 1], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote = PostMeltQuoteResponse(**response.json())
+    assert resp_quote.state == MeltQuoteState.paid.value
+
+    # the routing fee for 1000 sat is 1001 msat (1000 msat base fee + 1 ppm)
+    # which the mint must round up to 2 sat when it accounts the fee
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert melt_quote, "No melt quote in db"
+    assert melt_quote.fee_paid == 2, "Fee not rounded up to the next sat"
+
+    # we get back the fee reserve minus the rounded up fee
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    assert change_sat == 18, "Wrong change returned"
+
+
+@pytest.mark.asyncio
 async def test_api_check_state(ledger: Ledger):
     payload = PostCheckStateRequest(Ys=["asdasdasd", "asdasdasd1"])
     response = httpx.post(
@@ -556,10 +616,6 @@ async def test_api_check_state(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -597,10 +653,6 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint_quote_check(ledger: Ledger, wallet: Wallet):
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(32)
@@ -623,10 +675,6 @@ async def test_mint_quote_check(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(32)
@@ -658,9 +706,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert (
-        response.status_code == 200
-    ), f"{response.url} {response.status_code} {response.text}"
+    assert response.status_code == 200, (
+        f"{response.url} {response.status_code} {response.text}"
+    )
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64
@@ -668,10 +716,6 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet):
     mint_quote1 = await wallet.request_mint(64)
 
@@ -690,10 +734,6 @@ async def test_mint_batch_duplicate_quotes(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
     mint_quote1 = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote1.request)

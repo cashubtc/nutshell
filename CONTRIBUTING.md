@@ -35,6 +35,57 @@ LOG_LEVEL=TRACE
 
 To run the tests, run `make test` or `pytest tests` in the poetry environment.
 
+### Mutation testing
+
+Mutation testing checks whether the test suite detects small behavioral changes
+to the production code. Nutshell uses
+[Mutmut](https://mutmut.readthedocs.io/en/latest/) for this.
+
+Run the mutation-testing pilot with:
+
+```bash
+PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+  MUTATION_TESTING=true TOR=false poetry run mutmut run
+```
+
+The profiles cover each complete production subsystem: core, mint, wallet,
+lightning, and Tor. A profile target limits mutant execution to its subtree,
+while Mutmut uses the non-fuzz pytest suite to discover relevant tests.
+
+For a function-specific rerun within the configured scope, pass a Mutmut
+wildcard:
+
+```bash
+PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+  MUTATION_TESTING=true TOR=false \
+  poetry run mutmut run 'cashu.core.split*'
+```
+
+Mutmut stores incremental results in the ignored `mutants/` directory. View
+surviving mutants with `poetry run mutmut results`, or create the machine-readable
+`mutants/mutmut-cicd-stats.json` report with
+`poetry run mutmut export-cicd-stats`. Use
+`poetry run mutmut show <mutant-name>` to inspect a mutant and
+`poetry run mutmut apply <mutant-name>` to apply it temporarily for debugging.
+Only apply mutants in a clean worktree.
+
+Scheduled CI runs each profile independently at 01:00 UTC: core on Monday, mint
+on Tuesday, wallet on Wednesday, lightning on Thursday, and Tor on Friday.
+Every workflow also supports manual dispatch. Surviving mutants are advisory
+during the initial rollout: improve the relevant tests or document why a mutant
+is equivalent. CI uploads each profile's report and log as artifacts and retains
+its incremental mutation state in a separate cache. On Saturday, CI collects
+the five profile reports and opens a labeled weekly GitHub issue when actionable
+mutants remain or a profile report is unavailable.
+Jobs use GitHub's six-hour hosted-runner limit. Mutation execution receives 340
+minutes, leaving time to upload partial results if a profile does not finish.
+Do not add `# pragma: no mutate` or broaden `do_not_mutate` without review.
+Changes involving cryptography, key handling, migrations, protocol behavior, or
+public APIs require maintainer review.
+
+The dedicated Hypothesis fuzz suite remains a separate quality check; run it
+with `make fuzz`.
+
 ### FakeWallet
 
 We use the `FakeWallet` backend for most of the tests. `FakeWallet` acts like a Lightning node where all (fake) invoices are always automatically paid. It's great for testing code that does not affect the Lightning functionality of the mint. To use it, set:
@@ -67,7 +118,7 @@ You can choose one of the nodes as a backend for nutshell using the `.env` varia
 
 ```
 # Choose one from:
-# LndRPCWallet, LndRestWallet, CLNRestWallet, LNbitsWallet
+# LndRPCWallet, LndRestWallet, CLNRestWallet
 
 MINT_BACKEND_BOLT11_SAT=LndRestWallet
 ```
@@ -90,7 +141,3 @@ MINT_CLNREST_CERT="../cashu-regtest-enviroment/data/clightning-2/regtest/ca.pem"
 ### Profiling
 
 If you'd like to profile your code (measure how long steps take to execute), run the mint using `DEBUG_PROFILING=TRUE`. Make sure to turn this off again, as your application will be significantly slower with profiling enabled.
-
-### V0 API only
-
-To run the mint with only V0 API support (deprecated), use `DEBUG_MINT_ONLY_DEPRECATED=TRUE`

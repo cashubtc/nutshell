@@ -1,125 +1,384 @@
 import time
-from typing import List, Optional, Union
+from dataclasses import dataclass
+from hashlib import sha256
+from typing import List, Optional
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, P2PKWitness, Proof
+from ..core.base import BlindedMessage, HTLCWitness, P2PKWitness, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
 )
 from ..core.htlc import HTLCSecret
-from ..core.nuts import nut11, nut14
+from ..core.nuts import nut10, nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
     verify_schnorr_signature,
 )
-from ..core.secret import Secret, SecretKind
+from ..core.secret import SecretKind
+
+
+@dataclass
+class SpendPath:
+    pubkeys: List[str]
+    required_sigs: int
+
+
+@dataclass
+class SpendingRequirements:
+    preimage_hash: str | None
+    primary_path: SpendPath
+    refund_path: SpendPath | None
+
+
+@dataclass
+class WitnessForP2pkOrHtlc:
+    preimage: str | None
+    signatures: List[str]
+
+    @classmethod
+    def from_p2pk_witness(cls, witness: Optional[str]) -> "WitnessForP2pkOrHtlc":
+        if witness is None:
+            return cls(preimage=None, signatures=[])
+
+        try:
+            parsed = P2PKWitness.from_witness(witness)
+            return cls(preimage=None, signatures=parsed.signatures)
+        except Exception:
+            return cls(preimage=None, signatures=[])
+
+    @classmethod
+    def from_htlc_witness(cls, witness: Optional[str]) -> "WitnessForP2pkOrHtlc":
+        if witness is None:
+            return cls(preimage=None, signatures=[])
+
+        try:
+            parsed = HTLCWitness.from_witness(witness)
+            return cls(
+                preimage=parsed.preimage, signatures=list(parsed.signatures or [])
+            )
+        except Exception:
+            return cls(preimage=None, signatures=[])
 
 
 class LedgerSpendingConditions:
-    def _verify_p2pk_sig_inputs(
+    def _verify_input_output_spending_conditions(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        quote: Optional[str] = None,
+    ) -> bool:
+        """
+        This is the central function for all NUT-10 spending conditions. Any
+        swap or melt will give the inputs and outputs to this function.
+        This either returns True, if the token has no spending conditions or
+        it satisifies them, or it raises an error.
+        """
+        if self._at_least_one_proof_has_sig_all(proofs):
+            # At least one proof has SIG_ALL in it, therefore we delegate all
+            # enforcement to SIG_ALL-aware enforcement:
+            return self._verify_sigall_spending_conditions(proofs, outputs, quote)
+        else:
+            # otherwise, check each proof in turn and enforce any conditions
+            # such as P2PK and HTLC:
+            for proof in proofs:
+                self._verify_input_spending_conditions(proof)
+            return True
+
+    def _verify_sigall_spending_conditions(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        quote: Optional[str] = None,
+    ) -> bool:
+        """
+        Verify grouped spending conditions for a SIG_ALL transaction.
+
+        This function is only called after the mint has already determined that at
+        least one input requires `SIG_ALL`.
+
+        It enforces the grouped-input invariants for SIG_ALL:
+
+        - all proofs must represent the same spending condition
+        - in practice, that means the same secret kind, `Secret.data`, and `Secret.tags`
+        - therefore all grouped proofs must also be `SIG_ALL`
+
+        After those shared invariants are enforced, this function resolves the
+        typed secret, derives `SpendingRequirements`, normalizes the first
+        proof's witness, and applies the unified spending-requirements verifier.
+
+        This verifier returns `True` on success and raises on failure.
+        """
+
+        if not self._at_least_one_proof_has_sig_all(proofs):
+            raise TransactionError(
+                "_verify_sigall_spending_conditions() called without any SIG_ALL proofs"
+            )
+
+        # Raise if the secrets (ignoring nonce) are not identical to each other:
+
+        unique_secret = self._verify_all_secrets_equal_and_return(proofs)
+
+        # The secrets are now known to be identical, and since at least one had
+        # SIG_ALL, they all have SIG_ALL.
+
+        # In SIG_ALL, we use only the witness that's in the first proof:
+
+        first_proof = proofs[0]
+
+        # Compute the grouped message that the signing pubkeys are expected to sign:
+
+        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
+        if quote is not None:
+            message_to_sign += quote
+
+        # Now split depending on whether the secret kind is P2PK or HTLC:
+
+        if isinstance(unique_secret, HTLCSecret):
+            if unique_secret.sigflag != SigFlags.SIG_ALL:
+                raise TransactionError("HTLC secret does not have SIG_ALL flag")
+            return self._verify_p2pk_or_htlc_spending_requirements(
+                self._get_spending_requirements(unique_secret),
+                WitnessForP2pkOrHtlc.from_htlc_witness(first_proof.witness),
+                message_to_sign,
+            )
+        elif isinstance(unique_secret, P2PKSecret):
+            if unique_secret.sigflag != SigFlags.SIG_ALL:
+                raise TransactionError("P2PK secret does not have SIG_ALL flag")
+            return self._verify_p2pk_or_htlc_spending_requirements(
+                self._get_spending_requirements(unique_secret),
+                WitnessForP2pkOrHtlc.from_p2pk_witness(first_proof.witness),
+                message_to_sign,
+            )
+        else:
+            # not a P2PK or HTLC secret
+            raise TransactionError("secret kind not supported for SIG_ALL.")
+
+    def _verify_input_spending_conditions(self, proof: Proof) -> bool:
+        """
+        Verify spending conditions for a single non-SIG_ALL proof.
+
+        This function is used only when the transaction is not being verified in
+        grouped `SIG_ALL` mode. In that case, each proof is validated independently
+        according to the spending condition encoded in its `secret`.
+
+        Behavior:
+
+        - if `proof.secret` is not a structured spending-condition secret, the proof is
+          treated as a plain proof and any witness data is ignored
+        - if the secret kind is `P2PK`, verification is delegated to the shared
+          P2PK/HTLC spending-requirements verifier
+        - if the secret kind is `HTLC`, the HTLC-specific preimage requirements are
+          enforced within the shared P2PK/HTLC spending-requirements verifier
+
+        This verifier returns `True` on success and raises on failure.
+        """
+
+        condition = nut10.parse_spending_condition(proof.secret)
+        if condition is None:
+            return True
+
+        logger.trace(f"proof.secret: {proof.secret}")
+        logger.trace(f"condition: {condition}")
+
+        return self._verify_p2pk_or_htlc_sig_inputs(proof, condition)
+
+    def _at_least_one_proof_has_sig_all(self, proofs: List[Proof]) -> bool:
+        """
+        Check if any input requires sigall spending condition.
+        """
+        for proof in proofs:
+            if self._proof_has_sig_all(proof):
+                return True
+
+        # All proofs have been checked, and there is no SIG_ALL
+        return False
+
+    def _proof_has_sig_all(self, proof: Proof) -> bool:
+        """
+        Check if a single proof encodes a SIG_ALL spending condition.
+        """
+        condition = nut10.parse_spending_condition(proof.secret)
+        if condition is None:
+            return False
+
+        return condition.sigflag == SigFlags.SIG_ALL
+
+    def _verify_all_secrets_equal_and_return(
+        self, proofs: List[Proof]
+    ) -> nut10.SpendingCondition:
+        """
+        Verify that all secrets are equal (kind, data, tags)
+
+        Raise if they are different. If all identical, return that unique Secret
+        """
+        secrets: set[nut10.SpendingCondition] = set()
+        for proof in proofs:
+            condition = nut10.parse_spending_condition(proof.secret)
+            if condition is None:
+                raise TransactionError(
+                    "SIG_ALL transaction contains an ordinary secret."
+                )
+            secrets.add(condition)
+
+        if len(secrets) != 1:
+            raise TransactionError("not all secrets are equal.")
+
+        return secrets.pop()
+
+    def _verify_p2pk_or_htlc_sig_inputs(
         self,
         proof: Proof,
         secret: P2PKSecret | HTLCSecret,
-        message_to_sign: Optional[str] = None,
     ) -> bool:
         """
-        Verify P2PK spending condition for a single input.
+        Verify a single non-SIG_ALL P2PK or HTLC input.
 
-        Two spending paths are available:
-        1. Normal path: signatures from the main pubkeys (always valid)
-        2. Refund path: signatures from refund pubkeys (only valid after locktime)
+        This helper is used only when the transaction is not being validated in
+        grouped `SIG_ALL` mode. It computes `SpendingRequirements`, parses the
+        appropriate witness type for the secret kind, and delegates the actual
+        path enforcement to the shared P2PK/HTLC spending-requirements verifier.
+        The signed message is always derived from `proof.secret` in this mode.
 
-        We return True:
-        - if the secret is not a P2PKSecret spending condition
-        - if either spending path is satisfied
-
-        We raise an exception:
-        - if the pubkeys in the secret are not unique
-        - if no signatures are present
-        - if the signatures are not unique
-        - if n_sigs is not positive
-        - if n_sigs is larger than the number of provided signatures
-        - if neither spending path is satisfied
+        This verifier returns `True` on success and raises on failure.
         """
 
-        p2pk_secret = secret
-        message_to_sign = message_to_sign or proof.secret
+        message_to_sign = proof.secret
 
-        # if a sigflag other than SIG_INPUTS is present, we return True
-        if (
-            secret.tags.get_tag("sigflag")
-            and secret.tags.get_tag("sigflag") != SigFlags.SIG_INPUTS.value
-        ):
-            return True
-
-        # Build the main pubkeys list (always available)
-        main_pubkeys: List[str] = []
-        if SecretKind(p2pk_secret.kind) == SecretKind.P2PK:
-            main_pubkeys = [p2pk_secret.data]
-        # get all additional pubkeys from tags for multisig
-        main_pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
-        main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
-        main_n_sigs = p2pk_secret.n_sigs or 1
-
-        exception_to_raise: Optional[Exception] = None
-
-        can_use_main_path = True
-        if SecretKind(secret.kind) == SecretKind.HTLC and not proof.htlcpreimage:
-            can_use_main_path = False
-            exception_to_raise = TransactionError("HTLC requires preimage for main path.")
-
-        # Check if we can spend via the normal path (main pubkeys)
-        if can_use_main_path:
-            if main_pubkeys:
-                try:
-                    if self._verify_p2pk_signatures(
-                        message_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
-                    ):
-                        logger.trace("Spending condition satisfied via main pubkeys.")
-                        return True
-                except Exception as e:
-                    # Main path failed, continue to check refund path
-                    exception_to_raise = e
-                    pass
-            else:
-                # HTLC with no main pubkeys and a valid preimage
-                return True
-
-        # Check if locktime has passed and refund path is available
-        now = time.time()
-        if p2pk_secret.locktime and p2pk_secret.locktime < now:
-            logger.trace(
-                f"p2pk locktime passed ({p2pk_secret.locktime}<{now}). Checking refund path."
+        if secret.sigflag == SigFlags.SIG_ALL:
+            raise TransactionError(
+                "SIG_ALL proofs must be verified using a different method."
             )
 
-            refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
-            refund_n_sigs = p2pk_secret.n_sigs_refund or 1
+        requirements = self._get_spending_requirements(secret)
+        if SecretKind(secret.kind) == SecretKind.P2PK:
+            if not isinstance(secret, P2PKSecret):
+                raise TransactionError("Expected P2PKSecret")
+            return self._verify_p2pk_or_htlc_spending_requirements(
+                requirements,
+                WitnessForP2pkOrHtlc.from_p2pk_witness(proof.witness),
+                message_to_sign,
+            )
 
-            if refund_pubkeys:
-                try:
-                    if self._verify_p2pk_signatures(
-                        message_to_sign,
-                        refund_pubkeys,
-                        proof.p2pksigs.copy(),
-                        refund_n_sigs,
-                    ):
-                        logger.trace("Spending condition satisfied via refund pubkeys.")
-                        return True
-                except Exception as e:
-                    # Refund path also failed
-                    exception_to_raise = e
-                    pass
-            else:
-                return True  # no refund pubkeys, anyone can spend
+        if not isinstance(secret, HTLCSecret):
+            raise TransactionError("Expected HTLCSecret")
+        return self._verify_p2pk_or_htlc_spending_requirements(
+            requirements,
+            WitnessForP2pkOrHtlc.from_htlc_witness(proof.witness),
+            message_to_sign,
+        )
 
-        if exception_to_raise:
-            raise exception_to_raise
+    def _get_spending_requirements(
+        self,
+        secret: P2PKSecret | HTLCSecret,
+    ) -> SpendingRequirements:
+        current_time = time.time()
+        locktime_passed = secret.locktime is not None and secret.locktime < current_time
+
+        if SecretKind(secret.kind) == SecretKind.P2PK:
+            pubkeys = [secret.data] + secret.tags.get_tag_all("pubkeys")
+            required_sigs = secret.n_sigs or 1
+            preimage_hash = None
         else:
-            # if no pubkeys are present, anyone can spend
-            return True
+            # HTLC
+            preimage_hash = secret.data
+            pubkeys = secret.tags.get_tag_all("pubkeys")
+            required_sigs = 0 if not pubkeys else secret.n_sigs or 1
+
+        if pubkeys:
+            pubkeys = self._validate_pubkeys(pubkeys)
+
+        refund_path = None
+        if locktime_passed:
+            refund_pubkeys = secret.tags.get_tag_all("refund")
+            if refund_pubkeys:
+                refund_pubkeys = self._validate_pubkeys(refund_pubkeys)
+                refund_path = SpendPath(
+                    pubkeys=refund_pubkeys,
+                    required_sigs=secret.n_sigs_refund or 1,
+                )
+            else:
+                refund_path = SpendPath(pubkeys=[], required_sigs=0)
+
+        return SpendingRequirements(
+            preimage_hash=preimage_hash,  # None, for P2PK
+            primary_path=SpendPath(
+                pubkeys=pubkeys,
+                required_sigs=required_sigs,
+            ),
+            refund_path=refund_path,
+        )
+
+    def _verify_p2pk_or_htlc_spending_requirements(
+        self,
+        requirements: SpendingRequirements,
+        witness: WitnessForP2pkOrHtlc,
+        message_to_sign: str,
+    ) -> bool:
+        # Contract: this verifier returns True on success and raises on failure.
+        primary_path_error: Optional[Exception] = None
+
+        # Try the primary path first. Any failure here is remembered and only
+        # raised later if the refund path also cannot spend.
+        try:
+            # For HTLC-like requirements, the primary
+            # path additionally requires a matching preimage.
+            if requirements.preimage_hash is not None:
+                if witness.preimage is None:
+                    raise TransactionError("no HTLC preimage provided")
+                self._verify_htlc_preimage(requirements.preimage_hash, witness.preimage)
+
+            if self._verify_p2pk_signatures(
+                message_to_sign,
+                requirements.primary_path.pubkeys,
+                witness.signatures,
+                requirements.primary_path.required_sigs,
+            ):
+                logger.trace(
+                    "Spending condition satisfied via primary (non-refund) path"
+                )
+                return True
+        except Exception as exc:
+            # Primary-path failures do not immediately abort spending, because
+            # an expired lock may still be spendable via the refund path.
+            primary_path_error = exc
+
+        # If the primary path did not succeed, try the refund path next.
+        # The refund_path is only present if the locktime has expired; this
+        # is handled when the SpendingRequirements object is constructed.
+        if requirements.refund_path:
+            try:
+                if self._verify_p2pk_signatures(
+                    message_to_sign,
+                    requirements.refund_path.pubkeys,
+                    witness.signatures,
+                    requirements.refund_path.required_sigs,
+                ):
+                    logger.trace("Spending condition satisfied via refund pubkeys.")
+                    return True
+            except Exception as exc:
+                primary_path_error = exc
+
+        # No path succeeded, so surface the best available error.
+        if primary_path_error:
+            raise primary_path_error
+
+        return True
+
+    def _validate_pubkeys(self, pubkeys: List[str]) -> List[str]:
+        # The pubkeys must be distinct on their x-coordinates
+        pubkeys = [p.lower() for p in pubkeys]
+
+        if len(set(pubkeys)) != len(pubkeys):
+            raise TransactionError("pubkeys must be unique.")
+
+        x_only_pubkeys = [p[2:66] if len(p) in [66, 130] else p for p in pubkeys]
+        if len(set(x_only_pubkeys)) != len(x_only_pubkeys):
+            raise TransactionError("pubkeys must have unique x-coordinates.")
+
+        return pubkeys
 
     def _verify_p2pk_signatures(
         self,
@@ -128,14 +387,18 @@ class LedgerSpendingConditions:
         signatures: List[str],
         n_sigs_required: int,
     ) -> bool:
-        pubkeys = [p.lower() for p in pubkeys]
-        pubkeys = list(dict.fromkeys(pubkeys))
+        if n_sigs_required < 0:
+            raise TransactionError("n_sigs may not be negative.")
+
+        # Count the number of *distinct* pubkeys for which we a valid
+        # signature of the message. Return true if that count is at
+        # least n_sigs_required
+        if n_sigs_required == 0:
+            return True
+
+        pubkeys = self._validate_pubkeys(pubkeys)
         signatures = [s.lower() for s in signatures]
 
-        # enforce that x-coordinates are unique
-        x_only_pubkeys = [p[2:66] if len(p) in [66, 130] else p for p in pubkeys]
-        if len(set(x_only_pubkeys)) != len(x_only_pubkeys):
-            raise TransactionError("pubkeys must have unique x-coordinates.")
         logger.trace(f"pubkeys: {pubkeys}")
         unique_pubkeys = set(pubkeys)
 
@@ -144,15 +407,8 @@ class LedgerSpendingConditions:
             # no signature present although secret indicates one
             raise TransactionError("no signatures in proof.")
 
-        # we make sure that there are no duplicate signatures
-        if len(set(signatures)) != len(signatures):
-            raise TransactionError("signatures must be unique.")
-
         # INPUTS: check signatures against pubkey
         # we expect the signature to be on the pubkey (=message) itself
-        n_sigs_required = n_sigs_required or 1
-        if not n_sigs_required > 0:
-            raise TransactionError("n_sigs must be positive.")
 
         # check if enough pubkeys or signatures are present
         if len(pubkeys) < n_sigs_required or len(signatures) < n_sigs_required:
@@ -192,235 +448,20 @@ class LedgerSpendingConditions:
 
         return True
 
-    def _verify_input_spending_conditions(self, proof: Proof) -> bool:
-        """
-        Verify spending conditions:
-         Condition: P2PK - Checks if signature in proof.witness is valid for pubkey in proof.secret
-         Condition: HTLC - Checks if preimage in proof.witness is valid for hash in proof.secret
-        """
+    def _verify_htlc_preimage(
+        self,
+        preimage_hash: str,
+        preimage: Optional[str],
+    ) -> bool:
+        if not preimage:
+            raise TransactionError("no HTLC preimage provided")
 
         try:
-            secret = Secret.deserialize(proof.secret)
-            logger.trace(f"proof.secret: {proof.secret}")
-            logger.trace(f"secret: {secret}")
-        except Exception:
-            # secret is not a spending condition so we treat is a normal secret
+            if len(preimage) != 64:
+                raise TransactionError("HTLC preimage must be 64 characters hex.")
+            if sha256(bytes.fromhex(preimage)).digest() != bytes.fromhex(preimage_hash):
+                raise TransactionError("HTLC preimage does not match.")
+        except ValueError:
+            raise TransactionError("invalid preimage for HTLC: not a hex string.")
 
-            # no spending conditions means no witness allowed
-            if proof.witness is not None:
-                raise TransactionError(
-                    "witness data not allowed without a spending condition."
-                )
-            return True
-
-        # P2PK
-        if SecretKind(secret.kind) == SecretKind.P2PK:
-            p2pk_secret = P2PKSecret.from_secret(secret)
-            return self._verify_p2pk_sig_inputs(proof, p2pk_secret)
-
-        # HTLC
-        if SecretKind(secret.kind) == SecretKind.HTLC:
-            htlc_secret = HTLCSecret.from_secret(secret)
-            nut14.verify_htlc_spending_conditions(proof)
-            return self._verify_p2pk_sig_inputs(proof, htlc_secret)
-
-        # no spending condition present
         return True
-
-    # ------ output spending conditions ------
-
-    def _inputs_require_sigall(self, proofs: List[Proof]) -> bool:
-        """
-        Check if any input requires sigall spending condition.
-        """
-        for proof in proofs:
-            try:
-                secret = Secret.deserialize(proof.secret)
-                try:
-                    p2pk_secret = P2PKSecret.from_secret(secret)
-                    if p2pk_secret.sigflag == SigFlags.SIG_ALL:
-                        return True
-                except Exception:
-                    pass
-                try:
-                    htlc_secret = HTLCSecret.from_secret(secret)
-                    if htlc_secret.sigflag == SigFlags.SIG_ALL:
-                        return True
-                except Exception:
-                    pass
-            except Exception:
-                # secret is not a spending condition so we treat is a normal secret
-                pass
-        return False
-
-    def _verify_all_secrets_equal_and_return(self, proofs: List[Proof]) -> Secret:
-        """
-        Verify that all secrets are equal (kind, data, tags) and return them
-        """
-        secrets = set()
-        for proof in proofs:
-            secrets.add(Secret.deserialize(proof.secret))
-
-        if len(secrets) != 1:
-            raise TransactionError("not all secrets are equal.")
-
-        return secrets.pop()
-
-    def _check_at_least_one_sig_all(self, proofs: List[Proof]) -> bool:
-        """
-        Verify that at least one secret has a SIG_ALL spending condition
-        """
-        for proof in proofs:
-            try:
-                secret = Secret.deserialize(proof.secret)
-                if secret.tags.get_tag("sigflag") == SigFlags.SIG_ALL.value:
-                    return True
-            except Exception:
-                pass
-
-        return False
-
-    def _verify_sigall_spending_conditions(
-        self,
-        proofs: List[Proof],
-        outputs: List[BlindedMessage],
-        message_to_sign: Optional[str] = None,
-    ) -> bool:
-        """
-        If sigflag==SIG_ALL in any proof.secret, perform a signature check on all
-        inputs (proofs) and outputs (outputs) together.
-
-        We return True
-        - if we successfully validated the spending condition
-        - if all proof.secret are **NOT** SIG_ALL spending condition
-
-        We raise an exception:
-        - if one input is SIG_ALL but not all inputs are SIG_ALL
-        - if not all secret kinds are the same
-        - if not all pubkeys in all secrets are the same
-        - if not all n_sigs in all secrets are the same
-        - if not all signatures in all outputs are unique
-        - if not all signatures in all outputs are valid
-        - if no valid signatures are present
-        - if the signature threshold is not met
-
-        We return True if we successfully validated the spending condition.
-        """
-
-        # verify at least one secret is SIG_ALL
-        if not self._check_at_least_one_sig_all(proofs):
-            # it makes no sense to continue with a SIG_ALL check
-            return True
-
-        # verify that all secrets are of the same kind
-        try:
-            secret = self._verify_all_secrets_equal_and_return(proofs)
-        except Exception:
-            # not all secrets are equal, we fail
-            return False
-
-        # now we can enforce that all inputs are SIG_ALL
-        secret_lock: Union[P2PKSecret, HTLCSecret]
-        main_pubkeys: List[str] = []
-        if SecretKind(secret.kind) == SecretKind.P2PK:
-            secret_lock = P2PKSecret.from_secret(secret)
-            main_pubkeys = [secret_lock.data]
-        elif SecretKind(secret.kind) == SecretKind.HTLC:
-            secret_lock = HTLCSecret.from_secret(secret)
-        else:
-            # not a P2PK or HTLC secret
-            return False
-
-        main_pubkeys += secret_lock.tags.get_tag_all("pubkeys")
-        main_pubkeys = list(dict.fromkeys([p.lower() for p in main_pubkeys]))
-        main_n_sigs = secret_lock.n_sigs or 1
-
-        message_to_sign = message_to_sign or nut11.sigall_message_to_sign(
-            proofs, outputs
-        )
-
-
-        first_proof = proofs[0]
-        if not first_proof.witness:
-            raise TransactionError("no witness in proof.")
-        signatures = P2PKWitness.from_witness(first_proof.witness).signatures
-
-        exception_to_raise: Optional[Exception] = None
-
-        can_use_main_path = True
-        if SecretKind(secret.kind) == SecretKind.HTLC and not all([p.htlcpreimage for p in proofs]):
-            can_use_main_path = False
-            exception_to_raise = TransactionError("HTLC requires preimage for main path.")
-
-        # Check if we can spend via the normal path (main pubkeys)
-        if can_use_main_path:
-            if main_pubkeys:
-                try:
-                    if self._verify_p2pk_signatures(
-                        message_to_sign, main_pubkeys, signatures.copy(), main_n_sigs
-                    ):
-                        logger.trace("Spending condition satisfied via main pubkeys.")
-                        return True
-                except Exception as e:
-                    # Main path failed, continue to check refund path
-                    exception_to_raise = e
-                    pass
-            else:
-                # HTLC with no main pubkeys and a valid preimage
-                return True
-
-        # Check if locktime has passed and refund path is available
-        now = time.time()
-        if secret_lock.locktime and secret_lock.locktime < now:
-            logger.trace(
-                f"p2pk locktime passed ({secret_lock.locktime}<{now}). Checking refund path."
-            )
-
-            refund_pubkeys = secret_lock.tags.get_tag_all("refund")
-            refund_n_sigs = secret_lock.n_sigs_refund or 1
-
-            if refund_pubkeys:
-                try:
-                    if self._verify_p2pk_signatures(
-                        message_to_sign,
-                        refund_pubkeys,
-                        signatures.copy(),
-                        refund_n_sigs,
-                    ):
-                        logger.trace("Spending condition satisfied via refund pubkeys.")
-                        return True
-                except Exception as e:
-                    # Refund path also failed
-                    exception_to_raise = e
-                    pass
-            else:
-                return True  # no refund pubkeys, anyone can spend
-
-        if exception_to_raise:
-            raise exception_to_raise
-        else:
-            # if no pubkeys are present, anyone can spend
-            return True
-
-    def _verify_input_output_spending_conditions(
-        self,
-        proofs: List[Proof],
-        outputs: List[BlindedMessage],
-        message_to_sign: Optional[str] = None,
-    ) -> bool:
-        """
-        Verify spending conditions:
-         Condition: If sigflag==SIG_ALL in any proof.secret of the kind P2PK or HTLC
-            we require signatures on all inputs and outputs together.
-
-            Implicitly enforces many other conditions such as all input Secrets
-            being the same except for the nonce (see verify_same_kinds_and_return()).
-        """
-        if not self._inputs_require_sigall(proofs):
-            # no input requires sigall spending condition
-            return True
-
-        # verify that all secrets are of the same kind, raise an error if not
-        _ = self._verify_all_secrets_equal_and_return(proofs)
-
-        return self._verify_sigall_spending_conditions(proofs, outputs, message_to_sign)

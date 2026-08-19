@@ -15,16 +15,13 @@ on:
       os:
         default: "ubuntu-latest"
         type: string
-      mint-only-deprecated:
-        default: "false"
-        type: string
 
 permissions:
   contents: read
 
 jobs:
   poetry:
-    name: Run (db ${{ inputs.mint-database }}, deprecated api ${{ inputs.mint-only-deprecated }})
+    name: Run (db ${{ inputs.mint-database }})
     runs-on: ${{ inputs.os }}
     steps:
       - name: Start PostgreSQL service
@@ -45,7 +42,6 @@ jobs:
           MINT_HOST: localhost
           MINT_PORT: 3337
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
-          DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false
         run: |
           make test
