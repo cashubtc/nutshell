@@ -1621,12 +1621,20 @@ class NUT10Option(BaseModel):
     t: Optional[List[List[str]]] = None  # tags
 
 
+class SupportedMethod(BaseModel):
+    mn: str = Field(min_length=1)  # method name
+    # per-method fee, absent = 0; u64 range per NUT-26
+    mf: Optional[int] = Field(default=None, ge=0, lt=2**64)
+
+
 class PaymentRequest(BaseModel):
     i: Optional[str] = None  # payment id
     a: Optional[int] = None  # amount
     u: Optional[str] = None  # unit
     s: Optional[bool] = None  # single use
     m: Optional[List[str]] = None  # mints
+    mp: Optional[bool] = None  # mint list preferred
+    sm: Optional[List[SupportedMethod]] = None  # supported methods
     d: Optional[str] = None  # description
     t: Optional[List[Transport]] = None  # transports
     nut10: Optional[NUT10Option] = None
