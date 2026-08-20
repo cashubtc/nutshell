@@ -17,6 +17,8 @@ from cashu.core.base import (
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
+    AmountlessInvoiceNotSupportedError,
+    AmountMismatchError,
     InvalidProofsError,
     KeysetInactiveError,
     NoSecretInProofsError,
@@ -30,6 +32,7 @@ from cashu.core.errors import (
     TransactionError,
     TransactionMultipleUnitsError,
     TransactionUnitMismatchError,
+    UnitNotSupportedError,
     WitnessTooLongError,
 )
 from cashu.core.nuts import nut11, nut20
@@ -335,6 +338,19 @@ def test_verify_equation_balanced_rejects_unbalanced(ledger: Ledger):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "error_class, code",
+    [
+        (AmountlessInvoiceNotSupportedError, 11011),
+        (AmountMismatchError, 11012),
+        (UnitNotSupportedError, 11013),
+    ],
+)
+def test_transaction_error_codes(error_class, code):
+    assert error_class.code == code
+    assert error_class().code == code
+
+
 def test_verify_and_get_unit_method_accepts_bolt11_sat(ledger: Ledger):
     u, m = ledger._verify_and_get_unit_method("sat", "bolt11")
     assert u == Unit.sat
@@ -342,8 +358,11 @@ def test_verify_and_get_unit_method_accepts_bolt11_sat(ledger: Ledger):
 
 
 def test_verify_and_get_unit_method_rejects_unknown_unit(ledger: Ledger):
-    with pytest.raises(NotAllowedError, match="not supported in any keyset"):
+    with pytest.raises(
+        UnitNotSupportedError, match="not supported in any keyset"
+    ) as exc_info:
         ledger._verify_and_get_unit_method("auth", "bolt11")
+    assert exc_info.value.code == 11013
 
 
 def test_verify_and_get_unit_method_rejects_unsupported_backend(ledger: Ledger):

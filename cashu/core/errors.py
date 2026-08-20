@@ -135,6 +135,30 @@ class TransactionUnitMismatchError(TransactionError):
         super().__init__(detail, code=self.code)
 
 
+class AmountlessInvoiceNotSupportedError(TransactionError):
+    detail = "Amountless invoice is not supported"
+    code = 11011
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class AmountMismatchError(TransactionError):
+    detail = "Amount in request does not equal invoice"
+    code = 11012
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class UnitNotSupportedError(TransactionError):
+    detail = "Unit in request is not supported"
+    code = 11013
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
 class BatchDuplicateQuotesError(TransactionError):
     detail = "Duplicate quote IDs provided"
     code = 11016

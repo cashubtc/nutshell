@@ -26,6 +26,7 @@ from ..core.errors import (
     TransactionError,
     TransactionMultipleUnitsError,
     TransactionUnitMismatchError,
+    UnitNotSupportedError,
     WitnessTooLongError,
 )
 from ..core.nuts import nut20
@@ -384,7 +385,9 @@ class LedgerVerification(
         unit = Unit[unit_str]
 
         if not any([unit == k.unit for k in self.keysets.values()]):
-            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+            raise UnitNotSupportedError(
+                f"unit '{unit.name}' not supported in any keyset."
+            )
 
         if not self.backends.get(method) or unit not in self.backends[method]:
             raise NotAllowedError(

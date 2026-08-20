@@ -28,6 +28,8 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    AmountlessInvoiceNotSupportedError,
+    AmountMismatchError,
     BatchDuplicateQuotesError,
     CashuError,
     InvoiceAlreadyPaidError,
@@ -732,7 +734,7 @@ class Ledger(
             logger.error(
                 f"expected {payment_quote.amount.to(Unit.msat).amount} msat but got {melt_quote.mpp_amount}"
             )
-            raise TransactionError("quote amount not as requested")
+            raise AmountMismatchError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
             raise TransactionError("payment quote amount units do not match")
@@ -802,7 +804,7 @@ class Ledger(
         # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
         if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         now = int(time.time())
         expiry = None
@@ -990,9 +992,9 @@ class Ledger(
         invoice_obj = bolt11.decode(bolt11_request)
 
         if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
         if not mint_quote.amount == melt_quote.amount:
-            raise TransactionError("amounts do not match")
+            raise AmountMismatchError("amounts do not match")
         if not bolt11_request == mint_quote.request:
             raise TransactionError("bolt11 requests do not match")
         if not mint_quote.method == melt_quote.method:
