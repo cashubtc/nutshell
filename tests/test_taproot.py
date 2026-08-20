@@ -368,6 +368,43 @@ async def test_nut13_v3_secret_derivation_vectors():
         assert expected_pub and expected_pub.format() == secret
 
 
+@pytest.mark.asyncio
+async def test_nut13_v3_derivation_type_vectors():
+    """Each purpose gets its own derivation type over the framed V3 message.
+
+    A quote lock key may be handed over for delegated minting and a leaf key is
+    published in the tree, so neither may collide with a proof secret key.
+    """
+    from cashu.wallet.secrets import WalletSecrets
+
+    nut13 = VECTORS["nut13_v3"]
+    secrets = WalletSecrets()
+    secrets.seed = nut13["seed_utf8"].encode()
+    keyset_id = nut13["keyset_id"]
+    for output in nut13["outputs"]:
+        offset = secrets.derive_v3_nums_offset(output["counter"], keyset_id)
+        assert offset.hex() == output["nums_offset"]
+    for leaf in nut13["leaf_keys"]:
+        key = secrets.derive_v3_leaf_key(leaf["counter"], keyset_id, leaf["index"])
+        assert key.hex() == leaf["privkey"]
+        pub = PrivateKey(key).public_key
+        assert pub and pub.format().hex() == leaf["pubkey"]
+    for lock in nut13["quote_locks"]:
+        key = secrets.derive_v3_quote_lock_key(lock["counter"])
+        assert key.hex() == lock["privkey"]
+        pub = PrivateKey(key).public_key
+        assert pub and pub.format().hex() == lock["pubkey"]
+    # One counter describes one proof completely, so its components must not collide.
+    counter = nut13["outputs"][0]["counter"]
+    derived = {
+        secrets.derive_v3_secret_key(counter, keyset_id),
+        secrets.derive_v3_nums_offset(counter, keyset_id),
+        secrets.derive_v3_leaf_key(counter, keyset_id, 0),
+        secrets.derive_v3_quote_lock_key(counter),
+    }
+    assert len(derived) == 4
+
+
 def test_v3_secret_must_be_lowercase_hex():
     """One spelling per secret: upper-case hex names the same point but the two
     sides hash it differently, so it is refused rather than accepted twice."""
@@ -725,6 +762,7 @@ def test_shared_token_vectors_same_spend_info_from_either_encoder():
             assert out.spend_info.k == si.get("k"), name
             assert out.spend_info.E == si.get("E"), name
             assert out.spend_info.K == si.get("K"), name
+            assert out.spend_info.u == si.get("u"), name
             assert out.spend_info.tree == si.get("tree"), name
         # The cashu-ts string carries the short keyset id; expanding it is the wallet's job
         # (`_expand_short_keyset_ids`), not the token codec's.
