@@ -174,9 +174,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert wallet_mint_quote.privkey
-    signature = nut20.sign_mint_quote_v3(
-        mint_quote.quote, mint_quote.amount, outputs, wallet_mint_quote.privkey
-    )
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, wallet_mint_quote.privkey)
     await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     await assert_err(
@@ -219,7 +217,7 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert quote.privkey
-    signature = nut20.sign_mint_quote_v3(quote.quote, quote.amount, outputs, quote.privkey)
+    signature = nut20.sign_mint_quote(quote.quote, outputs, quote.privkey)
     await ledger.mint(outputs=outputs, quote_id=quote.quote, signature=signature)
 
     mint_quote_after_payment = await ledger.get_mint_quote(quote.quote)
@@ -375,9 +373,7 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert mint_quote.privkey
-    signature = nut20.sign_mint_quote_v3(
-        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
-    )
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
     await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     # now try to mint with the same outputs again
@@ -385,9 +381,7 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     await pay_if_regtest(mint_quote_2.request)
 
     assert mint_quote_2.privkey
-    signature = nut20.sign_mint_quote_v3(
-        mint_quote_2.quote, mint_quote_2.amount, outputs, mint_quote_2.privkey
-    )
+    signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature),
         OutputsAlreadySignedError.detail,
@@ -410,9 +404,7 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     mint_quote_2 = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote_2.request)
     assert mint_quote_2.privkey
-    signature = nut20.sign_mint_quote_v3(
-        mint_quote_2.quote, mint_quote_2.amount, outputs, mint_quote_2.privkey
-    )
+    signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
     await ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature)
 
     # use the same outputs for melting
