@@ -63,7 +63,9 @@ def v2_keyset(ledger: Ledger):
 async def wallet():
     wallet = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet",
+        # Its own db: binding this wallet to the v2 keyset persists keysets, and
+        # tests/wallet/test_wallet.py counts the keysets in the shared one.
+        db="test_data/wallet_mint_db_operations",
         name="wallet",
     )
     await wallet.load_mint()
