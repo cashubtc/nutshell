@@ -75,14 +75,14 @@ class TransactionNotBalancedError(TransactionError):
 
 
 class SecretTooLongError(TransactionError):
-    code = 11003
+    code = 11000
 
     def __init__(self, detail="secret too long"):
         super().__init__(detail, code=self.code)
 
 
 class WitnessTooLongError(TransactionError):
-    code = 11004
+    code = 11000
 
     def __init__(self, detail="witness too long"):
         super().__init__(detail, code=self.code)
@@ -94,13 +94,6 @@ class NoSecretInProofsError(TransactionError):
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
-
-
-class TransactionUnitError(TransactionError):
-    code = 11009
-
-    def __init__(self, detail):
-        super().__init__(detail, code=self.code)
 
 
 class TransactionAmountExceedsLimitError(TransactionError):
