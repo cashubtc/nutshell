@@ -7,6 +7,7 @@ from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState
 from cashu.core.mint_info import MintInfo
 from cashu.core.settings import settings
 from cashu.mint.management_rpc import management_rpc as rpc_module
+from cashu.mint.management_rpc.protos import management_pb2
 
 
 def _rpc_with_ledger(ledger=None):
@@ -200,7 +201,12 @@ async def test_rotate_next_keyset_and_limit_updates():
     rpc = _rpc_with_ledger(ledger)
 
     response = await rpc.RotateNextKeyset(
-        SimpleNamespace(unit="sat", input_fee_ppk=2, final_expiry=456, max_order=10),
+        management_pb2.RotateNextKeysetRequest(
+            unit="sat",
+            input_fee_ppk=2,
+            final_expiry=456,
+            max_order=10,
+        ),
         None,
     )
     assert response.id == "keyset-1"
@@ -235,6 +241,44 @@ async def test_rotate_next_keyset_and_limit_updates():
         settings.lightning_reserve_fee_min = old_fee_min
         settings.mint_auth_rate_limit_per_minute = old_auth_rate
         settings.mint_auth_max_blind_tokens = old_auth_max
+
+
+@pytest.mark.asyncio
+async def test_rotate_next_keyset_normalizes_absent_expiry_to_none():
+    received = {}
+    keyset = SimpleNamespace(
+        id="keyset-without-expiry",
+        unit=Unit.sat,
+        amounts=[1, 2, 4, 8],
+        input_fee_ppk=100,
+        final_expiry=None,
+    )
+
+    async def rotate_next_keyset(unit, input_fee_ppk, final_expiry):
+        received.update(
+            unit=unit,
+            input_fee_ppk=input_fee_ppk,
+            final_expiry=final_expiry,
+        )
+        return keyset
+
+    rpc = _rpc_with_ledger(SimpleNamespace(rotate_next_keyset=rotate_next_keyset))
+    request = management_pb2.RotateNextKeysetRequest(
+        unit="sat",
+        input_fee_ppk=100,
+    )
+
+    assert not request.HasField("final_expiry")
+    assert request.final_expiry == 0
+
+    response = await rpc.RotateNextKeyset(request, None)
+
+    assert received == {
+        "unit": Unit.sat,
+        "input_fee_ppk": 100,
+        "final_expiry": None,
+    }
+    assert not response.HasField("final_expiry")
 
 
 @pytest.mark.asyncio

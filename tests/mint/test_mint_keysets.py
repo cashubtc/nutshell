@@ -148,6 +148,22 @@ async def test_keyset_id_v2_derivation():
 
 
 @pytest.mark.asyncio
+async def test_keyset_id_v2_zero_expiry_matches_omitted_expiry():
+    """NUT-02 requires final_expiry=0 to be omitted from the ID preimage."""
+    keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
+    assert keyset.public_keys, "Public keys must be available"
+
+    id_without_expiry = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
+    id_with_zero_expiry = derive_keyset_id_v2(
+        keyset.public_keys,
+        Unit.sat,
+        final_expiry=0,
+    )
+
+    assert id_with_zero_expiry == id_without_expiry
+
+
+@pytest.mark.asyncio
 async def test_keyset_id_v2_units():
     """Test that different units produce different keyset IDs."""
     keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
