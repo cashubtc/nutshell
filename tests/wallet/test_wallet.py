@@ -658,8 +658,9 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     # Load keysets from mocked mint API
     await wallet1.load_mint_keysets()
 
-    # Assert only the real keyset remains in memory
-    assert len(wallet1.keysets) == 1
+    # Assert the seeded keyset is gone and the real one remains. The mint serves more
+    # than one keyset (a v2 alongside the v3), so count the change rather than the total.
+    assert fake_keyset_id not in wallet1.keysets
     assert real_keyset_id in wallet1.keysets
 
     # Assert the disappeared keyset is marked as deleted in the DB
