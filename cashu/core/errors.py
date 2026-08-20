@@ -213,16 +213,16 @@ class QuoteNotPaidError(CashuError):
     detail = "quote not paid"
     code = 20001
 
-    def __init__(self):
-        super().__init__(self.detail, code=self.code)
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
 
 
 class QuoteAlreadyIssuedError(CashuError):
     detail = "quote already issued"
     code = 20002
 
-    def __init__(self):
-        super().__init__(self.detail, code=self.code)
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
 
 
 class MintingDisabledError(CashuError):

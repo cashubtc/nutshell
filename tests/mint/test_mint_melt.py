@@ -16,6 +16,7 @@ from cashu.core.errors import (
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
     OutputsArePendingError,
+    QuotePendingError,
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
@@ -593,8 +594,6 @@ async def test_set_melt_quote_pending_without_checking_id(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Ledger):
     """Test that setting a melt quote as pending fails if another quote with same checking_id is already pending."""
-    from cashu.core.errors import TransactionError
-
     checking_id = "test_checking_id_duplicate"
 
     quote1 = MeltQuote(
@@ -633,9 +632,10 @@ async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Led
     # Attempt to set the second quote as pending should fail
     try:
         await ledger.db_write._set_melt_quote_pending(quote=quote2)
-        raise AssertionError("Expected TransactionError")
-    except TransactionError as e:
+        raise AssertionError("Expected QuotePendingError")
+    except QuotePendingError as e:
         assert "Melt quote already paid or pending." in str(e)
+        assert e.code == 20005
 
     # Verify the second quote is still unpaid
     quote2_db = await ledger.crud.get_melt_quote(

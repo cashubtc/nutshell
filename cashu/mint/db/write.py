@@ -15,7 +15,11 @@ from ...core.base import (
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
+    InvoiceAlreadyPaidError,
     ProofsArePendingError,
+    QuoteAlreadyIssuedError,
+    QuoteNotPaidError,
+    QuotePendingError,
     TransactionError,
 )
 from ..crud import LedgerCrud
@@ -171,9 +175,9 @@ class DbWriteHelper:
             if not quote:
                 raise TransactionError("Mint quote not found.")
             if quote.pending:
-                raise TransactionError("Mint quote already pending.")
+                raise QuotePendingError("Mint quote already pending.")
             if not quote.paid:
-                raise TransactionError("Mint quote is not paid yet.")
+                raise QuoteNotPaidError("Mint quote is not paid yet.")
             # set the quote as pending
             self._set_mint_quote_state(quote, MintQuoteState.pending)
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
@@ -213,11 +217,13 @@ class DbWriteHelper:
                 if not quote:
                     raise TransactionError(f"Mint quote {quote_id} not found.")
                 if quote.pending:
-                    raise TransactionError(f"Mint quote {quote_id} already pending.")
+                    raise QuotePendingError(f"Mint quote {quote_id} already pending.")
                 if quote.issued:
-                    raise TransactionError(f"Mint quote {quote_id} is already issued.")
+                    raise QuoteAlreadyIssuedError(
+                        f"Mint quote {quote_id} is already issued."
+                    )
                 if not quote.paid:
-                    raise TransactionError(f"Mint quote {quote_id} is not paid yet.")
+                    raise QuoteNotPaidError(f"Mint quote {quote_id} is not paid yet.")
 
                 # set the quote as pending
                 self._set_mint_quote_state(quote, MintQuoteState.pending)
@@ -330,13 +336,10 @@ class DbWriteHelper:
             )
             if len(quotes_db) == 0:
                 raise TransactionError("Melt quote not found.")
-            if any(
-                [
-                    quote.state in [MeltQuoteState.pending, MeltQuoteState.paid]
-                    for quote in quotes_db
-                ]
-            ):
-                raise TransactionError("Melt quote already paid or pending.")
+            if any([quote.state == MeltQuoteState.paid for quote in quotes_db]):
+                raise InvoiceAlreadyPaidError("Melt quote already paid or pending.")
+            if any([quote.state == MeltQuoteState.pending for quote in quotes_db]):
+                raise QuotePendingError("Melt quote already paid or pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
@@ -441,13 +444,10 @@ class DbWriteHelper:
             quotes_db = await self.crud.get_melt_quotes_by_checking_id(
                 checking_id=quote.checking_id, db=self.db, conn=conn
             )
-            if any(
-                [
-                    quote.state in [MeltQuoteState.pending, MeltQuoteState.paid]
-                    for quote in quotes_db
-                ]
-            ):
-                raise TransactionError("Melt quote already paid or pending.")
+            if any([quote.state == MeltQuoteState.paid for quote in quotes_db]):
+                raise InvoiceAlreadyPaidError("Melt quote already paid or pending.")
+            if any([quote.state == MeltQuoteState.pending for quote in quotes_db]):
+                raise QuotePendingError("Melt quote already paid or pending.")
 
             # store the melt quote
             await self.crud.store_melt_quote(quote=quote, db=self.db, conn=conn)
