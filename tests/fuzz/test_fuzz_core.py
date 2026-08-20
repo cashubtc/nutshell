@@ -18,6 +18,7 @@ from cashu.core.base import (
     Unit,
     WalletKeyset,
 )
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.secret import Secret, Tags
 
@@ -37,6 +38,17 @@ def public_key():
 
 def keyset_id():
     return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
+
+
+def pre_v3_keyset_id():
+    """Any keyset id that is not v3.
+
+    These strategies pair an id with an arbitrary text secret, which a v3 keyset
+    rejects by construction: its secrets are compressed points. A 16-character hex
+    id beginning "02" is the short form of a real v3 id, so it has to be excluded
+    rather than assumed legacy.
+    """
+    return st.one_of(keyset_id(), hex_string(16, 16).filter(lambda s: not is_bls_keyset(s)))
 
 
 def url_safe_text(min_len=1, max_len=20):
@@ -84,7 +96,7 @@ def test_fuzz_secret_serialization(kind, data, tags_list, nonce):
 
 @given(
     amount=st.integers(min_value=1),
-    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    id=pre_v3_keyset_id(),
     B_=st.one_of(hex_string(), public_key()),
     C_=st.one_of(st.none(), public_key(), hex_string()),
 )
@@ -102,7 +114,7 @@ def test_fuzz_blinded_message(amount, id, B_, C_):
 
 
 @given(
-    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    id=pre_v3_keyset_id(),
     amount=st.integers(min_value=1),
     C_=st.one_of(hex_string(), public_key()),
     dleq_e=hex_string(),
@@ -123,7 +135,7 @@ def test_fuzz_blinded_signature(id, amount, C_, dleq_e, dleq_s):
 
 
 @given(
-    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    id=pre_v3_keyset_id(),
     amount=st.integers(min_value=1),
     secret=st.text(min_size=1, max_size=64),
     C=st.one_of(hex_string(), public_key()),
@@ -318,7 +330,7 @@ def test_fuzz_wallet_keyset(id, unit, input_fee_ppk, public_keys_list):
     proofs=st.lists(
         st.builds(
             Proof,
-            id=st.one_of(keyset_id(), hex_string(16, 16)),
+            id=pre_v3_keyset_id(),
             amount=st.integers(min_value=1),
             secret=st.text(min_size=1),
             C=st.one_of(hex_string(), public_key()),
