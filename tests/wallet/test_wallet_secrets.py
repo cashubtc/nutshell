@@ -1,3 +1,6 @@
+import json
+import os
+
 import pytest
 
 from cashu.core.base import DLEQWallet, Proof, WalletKeyset
@@ -16,21 +19,25 @@ async def test_nut13_v3_secret_derivation():
         def __init__(self, seed: bytes):
             self.seed = seed
     
-    seed = b"nut13 v3 test seed"
-    ms = MockWalletSecrets(seed)
-    
-    keyset_id = "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6"
-    counter = 3
+    # Read the shared vectors rather than restating them: they are regenerated whenever the
+    # derivation message changes, and a copy here would silently go stale.
+    vectors_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "taproot_v3_vectors.json"
+    )
+    with open(vectors_path) as f:
+        nut13 = json.load(f)["nut13_v3"]
 
-    secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(counter, keyset_id)
+    ms = MockWalletSecrets(nut13["seed_utf8"].encode())
+    keyset_id = nut13["keyset_id"]
 
-    # Taproot secrets (spec 2.4.2): the 0x00 branch derives the internal key k with the
-    # attempt-counter retry; the secret is K = k*G compressed. Pinned by the shared vectors
-    # in tests/taproot_v3_vectors.json (nut13_v3, counter 3).
-    assert secret_bytes.hex() == "02cc8d2b280ca8e46846159d8918409a0820d664a4223060024fc6f489140e8368"
-
-    r = BlsPrivateKey(r_bytes)
-    assert r.to_hex() == "3d625b8869fc030e126f0a6d8109fc6c48b00ab6a8bd50a68dbd100e3cbb40de"
+    # Taproot secrets (spec 2.4.2): type 0x00 derives the internal key k with the attempt-counter
+    # retry over the framed V3 message; the secret is K = k*G compressed.
+    for output in nut13["outputs"]:
+        secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(
+            output["counter"], keyset_id
+        )
+        assert secret_bytes.hex() == output["secret"]
+        assert BlsPrivateKey(r_bytes).to_hex() == output["blinding_factor"]
 
 
 @pytest.mark.asyncio

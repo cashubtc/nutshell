@@ -112,7 +112,7 @@ async def test_get_keys(wallet1: Wallet):
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
     assert (
         keyset.id
-        == "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
+        == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
@@ -559,16 +559,16 @@ async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     # The mint also serves a v2 keyset for the pre-v3 secret formats, so assert
     # the v3 keyset is the one loaded and selected rather than the only one.
     assert (
-        "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
+        "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
         in wallet1.keysets
     )
     assert (
         wallet1.keyset_id
-        == "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
+        == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
     await wallet1.activate_keyset(
-        keyset_id="022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
+        keyset_id="02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     # expect deprecated keyset id to be present
     await assert_err(
