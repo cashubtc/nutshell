@@ -21,6 +21,19 @@ from ..wallet.crud import (
 )
 from .protocols import SupportsDb, SupportsKeysets
 
+SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+BLS_FR_ORDER = (
+    52435875175126190479447740508185965837690552500527637822603658699938581184513
+)
+
+# NUT-13 derivation types. 0x00-0x03 are components of one proof allocation and
+# share the keyset's proof counter; 0x04 has its own quote counter.
+DERIVATION_TYPE_SECRET_KEY = 0x00
+DERIVATION_TYPE_BLINDING_FACTOR = 0x01
+DERIVATION_TYPE_NUMS_OFFSET = 0x02
+DERIVATION_TYPE_LEAF_KEY = 0x03
+DERIVATION_TYPE_QUOTE_LOCK = 0x04
+
 
 class WalletSecrets(SupportsDb, SupportsKeysets):
     keyset_id: str
@@ -197,26 +210,77 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
-    def derive_v3_secret_key(self, counter: int, keyset_id: str) -> bytes:
-        """Derive the internal private key behind a v3 point secret (0x00 branch).
+    def _derive_v3_scalar(
+        self,
+        counter: int,
+        keyset_id: Optional[str],
+        derivation_type: int,
+        order: int = SECP256K1_N,
+        suffix: bytes = b"",
+    ) -> bytes:
+        """Derive one V3 scalar by rejection sampling the framed V3 message.
 
-        Same attempt-counter pattern as the blinding branch: append u32_BE(attempt)
-        and take the first digest that is a valid secp256k1 key (spec 2.4.2).
+        message_v3 = DST || u32_BE(len(keyset_id)) || keyset_id || u64_BE(counter)
+                     || derivation_type || u32_BE(attempt) || type_suffix
+        The keyset id is the one variable-length field, so it is framed; a type may
+        then append its own suffix. An absent keyset id frames an empty field, which
+        is what type 0x04 uses. V2 keeps its unframed message: reframing it would
+        re-derive every deployed secret.
         """
         assert self.seed, "Seed not initialized yet."
-        # secp256k1 group order
-        SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-        keyset_id_bytes = bytes.fromhex(keyset_id)
-        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
-        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+        keyset_id_bytes = b"" if keyset_id is None else bytes.fromhex(keyset_id)
+        base = (
+            b"Cashu_KDF_HMAC_SHA256"
+            + len(keyset_id_bytes).to_bytes(4, byteorder="big", signed=False)
+            + keyset_id_bytes
+            + counter.to_bytes(8, byteorder="big", signed=False)
+            + bytes([derivation_type])
+        )
         for attempt in range(65536):
             attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
-            msg = base + b"\x00" + attempt_bytes
-            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
+            digest = hmac.new(
+                self.seed, base + attempt_bytes + suffix, hashlib.sha256
+            ).digest()
             x = int.from_bytes(digest, "big")
-            if x != 0 and x < SECP256K1_N:
+            if x != 0 and x < order:
                 return digest
-        raise RuntimeError("V3 secret key derivation failed")
+        raise RuntimeError(f"V3 derivation failed for type {derivation_type}")
+
+    def derive_v3_secret_key(self, counter: int, keyset_id: str) -> bytes:
+        """Derive the internal private key behind a v3 point secret (type 0x00)."""
+        return self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_SECRET_KEY)
+
+    def derive_v3_nums_offset(self, counter: int, keyset_id: str) -> bytes:
+        """Derive the NUMS offset u for a self-owned script-only secret (type 0x02).
+
+        Shares the proof's counter with the secret key and blinding factor, so reusing a
+        counter repeats B_ and the mint refuses it.
+        """
+        return self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_NUMS_OFFSET)
+
+    def derive_v3_leaf_key(self, counter: int, keyset_id: str, index: int) -> bytes:
+        """Derive a self-owned leaf key at index i (type 0x03).
+
+        `i` has no canonical meaning and must not be read from a leaf's position:
+        recover by deriving candidates and matching the tree's keys by value.
+        """
+        return self._derive_v3_scalar(
+            counter,
+            keyset_id,
+            DERIVATION_TYPE_LEAF_KEY,
+            suffix=index.to_bytes(4, byteorder="big", signed=False),
+        )
+
+    def derive_v3_quote_lock_key(self, counter: int) -> bytes:
+        """Derive a mint quote lock key (NUT-13 message type 0x04, defined in NUT-20).
+
+        No keyset: a quote is requested before one is chosen, so binding the key to
+        the keyset current at request time would strand it after a rotation. The
+        message frames an empty keyset id and the counter is the wallet's single
+        quote counter, never the proof counter, because a quote may mint nothing and
+        a lock key may be handed over for delegated minting.
+        """
+        return self._derive_v3_scalar(counter, None, DERIVATION_TYPE_QUOTE_LOCK)
 
     async def _derive_secret_hmac_sha256_v3(
         self, counter: int, keyset_id: str
@@ -224,34 +288,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         """
         Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "02".
         NUT-13 (taproot secrets, spec 2.4.2):
-        - 0x00 branch: message = base || 0x00 || u32_BE(attempt); the first digest that is a
-          valid secp256k1 private key is the internal key k; the secret is K = k*G compressed.
-        - 0x01 branch: message = base || 0x01 || u32_BE(attempt); BLS Fr rejection sampling.
+        - type 0x00: the first digest that is a valid secp256k1 private key is
+          the internal key k; the secret is K = k*G compressed.
+        - type 0x01: BLS Fr rejection sampling.
         """
-        assert self.seed, "Seed not initialized yet."
-        keyset_id_bytes = bytes.fromhex(keyset_id)
-        counter_bytes = counter.to_bytes(8, byteorder="big", signed=False)
-        base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
-        
-        # BLS12-381 Fr group order
-        BLS_FR_ORDER = 52435875175126190479447740508185965837690552500527637822603658699938581184513
-        
         secret_key = self.derive_v3_secret_key(counter, keyset_id)
         secret = SecpPrivateKey(secret_key).public_key.format()
-
-        r = b""
-        for attempt in range(65536):
-            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
-            msg = base + b"\x01" + attempt_bytes
-            digest = hmac.new(self.seed, msg, hashlib.sha256).digest()
-            x = int.from_bytes(digest, "big")
-            if x != 0 and x < BLS_FR_ORDER:
-                r = digest
-                break
-                
-        if not r:
-            raise RuntimeError("V3 blinding factor derivation failed")
-            
+        r = self._derive_v3_scalar(
+            counter, keyset_id, DERIVATION_TYPE_BLINDING_FACTOR, BLS_FR_ORDER
+        )
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
         logger.trace(f"HMAC-SHA256 V3 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
