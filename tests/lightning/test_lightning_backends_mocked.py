@@ -13,7 +13,7 @@ from cashu.core.models import (
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
 )
-from cashu.lightning.base import PaymentResult, Unsupported
+from cashu.lightning.base import PaymentResult, PaymentStatusResult, Unsupported
 from cashu.lightning.clnrest import (
     CLN_PAYMENT_STATUS_COMPLETE,
     CLN_PAYMENT_STATUS_FAILED,
@@ -22,6 +22,7 @@ from cashu.lightning.clnrest import (
 )
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
+from cashu.wallet.lightning import LightningWallet
 
 
 def _response(status_code: int, json_data=None, text: str = "") -> httpx.Response:
@@ -42,6 +43,21 @@ def _quote(request: str, amount: int = 1, unit: str = "sat") -> MeltQuote:
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
     )
+
+
+@pytest.mark.asyncio
+async def test_cashu_get_payment_status_not_found(monkeypatch):
+    wallet = object.__new__(LightningWallet)
+    cast(Any, wallet).db = object()
+
+    async def get_melt_quote(db, request):
+        return None
+
+    monkeypatch.setattr(
+        "cashu.wallet.lightning.lightning.get_bolt11_melt_quote", get_melt_quote
+    )
+    status = await wallet.get_payment_status("missing")
+    assert status.result == PaymentStatusResult.NOT_FOUND
 
 
 class _StreamResponse:
@@ -122,7 +138,7 @@ async def test_strike_pay_invoice_http_error_returns_failed():
 
 
 @pytest.mark.asyncio
-async def test_strike_get_payment_status_404_returns_unknown():
+async def test_strike_get_payment_status_404_returns_not_found():
     wallet = object.__new__(StrikeWallet)
     wallet.unit = Unit.sat
     wallet.endpoint = "https://strike.test"
@@ -133,7 +149,7 @@ async def test_strike_get_payment_status_404_returns_unknown():
 
     cast(Any, wallet).client = Client()
     status = await wallet.get_payment_status("missing-id")
-    assert status.result == PaymentResult.UNKNOWN
+    assert status.result == PaymentStatusResult.NOT_FOUND
     assert status.error_message == "missing"
 
 
@@ -255,7 +271,7 @@ async def test_clnrest_xpay_uses_partial_msat_for_mpp(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_clnrest_get_payment_status_not_found_is_unknown():
+async def test_clnrest_get_payment_status_not_found():
     wallet = object.__new__(CLNRestWallet)
     wallet.unit = Unit.sat
 
@@ -265,7 +281,7 @@ async def test_clnrest_get_payment_status_not_found_is_unknown():
 
     cast(Any, wallet).client = Client()
     status = await wallet.get_payment_status("hash")
-    assert status.result == PaymentResult.UNKNOWN
+    assert status.result == PaymentStatusResult.NOT_FOUND
     assert status.error_message == "payment not found"
 
 
@@ -312,7 +328,7 @@ async def test_clnrest_get_payment_quote_uses_mpp_amount(monkeypatch):
                 {"status": CLN_PAYMENT_STATUS_FAILED},
                 {"status": CLN_PAYMENT_STATUS_PENDING},
             ],
-            PaymentResult.PENDING,
+            PaymentStatusResult.PENDING,
             None,
             None,
         ),
@@ -326,7 +342,7 @@ async def test_clnrest_get_payment_quote_uses_mpp_amount(monkeypatch):
                     "preimage": "preimage",
                 },
             ],
-            PaymentResult.SETTLED,
+            PaymentStatusResult.SETTLED,
             100,
             "preimage",
         ),
@@ -340,7 +356,7 @@ async def test_clnrest_get_payment_quote_uses_mpp_amount(monkeypatch):
                 },
                 {"status": CLN_PAYMENT_STATUS_PENDING},
             ],
-            PaymentResult.PENDING,
+            PaymentStatusResult.PENDING,
             None,
             None,
         ),
@@ -349,7 +365,7 @@ async def test_clnrest_get_payment_quote_uses_mpp_amount(monkeypatch):
                 {"status": CLN_PAYMENT_STATUS_FAILED},
                 {"status": CLN_PAYMENT_STATUS_FAILED},
             ],
-            PaymentResult.FAILED,
+            PaymentStatusResult.FAILED,
             None,
             None,
         ),
@@ -358,7 +374,7 @@ async def test_clnrest_get_payment_quote_uses_mpp_amount(monkeypatch):
                 {"status": CLN_PAYMENT_STATUS_FAILED},
                 {"status": "unexpected"},
             ],
-            PaymentResult.UNKNOWN,
+            PaymentStatusResult.ERROR,
             None,
             None,
         ),
@@ -568,7 +584,7 @@ async def test_lndrest_pay_invoice_unknown_on_stream_error(monkeypatch):
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
     )
-    assert result.result == PaymentResult.UNKNOWN
+    assert result.result == PaymentResult.ERROR
     assert result.error_message == "invoice is already paid"
 
 
@@ -590,7 +606,7 @@ async def test_lndrest_pay_invoice_unknown_on_empty_stream(monkeypatch):
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
     )
-    assert result.result == PaymentResult.UNKNOWN
+    assert result.result == PaymentResult.ERROR
 
 
 @pytest.mark.asyncio
@@ -616,7 +632,7 @@ async def test_lndrest_get_payment_status_reads_stream_result():
 
     cast(Any, wallet).client = Client()
     status = await wallet.get_payment_status("11" * 32)
-    assert status.result == PaymentResult.SETTLED
+    assert status.result == PaymentStatusResult.SETTLED
     assert status.fee == Amount(Unit.msat, 7)
     assert status.preimage == "abc"
 
@@ -650,7 +666,7 @@ async def test_lndrest_get_invoice_status_invalid_json_is_unknown():
 
     cast(Any, wallet).client = Client()
     status = await wallet.get_invoice_status("check")
-    assert status.result == PaymentResult.UNKNOWN
+    assert status.result == PaymentStatusResult.ERROR
 
 
 @pytest.mark.asyncio
@@ -779,7 +795,7 @@ async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
     cast(Any, wallet).sdk = MockSDK()
 
     res = await wallet.pay_invoice(_quote("lnbc1fake"), 1000)
-    assert res.result == PaymentResult.UNKNOWN
+    assert res.result == PaymentResult.ERROR
     assert res.checking_id == "checking-1"
     assert "Payment failed or unknown" in str(res.error_message)
     assert send_request
@@ -791,7 +807,7 @@ async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_spark_get_invoice_status_not_found_is_unknown(monkeypatch):
+async def test_spark_get_invoice_status_not_found(monkeypatch):
     from cashu.lightning import sparkl2
 
     wallet = object.__new__(sparkl2.SparkL2Wallet)
@@ -814,8 +830,36 @@ async def test_spark_get_invoice_status_not_found_is_unknown(monkeypatch):
     cast(Any, wallet).sdk = MockSDK()
 
     status = await wallet.get_invoice_status("missing-hash")
-    assert status.result == PaymentResult.UNKNOWN
+    assert status.result == PaymentStatusResult.NOT_FOUND
     assert status.error_message == "Invoice not found"
+
+
+@pytest.mark.asyncio
+async def test_spark_get_payment_status_not_found(monkeypatch):
+    from cashu.lightning import sparkl2
+
+    wallet = object.__new__(sparkl2.SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+    monkeypatch.setattr(
+        sparkl2.breez_sdk_spark,
+        "GetPaymentRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    class MockSDK:
+        async def get_payment(self, req):
+            return None
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    status = await wallet.get_payment_status("missing-id")
+    assert status.result == PaymentStatusResult.NOT_FOUND
+    assert status.error_message == "Payment not found"
 
 
 @pytest.mark.asyncio

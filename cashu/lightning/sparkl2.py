@@ -16,6 +16,7 @@ from cashu.lightning.base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    PaymentStatusResult,
     StatusResponse,
 )
 
@@ -319,17 +320,18 @@ class SparkL2Wallet(LightningBackend):
                         htlc = p.details.htlc_details
                         if htlc and htlc.payment_hash == checking_id:
                             if p.status == breez_sdk_spark.PaymentStatus.COMPLETED:
-                                return PaymentStatus(result=PaymentResult.SETTLED)
+                                return PaymentStatus(result=PaymentStatusResult.SETTLED)
                             elif p.status == breez_sdk_spark.PaymentStatus.FAILED:
-                                return PaymentStatus(result=PaymentResult.FAILED)
+                                return PaymentStatus(result=PaymentStatusResult.FAILED)
+                            return PaymentStatus(result=PaymentStatusResult.PENDING)
 
             return PaymentStatus(
-                result=PaymentResult.ERROR,
+                result=PaymentStatusResult.NOT_FOUND,
                 error_message="Invoice not found",
             )
 
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.ERROR, error_message=str(e))
+            return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         await self._ensure_sdk()
@@ -342,7 +344,8 @@ class SparkL2Wallet(LightningBackend):
 
             if not res or not res.payment:
                 return PaymentStatus(
-                    result=PaymentResult.ERROR, error_message="Payment not found"
+                    result=PaymentStatusResult.NOT_FOUND,
+                    error_message="Payment not found",
                 )
 
             payment = res.payment
@@ -361,15 +364,17 @@ class SparkL2Wallet(LightningBackend):
 
             if payment.status == breez_sdk_spark.PaymentStatus.COMPLETED:
                 return PaymentStatus(
-                    result=PaymentResult.SETTLED, preimage=preimage, fee=fee_amount
+                    result=PaymentStatusResult.SETTLED,
+                    preimage=preimage,
+                    fee=fee_amount,
                 )
             elif payment.status == breez_sdk_spark.PaymentStatus.FAILED:
-                return PaymentStatus(result=PaymentResult.FAILED)
+                return PaymentStatus(result=PaymentStatusResult.FAILED)
             else:
-                return PaymentStatus(result=PaymentResult.PENDING)
+                return PaymentStatus(result=PaymentStatusResult.PENDING)
 
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.ERROR, error_message=str(e))
+            return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

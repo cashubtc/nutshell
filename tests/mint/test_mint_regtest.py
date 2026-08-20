@@ -6,7 +6,7 @@ import pytest_asyncio
 
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Unit
 from cashu.core.models import PostMeltQuoteRequest
-from cashu.lightning.base import PaymentResponse
+from cashu.lightning.base import PaymentResponse, PaymentResult
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -77,8 +77,8 @@ async def test_lightning_create_invoice_balance_change(ledger: Ledger):
     )
     assert status.pending
 
-    status = await ledger.backends[Method.bolt11][Unit.sat].status()
-    balance_before = status.balance
+    backend_status = await ledger.backends[Method.bolt11][Unit.sat].status()
+    balance_before = backend_status.balance
 
     # settle the invoice
     await pay_if_regtest(invoice.payment_request)
@@ -92,8 +92,8 @@ async def test_lightning_create_invoice_balance_change(ledger: Ledger):
     )
     assert status.settled
 
-    status = await ledger.backends[Method.bolt11][Unit.sat].status()
-    balance_after = status.balance
+    backend_status = await ledger.backends[Method.bolt11][Unit.sat].status()
+    balance_after = backend_status.balance
 
     assert balance_after == balance_before + invoice_amount
 
@@ -160,7 +160,7 @@ async def test_lightning_pay_invoice_failure(ledger: Ledger):
     status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
         checking_id
     )
-    assert status.unknown
+    assert status.not_found
 
     # TEST 2: pay the invoice
     quote = MeltQuote(
@@ -185,7 +185,7 @@ async def test_lightning_pay_invoice_failure(ledger: Ledger):
         checking_id
     )
 
-    assert status.failed or status.unknown
+    assert status.failed or status.not_found
     assert not status.preimage
 
 
@@ -243,7 +243,11 @@ async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
             )
             if not status.pending:
                 payment = PaymentResponse(
-                    result=status.result,
+                    result=(
+                        PaymentResult.ERROR
+                        if status.not_found
+                        else PaymentResult[status.result.name]
+                    ),
                     checking_id=quote.checking_id,
                     fee=status.fee,
                     preimage=status.preimage,
@@ -322,7 +326,11 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
             )
             if not status.pending:
                 payment = PaymentResponse(
-                    result=status.result,
+                    result=(
+                        PaymentResult.ERROR
+                        if status.not_found
+                        else PaymentResult[status.result.name]
+                    ),
                     checking_id=quote.checking_id,
                     fee=status.fee,
                     preimage=status.preimage,
@@ -338,9 +346,7 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
     status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
         quote.checking_id
     )
-    assert (
-        status.failed or status.unknown
-    )  # some backends send unknown instead of failed if they can't find the payment
+    assert status.failed or status.not_found
     assert not status.preimage
     # assert status.error_message
 

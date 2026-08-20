@@ -243,72 +243,91 @@ class CLNRestWallet(LightningBackend):
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.post(
-            "/v1/listinvoices",
-            data={"payment_hash": checking_id},
-        )
         try:
+            r = await self.client.post(
+                "/v1/listinvoices",
+                data={"payment_hash": checking_id},
+            )
             r.raise_for_status()
             data = r.json()
 
             if r.is_error or "message" in data or data.get("invoices") is None:
                 raise Exception("error in cln response")
+            if not data["invoices"]:
+                return PaymentStatus(result=PaymentStatusResult.NOT_FOUND)
+            result = INVOICE_RESULT_MAP.get(
+                data["invoices"][0]["status"], PaymentStatusResult.ERROR
+            )
             return PaymentStatus(
-                result=INVOICE_RESULT_MAP[data["invoices"][0]["status"]],
+                result=result,
             )
         except Exception as e:
             logger.error(f"Error getting invoice status: {e}")
             return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.post(
-            "/v1/listpays",
-            data={"payment_hash": checking_id},
-        )
-        r.raise_for_status()
-        data = r.json()
-
-        if not data.get("pays"):
-            # payment not found
-            logger.error(f"payment not found: {data.get('pays')}")
-            return PaymentStatus(
-                result=PaymentStatusResult.ERROR, error_message="payment not found"
+        try:
+            r = await self.client.post(
+                "/v1/listpays",
+                data={"payment_hash": checking_id},
             )
+            r.raise_for_status()
+            data = r.json()
 
-        if r.is_error or "message" in data:
-            message = data.get("message") or data
-            raise Exception(f"error in clnrest response: {message}")
+            if r.is_error or "message" in data or data.get("pays") is None:
+                message = data.get("message") or data
+                raise Exception(f"error in clnrest response: {message}")
 
-        pays = data["pays"]
-        pay = next(
-            (pay for pay in pays if pay["status"] == CLN_PAYMENT_STATUS_PENDING),
-            None,
-        )
-        if pay is None:
+            pays = data["pays"]
+            if not pays:
+                return PaymentStatus(
+                    result=PaymentStatusResult.NOT_FOUND,
+                    error_message="payment not found",
+                )
+
             pay = next(
-                (pay for pay in pays if pay["status"] == CLN_PAYMENT_STATUS_COMPLETE),
+                (pay for pay in pays if pay["status"] == CLN_PAYMENT_STATUS_PENDING),
                 None,
             )
-        if pay is None and all(
-            pay["status"] == CLN_PAYMENT_STATUS_FAILED for pay in pays
-        ):
-            pay = pays[-1]
-        if pay is None:
+            if pay is None:
+                pay = next(
+                    (
+                        pay
+                        for pay in pays
+                        if pay["status"] == CLN_PAYMENT_STATUS_COMPLETE
+                    ),
+                    None,
+                )
+            if pay is None and all(
+                pay["status"] == CLN_PAYMENT_STATUS_FAILED for pay in pays
+            ):
+                pay = pays[-1]
+            if pay is None:
+                return PaymentStatus(
+                    result=PaymentStatusResult.ERROR,
+                    error_message="unknown payment status",
+                )
+
+            result = PAYMENT_STATUS_RESULT_MAP.get(pay["status"])
+            if result is None:
+                return PaymentStatus(
+                    result=PaymentStatusResult.ERROR,
+                    error_message="unknown payment status",
+                )
+
+            fee_msat, preimage = None, None
+            if result == PaymentStatusResult.SETTLED:
+                fee_msat = int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
+                preimage = pay["preimage"]
+
             return PaymentStatus(
-                result=PaymentStatusResult.NOT_FOUND,
-                error_message="unknown payment status",
+                result=result,
+                fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
+                preimage=preimage,
             )
-
-        fee_msat, preimage = None, None
-        if PAYMENT_RESULT_MAP[pay["status"]] == PaymentStatusResult.SETTLED:
-            fee_msat = int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
-            preimage = pay["preimage"]
-
-        return PaymentStatus(
-            result=PAYMENT_STATUS_RESULT_MAP[pay["status"]],
-            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
-            preimage=preimage,
-        )
+        except Exception as e:
+            logger.error(f"Error getting payment status: {e}")
+            return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         # call listinvoices to determine the last pay_index

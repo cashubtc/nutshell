@@ -14,6 +14,7 @@ from .base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    PaymentStatusResult,
     StatusResponse,
 )
 
@@ -77,12 +78,18 @@ PAYMENT_RESULT_MAP = {
     "FAILED": PaymentResult.FAILED,
 }
 
+PAYMENT_STATUS_RESULT_MAP = {
+    "PENDING": PaymentStatusResult.PENDING,
+    "COMPLETED": PaymentStatusResult.SETTLED,
+    "FAILED": PaymentStatusResult.FAILED,
+}
 
-INVOICE_RESULT_MAP = {
-    "PENDING": PaymentResult.PENDING,
-    "UNPAID": PaymentResult.PENDING,
-    "PAID": PaymentResult.SETTLED,
-    "CANCELLED": PaymentResult.FAILED,
+
+INVOICE_STATUS_RESULT_MAP = {
+    "PENDING": PaymentStatusResult.PENDING,
+    "UNPAID": PaymentStatusResult.PENDING,
+    "PAID": PaymentStatusResult.SETTLED,
+    "CANCELLED": PaymentStatusResult.FAILED,
 }
 
 
@@ -268,10 +275,22 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.get(url=f"{self.endpoint}/v1/invoices/{checking_id}")
             r.raise_for_status()
-        except Exception as e:
-            return PaymentStatus(result=PaymentResult.ERROR, error_message=str(e))
-        data = r.json()
-        return PaymentStatus(result=INVOICE_RESULT_MAP[data.get("state")])
+            data = r.json()
+            result = INVOICE_STATUS_RESULT_MAP.get(
+                data.get("state"), PaymentStatusResult.ERROR
+            )
+            return PaymentStatus(result=result)
+        except httpx.HTTPStatusError as exc:
+            result = (
+                PaymentStatusResult.NOT_FOUND
+                if exc.response.status_code == 404
+                else PaymentStatusResult.ERROR
+            )
+            return PaymentStatus(result=result, error_message=exc.response.text)
+        except Exception as exc:
+            return PaymentStatus(
+                result=PaymentStatusResult.ERROR, error_message=str(exc)
+            )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         try:
@@ -279,15 +298,23 @@ class StrikeWallet(LightningBackend):
             r.raise_for_status()
             payment = StrikePaymentResponse.model_validate(r.json())
             fee = self.fee_int(payment, self.unit)
+            result = PAYMENT_STATUS_RESULT_MAP.get(
+                payment.state, PaymentStatusResult.ERROR
+            )
             return PaymentStatus(
-                result=PAYMENT_RESULT_MAP[payment.state],
+                result=result,
                 fee=Amount(self.unit, fee),
             )
         except httpx.HTTPStatusError as exc:
-            if exc.response.status_code != 404:
-                raise exc
+            result = (
+                PaymentStatusResult.NOT_FOUND
+                if exc.response.status_code == 404
+                else PaymentStatusResult.ERROR
+            )
+            return PaymentStatus(result=result, error_message=exc.response.text)
+        except Exception as exc:
             return PaymentStatus(
-                result=PaymentResult.ERROR, error_message=exc.response.text
+                result=PaymentStatusResult.ERROR, error_message=str(exc)
             )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore

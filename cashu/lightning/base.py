@@ -125,8 +125,8 @@ class PaymentStatus(BaseModel):
             return "error" + (
                 f" (Error: {self.error_message})" if self.error_message else ""
             )
-        else:  # self.result == PaymentStatusResult.UNKNOWN:
-            return "unknown" + (
+        else:
+            return "not found" + (
                 f" (Error: {self.error_message})" if self.error_message else ""
             )
 

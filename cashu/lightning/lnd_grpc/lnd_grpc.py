@@ -412,7 +412,7 @@ class LndRPCWallet(LightningBackend):
             except AioRpcError as e:
                 # status = StatusCode.NOT_FOUND
                 if e.code() == grpc.StatusCode.NOT_FOUND:
-                    return PaymentStatus(result=PaymentStatusResult.ERROR)
+                    return PaymentStatus(result=PaymentStatusResult.NOT_FOUND)
 
         return PaymentStatus(result=PaymentStatusResult.ERROR)
 
