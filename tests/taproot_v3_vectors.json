@@ -62,43 +62,83 @@
       "leaf": "00040200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
       "control": {
         "K": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
-        "path": ["71fe4dfbac73f21b0c084febba39a1b1f5adc5afe8dadaeceaa35055cb21df03"]
+        "path": [
+          "71fe4dfbac73f21b0c084febba39a1b1f5adc5afe8dadaeceaa35055cb21df03"
+        ]
       },
       "signatures": [
         "27f53ffb8fe7bae5da0a754fd63aeb04fbfc7ee16c865fb5af3fb4411785b784df09a810c470386602fab69c450dc249efb465cff27f5322d1305e3eaec4d6fb"
       ]
     },
-    "after_witness_path": ["b2a5853a34fb233d543c15b4f1511f2e88e7b057b663dacc5bd4eff2914c06c7"]
+    "after_witness_path": [
+      "b2a5853a34fb233d543c15b4f1511f2e88e7b057b663dacc5bd4eff2914c06c7"
+    ]
   },
   "nut13_v3": {
-    "comment": "NUT-13 v3 secret derivation (spec 2.4.2): HMAC(seed, base || branch || u32_be(attempt)); 0x00 branch derives the internal private key k with valid-key retry, secret is K = k*G compressed; 0x01 branch unchanged (BLS Fr rejection sampling). base = \"Cashu_KDF_HMAC_SHA256\" || keyset_id_bytes || u64_be(counter). Key derivation (0x00) succeeds at attempt 0 for every counter; blinding factors (0x01) accept at attempts 3, 4, 1, 1 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
+    "comment": "NUT-13 v3 derivation (spec 2.4.2): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(keyset_id_bytes)) || keyset_id_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key on its own quote counter, derived with an EMPTY keyset id field (a quote precedes any keyset), so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
     "seed_utf8": "nut13 v3 test seed",
     "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
     "outputs": [
       {
         "counter": 0,
-        "secret_key": "7a7b3f7eb44f4a943041d936c0e0b2bf1dd0ac9a210bc8f8bc12b65cdbde9bd3",
-        "secret": "0234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f118",
-        "blinding_factor": "513d1a0f0f01a09fdad2f7cea1403143fb86a1be2d152969b46b45cdaabd21aa",
-        "Y": "87d86a7c00ee5f3a18b93c793b8e36f49518de08c7c20fd5e4fe6d89c4a3a9adaf4af0e8f6e9e06e44d0f1d83a1235c7"
+        "secret_key": "47196dc081150ce13fd0e478b8b71831b825be389211c9c56a8062a61af70347",
+        "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
+        "blinding_factor": "156857a0bce1b2788895f1885a21c56cf000df0de1e855608c7ccb6d9e2d7728",
+        "Y": "a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73",
+        "nums_offset": "4af68649f3230c5589879f0cf33fd6d9f007cd3a54a2e6ed8699a576630fc025"
       },
       {
         "counter": 1,
-        "secret_key": "46b6a7854d4007073151c09aa2091a763abd6492d1cbbc3a5abeb24fd1e1f075",
-        "secret": "02f6231465a1f6d4a787a0ede94b39a070993a4d84c2076ac53e4aeb168b5ff75b",
-        "blinding_factor": "48ec152dbe1ffff2f368d1623723009d9e8d6bdc8c138575eb15c34c6b56db7b"
+        "secret_key": "659a545656334a47e08de62377e2f3128c72cd27e576908842e1ab359d395247",
+        "secret": "03a882e17eb79f4f87313b299e208f9109734d0211a8df307b1570dbad2cdf74bf",
+        "blinding_factor": "6de008e7a6c418b76a94e48c4b71a11078173de70abb3eaeb7cc1273a6dccede",
+        "nums_offset": "d78b39a2ba263f92ea3ea2f721705c545d949349767e55bbdc41884cbb9a8b18"
       },
       {
         "counter": 2,
-        "secret_key": "78ef719cc25d6ffa6bfec641dbe0c4fc2a4260c4595ca0d27688dd6eb73ebd92",
-        "secret": "039a8259b6dcb41da0aff51ed9acd4b03b96d795d6825c4ff2c517dbbc31c73909",
-        "blinding_factor": "5041c676498aad5b0ec9e1135aa877a0716dbb3f1a4ccb894688f16d6b1debf6"
+        "secret_key": "cee0df42cdaee25b228300b460edcbfab94be650ce2676abd77ef0697311e5e2",
+        "secret": "02da107b7bfa3afedc0b49c62de58cb5429e1ad42b45c14a3e6da20156222ea41b",
+        "blinding_factor": "35f56bb2016802a96a2846de8635712281d68182788410735b9826a211499fd4",
+        "nums_offset": "d01054af49de60a8a62c592c4bea44f02782f7c6371136d985dfd9d690de5a15"
       },
       {
         "counter": 3,
-        "secret_key": "bc813beb35621f256e923bd9dd7cfb3460077c1b1b2ef07dbd479fe3fcc77f46",
-        "secret": "02cc8d2b280ca8e46846159d8918409a0820d664a4223060024fc6f489140e8368",
-        "blinding_factor": "3d625b8869fc030e126f0a6d8109fc6c48b00ab6a8bd50a68dbd100e3cbb40de"
+        "secret_key": "46c2c20d79496e1ebe19805ba4df33535474800eefefc252140e1f20d0284ffe",
+        "secret": "03189b6c67a0046084bbd2d810b5c6086c117082fe569cb56107d70f4acf8ddb5c",
+        "blinding_factor": "65724fcdbc4ccfbb2a610b1bddd14238492b81d3761584b6492fcbadfeb9355f",
+        "nums_offset": "54d0371fad402c83b0f3854fd9b7c876da857e7f276614d7e19dfb6680356f09"
+      }
+    ],
+    "leaf_keys": [
+      {
+        "counter": 0,
+        "index": 0,
+        "privkey": "8aac8b31fe4babb8097f416ef8f8508fdba63589087f4d10bf6f96bddba23788",
+        "pubkey": "033c1828d880aebfd316781d3dffe1c45953087917e6f734032666c1ed80f0653c"
+      },
+      {
+        "counter": 0,
+        "index": 1,
+        "privkey": "c77d6d9440bde035b140fe622e96dea2ffb2227179c3241df6e2994811984656",
+        "pubkey": "0210b63f8016248a6f4c372366eb521784002ab182acbeba94e00ec4898f629d81"
+      },
+      {
+        "counter": 0,
+        "index": 2,
+        "privkey": "ba7a8fc52b8c77b7412e5edaae211d92f2c79980788e3e3a480eb0dccac0b33e",
+        "pubkey": "020e35e2edc190c2c34e46e586233a4f357e35fa428ae6f53636bb93f201792096"
+      }
+    ],
+    "quote_locks": [
+      {
+        "counter": 0,
+        "privkey": "1e84b00ac9a8f6831dcd0f4b8750efbfb2af22b19c07cf4cccbb8cdc33289b25",
+        "pubkey": "039b390a9a298305cc43dbec906ceb1caae1187a8d16a3f45b945442ae7339d746"
+      },
+      {
+        "counter": 1,
+        "privkey": "7fe5104204360ed5e2710dfcd351f2091f1e2acf2f5eb9b0ac2ed34b0e120bb8",
+        "pubkey": "0332ef3eb87a93da987406ed1fe96a44541ea0daa175e53e7ffc1155bb09b47b38"
       }
     ]
   },
@@ -111,7 +151,7 @@
           {
             "amount": 8,
             "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
-            "secret": "0234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f118",
+            "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
             "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
           }
         ],
@@ -128,9 +168,9 @@
           }
         ]
       },
-      "transcript": "01007f0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f60300210234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f11804003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332703005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
-      "digest": "5603e6bd91eae45db2edc5b763057671b8a9667a06fe7c9317846b7981318572",
-      "signature": "2223919fc0cbd9e75ff3f7b1330e8644899721bb68fb4d26b08d8d5b2c495582782c93fb3f609cbe47d5521fe864bb2c5c4a58f0d4db013fa6f54658c44714d7"
+      "transcript": "01007f0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f603002102e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b04003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332703005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "77d581ac1ea31d85ecc5c251a7115ef6777e5b2a8f297933fd3a1a7e441094bd",
+      "signature": "d924e2b60507ebeeebb23f6fa1fb3851a170c17e9756d30e87f33e0091a0b20b513ff5e09030a83bfc438de09cd99cc852616a5c791585bafba6a7e4c39bee36"
     },
     "mint": {
       "tx": {
@@ -157,7 +197,7 @@
           {
             "amount": 8,
             "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
-            "secret": "0234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f118",
+            "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
             "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
           }
         ],
@@ -168,8 +208,8 @@
           }
         ]
       },
-      "transcript": "01007f0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f60300210234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f11804003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270400160100010802000f71756f74652d6d656c742d30303031",
-      "digest": "0eb9a8c9b8214437e36af259250c85afe22379126e7d17abbb7ee4eacdaa5cf3"
+      "transcript": "01007f0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f603002102e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b04003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270400160100010802000f71756f74652d6d656c742d30303031",
+      "digest": "172e38f867afa4d096fe0c1caef1aad4a19a2da6ffea25a33660172df66474b3"
     },
     "melt_with_change": {
       "tx": {
@@ -205,19 +245,19 @@
     }
   },
   "tokens_v4": {
-    "comment": "Cross-implementation V4 token vectors (spec 2.5.2 shapes). One 8-sat proof per token, mint https://mint.test, unit sat, keyset nut13_v3.keyset_id, C fixed. The `si` CBOR map carries k (bearer scalar), e (ephemeral E), i (internal key K), t (serialized leaves). The two encoders legitimately differ on things NUT-00 leaves free: cashu-ts writes the short (8-byte) keyset id and orders the top-level map m,u,t; nutshell writes the full 33-byte id and orders it t,m,u. What must agree is the spend_info: each side decodes BOTH strings to the same fields, and reproduces its own string exactly, so encoder drift shows up here.",
+    "comment": "Cross-implementation V4 token vectors (spec 2.5.2 shapes). One 8-sat proof per token, mint https://mint.test, unit sat, keyset nut13_v3.keyset_id, C fixed. The `si` CBOR map carries k (bearer scalar), e (ephemeral E), i (internal key K), u (NUMS offset, present iff i is H + u*G), t (serialized leaves). The two encoders legitimately differ on things NUT-00 leaves free: cashu-ts writes the short (8-byte) keyset id and orders the top-level map m,u,t; nutshell writes the full 33-byte id and orders it t,m,u. What must agree is the spend_info: each side decodes BOTH strings to the same fields, and reproduces its own string exactly, so encoder drift shows up here.",
     "mint": "https://mint.test",
     "unit": "sat",
     "amount": 8,
     "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327",
     "shapes": {
       "bearer_k": {
-        "secret": "0234df38671738d8e9ee205dc364fd4b45df8ed2ff91686e93d02ca1feb3b2f118",
+        "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
         "spend_info": {
-          "k": "7a7b3f7eb44f4a943041d936c0e0b2bf1dd0ac9a210bc8f8bc12b65cdbde9bd3"
+          "k": "47196dc081150ce13fd0e478b8b71831b825be389211c9c56a8062a61af70347"
         },
-        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAK34HfQIPq-YXCBpGFhCGFzeEIwMjM0ZGYzODY3MTczOGQ4ZTllZTIwNWRjMzY0ZmQ0YjQ1ZGY4ZWQyZmY5MTY4NmU5M2QwMmNhMWZlYjNiMmYxMThhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpoWFrWCB6ez9-tE9KlDBB2TbA4LK_HdCsmiELyPi8ErZc296b0w",
-        "token_nutshell": "cashuBo2F0gaJhaVghArfgd9Ag-r7UVqa-E4qOIOnvQLRNhz-hLABbZW6wz5n2YXCBpGFhCGFzeEIwMjM0ZGYzODY3MTczOGQ4ZTllZTIwNWRjMzY0ZmQ0YjQ1ZGY4ZWQyZmY5MTY4NmU5M2QwMmNhMWZlYjNiMmYxMThhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpoWFrWCB6ez9-tE9KlDBB2TbA4LK_HdCsmiELyPi8ErZc296b02FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0"
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAK34HfQIPq-YXCBpGFhCGFzeEIwMmU2ZTdjZmE3YjgyZDRiM2I0NDlmYTY0NjZjODkzNDY5YTcyN2QwMjE0ZDQ4ZGI0OTU2YTYwNTRiODAyMmEyOWJhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpoWFrWCBHGW3AgRUM4T_Q5Hi4txgxuCW-OJIRycVqgGKmGvcDRw",
+        "token_nutshell": "cashuBo2F0gaJhaVghArfgd9Ag-r7UVqa-E4qOIOnvQLRNhz-hLABbZW6wz5n2YXCBpGFhCGFzeEIwMmU2ZTdjZmE3YjgyZDRiM2I0NDlmYTY0NjZjODkzNDY5YTcyN2QwMjE0ZDQ4ZGI0OTU2YTYwNTRiODAyMmEyOWJhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpoWFrWCBHGW3AgRUM4T_Q5Hi4txgxuCW-OJIRycVqgGKmGvcDR2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0"
       },
       "receiver_keyed_E": {
         "secret": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
@@ -248,6 +288,18 @@
         },
         "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAK34HfQIPq-YXCBpGFhCGFzeEIwM2MyMjJlZjZkZWMyYmVjMDJhYjBkNjUwOGU0ZjgzMDI5NDgwMjE4NzVhMjY3ZjE0ZTA4NTQzMjVkODE5YmY4MjNhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpomFpWCEDo-EswHflYF82RBBG9QwRT8yIOweaNAKL7WZzLjpBnlFhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoA",
         "token_nutshell": "cashuBo2F0gaJhaVghArfgd9Ag-r7UVqa-E4qOIOnvQLRNhz-hLABbZW6wz5n2YXCBpGFhCGFzeEIwM2MyMjJlZjZkZWMyYmVjMDJhYjBkNjUwOGU0ZjgzMDI5NDgwMjE4NzVhMjY3ZjE0ZTA4NTQzMjVkODE5YmY4MjNhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpomFpWCEDo-EswHflYF82RBBG9QwRT8yIOweaNAKL7WZzLjpBnlFhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoBhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA"
+      },
+      "script_only_u": {
+        "secret": "036ea10bfdebcc3b20034331ff520e94b2c85d65274fc0e4341b70d174c219b146",
+        "spend_info": {
+          "K": "0308ca9ef021bf7ec241dbef7fa31aec8e63b41be200eb7530cd3d67d2a2c7d096",
+          "u": "4af68649f3230c5589879f0cf33fd6d9f007cd3a54a2e6ed8699a576630fc025",
+          "tree": [
+            "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+          ]
+        },
+        "token_nutshell": "cashuBo2F0gaJhaVghArfgd9Ag-r7UVqa-E4qOIOnvQLRNhz-hLABbZW6wz5n2YXCBpGFhCGFzeEIwMzZlYTEwYmZkZWJjYzNiMjAwMzQzMzFmZjUyMGU5NGIyYzg1ZDY1Mjc0ZmMwZTQzNDFiNzBkMTc0YzIxOWIxNDZhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpo2FpWCEDCMqe8CG_fsJB2-9_oxrsjmO0G-IA63UwzT1n0qLH0JZhdVggSvaGSfMjDFWJh58M8z_W2fAHzTpUoubthpmldmMPwCVhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoBhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA",
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAK34HfQIPq-YXCBpGFhCGFzeEIwMzZlYTEwYmZkZWJjYzNiMjAwMzQzMzFmZjUyMGU5NGIyYzg1ZDY1Mjc0ZmMwZTQzNDFiNzBkMTc0YzIxOWIxNDZhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpo2FpWCEDCMqe8CG_fsJB2-9_oxrsjmO0G-IA63UwzT1n0qLH0JZhdVggSvaGSfMjDFWJh58M8z_W2fAHzTpUoubthpmldmMPwCVhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoA"
       }
     }
   },
@@ -270,7 +322,9 @@
       "00030200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9080020a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
     ],
     "three_leaf_root": "c4fb3d4ccca2ddff6d756e1fdab834d459b0449f706233a3e82bad2409380513",
-    "three_leaf_path_index_2": ["1b5196405f3404af4c9eff23612852b37325c59ca0c254c8293b294b150113e7"],
+    "three_leaf_path_index_2": [
+      "1b5196405f3404af4c9eff23612852b37325c59ca0c254c8293b294b150113e7"
+    ],
     "three_leaf_secret": "033d319c858e0b102a922588d033aa9afda993b8c5a8559478b75fb01b7156b6ff",
     "nums_key": "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
     "blind_slot1_key": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
