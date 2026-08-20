@@ -11,7 +11,13 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+    use_v2_keyset,
+)
 
 
 async def assert_err(f, msg):
@@ -33,6 +39,8 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
+    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 

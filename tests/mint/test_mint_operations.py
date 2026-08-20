@@ -26,6 +26,7 @@ from tests.helpers import (
     is_fake,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 
@@ -63,6 +64,8 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
+    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 

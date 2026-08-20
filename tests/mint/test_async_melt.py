@@ -7,7 +7,7 @@ from cashu.core.base import Amount, MeltQuoteState, Method, Unit
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import is_fake, pay_if_regtest
+from tests.helpers import is_fake, pay_if_regtest, use_v2_keyset
 
 BASE_URL = "http://localhost:3337"
 
@@ -25,6 +25,8 @@ async def test_async_melt(ledger):
         name="wallet_async_melt",
     )
     await wallet.load_mint()
+    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    await use_v2_keyset(wallet)
 
     # Setup: get some funds
     mint_quote = await wallet.request_mint(64)
@@ -80,6 +82,8 @@ async def test_async_melt_commits_pending_before_returning(ledger):
         name="wallet_async_melt_race",
     )
     await wallet.load_mint()
+    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(64, quote_id=mint_quote.quote)
