@@ -17,6 +17,7 @@ from cashu.core.errors import (
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
     OutputsArePendingError,
+    TransactionError,
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
@@ -1053,6 +1054,101 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
     assert melt_quote is not None
     assert melt_quote.state == MeltQuoteState.unpaid, "Quote state should be unpaid"
     assert not melt_quote.pending, "Quote should not be pending"
+
+
+@pytest.mark.asyncio
+async def test_internal_melt_concurrently_issued_quote(ledger: Ledger, monkeypatch):
+    monkeypatch.setattr(settings, "fakewallet_brr", False)
+    internal_mint_quote = await ledger.mint_quote(
+        quote_request=PostMintQuoteRequest(amount=64, unit="sat")
+    )
+    internal_melt_quote_response = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=internal_mint_quote.request)
+    )
+    internal_melt_quote = await ledger.crud.get_melt_quote(
+        quote_id=internal_melt_quote_response.quote,
+        db=ledger.db,
+    )
+    assert internal_melt_quote is not None
+    internal_melt_quote.state = MeltQuoteState.pending
+    await ledger.crud.update_melt_quote(quote=internal_melt_quote, db=ledger.db)
+
+    proof = Proof(
+        amount=64,
+        C="concurrent-internal-settlement-proof",
+        secret="concurrent-internal-settlement-secret",
+        id=ledger.keyset.id,
+    )
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db,
+        keyset=ledger.keyset,
+        amount=proof.amount,
+    )
+    await ledger.crud.set_proof_pending(
+        proof=proof,
+        quote_id=internal_melt_quote.quote,
+        db=ledger.db,
+    )
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db,
+        keyset=ledger.keyset,
+        amount=-proof.amount,
+    )
+
+    original_get_mint_quote = ledger.crud.get_mint_quote
+    issued_during_settlement = False
+
+    async def get_mint_quote_with_concurrent_issuance(*args, **kwargs):
+        nonlocal issued_during_settlement
+        quote = await original_get_mint_quote(*args, **kwargs)
+        if (
+            not issued_during_settlement
+            and kwargs.get("request") == internal_mint_quote.request
+            and kwargs.get("conn") is None
+        ):
+            assert quote is not None
+            issued_quote = quote.model_copy(deep=True)
+            issued_quote.state = MintQuoteState.paid
+            issued_quote.state = MintQuoteState.pending
+            issued_quote.state = MintQuoteState.issued
+            issued_quote.paid_time = 1_700_000_000
+            issued_quote.issued_time = 1_700_000_001
+            issued_quote.updated_at = 1_700_000_001
+            await ledger.crud.update_mint_quote(quote=issued_quote, db=ledger.db)
+            issued_during_settlement = True
+        return quote
+
+    monkeypatch.setattr(
+        ledger.crud,
+        "get_mint_quote",
+        get_mint_quote_with_concurrent_issuance,
+    )
+
+    with pytest.raises(TransactionError, match="mint quote already issued"):
+        await ledger._execute_melt_payment(
+            internal_melt_quote,
+            [proof],
+            outputs=[],
+        )
+
+    assert issued_during_settlement
+    persisted_mint_quote = await original_get_mint_quote(
+        quote_id=internal_mint_quote.quote,
+        db=ledger.db,
+    )
+    assert persisted_mint_quote is not None
+    assert persisted_mint_quote.issued
+    assert persisted_mint_quote.issued_time == 1_700_000_001
+    assert persisted_mint_quote.amount_issued == 64
+
+    persisted_melt_quote = await ledger.crud.get_melt_quote(
+        quote_id=internal_melt_quote.quote,
+        db=ledger.db,
+    )
+    assert persisted_melt_quote is not None
+    assert persisted_melt_quote.unpaid
+    states = await ledger.db_read.get_proofs_states([proof.Y])
+    assert all(state.unspent for state in states)
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,7 @@ from ..core.crypto.keys import (
     generate_uuid_v7,
 )
 from ..core.crypto.secp import PrivateKey, PublicKey
-from ..core.db import Connection, Database
+from ..core.db import SQLITE, Connection, Database
 from ..core.errors import (
     BatchDuplicateQuotesError,
     CashuError,
@@ -1175,47 +1175,83 @@ class Ledger(
         if mint_quote.unit != melt_quote.unit:
             return melt_quote
 
-        # we settle the transaction internally
-        if melt_quote.state == MeltQuoteState.paid:
-            raise TransactionError("melt quote already paid")
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": mint_quote.quote},
+        ) as conn:
+            if self.db.type != SQLITE:
+                await self.db.acquire_lock(
+                    conn,
+                    "melt_quotes",
+                    "quote = :quote",
+                    {"quote": melt_quote.quote},
+                )
 
-        # verify amounts from bolt11 invoice
-        bolt11_request = melt_quote.request
-        invoice_obj = bolt11.decode(bolt11_request)
+            mint_quote = await self.crud.get_mint_quote(
+                quote_id=mint_quote.quote,
+                db=self.db,
+                conn=conn,
+            )
+            if not mint_quote:
+                raise TransactionError("Mint quote not found.")
 
-        if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
-        if not mint_quote.amount == melt_quote.amount:
-            raise TransactionError("amounts do not match")
-        if not bolt11_request == mint_quote.request:
-            raise TransactionError("bolt11 requests do not match")
-        if not mint_quote.method == melt_quote.method:
-            raise TransactionError("methods do not match")
+            melt_quote = await self.crud.get_melt_quote(
+                quote_id=melt_quote.quote,
+                db=self.db,
+                conn=conn,
+            )
+            if not melt_quote:
+                raise TransactionError("Melt quote not found.")
 
-        if mint_quote.paid:
-            raise TransactionError("mint quote already paid")
-        if mint_quote.issued:
-            raise TransactionError("mint quote already issued")
+            if melt_quote.paid:
+                raise TransactionError("melt quote already paid")
+            if not melt_quote.pending:
+                raise TransactionError("melt quote is not pending")
 
-        if mint_quote.state != MintQuoteState.unpaid:
-            raise TransactionError("mint quote is not unpaid")
+            bolt11_request = melt_quote.request
+            invoice_obj = bolt11.decode(bolt11_request)
 
-        logger.info(
-            f"Settling bolt11 payment internally: {melt_quote.quote} ->"
-            f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
-        )
+            if not invoice_obj.amount_msat:
+                raise TransactionError("invoice has no amount.")
+            if mint_quote.amount != melt_quote.amount:
+                raise TransactionError("amounts do not match")
+            if bolt11_request != mint_quote.request:
+                raise TransactionError("bolt11 requests do not match")
+            if mint_quote.method != melt_quote.method:
+                raise TransactionError("methods do not match")
 
-        melt_quote.fee_paid = 0  # no internal fees
-        melt_quote.state = MeltQuoteState.paid
-        melt_quote.paid_time = int(time.time())
+            if mint_quote.paid:
+                raise TransactionError("mint quote already paid")
+            if mint_quote.issued:
+                raise TransactionError("mint quote already issued")
+            if mint_quote.state != MintQuoteState.unpaid:
+                raise TransactionError("mint quote is not unpaid")
 
-        mint_quote.state = MintQuoteState.paid
-        mint_quote.paid_time = melt_quote.paid_time
-        mint_quote.updated_at = melt_quote.paid_time
+            logger.info(
+                f"Settling bolt11 payment internally: {melt_quote.quote} ->"
+                f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
+            )
 
-        async with self.db.get_connection() as conn:
-            await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
-            await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
+            paid_time = int(time.time())
+            melt_quote.fee_paid = 0  # no internal fees
+            melt_quote.state = MeltQuoteState.paid
+            melt_quote.paid_time = paid_time
+
+            mint_quote.state = MintQuoteState.paid
+            mint_quote.paid_time = paid_time
+            mint_quote.updated_at = paid_time
+
+            await self.crud.update_melt_quote(
+                quote=melt_quote,
+                db=self.db,
+                conn=conn,
+            )
+            await self.crud.update_mint_quote(
+                quote=mint_quote,
+                db=self.db,
+                conn=conn,
+            )
 
         await self.events.submit(melt_quote)
         await self.events.submit(mint_quote)
