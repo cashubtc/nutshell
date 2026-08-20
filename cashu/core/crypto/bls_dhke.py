@@ -57,7 +57,7 @@ def step1_alice(
     Y: PublicKey = hash_to_curve(secret_to_hash_input(secret_msg))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y * r
-    logger.trace(f"BLS step1: secret='{secret_msg}' -> Y={Y.format().hex()} B_={B_.format().hex()} r={r.to_hex()}")
+    logger.trace(f"BLS step1: secret={secret_msg!r} -> Y={Y.format().hex()} B_={B_.format().hex()} r={r.to_hex()}")
     return B_, r
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
