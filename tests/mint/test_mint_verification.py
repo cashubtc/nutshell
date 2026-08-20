@@ -87,6 +87,15 @@ def _mint_quote_with_pubkey(pubkey: str) -> MintQuote:
 # ---------------------------------------------------------------------------
 
 
+def v2_keyset(ledger: Ledger):
+    """The mint's pre-v3 keyset."""
+    return next(
+        ks
+        for kid, ks in ledger.keysets.items()
+        if ks.active and ks.unit == ledger.keyset.unit and not is_bls_keyset(kid)
+    )
+
+
 def v2_keyset_id(ledger: Ledger) -> str:
     """The mint's pre-v3 keyset.
 
@@ -462,7 +471,7 @@ def test_verify_proof_bdhke_rejects_legacy_hash_to_curve_alias(ledger: Ledger):
         )
     ).decode("utf-8")
     amount = 8
-    private_key = ledger.keyset.private_keys[amount]
+    private_key = v2_keyset(ledger).private_keys[amount]
     C = (hash_to_curve(current_secret.encode()) * private_key).format().hex()  # type: ignore
 
     current_proof = Proof(
@@ -709,7 +718,7 @@ async def test_verify_inputs_and_outputs_outputs_none_skips_output_pipeline(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=None
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=None
         )
     vo.assert_not_called()
     together.assert_not_called()
@@ -723,7 +732,7 @@ async def test_verify_inputs_and_outputs_with_outputs_calls_together(ledger: Led
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs
         )
     together.assert_called_once()
 
@@ -735,7 +744,7 @@ async def test_verify_inputs_and_outputs_empty_outputs_list_fails_after_inputs(
     with patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)):
         await assert_err(
             ledger.verify_inputs_and_outputs(
-                proofs=[MagicMock(spec=Proof)], outputs=[]
+                proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=[]
             ),
             TransactionError(),
         )
@@ -750,7 +759,7 @@ async def test_verify_inputs_and_outputs_happy_path_outputs_only_phase(ledger: L
         patch.object(ledger, "_verify_inputs_and_outputs_together", return_value=None),
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs
         )
 
 
@@ -1211,7 +1220,7 @@ async def test_vio_forwards_conn_to_verify_outputs(ledger: Ledger):
         patch.object(ledger, "_verify_outputs", side_effect=vo),
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs, conn=mock_conn
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs, conn=mock_conn
         )
     assert captured["conn"] is mock_conn
     assert captured["outputs"] == outs
@@ -1226,7 +1235,7 @@ async def test_vio_does_not_call_together_when_outputs_fail(ledger: Ledger):
     ):
         await assert_err(
             ledger.verify_inputs_and_outputs(
-                proofs=[MagicMock(spec=Proof)], outputs=[]
+                proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=[]
             ),
             TransactionError(),
         )
@@ -1252,7 +1261,7 @@ async def test_vio_full_pipeline_order_outputs_then_together(ledger: Ledger):
         ),
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs
         )
     assert calls == ["outputs", "together"]
 
@@ -1288,7 +1297,7 @@ async def test_verify_transaction_swap_orders_inputs_nut10_outputs_together(
             ledger, "_verify_inputs_and_outputs_together", side_effect=together
         ),
     ):
-        await ledger._verify_transaction(proofs=[MagicMock(spec=Proof)], outputs=outs)
+        await ledger._verify_transaction(proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs)
 
     assert calls == ["inputs", "nut10", "outputs", "together"]
 
@@ -1322,7 +1331,7 @@ async def test_verify_transaction_melt_passes_quote_and_skips_balance_check(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger._verify_transaction(
-            proofs=[MagicMock(spec=Proof)],
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))],
             outputs=outs,
             quote="quote-1",
             skip_output_amount_check=True,
@@ -1362,7 +1371,7 @@ async def test_verify_transaction_without_outputs_only_runs_nut10_and_inputs(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger._verify_transaction(
-            proofs=[MagicMock(spec=Proof)], outputs=None, quote="quote-2"
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=None, quote="quote-2"
         )
 
     assert calls == ["inputs", "nut10"]
@@ -1394,7 +1403,7 @@ async def test_verify_transaction_melt_empty_outputs_skips_output_pipeline(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger._verify_transaction(
-            proofs=[MagicMock(spec=Proof)],
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))],
             outputs=[],
             quote="quote-3",
             verify_input_output_balance=False,
