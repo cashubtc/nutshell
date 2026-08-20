@@ -1,15 +1,18 @@
 import asyncio
-from typing import List, Tuple
+import sys
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Tuple
 
 import bolt11
 import pytest
 import pytest_asyncio
+from loguru import logger
 
-from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof, Unit
+from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult, PaymentStatus
+from cashu.lightning.base import PaymentResult, PaymentStatus, StatusResponse
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -526,3 +529,128 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
     )
     assert melt_quotes
     assert melt_quotes.state == MeltQuoteState.unpaid
+
+
+class RaisingBackend:
+    """A backend whose status check raises instead of reporting an error message."""
+
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    async def status(self) -> StatusResponse:
+        raise self.exc
+
+
+class ReportingBackend:
+    """A backend that reports failure the documented way."""
+
+    async def status(self) -> StatusResponse:
+        return StatusResponse(
+            error_message="rune is invalid", balance=Amount(Unit.sat, 0)
+        )
+
+
+class HealthyBackend:
+    async def status(self) -> StatusResponse:
+        return StatusResponse(error_message=None, balance=Amount(Unit.sat, 21))
+
+
+def ledger_with_backend(backend: Any) -> Ledger:
+    return Ledger(
+        db=Database("mint", settings.mint_database),
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        backends={Method.bolt11: {Unit.sat: backend}},
+        crud=LedgerCrudSqlite(),
+    )
+
+
+@contextmanager
+def captured_logs(level: str = "INFO") -> Iterator[List[str]]:
+    """Collects everything the ledger logs at `level` or above."""
+    messages: List[str] = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), level=level)
+    try:
+        yield messages
+    finally:
+        logger.remove(sink_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        ConnectionRefusedError("connection refused"),
+        OSError("certificate file missing"),
+        TimeoutError("timed out"),
+        ValueError("malformed response"),
+        RuntimeError("a backend added later blew up"),
+    ],
+)
+async def test_check_backends_reports_raising_backend(exc: Exception):
+    """A backend that raises is reported like one that returns an error message."""
+    ledger = ledger_with_backend(RaisingBackend(exc))
+
+    with captured_logs("INFO") as messages:
+        with pytest.raises(SystemExit) as exit_info:
+            await ledger._check_backends()
+
+    assert exit_info.value.code == 1
+    logged = "".join(messages)
+    assert "isn't working properly" in logged
+    # the cause stays identifiable without dumping a stack on the operator
+    assert type(exc).__name__ in logged
+    assert "Backend status check failed" not in logged
+
+
+@pytest.mark.asyncio
+async def test_check_backends_logs_traceback_at_debug():
+    ledger = ledger_with_backend(RaisingBackend(ConnectionRefusedError("refused")))
+    tracebacklimit = getattr(sys, "tracebacklimit", None)
+    if tracebacklimit is not None:
+        del sys.tracebacklimit
+
+    try:
+        with captured_logs("DEBUG") as messages:
+            with pytest.raises(SystemExit):
+                await ledger._check_backends()
+    finally:
+        if tracebacklimit is not None:
+            sys.tracebacklimit = tracebacklimit
+
+    logged = "".join(messages)
+    assert "Backend status check failed" in logged
+    assert "Traceback (most recent call last)" in logged
+    assert "_check_backends" in logged
+
+
+@pytest.mark.asyncio
+async def test_check_backends_reports_backend_error_message():
+    """Backends that return an error message behave as they did before."""
+    ledger = ledger_with_backend(ReportingBackend())
+
+    with captured_logs("INFO") as messages:
+        with pytest.raises(SystemExit) as exit_info:
+            await ledger._check_backends()
+
+    assert exit_info.value.code == 1
+    assert "rune is invalid" in "".join(messages)
+
+
+@pytest.mark.asyncio
+async def test_check_backends_accepts_healthy_backend():
+    ledger = ledger_with_backend(HealthyBackend())
+
+    with captured_logs("INFO") as messages:
+        await ledger._check_backends()
+
+    assert "Backend balance: 21 sat" in "".join(messages)
+
+
+@pytest.mark.asyncio
+async def test_check_backends_propagates_cancellation():
+    """Cancellation is not a backend failure and must not be swallowed."""
+    ledger = ledger_with_backend(RaisingBackend(asyncio.CancelledError()))
+
+    with pytest.raises(asyncio.CancelledError):
+        await ledger._check_backends()
