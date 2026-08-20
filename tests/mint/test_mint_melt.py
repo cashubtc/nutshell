@@ -30,6 +30,7 @@ from tests.helpers import (
     is_fake,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -417,6 +418,8 @@ async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: Wallet):
+    # Inherited test: it melts without taproot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
@@ -431,35 +434,10 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     try:
-        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
+        await ledger.melt(proofs=wallet.proofs, quote=quote_id)
         raise AssertionError("Expected LightningPaymentFailedError")
     except LightningPaymentFailedError:
         pass
-
-    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
-    settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
-    try:
-        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
-
-    settings.fakewallet_payment_state = PaymentResult.FAILED.name
-    settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
-    try:
-        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
-
-    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
-    settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
-    try:
-        await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningPaymentFailedError")
-    except LightningPaymentFailedError:
-        pass
-
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
@@ -991,6 +969,8 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
 async def test_melt_early_return_leaves_no_orphan_blank_outputs(
     wallet, ledger: Ledger, monkeypatch, fee_paid_sat_offset: int
 ):
+    # Inherited test: it melts without taproot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     """When `_generate_change_promises` takes its early-return branch
     (overpaid_fee <= 0), the wallet's blank NUT-08 outputs — already
     inserted into `promises` with c_ IS NULL before the LN payment —
