@@ -30,12 +30,16 @@ from ..core.db import Connection, Database
 from ..core.errors import (
     BatchDuplicateQuotesError,
     CashuError,
+    InvoiceAlreadyPaidError,
     KeysetInactiveError,
     LightningError,
     LightningPaymentFailedError,
+    MintingDisabledError,
     NotAllowedError,
     QuoteAlreadyIssuedError,
+    QuoteExpiredError,
     QuoteNotPaidError,
+    QuotePendingError,
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
     TransactionError,
@@ -329,7 +333,7 @@ class Ledger(
                 f"Maximum mint amount is {settings.mint_max_mint_bolt11_sat} sat."
             )
         if settings.mint_bolt11_disable_mint:
-            raise NotAllowedError("Minting with bolt11 is disabled.")
+            raise MintingDisabledError("Minting with bolt11 is disabled.")
 
         unit, method = self._verify_and_get_unit_method(
             quote_request.unit, Method.bolt11.name
@@ -510,7 +514,7 @@ class Ledger(
 
         quote = await self.get_mint_quote(quote_id)
         if quote.pending:
-            raise TransactionError("Mint quote already pending.")
+            raise QuotePendingError("Mint quote already pending.")
         if quote.issued:
             raise QuoteAlreadyIssuedError()
         if quote.state != MintQuoteState.paid:
@@ -524,7 +528,7 @@ class Ledger(
             if not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
-                raise TransactionError("quote expired")
+                raise QuoteExpiredError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
             await self._store_blinded_messages(outputs, mint_id=quote_id)
@@ -595,7 +599,7 @@ class Ledger(
 
         for quote in quotes:
             if quote.pending:
-                raise TransactionError("mint quote already pending")
+                raise QuotePendingError("mint quote already pending")
             if quote.issued:
                 raise QuoteAlreadyIssuedError()
             if quote.state != MintQuoteState.paid:
@@ -646,7 +650,7 @@ class Ledger(
         try:
             for quote in quotes:
                 if quote.expiry and quote.expiry < int(time.time()):
-                    raise TransactionError("quote expired")
+                    raise QuoteExpiredError("quote expired")
 
             # Store all blinded messages
             await self._store_blinded_messages(
@@ -685,7 +689,7 @@ class Ledger(
         if not mint_quote.method == method.name:
             raise TransactionError("methods do not match")
         if mint_quote.paid:
-            raise TransactionError("mint quote already paid")
+            raise InvoiceAlreadyPaidError("mint quote already paid")
         if mint_quote.issued:
             raise TransactionError("mint quote already issued")
         if not mint_quote.unpaid:
@@ -979,7 +983,7 @@ class Ledger(
 
         # we settle the transaction internally
         if melt_quote.state == MeltQuoteState.paid:
-            raise TransactionError("melt quote already paid")
+            raise InvoiceAlreadyPaidError("melt quote already paid")
 
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
@@ -995,7 +999,7 @@ class Ledger(
             raise TransactionError("methods do not match")
 
         if mint_quote.paid:
-            raise TransactionError("mint quote already paid")
+            raise InvoiceAlreadyPaidError("mint quote already paid")
         if mint_quote.issued:
             raise TransactionError("mint quote already issued")
 

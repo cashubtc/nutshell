@@ -2,7 +2,14 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
-from cashu.core.errors import OutputsAlreadySignedError, ProofsAlreadySpentError
+from cashu.core.errors import (
+    InvoiceAlreadyPaidError,
+    MintingDisabledError,
+    OutputsAlreadySignedError,
+    ProofsAlreadySpentError,
+    QuoteExpiredError,
+    QuotePendingError,
+)
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.nuts import nut20
@@ -529,6 +536,54 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
     expected_amounts = [4, 2, 1]
     for i, proof in enumerate(change_proofs):
         assert proof.amount == expected_amounts[i]
+
+
+@pytest.mark.parametrize(
+    "error_class, code",
+    [
+        (MintingDisabledError, 20003),
+        (QuotePendingError, 20005),
+        (InvoiceAlreadyPaidError, 20006),
+        (QuoteExpiredError, 20007),
+    ],
+)
+def test_quote_lifecycle_error_codes(error_class, code):
+    assert error_class.code == code
+    assert error_class().code == code
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_disabled_raises_minting_disabled(ledger: Ledger, monkeypatch):
+    monkeypatch.setattr(settings, "mint_bolt11_disable_mint", True)
+
+    with pytest.raises(MintingDisabledError) as exc_info:
+        await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=128))
+    assert exc_info.value.code == 20003
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_mint_pending_quote_raises_quote_pending(
+    wallet1: Wallet, ledger: Ledger
+):
+    wallet_mint_quote = await wallet1.request_mint(128)
+    mint_quote = await ledger.get_mint_quote(wallet_mint_quote.quote)
+    assert mint_quote.state == MintQuoteState.paid
+
+    secrets, rs, _ = await wallet1.generate_n_secrets(1)
+    outputs, rs = wallet1._construct_outputs([128], secrets, rs)
+
+    await ledger.db_write._set_mint_quote_pending(mint_quote.quote)
+    try:
+        with pytest.raises(QuotePendingError) as exc_info:
+            await ledger.mint(outputs=outputs, quote_id=mint_quote.quote)
+        assert exc_info.value.code == 20005
+    finally:
+        await ledger.db_write._unset_mint_quote_pending(
+            mint_quote.quote, MintQuoteState.paid
+        )
+
+
 
 # TODO: test keeps running forever, needs to be fixed
 # @pytest.mark.asyncio

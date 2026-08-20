@@ -201,9 +201,41 @@ class QuoteAlreadyIssuedError(CashuError):
         super().__init__(self.detail, code=self.code)
 
 
+class MintingDisabledError(CashuError):
+    detail = "Minting is disabled"
+    code = 20003
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
 class LightningPaymentFailedError(CashuError):
     detail = "Lightning payment failed"
     code = 20004
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class QuotePendingError(CashuError):
+    detail = "quote is pending"
+    code = 20005
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class InvoiceAlreadyPaidError(CashuError):
+    detail = "invoice already paid"
+    code = 20006
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class QuoteExpiredError(CashuError):
+    detail = "quote is expired"
+    code = 20007
 
     def __init__(self, detail: Optional[str] = None):
         super().__init__(detail or self.detail, code=self.code)
