@@ -12,6 +12,7 @@ from ..core.crypto.bls import PrivateKey as BlsPrivateKey
 from ..core.crypto.keys import PrivateKey, get_keyset_id_version, is_bls_keyset
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.db import Database
+from ..core.errors import NotAllowedError
 from ..core.secret import Secret
 from ..core.settings import settings
 from ..wallet.crud import (
@@ -396,7 +397,18 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         Returns:
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+
+        Raises:
+            NotAllowedError: If the keyset is v3. NUT-10 well-known secrets are a
+                pre-v3 construction: a v3 secret is itself a key, so a lock is
+                expressed by the secret rather than by a condition inside it.
         """
+        if is_bls_keyset(self.keyset_id):
+            raise NotAllowedError(
+                "Well-known secret locks (P2PK, HTLC) need a pre-v3 keyset. The active"
+                f" keyset {self.keyset_id} is v3, which locks a proof to a key"
+                " directly (NUT-10 taproot secrets)."
+            )
         rs: List[PrivateKey] = []
         # generate secrets for receiver
         secret_locks = [secret_lock.serialize() for i in range(len(send_outputs))]
