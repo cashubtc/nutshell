@@ -1162,7 +1162,7 @@ class Ledger(
         return melt_quote
 
     async def melt_mint_settle_internally(
-        self, melt_quote: MeltQuote, proofs: List[Proof]
+        self, melt_quote_arg: MeltQuote, proofs: List[Proof]
     ) -> MeltQuote:
         """Settles a melt quote internally if there is a mint quote with the same payment request.
 
@@ -1182,14 +1182,14 @@ class Ledger(
         # first we check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without the backend
         mint_quote = await self.crud.get_mint_quote(
-            request=melt_quote.request, db=self.db
+            request=melt_quote_arg.request, db=self.db
         )
         if not mint_quote:
-            return melt_quote
+            return melt_quote_arg
 
         # settle externally if units are different
-        if mint_quote.unit != melt_quote.unit:
-            return melt_quote
+        if mint_quote.unit != melt_quote_arg.unit:
+            return melt_quote_arg
 
         async with self.db.get_connection(
             locks=[
@@ -1201,7 +1201,7 @@ class Ledger(
                 LockOptions(
                     table="melt_quotes",
                     select_statement="quote = :melt_quote",
-                    parameters={"melt_quote": melt_quote.quote},
+                    parameters={"melt_quote": melt_quote_arg.quote},
                 ),
             ],
         ) as conn:
@@ -1214,7 +1214,7 @@ class Ledger(
                 raise TransactionError("Mint quote not found.")
 
             melt_quote = await self.crud.get_melt_quote(
-                quote_id=melt_quote.quote,
+                quote_id=melt_quote_arg.quote,
                 db=self.db,
                 conn=conn,
             )

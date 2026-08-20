@@ -42,7 +42,7 @@ INVOICE_RESULT_MAP = {
     "ACCEPTED": PaymentResult.PENDING,
 }
 PAYMENT_STATUS_RESULT_MAP = {
-    "UNKNOWN": PaymentStatusResult.ERROR,
+    "UNKNOWN": PaymentStatusResult.NOT_FOUND,
     "IN_FLIGHT": PaymentStatusResult.PENDING,
     "INITIATED": PaymentStatusResult.PENDING,
     "SUCCEEDED": PaymentStatusResult.SETTLED,

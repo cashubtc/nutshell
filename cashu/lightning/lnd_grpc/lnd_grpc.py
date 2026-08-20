@@ -48,7 +48,7 @@ INVOICE_RESULT_MAP = {
 }
 
 PAYMENT_STATUS_RESULT_MAP = {
-    lnrpc.Payment.PaymentStatus.UNKNOWN: PaymentStatusResult.ERROR,
+    lnrpc.Payment.PaymentStatus.UNKNOWN: PaymentStatusResult.NOT_FOUND,
     lnrpc.Payment.PaymentStatus.IN_FLIGHT: PaymentStatusResult.PENDING,
     lnrpc.Payment.PaymentStatus.INITIATED: PaymentStatusResult.PENDING,
     lnrpc.Payment.PaymentStatus.SUCCEEDED: PaymentStatusResult.SETTLED,

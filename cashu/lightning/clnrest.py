@@ -295,12 +295,12 @@ class CLNRestWallet(LightningBackend):
             pay = pays[-1]
         if pay is None:
             return PaymentStatus(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentStatusResult.NOT_FOUND,
                 error_message="unknown payment status",
             )
 
         fee_msat, preimage = None, None
-        if PAYMENT_RESULT_MAP[pay["status"]] == PaymentResult.SETTLED:
+        if PAYMENT_RESULT_MAP[pay["status"]] == PaymentStatusResult.SETTLED:
             fee_msat = int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
             preimage = pay["preimage"]
 
