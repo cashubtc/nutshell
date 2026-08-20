@@ -234,7 +234,7 @@ class QuoteRequiresPubkeyError(CashuError):
 
 class ClearAuthRequiredError(CashuError):
     detail = "Endpoint requires clear auth"
-    code = 80001
+    code = 30001
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
@@ -242,7 +242,7 @@ class ClearAuthRequiredError(CashuError):
 
 class ClearAuthFailedError(CashuError):
     detail = "Clear authentication failed"
-    code = 80002
+    code = 30002
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
@@ -250,7 +250,7 @@ class ClearAuthFailedError(CashuError):
 
 class BlindAuthRequiredError(CashuError):
     detail = "Endpoint requires blind auth"
-    code = 81001
+    code = 31001
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
@@ -258,7 +258,7 @@ class BlindAuthRequiredError(CashuError):
 
 class BlindAuthFailedError(CashuError):
     detail = "Blind authentication failed"
-    code = 81002
+    code = 31002
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
@@ -266,7 +266,7 @@ class BlindAuthFailedError(CashuError):
 
 class BlindAuthAmountExceededError(CashuError):
     detail = "Maximum blind auth amount exceeded"
-    code = 81003
+    code = 31003
 
     def __init__(self, detail: Optional[str] = None):
         super().__init__(detail or self.detail, code=self.code)
@@ -274,7 +274,7 @@ class BlindAuthAmountExceededError(CashuError):
 
 class BlindAuthRateLimitExceededError(CashuError):
     detail = "Blind auth token mint rate limit exceeded"
-    code = 81004
+    code = 31004
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
