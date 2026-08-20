@@ -348,7 +348,9 @@ async def test_melt_sigall_requires_uniform_secrets(
 
     melt_quote_req = _MQR(request=(await wallet1.request_mint(8)).request, unit="sat")
     melt_quote = await ledger.melt_quote(melt_quote_req)
+    # The plain proof carries no NUT-10 secret at all, so it is refused before the
+    # "not all secrets are equal" comparison of two differing conditions.
     await assert_err(
         ledger.melt(proofs=locked + plain[:1], quote=melt_quote.quote),
-        "not all secrets are equal",
+        "SIG_ALL transaction contains an ordinary secret",
     )
