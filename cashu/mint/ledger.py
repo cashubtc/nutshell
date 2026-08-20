@@ -503,18 +503,32 @@ class Ledger(
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
+        quote = await self.get_mint_quote(quote_id)
+
+        # Idempotency: if this quote was already issued or is stuck pending,
+        # return previously stored signatures for matching outputs.
+        if quote.issued or quote.pending:
+            stored = await self.crud.get_blind_signatures_mint_id(
+                db=self.db, mint_id=quote_id
+            )
+            stored_Bs = await self.crud.get_blinded_Bs_mint_id(
+                db=self.db, mint_id=quote_id
+            )
+            if len(stored) == len(outputs) and stored_Bs == [
+                o.B_ for o in outputs
+            ]:
+                return stored
+            if quote.issued:
+                raise QuoteAlreadyIssuedError()
+            raise TransactionError("Mint quote already pending.")
+
+        if quote.state != MintQuoteState.paid:
+            raise QuoteNotPaidError()
+
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
         # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
         output_unit = self.keysets[outputs[0].id].unit
-
-        quote = await self.get_mint_quote(quote_id)
-        if quote.pending:
-            raise TransactionError("Mint quote already pending.")
-        if quote.issued:
-            raise QuoteAlreadyIssuedError()
-        if quote.state != MintQuoteState.paid:
-            raise QuoteNotPaidError()
 
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)

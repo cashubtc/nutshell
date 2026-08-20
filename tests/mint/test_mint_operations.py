@@ -147,16 +147,21 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     signature = nut20.sign_mint_quote(
         mint_quote.quote, outputs, wallet_mint_quote.privkey
     )
-    await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
-
-    await assert_err(
-        ledger.mint(outputs=outputs, quote_id=mint_quote.quote),
-        OutputsAlreadySignedError.detail,
+    signatures = await ledger.mint(
+        outputs=outputs, quote_id=mint_quote.quote, signature=signature
     )
 
     mint_quote_after_payment = await ledger.get_mint_quote(mint_quote.quote)
     assert mint_quote_after_payment.issued, "mint quote should be issued"
-    assert mint_quote_after_payment.issued
+
+    # Idempotent retry with same outputs should return stored signatures
+    retry_signatures = await ledger.mint(
+        outputs=outputs, quote_id=mint_quote.quote
+    )
+    assert len(retry_signatures) == len(signatures)
+    for orig, retry in zip(signatures, retry_signatures):
+        assert orig.C_ == retry.C_
+        assert orig.amount == retry.amount
 
 
 @pytest.mark.asyncio
@@ -356,6 +361,64 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature),
         OutputsAlreadySignedError.detail,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_mint_idempotent_retry_same_outputs(wallet1: Wallet, ledger: Ledger):
+    """Retry with the same outputs and same quote returns stored signatures."""
+    mint_quote = await wallet1.request_mint(64)
+    output_amounts = [64]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(
+        mint_quote.quote, outputs, mint_quote.privkey
+    )
+    signatures = await ledger.mint(
+        outputs=outputs, quote_id=mint_quote.quote, signature=signature
+    )
+
+    retry_signatures = await ledger.mint(
+        outputs=outputs, quote_id=mint_quote.quote
+    )
+    assert len(retry_signatures) == len(signatures)
+    for orig, retry in zip(signatures, retry_signatures):
+        assert orig.C_ == retry.C_
+        assert orig.amount == retry.amount
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_mint_retry_different_outputs_same_count_rejected(
+    wallet1: Wallet, ledger: Ledger
+):
+    """Retry with different outputs (same count) for an issued quote is rejected."""
+    mint_quote = await wallet1.request_mint(128)
+    output_amounts = [128]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs1, rs1 = wallet1._construct_outputs(output_amounts, secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(
+        mint_quote.quote, outputs1, mint_quote.privkey
+    )
+    await ledger.mint(
+        outputs=outputs1, quote_id=mint_quote.quote, signature=signature
+    )
+
+    # Different outputs, same count, same quote
+    secrets2, rs2, derivation_paths2 = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs2, rs2 = wallet1._construct_outputs(output_amounts, secrets2, rs2)
+    await assert_err(
+        ledger.mint(outputs=outputs2, quote_id=mint_quote.quote),
+        "quote already issued",
     )
 
 
