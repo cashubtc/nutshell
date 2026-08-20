@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 import pytest
 import pytest_asyncio
@@ -79,6 +80,47 @@ async def test_ledger_mint_batch_success(ledger: Ledger, wallet: Wallet):
     quote2 = await ledger.get_mint_quote(mint_quote2.quote)
     assert quote1.issued_time is not None
     assert quote2.issued_time is not None
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_paid_quotes_after_expiry(
+    ledger: Ledger, wallet: Wallet
+):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    quote1 = await ledger.get_mint_quote(mint_quote1.quote)
+    quote2 = await ledger.get_mint_quote(mint_quote2.quote)
+    assert quote1.paid
+    assert quote2.paid
+
+    quote1.expiry = int(time.time()) - 1
+    quote2.expiry = int(time.time()) - 1
+    await ledger.crud.update_mint_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.update_mint_quote(quote=quote2, db=ledger.db)
+
+    secrets, rs, _ = await wallet.generate_secrets_from_to(10002, 10003)
+    outputs, _ = wallet._construct_outputs([64, 32], secrets, rs)
+
+    assert mint_quote1.privkey
+    assert mint_quote2.privkey
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+
+    promises = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote1.quote, mint_quote2.quote],
+            quote_amounts=[64, 32],
+            outputs=outputs,
+            signatures=[sig1, sig2],
+        )
+    )
+
+    assert [promise.amount for promise in promises] == [64, 32]
 
 
 @pytest.mark.asyncio

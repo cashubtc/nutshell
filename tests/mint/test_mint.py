@@ -88,6 +88,32 @@ async def test_mint(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_mint_paid_quote_after_expiry(ledger: Ledger):
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    await pay_if_regtest(quote.request)
+    quote = await ledger.get_mint_quote(quote.quote)
+    assert quote.paid
+
+    quote.expiry = int(time.time()) - 1
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    blinded_message, _ = step1_alice("paid_quote_after_expiry")
+    promises = await ledger.mint(
+        outputs=[
+            BlindedMessage(
+                amount=8,
+                B_=blinded_message.format().hex(),
+                id=ledger.keyset.id,
+            )
+        ],
+        quote_id=quote.quote,
+    )
+
+    assert len(promises) == 1
+    assert promises[0].amount == 8
+
+
+@pytest.mark.asyncio
 async def test_mint_invalid_quote(ledger: Ledger):
     await assert_err(
         ledger.get_mint_quote(quote_id="invalid_quote_id"),
