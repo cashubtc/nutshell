@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core import db
-from cashu.core.db import Connection
+from cashu.core.db import Connection, LockOptions
 from cashu.core.migrations import backup_database
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
@@ -129,6 +129,28 @@ async def test_db_get_connection(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_db_get_connection_multiple_locks(ledger: Ledger):
+    locks = [
+        LockOptions(table="mint_quotes"),
+        LockOptions(table="melt_quotes"),
+    ]
+    async with ledger.db.get_connection(locks=locks) as conn:
+        assert isinstance(conn, Connection)
+
+
+@pytest.mark.asyncio
+async def test_db_get_connection_adds_locks_to_reused_connection(ledger: Ledger):
+    async with ledger.db.get_connection(
+        locks=[LockOptions(table="mint_quotes")]
+    ) as conn:
+        async with ledger.db.get_connection(
+            conn=conn,
+            locks=[LockOptions(table="melt_quotes")],
+        ) as reused_conn:
+            assert reused_conn is conn
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(is_github_actions, reason="Hangs on GitHub Actions")
 async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(64)
@@ -136,10 +158,12 @@ async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
     async def get_connection():
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
-            async with ledger.db.get_connection(lock_table="mint_quotes"):
+            async with ledger.db.get_connection(
+                locks=[LockOptions(table="mint_quotes")]
+            ):
                 try:
                     async with ledger.db.get_connection(
-                        lock_table="mint_quotes", lock_timeout=0.1
+                        locks=[LockOptions(table="mint_quotes", timeout=0.1)]
                     ) as conn2:
                         # write something with conn1, we never reach this point if the lock works
                         await conn2.execute(
@@ -170,18 +194,28 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
             async with ledger.db.get_connection(
-                lock_table="mint_quotes",
-                lock_select_statement=f"quote='{mint_quote.quote}'",
-                lock_timeout=0.1,
+                locks=[
+                    LockOptions(
+                        table="mint_quotes",
+                        select_statement="quote = :quote",
+                        parameters={"quote": mint_quote.quote},
+                        timeout=0.1,
+                    )
+                ],
             ) as conn1:
                 await conn1.execute(
                     f"UPDATE mint_quotes SET amount=100 WHERE quote='{mint_quote.quote}';"
                 )
                 try:
                     async with ledger.db.get_connection(
-                        lock_table="mint_quotes",
-                        lock_select_statement=f"quote='{mint_quote.quote}'",
-                        lock_timeout=0.1,
+                        locks=[
+                            LockOptions(
+                                table="mint_quotes",
+                                select_statement="quote = :quote",
+                                parameters={"quote": mint_quote.quote},
+                                timeout=0.1,
+                            )
+                        ],
                     ) as conn2:
                         # write something with conn1, we never reach this point if the lock works
                         await conn2.execute(
@@ -301,15 +335,25 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
             async with ledger.db.get_connection(
-                lock_table="mint_quotes",
-                lock_select_statement=f"quote='{mint_quote.quote}'",
-                lock_timeout=0.1,
+                locks=[
+                    LockOptions(
+                        table="mint_quotes",
+                        select_statement="quote = :quote",
+                        parameters={"quote": mint_quote.quote},
+                        timeout=0.1,
+                    )
+                ],
             ):
                 try:
                     async with ledger.db.get_connection(
-                        lock_table="mint_quotes",
-                        lock_select_statement=f"quote='{mint_quote_2.quote}'",
-                        lock_timeout=0.1,
+                        locks=[
+                            LockOptions(
+                                table="mint_quotes",
+                                select_statement="quote = :quote",
+                                parameters={"quote": mint_quote_2.quote},
+                                timeout=0.1,
+                            )
+                        ],
                     ) as conn2:
                         # write something with conn1, this time we should reach this block with postgres
                         quote = await ledger.crud.get_mint_quote(
@@ -347,7 +391,9 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
-    async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
+    async with ledger.db.connect(
+        locks=[LockOptions(table="proofs_pending", timeout=0.1)]
+    ) as conn:
         assert isinstance(conn, Connection)
         await assert_err(
             ledger.db_write._verify_spent_proofs_and_set_pending(
@@ -732,9 +778,9 @@ async def test_get_melt_quote_preserves_change_signatures_order(
     # However we can just verify that C_ values matches what we inserted
     # Since we mocked C_ to be the same as B_ in our test
     for i in range(5):
-        assert (
-            quote_db.change[i].C_ == b_values[i]
-        ), f"Change signature at index {i} is out of order"
+        assert quote_db.change[i].C_ == b_values[i], (
+            f"Change signature at index {i} is out of order"
+        )
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,7 @@ from ..core.crypto.keys import (
     generate_uuid_v7,
 )
 from ..core.crypto.secp import PrivateKey, PublicKey
-from ..core.db import SQLITE, Connection, Database
+from ..core.db import Connection, Database, LockOptions
 from ..core.errors import (
     BatchDuplicateQuotesError,
     CashuError,
@@ -346,9 +346,13 @@ class Ledger(
         settled_proofs: List[Proof] = []
 
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             melt_quote = await self.crud.get_melt_quote(
                 quote_id=quote_id,
@@ -458,9 +462,13 @@ class Ledger(
         released_proofs: List[Proof] = []
 
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             melt_quote = await self.crud.get_melt_quote(
                 quote_id=quote_id,
@@ -524,9 +532,13 @@ class Ledger(
     ) -> MeltQuote:
         """Update a backend checking ID without overwriting a concurrent state change."""
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             melt_quote = await self.crud.get_melt_quote(
                 quote_id=quote_id,
@@ -677,9 +689,13 @@ class Ledger(
                 # change state to paid in one transaction, it could have been marked paid
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
-                    lock_table="mint_quotes",
-                    lock_select_statement="quote = :quote",
-                    lock_parameters={"quote": quote_id},
+                    locks=[
+                        LockOptions(
+                            table="mint_quotes",
+                            select_statement="quote = :quote",
+                            parameters={"quote": quote_id},
+                        )
+                    ],
                 ) as conn:
                     quote = await self.crud.get_mint_quote(
                         quote_id=quote_id, db=self.db, conn=conn
@@ -1176,18 +1192,19 @@ class Ledger(
             return melt_quote
 
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": mint_quote.quote},
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="quote = :mint_quote",
+                    parameters={"mint_quote": mint_quote.quote},
+                ),
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :melt_quote",
+                    parameters={"melt_quote": melt_quote.quote},
+                ),
+            ],
         ) as conn:
-            if self.db.type != SQLITE:
-                await self.db.acquire_lock(
-                    conn,
-                    "melt_quotes",
-                    "quote = :quote",
-                    {"quote": melt_quote.quote},
-                )
-
             mint_quote = await self.crud.get_mint_quote(
                 quote_id=mint_quote.quote,
                 db=self.db,
@@ -1548,9 +1565,13 @@ class Ledger(
             lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
             ys_list = ", ".join(f":y{i}" for i in range(len(Ys)))
             async with self.db.get_connection(
-                lock_table="proofs_pending",
-                lock_select_statement=f"y IN ({ys_list})",
-                lock_parameters=lock_parameters,
+                locks=[
+                    LockOptions(
+                        table="proofs_pending",
+                        select_statement=f"y IN ({ys_list})",
+                        parameters=lock_parameters,
+                    )
+                ],
             ) as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
 

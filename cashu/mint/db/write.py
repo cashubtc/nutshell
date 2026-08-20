@@ -13,7 +13,7 @@ from ...core.base import (
     ProofSpentState,
     ProofState,
 )
-from ...core.db import Connection, Database
+from ...core.db import Connection, Database, LockOptions
 from ...core.errors import (
     ProofsArePendingError,
     TransactionError,
@@ -72,8 +72,7 @@ class DbWriteHelper:
         try:
             logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
-                lock_table="proofs_pending",
-                lock_timeout=1,
+                locks=[LockOptions(table="proofs_pending", timeout=1)],
                 conn=conn,
             ) as conn:
                 logger.trace("checking whether proofs are already spent")
@@ -161,9 +160,13 @@ class DbWriteHelper:
         """
         quote: Union[MintQuote, None] = None
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             # get mint quote from db and check if it is already pending
             quote = await self.crud.get_mint_quote(
@@ -203,9 +206,13 @@ class DbWriteHelper:
         )
 
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement=lock_select_statement,
-            lock_parameters=lock_parameters,
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement=lock_select_statement,
+                    parameters=lock_parameters,
+                )
+            ],
         ) as conn:
             for quote_id in quote_ids:
                 quote = await self.crud.get_mint_quote(
@@ -238,9 +245,13 @@ class DbWriteHelper:
         """
         quote: Union[MintQuote, None] = None
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             # get mint quote from db and check if it is pending
             quote = await self.crud.get_mint_quote(
@@ -283,9 +294,13 @@ class DbWriteHelper:
         )
 
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement=lock_select_statement,
-            lock_parameters=lock_parameters,
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement=lock_select_statement,
+                    parameters=lock_parameters,
+                )
+            ],
         ) as conn:
             for quote_id in quote_ids:
                 quote = await self.crud.get_mint_quote(
@@ -320,9 +335,13 @@ class DbWriteHelper:
         if not quote.checking_id:
             raise TransactionError("Melt quote doesn't have checking ID.")
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="checking_id = :checking_id",
-            lock_parameters={"checking_id": quote.checking_id},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="checking_id = :checking_id",
+                    parameters={"checking_id": quote.checking_id},
+                )
+            ],
             conn=conn,
         ) as conn:
             # get all melt quotes with same checking_id from db and check if there is one already pending or paid
@@ -362,9 +381,13 @@ class DbWriteHelper:
         """
         quote_copy = quote.model_copy()
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote.quote},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote.quote},
+                )
+            ],
             conn=conn,
         ) as conn:
             # get melt quote from db and check if it is pending
@@ -384,9 +407,13 @@ class DbWriteHelper:
 
     async def _update_mint_quote_state(self, quote_id: str, state: MintQuoteState):
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             mint_quote = await self.crud.get_mint_quote(
                 quote_id=quote_id, db=self.db, conn=conn
@@ -412,9 +439,13 @@ class DbWriteHelper:
             TransactionError: If the melt quote is not found.
         """
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="quote = :quote",
-            lock_parameters={"quote": quote_id},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
         ) as conn:
             melt_quote = await self.crud.get_melt_quote(
                 quote_id=quote_id, db=self.db, conn=conn
@@ -434,9 +465,13 @@ class DbWriteHelper:
             TransactionError: If a quote with the same checking_id is already pending or paid.
         """
         async with self.db.get_connection(
-            lock_table="melt_quotes",
-            lock_select_statement="checking_id = :checking_id",
-            lock_parameters={"checking_id": quote.checking_id},
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="checking_id = :checking_id",
+                    parameters={"checking_id": quote.checking_id},
+                )
+            ],
         ) as conn:
             # get all melt quotes with same checking_id from db and check if there is one already pending or paid
             quotes_db = await self.crud.get_melt_quotes_by_checking_id(
@@ -470,8 +505,7 @@ class DbWriteHelper:
             MeltQuote: Updated melt quote object.
         """
         async with self.db.get_connection(
-            lock_table="proofs_pending",
-            lock_timeout=1,
+            locks=[LockOptions(table="proofs_pending", timeout=1)],
         ) as conn:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn
@@ -496,8 +530,7 @@ class DbWriteHelper:
             state (MeltQuoteState): New state for the melt quote (e.g. UNPAID).
         """
         async with self.db.get_connection(
-            lock_table="proofs_pending",
-            lock_timeout=1,
+            locks=[LockOptions(table="proofs_pending", timeout=1)],
         ) as conn:
             await self._unset_proofs_pending(proofs, keysets, spent=False, conn=conn)
             quote = await self._unset_melt_quote_pending(quote, state, conn=conn)
@@ -578,8 +611,7 @@ class DbWriteHelper:
         quote_copy = quote.model_copy()
 
         async with self.db.get_connection(
-            lock_table="proofs_pending",
-            lock_timeout=1,
+            locks=[LockOptions(table="proofs_pending", timeout=1)],
         ) as conn:
             # 1. Unset proofs PENDING
             # This bumps balance back up.
