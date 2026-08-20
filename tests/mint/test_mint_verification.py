@@ -17,6 +17,8 @@ from cashu.core.base import (
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
+    AmountlessInvoiceNotSupportedError,
+    AmountMismatchError,
     InvalidProofsError,
     KeysetInactiveError,
     NoSecretInProofsError,
@@ -29,8 +31,8 @@ from cashu.core.errors import (
     TransactionDuplicateOutputsError,
     TransactionError,
     TransactionMultipleUnitsError,
-    TransactionUnitError,
     TransactionUnitMismatchError,
+    UnitNotSupportedError,
     WitnessTooLongError,
 )
 from cashu.core.nuts import nut11, nut20
@@ -101,8 +103,9 @@ def test_verify_secret_criteria_rejects_too_long_secret(ledger: Ledger):
         secret="x" * (settings.mint_max_secret_length + 1),
         C="02" + "ab" * 32,
     )
-    with pytest.raises(SecretTooLongError):
+    with pytest.raises(SecretTooLongError) as exc_info:
         ledger._verify_secret_criteria(p)
+    assert exc_info.value.code == 11000
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +150,9 @@ def test_verify_input_witness_criteria_rejects_long_witness(ledger: Ledger):
         C="02" + "ab" * 32,
         witness="w" * (settings.mint_max_witness_length + 1),
     )
-    with pytest.raises(WitnessTooLongError):
+    with pytest.raises(WitnessTooLongError) as exc_info:
         ledger._verify_input_witness_criteria(p)
+    assert exc_info.value.code == 11000
 
 
 # ---------------------------------------------------------------------------
@@ -282,8 +286,11 @@ def test_get_fees_for_proofs_rejects_mixed_units(ledger: Ledger):
         p1.id = "k_sat"
         p2 = MagicMock()
         p2.id = "k_usd"
-        with pytest.raises(TransactionUnitError, match="inputs have different units"):
+        with pytest.raises(
+            TransactionMultipleUnitsError, match="inputs have different units"
+        ) as exc_info:
             ledger.get_fees_for_proofs([p1, p2])
+        assert exc_info.value.code == 11009
     finally:
         ledger.keysets = orig
 
@@ -331,6 +338,19 @@ def test_verify_equation_balanced_rejects_unbalanced(ledger: Ledger):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "error_class, code",
+    [
+        (AmountlessInvoiceNotSupportedError, 11011),
+        (AmountMismatchError, 11012),
+        (UnitNotSupportedError, 11013),
+    ],
+)
+def test_transaction_error_codes(error_class, code):
+    assert error_class.code == code
+    assert error_class().code == code
+
+
 def test_verify_and_get_unit_method_accepts_bolt11_sat(ledger: Ledger):
     u, m = ledger._verify_and_get_unit_method("sat", "bolt11")
     assert u == Unit.sat
@@ -338,8 +358,11 @@ def test_verify_and_get_unit_method_accepts_bolt11_sat(ledger: Ledger):
 
 
 def test_verify_and_get_unit_method_rejects_unknown_unit(ledger: Ledger):
-    with pytest.raises(NotAllowedError, match="not supported in any keyset"):
+    with pytest.raises(
+        UnitNotSupportedError, match="not supported in any keyset"
+    ) as exc_info:
         ledger._verify_and_get_unit_method("auth", "bolt11")
+    assert exc_info.value.code == 11013
 
 
 def test_verify_and_get_unit_method_rejects_unsupported_backend(ledger: Ledger):

@@ -25,8 +25,8 @@ from ..core.errors import (
     TransactionDuplicateOutputsError,
     TransactionError,
     TransactionMultipleUnitsError,
-    TransactionUnitError,
     TransactionUnitMismatchError,
+    UnitNotSupportedError,
     WitnessTooLongError,
 )
 from ..core.nuts import nut20
@@ -351,7 +351,7 @@ class LedgerVerification(
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         if not len({self.keysets[p.id].unit for p in proofs}) == 1:
-            raise TransactionUnitError("inputs have different units.")
+            raise TransactionMultipleUnitsError("inputs have different units.")
         fee = (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000
         return fee
 
@@ -385,7 +385,9 @@ class LedgerVerification(
         unit = Unit[unit_str]
 
         if not any([unit == k.unit for k in self.keysets.values()]):
-            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+            raise UnitNotSupportedError(
+                f"unit '{unit.name}' not supported in any keyset."
+            )
 
         if not self.backends.get(method) or unit not in self.backends[method]:
             raise NotAllowedError(
