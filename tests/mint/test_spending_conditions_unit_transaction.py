@@ -18,7 +18,8 @@ from tests.mint.spending_conditions_test_helpers import proof, secret_str
 
 def outputs_for_amounts(amounts: list[int]) -> list[BlindedMessage]:
     return [
-        BlindedMessage(id="ks", amount=amount, B_=f"b{i:02x}")
+        # B_ must be even-length hex: the v1 SIG_ALL message decodes it to bytes
+        BlindedMessage(id="ks", amount=amount, B_=f"0b{i:02x}")
         for i, amount in enumerate(amounts, start=1)
     ]
 
@@ -83,7 +84,7 @@ def test_p2pk_requirements_ignore_stray_preimage_in_normalized_witness():
     assert cond._verify_p2pk_or_htlc_spending_requirements(
         requirements,
         witness,
-        secret,
+        [secret.encode("utf-8")],
     )
 
 

@@ -401,3 +401,77 @@ def test_sig_all_swap_multisig_valid():
     outputs = _outputs_from_list(output_dicts)
     cond = LedgerSpendingConditions()
     assert cond._verify_input_output_spending_conditions(proofs, outputs) is True
+
+
+# --- SIG_ALL v1 (length-framed) message vectors ---
+# Canonical vectors from nuts tests/11-test.md ("SIG_ALL v1 Message Vectors"),
+# pinned byte-for-byte in cashu-ts and cdk too. Signing key is the well-known
+# test key (privkey 0x...01).
+
+
+def test_sig_all_v1_message_canonical_vector():
+    pub = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    inputs = [
+        {
+            "amount": 8,
+            "id": "009a1f293253e41e",
+            "secret": f'["P2PK",{{"nonce":"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f","data":"{pub}","tags":[["sigflag","SIG_ALL"]]}}]',
+            "C": "02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904",
+        },
+        {
+            "amount": 2,
+            "id": "009a1f293253e41e",
+            "secret": f'["P2PK",{{"nonce":"16d937a29ae4e5d4a6e9f9959c4d4b9a8d6f2f7b2f0a1b3c4d5e6f708192a3b4","data":"{pub}","tags":[["sigflag","SIG_ALL"]]}}]',
+            "C": "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5",
+        },
+    ]
+    outputs = [
+        {
+            "amount": 8,
+            "id": "009a1f293253e41e",
+            "B_": "035015e6d7ade60ba8426cefaf1832bbd27257636e44a76b922d78e79b47cb689d",
+        },
+        {
+            "amount": 2,
+            "id": "009a1f293253e41e",
+            "B_": "0288d7649652d0a83fc9c966c969fb217f15904431e61a44b14999fabc1b5d9ac6",
+        },
+    ]
+    quote_id = "9d745270-1405-46de-b5c5-e2762b4f5e00"
+    proofs = [_proof_from_dict(i) for i in inputs]
+    outs = _outputs_from_list(outputs)
+
+    from hashlib import sha256
+
+    from cashu.core.crypto.secp import PublicKey
+    from cashu.core.p2pk import verify_schnorr_signature
+
+    swap_msg = nut11.sigall_message_to_sign_v1(proofs, outs)
+    assert len(swap_msg) == 572
+    assert swap_msg.startswith(b"Cashu_SigAllSig_v1" + b"\x00" * 4)
+    assert (
+        sha256(swap_msg).hexdigest()
+        == "3fd05c896ff0d5a058f9180e577dced83539ea885f9bf6adf71f7ed084590dc2"
+    )
+    # Pinned signature by the test key over the swap message
+    assert verify_schnorr_signature(
+        message=swap_msg,
+        pubkey=PublicKey(bytes.fromhex(pub)),
+        signature=bytes.fromhex(
+            "b2b821f819f12ab61d261971187d19772aaad11422f9d5f3ffda6f97de03349e0e44976b5d44e3c850a99b621045167915caf3ef5b102abe69439e36b68f89d5"
+        ),
+    )
+
+    melt_msg = nut11.sigall_message_to_sign_v1(proofs, outs, quote_id)
+    assert len(melt_msg) == 608
+    assert (
+        sha256(melt_msg).hexdigest()
+        == "0ebae3a8dbe1107a7b6392a53b6fb3dfc18b38c4ab02b4b9a460ad8829e20ce1"
+    )
+    assert verify_schnorr_signature(
+        message=melt_msg,
+        pubkey=PublicKey(bytes.fromhex(pub)),
+        signature=bytes.fromhex(
+            "1493200b3f52cd67bdda888f67d80cf8862b4e7bd48a800828f5482218305c367f17dc3409cf89e6c795741605ccce2501f5e2b0f0e3ec54edcc7001a5863e3d"
+        ),
+    )

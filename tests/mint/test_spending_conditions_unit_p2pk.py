@@ -20,7 +20,7 @@ def test_verify_p2pk_signatures_valid_threshold():
     message = "msg-1"
     pub1, sig1 = pubkey_and_sig(message)
     pub2, sig2 = pubkey_and_sig(message)
-    assert cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
+    assert cond._verify_p2pk_signatures([message.encode("utf-8")], [pub1, pub2], [sig1, sig2], 2)
 
 
 def test_verify_p2pk_signatures_reject_duplicate_pubkeys():
@@ -28,21 +28,21 @@ def test_verify_p2pk_signatures_reject_duplicate_pubkeys():
     message = "msg-dup-pubkeys"
     pub, sig = pubkey_and_sig(message)
     with pytest.raises(Exception, match="pubkeys must be unique"):
-        cond._verify_p2pk_signatures(message, [pub, pub], [sig], 1)
+        cond._verify_p2pk_signatures([message.encode("utf-8")], [pub, pub], [sig], 1)
 
 
 def test_verify_p2pk_signatures_allows_duplicate_signatures_when_threshold_is_met():
     cond = LedgerSpendingConditions()
     message = "msg-dup-sigs"
     pub, sig = pubkey_and_sig(message)
-    assert cond._verify_p2pk_signatures(message, [pub], [sig, sig], 1)
+    assert cond._verify_p2pk_signatures([message.encode("utf-8")], [pub], [sig, sig], 1)
 
 
 def test_verify_p2pk_signatures_reject_missing_signatures():
     cond = LedgerSpendingConditions()
     pub, _ = pubkey_and_sig("msg-empty")
     with pytest.raises(Exception, match="no signatures in proof"):
-        cond._verify_p2pk_signatures("msg-empty", [pub], [], 1)
+        cond._verify_p2pk_signatures(["msg-empty".encode("utf-8")], [pub], [], 1)
 
 
 def test_verify_p2pk_signatures_reject_threshold_not_met():
@@ -53,7 +53,7 @@ def test_verify_p2pk_signatures_reject_threshold_not_met():
     with pytest.raises(
         Exception, match=r"not enough pubkeys \(2\) or signatures \(1\)"
     ):
-        cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1], 2)
+        cond._verify_p2pk_signatures([message.encode("utf-8")], [pub1, pub2], [sig1], 2)
 
 
 def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
@@ -70,7 +70,7 @@ def test_verify_p2pk_signatures_rejects_same_x_coord_different_prefix():
     sig1 = priv.sign_schnorr(sha256(message.encode()).digest(), b"1" * 32).hex()
     sig2 = priv.sign_schnorr(sha256(message.encode()).digest(), b"2" * 32).hex()
     with pytest.raises(Exception, match="pubkeys must have unique x-coordinates"):
-        cond._verify_p2pk_signatures(message, [pub1, pub2], [sig1, sig2], 2)
+        cond._verify_p2pk_signatures([message.encode("utf-8")], [pub1, pub2], [sig1, sig2], 2)
 
 
 def test_verify_p2pk_sig_inputs_rejects_sig_all():
