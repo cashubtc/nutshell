@@ -11,7 +11,6 @@ import os
 import pytest
 from coincurve import PublicKeyXOnly
 
-from cashu.core.errors import TransactionError
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.crypto.taproot import (
     TAPROOT_BRANCH_TAG,
@@ -22,7 +21,6 @@ from cashu.core.crypto.taproot import (
     read_minimal_be,
     read_tlv_records,
     serialize_taproot_leaf,
-    tagged_hash,
     taproot_branch_hash,
     taproot_leaf_hash,
     taproot_merkle_path,
@@ -34,6 +32,7 @@ from cashu.core.crypto.taproot import (
     tlv_record,
     verify_taproot_commitment,
 )
+from cashu.core.errors import TransactionError
 
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 

@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 
 from ..core.base import (
-    SpendInfo,
     Proof,
+    SpendInfo,
     TokenV3,
     TokenV3Token,
     TokenV4,
