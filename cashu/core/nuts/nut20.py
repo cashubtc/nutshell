@@ -6,7 +6,7 @@ from coincurve import PublicKeyXOnly
 from loguru import logger
 
 from ..base import BlindedMessage
-from ..crypto.secp import PrivateKey
+from ..crypto.secp import PrivateKey, PublicKey
 from ..crypto.taproot import keyset_id_transcript_bytes, verify_script_path_spend
 from ..crypto.transcript import (
     TransactionShape,
@@ -151,7 +151,9 @@ def verify_mint_quote_v3(
             return False
     if isinstance(witness, dict) and "leaf" in witness:
         try:
-            verify_script_path_spend(bytes.fromhex(public_key), digest, witness)
+            verify_script_path_spend(
+                PublicKey(bytes.fromhex(public_key)), digest, witness
+            )
             return True
         except Exception:
             return False

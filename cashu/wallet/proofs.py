@@ -14,7 +14,6 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.taproot import is_taproot_point_secret
 from ..core.db import Database
 from ..wallet.crud import (
@@ -243,11 +242,11 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             try:
                 _, path_keyset_id, counter_str = path.split(":")
                 secret_key = derive(int(counter_str), path_keyset_id)
-                pub = SecpPrivateKey(secret_key).public_key
+                pub = secret_key.public_key
                 assert pub and pub.format().hex() == proof.secret
             except Exception:
                 continue
-            proof.spend_info = SpendInfo(k=secret_key.hex())
+            proof.spend_info = SpendInfo(k=secret_key.secret.hex())
 
     async def _make_tokenv4(
         self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None

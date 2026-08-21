@@ -302,7 +302,7 @@ class LedgerVerification(
                 # Script path: leaf -> root -> tweak -> P, then evaluate (spec 2.3.2).
                 try:
                     verify_script_path_spend(
-                        bytes.fromhex(proof.secret), digest, witness
+                        SecpPublicKey(bytes.fromhex(proof.secret)), digest, witness
                     )
                 except Exception as e:
                     raise TransactionError(
