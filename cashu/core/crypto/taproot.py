@@ -356,16 +356,11 @@ def taproot_tweak_seckey(seckey: bytes, merkle_root: Optional[bytes] = None) -> 
     """Tweaked private key p' = (k + t) mod n for the key path."""
     if len(seckey) != 32:
         raise ValueError("Secret key must be 32 bytes")
-    k = int.from_bytes(seckey, "big")
-    if k == 0 or k >= SECP256K1_N:
-        raise ValueError("Invalid secret key")
-    K = PrivateKey(seckey).public_key
+    private_key = PrivateKey(seckey)
+    K = private_key.public_key
     assert K
     t = taproot_tweak(K.format(), merkle_root)
-    p = (k + t) % SECP256K1_N
-    if p == 0:
-        raise ValueError("Tweaked secret key is zero")
-    return p.to_bytes(32, "big")
+    return private_key.add(t.to_bytes(32, "big")).secret
 
 
 def verify_taproot_commitment(
