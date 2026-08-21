@@ -79,11 +79,15 @@ class ProofState(LedgerEvent):
     Y: str
     state: ProofSpentState
     witness: Optional[str] = None
+    # NUT-07: v3 transaction digest the witness's signatures cover.
+    digest: Optional[str] = None
 
     @model_validator(mode="after")
     def check_witness(self):
         if self.witness is not None and self.state != ProofSpentState.spent:
             raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        if self.digest is not None and self.state != ProofSpentState.spent:
+            raise ValueError('Digest can only be set if the spent state is "SPENT"')
         return self
 
     @property
@@ -163,6 +167,9 @@ class Proof(BaseModel):
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
     spend_info: Optional[SpendInfo] = None  # taproot spend info (local-only)
+    # Mint-side: v3 transaction digest the witness signed, stored with the
+    # spent proof and served by NUT-07 (a v3 witness verifies only against it).
+    digest: Union[None, str] = None
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False

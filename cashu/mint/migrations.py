@@ -1338,3 +1338,16 @@ async def m038_remove_dleq_from_promises(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
         )
+
+
+async def m039_add_digest_to_proofs(db: Database):
+    """Store the v3 transaction digest beside the spent proof's witness
+    (served by NUT-07; a v3 witness verifies only against its digest).
+    The pending table carries it across a melt's payment window."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('proofs_used')} ADD COLUMN digest TEXT DEFAULT NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('proofs_pending')} ADD COLUMN digest TEXT DEFAULT NULL"
+        )

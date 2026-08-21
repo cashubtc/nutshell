@@ -553,6 +553,77 @@ async def test_api_check_state(ledger: Ledger):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
+async def test_api_check_state_v3_serves_witness_digest(
+    ledger: Ledger, wallet: Wallet
+):
+    """A spent v3 proof's state carries the transaction digest its witness
+    signed (NUT-07): the witness verifies only against it."""
+    from cashu.core.base import ProofSpentState
+    from cashu.core.crypto.taproot import (
+        keyset_id_transcript_bytes,
+        secret_transcript_bytes,
+    )
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        transaction_digest,
+    )
+
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
+    outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    inputs = wallet.proofs
+    wallet._attach_taproot_witnesses(inputs, outputs)
+    payload = {
+        "inputs": [p.to_dict() for p in inputs],
+        "outputs": [o.model_dump() for o in outputs],
+    }
+    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+
+    expected_digest = transaction_digest(
+        TransactionShape(
+            proof_inputs=[
+                TranscriptProofInput(
+                    amount=p.amount,
+                    keyset_id=keyset_id_transcript_bytes(p.id),
+                    secret=secret_transcript_bytes(p.secret, p.id),
+                    C=bytes.fromhex(p.C),
+                )
+                for p in inputs
+            ],
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=o.amount,
+                    keyset_id=keyset_id_transcript_bytes(o.id),
+                    B_=bytes.fromhex(o.B_),
+                )
+                for o in outputs
+            ],
+        )
+    ).hex()
+
+    state_payload = PostCheckStateRequest(Ys=[p.Y for p in inputs])
+    response = httpx.post(
+        f"{BASE_URL}/v1/checkstate", json=state_payload.model_dump()
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    states = PostCheckStateResponse.model_validate(response.json()).states
+    assert states
+    for state in states:
+        assert state.state == ProofSpentState.spent
+        assert state.witness
+        assert state.digest == expected_digest
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)

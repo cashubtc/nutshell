@@ -290,6 +290,10 @@ class LedgerVerification(
         for proof in proofs:
             if not is_taproot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
+            # Stored with the spent proof and served by NUT-07: the witness
+            # verifies only against this digest. A failure below aborts the
+            # transaction, so nothing unverified is ever persisted.
+            proof.digest = digest.hex()
             if proof.witness is None:
                 # Inputs sign (spec 2.2.2): with spend_info live in both wallets,
                 # every legitimate spender of a point secret can sign.
