@@ -72,6 +72,7 @@ class DbReadHelper:
                             Y=Y,
                             state=ProofSpentState.spent,
                             witness=proofs_spent[Y].witness,
+                            digest=proofs_spent[Y].digest,
                         )
                     )
         return states
