@@ -1,3 +1,4 @@
+import json
 from hashlib import sha256
 from typing import List
 
@@ -6,6 +7,13 @@ from loguru import logger
 
 from ..base import BlindedMessage
 from ..crypto.secp import PrivateKey
+from ..crypto.taproot import keyset_id_transcript_bytes, verify_script_path_spend
+from ..crypto.transcript import (
+    TransactionShape,
+    TranscriptBlindedOutput,
+    TranscriptQuote,
+    transaction_digest,
+)
 
 
 def generate_keypair() -> tuple[str, str]:
@@ -93,14 +101,6 @@ def construct_batch_transaction_message(
     """The one transaction digest for a (batch) mint: every quote input
     (quote_id, amount) in request order plus all blinded outputs. Every
     quote's witness signs this same message (spec 2.2.2)."""
-    from ..crypto.taproot import keyset_id_transcript_bytes
-    from ..crypto.transcript import (
-        TransactionShape,
-        TranscriptBlindedOutput,
-        TranscriptQuote,
-        transaction_digest,
-    )
-
     return transaction_digest(
         TransactionShape(
             mint_quote_inputs=[
@@ -140,10 +140,6 @@ def verify_mint_quote_v3(
     or script path ({"leaf", "control", ...}) against the quote lock point.
     For batch mints, pass every quote as `batch_quotes`; the digest covers
     them all and `quote_id`/`amount` are ignored."""
-    import json
-
-    from ..crypto.taproot import verify_script_path_spend
-
     digest = construct_batch_transaction_message(
         batch_quotes if batch_quotes is not None else [(quote_id, amount)], outputs
     )
