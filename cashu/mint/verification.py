@@ -1,5 +1,7 @@
+import json
 from typing import List, Literal, Optional, Tuple, Union
 
+from coincurve import PublicKeyXOnly
 from loguru import logger
 
 from ..core.base import (
@@ -16,7 +18,20 @@ from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.bls_dhke import keyed_verification
 from ..core.crypto.keys import PublicKey, is_bls_keyset
 from ..core.crypto.secp import PublicKey as SecpPublicKey
-from ..core.crypto.taproot import TAPROOT_MAX_WITNESS_LENGTH
+from ..core.crypto.taproot import (
+    TAPROOT_MAX_WITNESS_LENGTH,
+    is_taproot_point_secret,
+    keyset_id_transcript_bytes,
+    secret_transcript_bytes,
+    verify_script_path_spend,
+)
+from ..core.crypto.transcript import (
+    TransactionShape,
+    TranscriptBlindedOutput,
+    TranscriptProofInput,
+    TranscriptQuote,
+    transaction_digest,
+)
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
@@ -242,24 +257,6 @@ class LedgerVerification(
         invalid rejects the transaction. v0-v2 inputs keep their own rules and
         are skipped here, so mixed transactions verify per input as specified.
         """
-        import json
-
-        from coincurve import PublicKeyXOnly
-
-        from ..core.crypto.taproot import (
-            is_taproot_point_secret,
-            keyset_id_transcript_bytes,
-            secret_transcript_bytes,
-            verify_script_path_spend,
-        )
-        from ..core.crypto.transcript import (
-            TransactionShape,
-            TranscriptBlindedOutput,
-            TranscriptProofInput,
-            TranscriptQuote,
-            transaction_digest,
-        )
-
         if not proofs or (not outputs and melt_quote is None):
             return
         if not any(is_taproot_point_secret(p.secret, p.id) for p in proofs):

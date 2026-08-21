@@ -14,6 +14,8 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.taproot import is_taproot_point_secret
 from ..core.db import Database
 from ..wallet.crud import (
     get_keysets,
@@ -227,9 +229,6 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         without one (or non-v3) are left untouched. The receiver needs `k` to
         run the receive cascade and sign the sweep's transaction witness.
         """
-        from ..core.crypto.secp import PrivateKey as SecpPrivateKey
-        from ..core.crypto.taproot import is_taproot_point_secret
-
         derive = getattr(self, "derive_v3_secret_key", None)
         if derive is None:
             return

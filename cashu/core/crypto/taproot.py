@@ -8,9 +8,13 @@ shared vectors in tests/taproot_v3_vectors.json.
 """
 
 import hashlib
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+from coincurve import PublicKeyXOnly
+
+from .keys import is_bls_keyset
 from .secp import PrivateKey, PublicKey
 
 TAPROOT_LEAF_TAG = "Cashu_NutrootLeaf"
@@ -386,8 +390,6 @@ def secret_transcript_bytes(secret: str, keyset_id: str) -> bytes:
     A v3 point secret contributes its raw 33 bytes; a v0-v2 secret contributes
     its utf8 bytes, which is what mixed transactions need.
     """
-    from .keys import is_bls_keyset
-
     if is_bls_keyset(keyset_id):
         return bytes.fromhex(secret)
     return secret.encode("utf-8")
@@ -411,8 +413,6 @@ def keyset_id_transcript_bytes(keyset_id: str) -> bytes:
 
 def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
     """True when a v3 keyset proof's secret is a 33-byte compressed point hex."""
-    from .keys import is_bls_keyset
-
     if not is_bls_keyset(keyset_id):
         return False
     if len(secret) != 66 or secret[:2] not in ("02", "03"):
@@ -439,11 +439,6 @@ def verify_script_path_spend(
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
     transaction digest. Raises ValueError on any failure (fail closed).
     """
-    import hashlib as _hashlib
-    import time as _time
-
-    from coincurve import PublicKeyXOnly
-
     leaf_bytes = bytes.fromhex(witness["leaf"])
     control = witness["control"]
     internal_key = bytes.fromhex(control["K"])
@@ -454,7 +449,7 @@ def verify_script_path_spend(
 
     if leaf.type == "after":
         assert leaf.time is not None
-        if (now if now is not None else _time.time()) < leaf.time:
+        if (now if now is not None else time.time()) < leaf.time:
             raise ValueError("after leaf locktime not reached")
 
     if leaf.type == "hashlock":
@@ -465,7 +460,7 @@ def verify_script_path_spend(
         preimage = bytes.fromhex(preimage_hex)
         if len(preimage) > preimage_max_len:
             raise ValueError("hashlock preimage too long")
-        if _hashlib.sha256(preimage).digest() != leaf.hash:
+        if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
 
     signatures = witness.get("signatures") or []

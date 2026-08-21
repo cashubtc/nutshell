@@ -21,6 +21,8 @@ from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.bls import PrivateKey as BlsPrivateKey
 from .crypto.bls import PublicKey as BlsPublicKey
+from .crypto.bls_dhke import hash_to_curve as bls_hash_to_curve
+from .crypto.bls_dhke import secret_to_hash_input
 from .crypto.keys import (
     derive_keys,
     derive_keys_deprecated_pre_0_15,
@@ -181,9 +183,6 @@ class Proof(BaseModel):
         if is_bls_keyset(self.id):
             # V3: Y lives on BLS G1, hashed over the secret's raw bytes for
             # point secrets (taproot) with utf8 fallback for legacy secrets.
-            from .crypto.bls_dhke import hash_to_curve as bls_hash_to_curve
-            from .crypto.bls_dhke import secret_to_hash_input
-
             self.Y = bls_hash_to_curve(secret_to_hash_input(self.secret)).format().hex()
         else:
             self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
