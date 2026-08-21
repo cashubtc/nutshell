@@ -247,32 +247,40 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
                 return digest
         raise RuntimeError(f"V3 derivation failed for type {derivation_type}")
 
-    def derive_v3_secret_key(self, counter: int, keyset_id: str) -> bytes:
+    def derive_v3_secret_key(self, counter: int, keyset_id: str) -> SecpPrivateKey:
         """Derive the internal private key behind a v3 point secret (type 0x00)."""
-        return self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_SECRET_KEY)
+        return SecpPrivateKey(
+            self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_SECRET_KEY)
+        )
 
-    def derive_v3_nums_offset(self, counter: int, keyset_id: str) -> bytes:
+    def derive_v3_nums_offset(self, counter: int, keyset_id: str) -> SecpPrivateKey:
         """Derive the NUMS offset u for a self-owned script-only secret (type 0x02).
 
         Shares the proof's counter with the secret key and blinding factor, so reusing a
         counter repeats B_ and the mint refuses it.
         """
-        return self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_NUMS_OFFSET)
+        return SecpPrivateKey(
+            self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_NUMS_OFFSET)
+        )
 
-    def derive_v3_leaf_key(self, counter: int, keyset_id: str, index: int) -> bytes:
+    def derive_v3_leaf_key(
+        self, counter: int, keyset_id: str, index: int
+    ) -> SecpPrivateKey:
         """Derive a self-owned leaf key at index i (type 0x03).
 
         `i` has no canonical meaning and must not be read from a leaf's position:
         recover by deriving candidates and matching the tree's keys by value.
         """
-        return self._derive_v3_scalar(
-            counter,
-            keyset_id,
-            DERIVATION_TYPE_LEAF_KEY,
-            suffix=index.to_bytes(4, byteorder="big", signed=False),
+        return SecpPrivateKey(
+            self._derive_v3_scalar(
+                counter,
+                keyset_id,
+                DERIVATION_TYPE_LEAF_KEY,
+                suffix=index.to_bytes(4, byteorder="big", signed=False),
+            )
         )
 
-    def derive_v3_quote_lock_key(self, counter: int) -> bytes:
+    def derive_v3_quote_lock_key(self, counter: int) -> SecpPrivateKey:
         """Derive a mint quote lock key (NUT-13 message type 0x04, defined in NUT-20).
 
         No keyset: a quote is requested before one is chosen, so binding the key to
@@ -281,7 +289,9 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         quote counter, never the proof counter, because a quote may mint nothing and
         a lock key may be handed over for delegated minting.
         """
-        return self._derive_v3_scalar(counter, None, DERIVATION_TYPE_QUOTE_LOCK)
+        return SecpPrivateKey(
+            self._derive_v3_scalar(counter, None, DERIVATION_TYPE_QUOTE_LOCK)
+        )
 
     async def _derive_secret_hmac_sha256_v3(
         self, counter: int, keyset_id: str
@@ -294,7 +304,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         - type 0x01: BLS Fr rejection sampling.
         """
         secret_key = self.derive_v3_secret_key(counter, keyset_id)
-        secret = SecpPrivateKey(secret_key).public_key.format()
+        secret = secret_key.public_key.format()
         r = self._derive_v3_scalar(
             counter, keyset_id, DERIVATION_TYPE_BLINDING_FACTOR, BLS_FR_ORDER
         )
