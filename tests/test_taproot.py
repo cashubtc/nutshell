@@ -11,7 +11,7 @@ import os
 import pytest
 from coincurve import PublicKeyXOnly
 
-from cashu.core.crypto.secp import PrivateKey
+from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.crypto.taproot import (
     TAPROOT_BRANCH_TAG,
     TAPROOT_LEAF_TAG,
@@ -88,7 +88,7 @@ def test_leaf_serialization_6_1():
         TaprootLeaf(
             type="after",
             n=1,
-            keys=[bytes.fromhex(V61["alice_refund_pub"])],
+            keys=[PublicKey(bytes.fromhex(V61["alice_refund_pub"]))],
             time=V61["refund_time"],
         )
     )
@@ -96,7 +96,7 @@ def test_leaf_serialization_6_1():
     parsed = parse_taproot_leaf(leaf)
     assert parsed.type == "after"
     assert parsed.n == 1
-    assert parsed.keys == [bytes.fromhex(V61["alice_refund_pub"])]
+    assert [key.format().hex() for key in parsed.keys] == [V61["alice_refund_pub"]]
     assert parsed.time == V61["refund_time"]
     assert taproot_leaf_hash(leaf).hex() == V61["merkle_root"]
 
@@ -106,7 +106,7 @@ def test_leaf_serialization_6_2():
         TaprootLeaf(
             type="after",
             n=1,
-            keys=[bytes.fromhex(V62["kid_pub"])],
+            keys=[PublicKey(bytes.fromhex(V62["kid_pub"]))],
             time=V62["vest_time"],
         )
     )
@@ -139,7 +139,7 @@ def test_leaf_parsing_fails_closed():
     parsed = parse_taproot_leaf(unknown_odd)
     assert parsed.type == "threshold"
     assert parsed.n == 1
-    assert parsed.keys == [bytes.fromhex(V61["carol_pub"])]
+    assert [key.format().hex() for key in parsed.keys] == [V61["carol_pub"]]
 
     at_limit = (
         b"\x00\x01"
@@ -149,9 +149,7 @@ def test_leaf_parsing_fails_closed():
     assert len(at_limit) == 1025
     assert parse_taproot_leaf(at_limit).type == "threshold"
     over_limit = (
-        b"\x00\x01"
-        + base_fields
-        + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
+        b"\x00\x01" + base_fields + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
     )
     with pytest.raises(ValueError, match="body exceeds"):
         parse_taproot_leaf(over_limit)
@@ -160,11 +158,7 @@ def test_leaf_parsing_fails_closed():
     with pytest.raises(ValueError, match="multiple of 33"):
         parse_taproot_leaf(bad_keys)
 
-    threshold_with_time = (
-        b"\x00\x01"
-        + base_fields
-        + tlv_record(0x06, b"\x01")
-    )
+    threshold_with_time = b"\x00\x01" + base_fields + tlv_record(0x06, b"\x01")
     with pytest.raises(ValueError, match="must not carry a time"):
         parse_taproot_leaf(threshold_with_time)
 
@@ -181,23 +175,19 @@ def test_leaf_parsing_fails_closed():
             TaprootLeaf(
                 type="threshold",
                 n=1,
-                keys=[bytes.fromhex(V61["carol_pub"])],
+                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
                 time=1,
             )
         )
 
     invalid_key = b"\x02" + b"\xff" * 32
     invalid_point = (
-        b"\x00\x01"
-        + tlv_record(0x02, b"\x01")
-        + tlv_record(0x04, invalid_key)
+        b"\x00\x01" + tlv_record(0x02, b"\x01") + tlv_record(0x04, invalid_key)
     )
     with pytest.raises(ValueError, match="valid compressed"):
         parse_taproot_leaf(invalid_point)
     with pytest.raises(ValueError):
-        serialize_taproot_leaf(
-            TaprootLeaf(type="threshold", n=1, keys=[invalid_key])
-        )
+        PublicKey(invalid_key)
 
     impossible_threshold = (
         b"\x00\x01"
@@ -211,7 +201,7 @@ def test_leaf_parsing_fails_closed():
             TaprootLeaf(
                 type="threshold",
                 n=2,
-                keys=[bytes.fromhex(V61["carol_pub"])],
+                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
             )
         )
 
@@ -272,27 +262,31 @@ def test_merkle_root_is_order_independent():
 
 
 def test_tweak_math_6_1():
-    K = bytes.fromhex(V61["internal_key"])
+    K = PrivateKey(bytes.fromhex(V61["carol_priv"])).public_key.add(
+        bytes.fromhex(V61["p2bk_r"])
+    )
     root = bytes.fromhex(V61["merkle_root"])
     assert format(taproot_tweak(K, root), "064x") == V61["tweak"]
-    assert taproot_tweak_pubkey(K, root).hex() == V61["secret"]
+    assert taproot_tweak_pubkey(K, root).format().hex() == V61["secret"]
 
     internal_seckey = (
         int(V61["carol_priv"], 16) + int(V61["p2bk_r"], 16)
     ) % SECP256K1_N
-    p_prime = taproot_tweak_seckey(internal_seckey.to_bytes(32, "big"), root)
-    assert p_prime.hex() == V61["keypath_priv"]
-    pub = PrivateKey(p_prime).public_key
+    p_prime = taproot_tweak_seckey(
+        PrivateKey(internal_seckey.to_bytes(32, "big")), root
+    )
+    assert p_prime.secret.hex() == V61["keypath_priv"]
+    pub = p_prime.public_key
     assert pub and pub.format().hex() == V61["secret"]
 
 
 def test_tweak_math_6_2():
-    K = bytes.fromhex(V62["internal_key"])
+    K = PrivateKey(bytes.fromhex(V62["parent_priv"])).public_key
     root = bytes.fromhex(V62["merkle_root"])
     assert format(taproot_tweak(K, root), "064x") == V62["tweak"]
-    assert taproot_tweak_pubkey(K, root).hex() == V62["secret"]
-    p_prime = taproot_tweak_seckey(int(V62["parent_priv"], 16).to_bytes(32, "big"), root)
-    pub = PrivateKey(p_prime).public_key
+    assert taproot_tweak_pubkey(K, root).format().hex() == V62["secret"]
+    p_prime = taproot_tweak_seckey(PrivateKey(bytes.fromhex(V62["parent_priv"])), root)
+    pub = p_prime.public_key
     assert pub and pub.format().hex() == V62["secret"]
 
 
@@ -324,28 +318,30 @@ def test_keypath_signature_reproduces():
 
 def test_script_path_commitment():
     assert verify_taproot_commitment(
-        bytes.fromhex(V61["secret"]),
-        bytes.fromhex(V61["scriptpath_witness"]["control"]["K"]),
+        PrivateKey(bytes.fromhex(V61["keypath_priv"])).public_key,
+        PrivateKey(bytes.fromhex(V61["carol_priv"])).public_key.add(
+            bytes.fromhex(V61["p2bk_r"])
+        ),
         bytes.fromhex(V61["scriptpath_witness"]["leaf"]),
         [bytes.fromhex(p) for p in V61["scriptpath_witness"]["control"]["path"]],
     )
     assert verify_taproot_commitment(
-        bytes.fromhex(V62["secret"]),
-        bytes.fromhex(V62["melt_witness"]["control"]["K"]),
+        PublicKey(bytes.fromhex(V62["secret"])),
+        PublicKey(bytes.fromhex(V62["melt_witness"]["control"]["K"])),
         bytes.fromhex(V62["melt_witness"]["leaf"]),
         [bytes.fromhex(p) for p in V62["melt_witness"]["control"]["path"]],
     )
     # Wrong merkle path fails
     assert not verify_taproot_commitment(
-        bytes.fromhex(V62["secret"]),
-        bytes.fromhex(V62["melt_witness"]["control"]["K"]),
+        PublicKey(bytes.fromhex(V62["secret"])),
+        PublicKey(bytes.fromhex(V62["melt_witness"]["control"]["K"])),
         bytes.fromhex(V62["melt_witness"]["leaf"]),
         [bytes.fromhex(V62["leaf_hash_melt_to"])],
     )
     # Wrong internal key fails
     assert not verify_taproot_commitment(
-        bytes.fromhex(V62["secret"]),
-        bytes.fromhex(V61["internal_key"]),
+        PublicKey(bytes.fromhex(V62["secret"])),
+        PublicKey(bytes.fromhex(V61["internal_key"])),
         bytes.fromhex(V62["melt_witness"]["leaf"]),
         [bytes.fromhex(p) for p in V62["melt_witness"]["control"]["path"]],
     )
@@ -360,9 +356,12 @@ def test_script_path_commitment():
 def test_zero_tweak_keeps_internal_key(monkeypatch):
     from cashu.core.crypto import taproot as taproot_crypto
 
-    internal_key = bytes.fromhex(V61["internal_key"])
+    internal_key = PublicKey(bytes.fromhex(V61["internal_key"]))
     monkeypatch.setattr(taproot_crypto, "taproot_tweak", lambda *_: 0)
-    assert taproot_crypto.taproot_tweak_pubkey(internal_key) == internal_key
+    assert (
+        taproot_crypto.taproot_tweak_pubkey(internal_key).format()
+        == internal_key.format()
+    )
 
 
 def test_bearer_contrast():
@@ -403,24 +402,24 @@ async def test_nut13_v3_derivation_type_vectors():
     keyset_id = nut13["keyset_id"]
     for output in nut13["outputs"]:
         offset = secrets.derive_v3_nums_offset(output["counter"], keyset_id)
-        assert offset.hex() == output["nums_offset"]
+        assert offset.secret.hex() == output["nums_offset"]
     for leaf in nut13["leaf_keys"]:
         key = secrets.derive_v3_leaf_key(leaf["counter"], keyset_id, leaf["index"])
-        assert key.hex() == leaf["privkey"]
-        pub = PrivateKey(key).public_key
+        assert key.secret.hex() == leaf["privkey"]
+        pub = key.public_key
         assert pub and pub.format().hex() == leaf["pubkey"]
     for lock in nut13["quote_locks"]:
         key = secrets.derive_v3_quote_lock_key(lock["counter"])
-        assert key.hex() == lock["privkey"]
-        pub = PrivateKey(key).public_key
+        assert key.secret.hex() == lock["privkey"]
+        pub = key.public_key
         assert pub and pub.format().hex() == lock["pubkey"]
     # One counter describes one proof completely, so its components must not collide.
     counter = nut13["outputs"][0]["counter"]
     derived = {
-        secrets.derive_v3_secret_key(counter, keyset_id),
-        secrets.derive_v3_nums_offset(counter, keyset_id),
-        secrets.derive_v3_leaf_key(counter, keyset_id, 0),
-        secrets.derive_v3_quote_lock_key(counter),
+        secrets.derive_v3_secret_key(counter, keyset_id).secret,
+        secrets.derive_v3_nums_offset(counter, keyset_id).secret,
+        secrets.derive_v3_leaf_key(counter, keyset_id, 0).secret,
+        secrets.derive_v3_quote_lock_key(counter).secret,
     }
     assert len(derived) == 4
 
@@ -448,8 +447,9 @@ def test_threshold_leaf_rejects_parity_twin_keys():
 
     priv = PrivateKey()
     assert priv.public_key
-    pub = priv.public_key.format()
-    twin = (b"\x03" if pub[0] == 2 else b"\x02") + pub[1:]
+    pub = priv.public_key
+    pub_bytes = pub.format()
+    twin = PublicKey((b"\x03" if pub_bytes[0] == 2 else b"\x02") + pub_bytes[1:])
     leaf = TaprootLeaf(type="threshold", n=2, keys=[pub, twin])
     with pytest.raises(ValueError, match="distinct keys"):
         serialize_taproot_leaf(leaf)
@@ -472,7 +472,9 @@ def test_point_secret_hashes_as_raw_bytes():
     from cashu.core.crypto.taproot import secret_transcript_bytes
 
     point = output["secret"]
-    assert secret_transcript_bytes(point, VECTORS["nut13_v3"]["keyset_id"]) == bytes.fromhex(point)
+    assert secret_transcript_bytes(
+        point, VECTORS["nut13_v3"]["keyset_id"]
+    ) == bytes.fromhex(point)
     assert secret_transcript_bytes(point, "01" + "11" * 32) == point.encode()
 
 
@@ -544,9 +546,7 @@ def test_transcript_rejects_empty_sections():
     tv = VECTORS["transcript"]["swap"]
     tx = _tx_from_vector(tv["tx"])
     with pytest.raises(ValueError, match="input"):
-        build_transaction_transcript(
-            type(tx)(blinded_outputs=tx.blinded_outputs)
-        )
+        build_transaction_transcript(type(tx)(blinded_outputs=tx.blinded_outputs))
     with pytest.raises(ValueError, match="output"):
         build_transaction_transcript(type(tx)(proof_inputs=tx.proof_inputs))
 
@@ -758,24 +758,36 @@ def test_leaf_forms_match_the_shared_vectors():
 
     lf = VECTORS["leaf_forms"]
     v = VECTORS["example_6_1"]
-    carol = bytes.fromhex(v["carol_pub"])
-    alice = bytes.fromhex(v["alice_refund_pub"])
+    carol = PublicKey(bytes.fromhex(v["carol_pub"]))
+    alice = PublicKey(bytes.fromhex(v["alice_refund_pub"]))
 
-    assert serialize_taproot_leaf(TaprootLeaf(type="threshold", n=1, keys=[carol])).hex() == lf["threshold_1of1"]
     assert (
-        serialize_taproot_leaf(TaprootLeaf(type="threshold", n=2, keys=[carol, alice])).hex()
+        serialize_taproot_leaf(TaprootLeaf(type="threshold", n=1, keys=[carol])).hex()
+        == lf["threshold_1of1"]
+    )
+    assert (
+        serialize_taproot_leaf(
+            TaprootLeaf(type="threshold", n=2, keys=[carol, alice])
+        ).hex()
         == lf["threshold_2of2"]
     )
     assert (
         serialize_taproot_leaf(
-            TaprootLeaf(type="hashlock", n=1, keys=[carol], hash=bytes.fromhex(lf["hashlock_hash"]))
+            TaprootLeaf(
+                type="hashlock",
+                n=1,
+                keys=[carol],
+                hash=bytes.fromhex(lf["hashlock_hash"]),
+            )
         ).hex()
         == lf["hashlock"]
     )
 
     hashes = [taproot_leaf_hash(bytes.fromhex(x)) for x in lf["three_leaf_tree"]]
     assert taproot_merkle_root(hashes).hex() == lf["three_leaf_root"]
-    assert [h.hex() for h in taproot_merkle_path(hashes, 2)] == lf["three_leaf_path_index_2"]
+    assert [h.hex() for h in taproot_merkle_path(hashes, 2)] == lf[
+        "three_leaf_path_index_2"
+    ]
 
 
 def test_empty_tweak_matches_the_shared_vector():
@@ -788,8 +800,8 @@ def test_empty_tweak_matches_the_shared_vector():
     from cashu.core.crypto.taproot import taproot_tweak, taproot_tweak_pubkey
 
     v = VECTORS["empty_tweak"]
-    K = bytes.fromhex(v["internal_key"])
-    assert taproot_tweak_pubkey(K).hex() == v["secret"]
+    K = PublicKey(bytes.fromhex(v["internal_key"]))
+    assert taproot_tweak_pubkey(K).format().hex() == v["secret"]
     assert f"{taproot_tweak(K):064x}" == v["tweak"]
     # With a root it is a different tweak entirely, which is what stops an empty-tweak secret
     # being mistaken for a tree-committed one.
@@ -856,9 +868,9 @@ def test_resolve_v3_secret_key_prefers_spend_info():
         C="84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327",
         spend_info=SpendInfo(k=n13["outputs"][0]["secret_key"]),
     )
-    assert wallet._resolve_v3_secret_key(proof) == bytes.fromhex(
-        n13["outputs"][0]["secret_key"]
-    )
+    resolved = wallet._resolve_v3_secret_key(proof)
+    assert resolved is not None
+    assert resolved.secret == bytes.fromhex(n13["outputs"][0]["secret_key"])
     # Wrong bearer key and no derivation path -> None
     proof.spend_info = SpendInfo(k="11" * 32)
     assert wallet._resolve_v3_secret_key(proof) is None
@@ -867,9 +879,11 @@ def test_resolve_v3_secret_key_prefers_spend_info():
 def _sign_digest(privkey_int: int, digest: bytes) -> str:
     from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey
 
-    return SecpPrivateKey(privkey_int.to_bytes(32, "big")).sign_schnorr(
-        digest, b"\x00" * 32
-    ).hex()
+    return (
+        SecpPrivateKey(privkey_int.to_bytes(32, "big"))
+        .sign_schnorr(digest, b"\x00" * 32)
+        .hex()
+    )
 
 
 def test_script_path_spend_after_leaf_vectors():
@@ -883,18 +897,22 @@ def test_script_path_spend_after_leaf_vectors():
         "signatures": v61["scriptpath_witness"]["signatures"],
     }
     digest = bytes.fromhex(v61["transcript_digest"])
-    secret = bytes.fromhex(v61["secret"])
+    secret = PublicKey(bytes.fromhex(v61["secret"]))
     # After the locktime: passes.
     verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] + 1)
     # Before the locktime: fails closed.
     with pytest.raises(ValueError, match="locktime"):
         verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] - 1)
     # Wrong merkle path: fails.
-    bad = dict(witness, control={"K": witness["control"]["K"], "path": [v61["merkle_root"]]})
+    bad = dict(
+        witness, control={"K": witness["control"]["K"], "path": [v61["merkle_root"]]}
+    )
     with pytest.raises(ValueError, match="commitment"):
         verify_script_path_spend(secret, digest, bad, now=v61["refund_time"] + 1)
     # Wrong signature (kid key 3 signed a different digest): threshold fails.
-    bad_sig = dict(witness, signatures=[VECTORS["example_6_2"]["melt_witness"]["signatures"][0]])
+    bad_sig = dict(
+        witness, signatures=[VECTORS["example_6_2"]["melt_witness"]["signatures"][0]]
+    )
     with pytest.raises(ValueError, match="threshold"):
         verify_script_path_spend(secret, digest, bad_sig, now=v61["refund_time"] + 1)
 
@@ -911,7 +929,7 @@ def test_script_path_unknown_leaf_type_fails_closed():
     }
     with pytest.raises(ValueError, match="Unknown leaf type"):
         verify_script_path_spend(
-            bytes.fromhex(v62["secret"]),
+            PublicKey(bytes.fromhex(v62["secret"])),
             bytes.fromhex(v62["transcript_digest"]),
             witness,
         )
@@ -932,10 +950,8 @@ def test_script_path_threshold_and_hashlock():
         verify_script_path_spend,
     )
 
-    keys = {
-        i: SecpPrivateKey(i.to_bytes(32, "big")).public_key.format() for i in (3, 4, 9)
-    }
-    internal_key = SecpPrivateKey((6).to_bytes(32, "big")).public_key.format()
+    keys = {i: SecpPrivateKey(i.to_bytes(32, "big")).public_key for i in (3, 4, 9)}
+    internal_key = SecpPrivateKey((6).to_bytes(32, "big")).public_key
     preimage = b"\x07" * 32
     leaf_threshold = serialize_taproot_leaf(
         TaprootLeaf(type="threshold", n=2, keys=[keys[3], keys[4], keys[9]])
@@ -960,7 +976,7 @@ def test_script_path_threshold_and_hashlock():
         {
             "leaf": leaf_threshold.hex(),
             "control": {
-                "K": internal_key.hex(),
+                "K": internal_key.format().hex(),
                 "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
             },
             "signatures": [_sign_digest(3, digest), _sign_digest(9, digest)],
@@ -974,7 +990,7 @@ def test_script_path_threshold_and_hashlock():
             {
                 "leaf": leaf_threshold.hex(),
                 "control": {
-                    "K": internal_key.hex(),
+                    "K": internal_key.format().hex(),
                     "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest)],
@@ -988,7 +1004,7 @@ def test_script_path_threshold_and_hashlock():
             {
                 "leaf": leaf_threshold.hex(),
                 "control": {
-                    "K": internal_key.hex(),
+                    "K": internal_key.format().hex(),
                     "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest), _sign_digest(3, digest)],
@@ -999,7 +1015,7 @@ def test_script_path_threshold_and_hashlock():
     hashlock_witness = {
         "leaf": leaf_hashlock.hex(),
         "control": {
-            "K": internal_key.hex(),
+            "K": internal_key.format().hex(),
             "path": [h.hex() for h in taproot_merkle_path(hashes, 1)],
         },
         "signatures": [_sign_digest(3, digest)],
@@ -1050,7 +1066,9 @@ def test_mint_accepts_script_path_witness_on_swap():
             ],
             blinded_outputs=[
                 TranscriptBlindedOutput(
-                    amount=o.amount, keyset_id=bytes.fromhex(o.id), B_=bytes.fromhex(o.B_)
+                    amount=o.amount,
+                    keyset_id=bytes.fromhex(o.id),
+                    B_=bytes.fromhex(o.B_),
                 )
                 for o in outputs
             ],
@@ -1090,7 +1108,7 @@ def test_leaf_time_is_bounded():
             TaprootLeaf(
                 type="after",
                 n=1,
-                keys=[bytes.fromhex(V61["carol_pub"])],
+                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
                 time=TAPROOT_MAX_LEAF_TIME + 1,
             )
         )
@@ -1140,7 +1158,9 @@ def test_v3_witness_does_not_travel_in_a_token():
     assert TokenV4Proof.from_proof(proof).w is None
 
     carried = TokenV4Proof.from_proof(proof)
-    carried.w = '{"signatures":["' + "00" * 64 + '"]}'  # as a hostile sender would send it
+    carried.w = (
+        '{"signatures":["' + "00" * 64 + '"]}'
+    )  # as a hostile sender would send it
     token = TokenV4(
         m="https://m.example",
         u="sat",

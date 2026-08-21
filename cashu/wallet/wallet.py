@@ -798,21 +798,21 @@ class Wallet(
             secret_key = self._resolve_v3_secret_key(proof)
             if secret_key is None:
                 continue
-            signature = SecpPrivateKey(secret_key).sign_schnorr(
+            signature = secret_key.sign_schnorr(
                 digest,
                 None,  # type: ignore
             )
             proof.witness = json.dumps({"signatures": [signature.hex()]})
         return proofs
 
-    def _resolve_v3_secret_key(self, proof: Proof) -> Optional[bytes]:
+    def _resolve_v3_secret_key(self, proof: Proof) -> Optional[SecpPrivateKey]:
         """The internal key behind a v3 point secret: bearer spend info first,
         then re-derivation from the stored derivation path. None if neither
         yields a key matching the secret."""
         if proof.spend_info and proof.spend_info.k:
             try:
-                secret_key = bytes.fromhex(proof.spend_info.k)
-                pub = SecpPrivateKey(secret_key).public_key
+                secret_key = SecpPrivateKey(bytes.fromhex(proof.spend_info.k))
+                pub = secret_key.public_key
                 if pub and pub.format().hex() == proof.secret:
                     return secret_key
             except Exception:
@@ -823,7 +823,7 @@ class Wallet(
         try:
             _, path_keyset_id, counter_str = path.split(":")
             secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
-            pub = SecpPrivateKey(secret_key).public_key
+            pub = secret_key.public_key
             assert pub and pub.format().hex() == proof.secret
             return secret_key
         except Exception:
