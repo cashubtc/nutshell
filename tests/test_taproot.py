@@ -233,8 +233,10 @@ def test_merkle_tree_6_2():
 
 def test_merkle_tree_folding():
     hashes = [hashlib.sha256(bytes([i])).digest() for i in range(1, 5)]
-    b12 = taproot_branch_hash(hashes[0], hashes[1])
-    b34 = taproot_branch_hash(hashes[2], hashes[3])
+    # The fold sorts, so build the expected tree over the sorted list.
+    s = sorted(hashes)
+    b12 = taproot_branch_hash(s[0], s[1])
+    b34 = taproot_branch_hash(s[2], s[3])
     root = taproot_branch_hash(b12, b34)
     assert taproot_merkle_root(hashes) == root
     for i in range(4):
@@ -243,11 +245,30 @@ def test_merkle_tree_folding():
         assert taproot_root_from_path(hashes[i], path) == root
 
     three = hashes[:3]
-    root3 = taproot_branch_hash(taproot_branch_hash(three[0], three[1]), three[2])
+    s3 = sorted(three)
+    root3 = taproot_branch_hash(taproot_branch_hash(s3[0], s3[1]), s3[2])
     assert taproot_merkle_root(three) == root3
-    path2 = taproot_merkle_path(three, 2)
+    # The promoted (last sorted) leaf has the single-sibling path.
+    promoted = three.index(s3[2])
+    path2 = taproot_merkle_path(three, promoted)
     assert len(path2) == 1
-    assert taproot_root_from_path(three[2], path2) == root3
+    assert taproot_root_from_path(three[promoted], path2) == root3
+
+
+def test_merkle_root_is_order_independent():
+    # The root commits the leaf set: every permutation folds to one root and
+    # every path still verifies. Before the sorted fold a reordered 3-leaf
+    # list produced a different root, silently invalidating stored proofs.
+    from itertools import permutations
+
+    hashes = [hashlib.sha256(bytes([i])).digest() for i in range(1, 4)]
+    root = taproot_merkle_root(hashes)
+    for perm in permutations(hashes):
+        order = list(perm)
+        assert taproot_merkle_root(order) == root
+        for i in range(len(order)):
+            path = taproot_merkle_path(order, i)
+            assert taproot_root_from_path(order[i], path) == root
 
 
 def test_tweak_math_6_1():

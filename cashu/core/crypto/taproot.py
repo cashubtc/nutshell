@@ -13,9 +13,9 @@ from typing import Dict, List, Optional, Tuple
 
 from .secp import PrivateKey, PublicKey
 
-TAPROOT_LEAF_TAG = "Cashu_TapLeaf"
-TAPROOT_BRANCH_TAG = "Cashu_TapBranch"
-TAPROOT_TWEAK_TAG = "Cashu_TapTweak"
+TAPROOT_LEAF_TAG = "Cashu_NutrootLeaf"
+TAPROOT_BRANCH_TAG = "Cashu_NutrootBranch"
+TAPROOT_TWEAK_TAG = "Cashu_NutrootTweak"
 
 TAPROOT_LEAF_VERSION = 0x00
 
@@ -237,7 +237,7 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
 
 
 def taproot_leaf_hash(serialized_leaf: bytes) -> bytes:
-    """tagged_hash("Cashu_TapLeaf", leaf)."""
+    """tagged_hash("Cashu_NutrootLeaf", leaf)."""
     return tagged_hash(TAPROOT_LEAF_TAG, serialized_leaf)
 
 
@@ -248,7 +248,13 @@ def taproot_branch_hash(a: bytes, b: bytes) -> bytes:
 
 
 def taproot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
-    """Fold leaf hashes to a root: pairwise per level, odd hash promoted.
+    """Fold leaf hashes to a root: sorted ascending, then pairwise per
+    level, odd hash promoted.
+
+    The sort makes the root a function of the leaf set: any transmitted
+    order reconstructs, so a store or codec that does not preserve list
+    order cannot invalidate a proof. Slot assignment (spec 2.7) still
+    walks the transmitted order; receivers match slot keys by value.
 
     Depth is a property of the tree, not of one leaf, so the cap is checked
     here and not only on a witness path. A tree of more than 2^8 leaves is
@@ -263,7 +269,7 @@ def taproot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
         raise ValueError("Merkle root of zero leaves")
     if len(leaf_hashes) > 2**TAPROOT_MAX_TREE_DEPTH:
         raise ValueError(f"Tree exceeds depth {TAPROOT_MAX_TREE_DEPTH}")
-    level = list(leaf_hashes)
+    level = sorted(leaf_hashes)
     while len(level) > 1:
         nxt = [
             taproot_branch_hash(level[i], level[i + 1])
@@ -276,12 +282,15 @@ def taproot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
 
 
 def taproot_merkle_path(leaf_hashes: List[bytes], index: int) -> List[bytes]:
-    """Merkle path for the leaf at index: sibling hashes on the way up."""
+    """Merkle path for the leaf at index (an index into the transmitted
+    list): sibling hashes on the way up the sorted fold."""
     if not 0 <= index < len(leaf_hashes):
         raise ValueError(f"Leaf index out of range: {index}")
     path: List[bytes] = []
-    level = list(leaf_hashes)
-    pos = index
+    level = sorted(leaf_hashes)
+    # Equal hashes are interchangeable under sorted-pair hashing, so first
+    # match is enough.
+    pos = level.index(leaf_hashes[index])
     while len(level) > 1:
         nxt = [
             taproot_branch_hash(level[i], level[i + 1])
@@ -313,7 +322,7 @@ def taproot_root_from_path(leaf_hash: bytes, path: List[bytes]) -> bytes:
 
 
 def taproot_tweak(internal_key: bytes, merkle_root: Optional[bytes] = None) -> int:
-    """Tweak scalar tagged_hash("Cashu_TapTweak", K || root) mod n.
+    """Tweak scalar tagged_hash("Cashu_NutrootTweak", K || root) mod n.
 
     Omit merkle_root for the empty tweak (aggregated keys, spec 3.8).
     """
