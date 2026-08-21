@@ -652,6 +652,58 @@ async def test_wallet_attaches_taproot_witnesses():
     out2 = wallet._attach_taproot_witnesses([foreign], outputs)
     assert out2[0].witness is None
 
+    # Mixed transactions include legacy inputs in the shared transcript while
+    # attaching a witness only to each v3 point-secret input.
+    legacy = Proof(
+        amount=4,
+        id="00ad268c4d1f5826",
+        secret="legacy-secret",
+        C=tv["tx"]["proof_inputs"][0]["C"],
+    )
+    mixed = wallet._attach_taproot_witnesses([proofs[0], legacy], outputs)
+    assert mixed[0].witness is not None
+    assert mixed[1].witness is None
+
+    from cashu.core.crypto.taproot import keyset_id_transcript_bytes
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        transaction_digest,
+    )
+
+    mixed_digest = transaction_digest(
+        TransactionShape(
+            proof_inputs=[
+                TranscriptProofInput(
+                    amount=proof.amount,
+                    keyset_id=keyset_id_transcript_bytes(proof.id),
+                    secret=(
+                        bytes.fromhex(proof.secret)
+                        if proof is proofs[0]
+                        else proof.secret.encode()
+                    ),
+                    C=bytes.fromhex(proof.C),
+                )
+                for proof in mixed
+            ],
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=output.amount,
+                    keyset_id=keyset_id_transcript_bytes(output.id),
+                    B_=bytes.fromhex(output.B_),
+                )
+                for output in outputs
+            ],
+        )
+    )
+    mixed_signature = json.loads(mixed[0].witness)["signatures"][0]
+    assert verify_schnorr_digest(
+        bytes.fromhex(mixed_signature),
+        mixed_digest,
+        bytes.fromhex(mixed[0].secret),
+    )
+
 
 def test_spend_info_roundtrips_through_tokenv4():
     from cashu.core.base import Proof, SpendInfo, TokenV4, TokenV4Proof, TokenV4Token
