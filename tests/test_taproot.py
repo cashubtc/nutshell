@@ -583,9 +583,11 @@ def test_mint_verifies_taproot_transaction_witnesses():
     with pytest.raises(TransactionError, match="missing taproot transaction witness"):
         verify(proofs, outputs)
 
-    # Valid witness passes.
+    # Valid witness passes, and the digest it signed is attached to the
+    # proof for NUT-07 storage.
     proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})
     verify(proofs, outputs)
+    assert proofs[0].digest == tv["digest"]
 
     # Tampered signature rejects.
     bad_sig = tv["signature"][:-2] + ("00" if tv["signature"][-2:] != "00" else "01")
