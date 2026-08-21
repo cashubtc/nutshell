@@ -55,13 +55,12 @@ SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 class TaprootLeaf:
     """A parsed declarative leaf (version 0x00).
 
-    Keys are 33-byte compressed SEC1. `time` is unix seconds; `hash` is 32
-    bytes.
+    Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes.
     """
 
     type: str
     n: int
-    keys: List[bytes]
+    keys: List[PublicKey]
     time: Optional[int] = None
     hash: Optional[bytes] = None
 
@@ -139,16 +138,13 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
         raise ValueError(f"Invalid threshold n: {leaf.n}")
     if not leaf.keys:
         raise ValueError("Leaf requires at least one key")
-    for key in leaf.keys:
-        if len(key) != 33:
-            raise ValueError(f"Leaf key must be 33 bytes, got {len(key)}")
-        PublicKey(key)
-    if len({key[1:] for key in leaf.keys}) != len(leaf.keys):
+    serialized_keys = [key.format() for key in leaf.keys]
+    if len({key[1:] for key in serialized_keys}) != len(serialized_keys):
         raise ValueError("Leaf must list distinct keys")
     if leaf.n > len(leaf.keys):
         raise ValueError("Threshold exceeds leaf key count")
     fields = tlv_record(_FIELD_N, bytes([leaf.n])) + tlv_record(
-        _FIELD_KEYS, b"".join(leaf.keys)
+        _FIELD_KEYS, b"".join(serialized_keys)
     )
     if leaf.type == "after":
         if leaf.time is None or leaf.time < 0:
@@ -187,7 +183,7 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
     if type_name is None:
         raise ValueError(f"Unknown leaf type: {data[1]}")
     n: Optional[int] = None
-    keys: Optional[List[bytes]] = None
+    keys: Optional[List[PublicKey]] = None
     time: Optional[int] = None
     hash_: Optional[bytes] = None
     for record_type, value in read_tlv_records(data[2:], unique_ascending=True):
@@ -198,10 +194,11 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
         elif record_type == _FIELD_KEYS:
             if len(value) == 0 or len(value) % 33 != 0:
                 raise ValueError("keys field length must be a positive multiple of 33")
-            keys = [value[i : i + 33] for i in range(0, len(value), 33)]
-            for key in keys:
+            serialized_keys = [value[i : i + 33] for i in range(0, len(value), 33)]
+            keys = []
+            for serialized_key in serialized_keys:
                 try:
-                    PublicKey(key)
+                    keys.append(PublicKey(serialized_key))
                 except ValueError:
                     raise ValueError(
                         "Leaf key must be a valid compressed secp256k1 point"
@@ -209,7 +206,7 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
             # Signatures verify against the x-only key, so two entries sharing an
             # x coordinate are one signer wearing two hats: a threshold counting
             # them separately would be satisfied by fewer signatures than it names.
-            if len({k[1:] for k in keys}) != len(keys):
+            if len({key[1:] for key in serialized_keys}) != len(serialized_keys):
                 raise ValueError("keys field must list distinct keys")
         elif record_type == _FIELD_TIME:
             time = read_minimal_be(value)
@@ -325,42 +322,40 @@ def taproot_root_from_path(leaf_hash: bytes, path: List[bytes]) -> bytes:
     return acc
 
 
-def taproot_tweak(internal_key: bytes, merkle_root: Optional[bytes] = None) -> int:
+def taproot_tweak(internal_key: PublicKey, merkle_root: Optional[bytes] = None) -> int:
     """Tweak scalar tagged_hash("Cashu_NutrootTweak", K || root) mod n.
 
     Omit merkle_root for the empty tweak (aggregated keys, spec 3.8).
     """
-    if len(internal_key) != 33:
-        raise ValueError("Internal key must be 33 bytes")
+    internal_key_bytes = internal_key.format()
     if merkle_root is not None:
-        digest = tagged_hash(TAPROOT_TWEAK_TAG, internal_key, merkle_root)
+        digest = tagged_hash(TAPROOT_TWEAK_TAG, internal_key_bytes, merkle_root)
     else:
-        digest = tagged_hash(TAPROOT_TWEAK_TAG, internal_key)
+        digest = tagged_hash(TAPROOT_TWEAK_TAG, internal_key_bytes)
     return int.from_bytes(digest, "big") % SECP256K1_N
 
 
 def taproot_tweak_pubkey(
-    internal_key: bytes, merkle_root: Optional[bytes] = None
-) -> bytes:
-    """The v3 secret P = K + t*G as compressed SEC1 bytes."""
+    internal_key: PublicKey, merkle_root: Optional[bytes] = None
+) -> PublicKey:
+    """The v3 secret P = K + t*G."""
     t = taproot_tweak(internal_key, merkle_root)
-    return PublicKey(internal_key).add(t.to_bytes(32, "big")).format()
+    return internal_key.add(t.to_bytes(32, "big"))
 
 
-def taproot_tweak_seckey(seckey: bytes, merkle_root: Optional[bytes] = None) -> bytes:
+def taproot_tweak_seckey(
+    private_key: PrivateKey, merkle_root: Optional[bytes] = None
+) -> PrivateKey:
     """Tweaked private key p' = (k + t) mod n for the key path."""
-    if len(seckey) != 32:
-        raise ValueError("Secret key must be 32 bytes")
-    private_key = PrivateKey(seckey)
     K = private_key.public_key
     assert K
-    t = taproot_tweak(K.format(), merkle_root)
-    return private_key.add(t.to_bytes(32, "big")).secret
+    t = taproot_tweak(K, merkle_root)
+    return private_key.add(t.to_bytes(32, "big"))
 
 
 def verify_taproot_commitment(
-    secret: bytes,
-    internal_key: bytes,
+    secret: PublicKey,
+    internal_key: PublicKey,
     serialized_leaf: bytes,
     merkle_path: List[bytes],
 ) -> bool:
@@ -368,10 +363,8 @@ def verify_taproot_commitment(
 
     Commitment only; evaluating the revealed leaf is the caller's job.
     """
-    if len(secret) != 33:
-        raise ValueError("Secret must be 33 bytes")
     root = taproot_root_from_path(taproot_leaf_hash(serialized_leaf), merkle_path)
-    return taproot_tweak_pubkey(internal_key, root) == secret
+    return taproot_tweak_pubkey(internal_key, root).format() == secret.format()
 
 
 def secret_transcript_bytes(secret: str, keyset_id: str) -> bytes:
@@ -417,7 +410,7 @@ def is_taproot_point_secret(secret: str, keyset_id: str) -> bool:
 
 
 def verify_script_path_spend(
-    secret: bytes,
+    secret: PublicKey,
     digest: bytes,
     witness: dict,
     now: Optional[float] = None,
@@ -431,7 +424,7 @@ def verify_script_path_spend(
     """
     leaf_bytes = bytes.fromhex(witness["leaf"])
     control = witness["control"]
-    internal_key = bytes.fromhex(control["K"])
+    internal_key = PublicKey(bytes.fromhex(control["K"]))
     path = [bytes.fromhex(h) for h in control.get("path", [])]
     if not verify_taproot_commitment(secret, internal_key, leaf_bytes, path):
         raise ValueError("script path commitment does not reach the secret")
@@ -459,10 +452,11 @@ def verify_script_path_spend(
     unique_sigs = list(dict.fromkeys(signatures))
     satisfied_keys = set()
     for key in leaf.keys:
+        key_bytes = key.format()
         for sig_hex in unique_sigs:
             try:
-                if PublicKeyXOnly(key[1:]).verify(bytes.fromhex(sig_hex), digest):
-                    satisfied_keys.add(key)
+                if PublicKeyXOnly(key_bytes[1:]).verify(bytes.fromhex(sig_hex), digest):
+                    satisfied_keys.add(key_bytes[1:])
                     break
             except Exception:
                 continue
