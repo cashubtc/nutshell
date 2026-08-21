@@ -344,12 +344,7 @@ def taproot_tweak_pubkey(
 ) -> bytes:
     """The v3 secret P = K + t*G as compressed SEC1 bytes."""
     t = taproot_tweak(internal_key, merkle_root)
-    if t == 0:
-        return PublicKey(internal_key).format()
-    tweak_point = PrivateKey(t.to_bytes(32, "big")).public_key
-    assert tweak_point
-    P = PublicKey.combine_keys([PublicKey(internal_key), tweak_point])
-    return P.format()
+    return PublicKey(internal_key).add(t.to_bytes(32, "big")).format()
 
 
 def taproot_tweak_seckey(seckey: bytes, merkle_root: Optional[bytes] = None) -> bytes:
