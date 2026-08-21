@@ -32,6 +32,18 @@ from ..core.crypto.keys import (
 )
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.secp import PublicKey as SecpPublicKey
+from ..core.crypto.taproot import (
+    is_taproot_point_secret,
+    keyset_id_transcript_bytes,
+    secret_transcript_bytes,
+)
+from ..core.crypto.transcript import (
+    TransactionShape,
+    TranscriptBlindedOutput,
+    TranscriptProofInput,
+    TranscriptQuote,
+    transaction_digest,
+)
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -750,21 +762,6 @@ class Wallet(
         unsigned. Legacy inputs are included in mixed-transaction transcripts
         but do not receive a taproot witness.
         """
-        import json as _json
-
-        from ..core.crypto.taproot import (
-            is_taproot_point_secret,
-            keyset_id_transcript_bytes,
-            secret_transcript_bytes,
-        )
-        from ..core.crypto.transcript import (
-            TransactionShape,
-            TranscriptBlindedOutput,
-            TranscriptProofInput,
-            TranscriptQuote,
-            transaction_digest,
-        )
-
         if not proofs or not any(
             is_taproot_point_secret(p.secret, p.id) for p in proofs
         ):
@@ -805,7 +802,7 @@ class Wallet(
                 digest,
                 None,  # type: ignore
             )
-            proof.witness = _json.dumps({"signatures": [signature.hex()]})
+            proof.witness = json.dumps({"signatures": [signature.hex()]})
         return proofs
 
     def _resolve_v3_secret_key(self, proof: Proof) -> Optional[bytes]:
