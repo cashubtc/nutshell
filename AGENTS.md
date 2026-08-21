@@ -38,6 +38,12 @@
   and use `List[Step]` instead of
   `List[Tuple[Proof, Union[int, float], Optional[Proof]]]`.
 
+### Imports
+
+- Keep imports at module scope at the top of each production Python module.
+- Do not add imports inside functions, methods, or conditional blocks unless a
+  documented circular dependency or optional dependency requires lazy loading.
+
 ### Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
