@@ -747,13 +747,15 @@ class Wallet(
         Builds the transcript from the request's own inputs and outputs and signs
         its digest with each input's internal key, re-derived from the proof's
         stored derivation path. Inputs without a re-derivable key are left
-        unsigned. No-op unless every input is a v3 point secret.
+        unsigned. Legacy inputs are included in mixed-transaction transcripts
+        but do not receive a taproot witness.
         """
         import json as _json
 
         from ..core.crypto.taproot import (
             is_taproot_point_secret,
             keyset_id_transcript_bytes,
+            secret_transcript_bytes,
         )
         from ..core.crypto.transcript import (
             TransactionShape,
@@ -763,7 +765,7 @@ class Wallet(
             transaction_digest,
         )
 
-        if not proofs or not all(
+        if not proofs or not any(
             is_taproot_point_secret(p.secret, p.id) for p in proofs
         ):
             return proofs
@@ -773,7 +775,7 @@ class Wallet(
                     TranscriptProofInput(
                         amount=p.amount,
                         keyset_id=keyset_id_transcript_bytes(p.id),
-                        secret=bytes.fromhex(p.secret),
+                        secret=secret_transcript_bytes(p.secret, p.id),
                         C=bytes.fromhex(p.C),
                     )
                     for p in proofs
@@ -794,6 +796,8 @@ class Wallet(
             )
         )
         for proof in proofs:
+            if not is_taproot_point_secret(proof.secret, proof.id):
+                continue
             secret_key = self._resolve_v3_secret_key(proof)
             if secret_key is None:
                 continue
