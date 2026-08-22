@@ -22,7 +22,7 @@ async def test_nut13_v3_secret_derivation():
     # Read the shared vectors rather than restating them: they are regenerated whenever the
     # derivation message changes, and a copy here would silently go stale.
     vectors_path = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "taproot_v3_vectors.json"
+        os.path.dirname(os.path.dirname(__file__)), "nutroot_v3_vectors.json"
     )
     with open(vectors_path) as f:
         nut13 = json.load(f)["nut13_v3"]
@@ -30,7 +30,7 @@ async def test_nut13_v3_secret_derivation():
     ms = MockWalletSecrets(nut13["seed_utf8"].encode())
     keyset_id = nut13["keyset_id"]
 
-    # Taproot secrets (spec 2.4.2): type 0x00 derives the internal key k with the attempt-counter
+    # Nutroot secrets (NUT-13): type 0x00 derives the internal key k with the attempt-counter
     # retry over the framed V3 message; the secret is K = k*G compressed.
     for output in nut13["outputs"]:
         secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(
