@@ -14,7 +14,7 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.crypto.taproot import is_taproot_point_secret
+from ..core.crypto.nutroot import is_nutroot_point_secret
 from ..core.db import Database
 from ..wallet.crud import (
     get_keysets,
@@ -222,7 +222,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         return token
 
     def _attach_bearer_spend_info(self, proofs: List[Proof]) -> None:
-        """Attach bearer spend info (`k`) to v3 point-secret proofs (spec 2.5.2).
+        """Attach bearer spend info (`k`) to v3 point-secret proofs (NUT-10).
 
         The key re-derives from each proof's stored derivation path; proofs
         without one (or non-v3) are left untouched. The receiver needs `k` to
@@ -234,7 +234,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         for proof in proofs:
             if proof.spend_info is not None:
                 continue
-            if not is_taproot_point_secret(proof.secret, proof.id):
+            if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue
             path = proof.derivation_path or ""
             if not path.startswith("HMAC-SHA256:"):

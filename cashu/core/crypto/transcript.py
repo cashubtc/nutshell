@@ -1,4 +1,4 @@
-"""Transaction transcript (taproot secrets spec 2.2.1).
+"""Transaction transcript (NUT-10).
 
 The one message every input signs: msg = domain tag || TLV stream; each
 input carries one BIP-340 signature over SHA256(msg). Containers: 0x01
@@ -13,7 +13,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import List, Optional
 
-from .taproot import minimal_be, tlv_record
+from .nutroot import minimal_be, tlv_record
 
 TRANSCRIPT_DOMAIN_TAG = "Cashu_Transaction_v1"
 
@@ -59,7 +59,7 @@ def _amount_record(amount: int) -> bytes:
 
 
 def _proof_input_container(p: TranscriptProofInput) -> bytes:
-    # Mixed transactions are normative (spec 5), so a v0-v2 input appears here
+    # Mixed transactions are normative (NUT-10), so a v0-v2 input appears here
     # with its secret's raw bytes next to a v3 input's 33-byte point.
     if not p.secret:
         raise ValueError("Transcript proof secret must be non-empty")

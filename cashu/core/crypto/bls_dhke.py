@@ -22,7 +22,7 @@ def hash_to_curve(message: bytes) -> PublicKey:
 def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
     """Map a v3 secret string to its hash-to-curve input.
 
-    v3 keysets carry taproot point secrets only: 33-byte compressed points,
+    v3 keysets carry nutroot point secrets only: 33-byte compressed points,
     written as 66-char hex in JSON, hashed as the raw bytes. NUT-10 well-known
     secrets and plain text secrets belong to legacy/v1/v2 keysets and are
     refused here. Only BLS (v3) code paths reach this function.

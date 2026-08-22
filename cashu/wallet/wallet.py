@@ -30,13 +30,13 @@ from ..core.crypto.keys import (
     is_bls_keyset,
     is_supported_keyset_version,
 )
-from ..core.crypto.secp import PrivateKey as SecpPrivateKey
-from ..core.crypto.secp import PublicKey as SecpPublicKey
-from ..core.crypto.taproot import (
-    is_taproot_point_secret,
+from ..core.crypto.nutroot import (
+    is_nutroot_point_secret,
     keyset_id_transcript_bytes,
     secret_transcript_bytes,
 )
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
@@ -747,23 +747,23 @@ class Wallet(
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
 
-    def _attach_taproot_witnesses(
+    def _attach_nutroot_witnesses(
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         melt_quote_id: Optional[str] = None,
         melt_quote_amount: Optional[int] = None,
     ) -> List[Proof]:
-        """Attach taproot transaction witnesses to v3 point-secret inputs (spec 2.2.2).
+        """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
 
         Builds the transcript from the request's own inputs and outputs and signs
         its digest with each input's internal key, re-derived from the proof's
         stored derivation path. Inputs without a re-derivable key are left
         unsigned. Legacy inputs are included in mixed-transaction transcripts
-        but do not receive a taproot witness.
+        but do not receive a nutroot witness.
         """
         if not proofs or not any(
-            is_taproot_point_secret(p.secret, p.id) for p in proofs
+            is_nutroot_point_secret(p.secret, p.id) for p in proofs
         ):
             return proofs
         digest = transaction_digest(
@@ -793,7 +793,7 @@ class Wallet(
             )
         )
         for proof in proofs:
-            if not is_taproot_point_secret(proof.secret, proof.id):
+            if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue
             secret_key = self._resolve_v3_secret_key(proof)
             if secret_key is None:
@@ -902,8 +902,8 @@ class Wallet(
         )
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
 
-        # Attach taproot transaction witnesses (v3 keysets)
-        proofs = self._attach_taproot_witnesses(proofs, list(sorted_outputs))
+        # Attach nutroot transaction witnesses (v3 keysets)
+        proofs = self._attach_nutroot_witnesses(proofs, list(sorted_outputs))
 
         # Call swap API
         sorted_promises = await super().split(proofs, list(sorted_outputs))
@@ -1032,11 +1032,11 @@ class Wallet(
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
 
-        # Attach taproot transaction witnesses (v3 keysets); the quote amount
+        # Attach nutroot transaction witnesses (v3 keysets); the quote amount
         # comes from the locally stored melt quote.
         melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote_id)
         if melt_quote_local is not None:
-            proofs = self._attach_taproot_witnesses(
+            proofs = self._attach_nutroot_witnesses(
                 proofs,
                 change_outputs,
                 melt_quote_id=quote_id,
@@ -1486,7 +1486,7 @@ class Wallet(
             swap_proofs, amount, secret_lock, include_fees=include_fees, p2pk_e=p2pk_e
         )
         # Bearer spend info: the receiver needs `k` to run the receive cascade
-        # and sign the sweep's transaction witness (spec 2.5.2).
+        # and sign the sweep's transaction witness (NUT-10).
         self._attach_bearer_spend_info(send_proofs)
         if set_reserved:
             await self.set_reserved_for_send(send_proofs, reserved=True)

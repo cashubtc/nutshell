@@ -1,7 +1,7 @@
-"""Taproot v3 crypto core tests against the shared vectors.
+"""Nutroot v3 crypto core tests against the shared vectors.
 
-Vectors: tests/taproot_v3_vectors.json (canonical copy lives in cashu-ts
-test/vectors/taproot-v3.json; update both in the same commit set).
+Vectors: tests/nutroot_v3_vectors.json (canonical copy lives in cashu-ts
+test/vectors/nutroot-v3.json; update both in the same commit set).
 """
 
 import hashlib
@@ -11,32 +11,32 @@ import os
 import pytest
 from coincurve import PublicKeyXOnly
 
-from cashu.core.crypto.secp import PrivateKey, PublicKey
-from cashu.core.crypto.taproot import (
-    TAPROOT_BRANCH_TAG,
-    TAPROOT_LEAF_TAG,
-    TAPROOT_TWEAK_TAG,
-    TaprootLeaf,
-    parse_taproot_leaf,
+from cashu.core.crypto.nutroot import (
+    NUTROOT_BRANCH_TAG,
+    NUTROOT_LEAF_TAG,
+    NUTROOT_TWEAK_TAG,
+    NutrootLeaf,
+    nutroot_branch_hash,
+    nutroot_leaf_hash,
+    nutroot_merkle_path,
+    nutroot_merkle_root,
+    nutroot_root_from_path,
+    nutroot_tweak,
+    nutroot_tweak_pubkey,
+    nutroot_tweak_seckey,
+    parse_nutroot_leaf,
     read_minimal_be,
     read_tlv_records,
-    serialize_taproot_leaf,
-    taproot_branch_hash,
-    taproot_leaf_hash,
-    taproot_merkle_path,
-    taproot_merkle_root,
-    taproot_root_from_path,
-    taproot_tweak,
-    taproot_tweak_pubkey,
-    taproot_tweak_seckey,
+    serialize_nutroot_leaf,
     tlv_record,
-    verify_taproot_commitment,
+    verify_nutroot_commitment,
 )
+from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.errors import TransactionError
 
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
-with open(os.path.join(os.path.dirname(__file__), "taproot_v3_vectors.json")) as f:
+with open(os.path.join(os.path.dirname(__file__), "nutroot_v3_vectors.json")) as f:
     VECTORS = json.load(f)
 
 V61 = VECTORS["example_6_1"]
@@ -49,9 +49,9 @@ def verify_schnorr_digest(signature: bytes, digest: bytes, pubkey33: bytes) -> b
 
 
 def test_vector_tags_match_module_tags():
-    assert VECTORS["tags"]["leaf"] == TAPROOT_LEAF_TAG
-    assert VECTORS["tags"]["branch"] == TAPROOT_BRANCH_TAG
-    assert VECTORS["tags"]["tweak"] == TAPROOT_TWEAK_TAG
+    assert VECTORS["tags"]["leaf"] == NUTROOT_LEAF_TAG
+    assert VECTORS["tags"]["branch"] == NUTROOT_BRANCH_TAG
+    assert VECTORS["tags"]["tweak"] == NUTROOT_TWEAK_TAG
 
 
 def test_tlv_roundtrip_and_canonical_rules():
@@ -84,8 +84,8 @@ def test_minimal_be_integers():
 
 
 def test_leaf_serialization_6_1():
-    leaf = serialize_taproot_leaf(
-        TaprootLeaf(
+    leaf = serialize_nutroot_leaf(
+        NutrootLeaf(
             type="after",
             n=1,
             keys=[PublicKey(bytes.fromhex(V61["alice_refund_pub"]))],
@@ -93,17 +93,17 @@ def test_leaf_serialization_6_1():
         )
     )
     assert leaf.hex() == V61["leaf_after"]
-    parsed = parse_taproot_leaf(leaf)
+    parsed = parse_nutroot_leaf(leaf)
     assert parsed.type == "after"
     assert parsed.n == 1
     assert [key.format().hex() for key in parsed.keys] == [V61["alice_refund_pub"]]
     assert parsed.time == V61["refund_time"]
-    assert taproot_leaf_hash(leaf).hex() == V61["merkle_root"]
+    assert nutroot_leaf_hash(leaf).hex() == V61["merkle_root"]
 
 
 def test_leaf_serialization_6_2():
-    after = serialize_taproot_leaf(
-        TaprootLeaf(
+    after = serialize_nutroot_leaf(
+        NutrootLeaf(
             type="after",
             n=1,
             keys=[PublicKey(bytes.fromhex(V62["kid_pub"]))],
@@ -115,30 +115,30 @@ def test_leaf_serialization_6_2():
     # implemented leaf type; its bytes still pin the tree and tweak math,
     # and parsing it must fail closed as an unknown type.
     melt_to = bytes.fromhex(V62["leaf_melt_to"])
-    assert taproot_leaf_hash(melt_to).hex() == V62["leaf_hash_melt_to"]
-    assert taproot_leaf_hash(after).hex() == V62["leaf_hash_after"]
+    assert nutroot_leaf_hash(melt_to).hex() == V62["leaf_hash_melt_to"]
+    assert nutroot_leaf_hash(after).hex() == V62["leaf_hash_after"]
     with pytest.raises(ValueError, match="type"):
-        parse_taproot_leaf(melt_to)
+        parse_nutroot_leaf(melt_to)
 
 
 def test_leaf_parsing_fails_closed():
     good = bytes.fromhex(V61["leaf_after"])
     with pytest.raises(ValueError, match="version"):
-        parse_taproot_leaf(b"\x01" + good[1:])
+        parse_nutroot_leaf(b"\x01" + good[1:])
     with pytest.raises(ValueError, match="type"):
-        parse_taproot_leaf(good[:1] + b"\x7f" + good[2:])
+        parse_nutroot_leaf(good[:1] + b"\x7f" + good[2:])
 
     base_fields = tlv_record(0x02, b"\x01") + tlv_record(
         0x04, bytes.fromhex(V61["carol_pub"])
     )
     unknown_even = b"\x00\x01" + base_fields + tlv_record(0x0C, b"\x01")
     with pytest.raises(ValueError, match="field"):
-        parse_taproot_leaf(unknown_even)
+        parse_nutroot_leaf(unknown_even)
 
     # Odd types are reserved, not ignorable: the NUT-10 rejection vector shape.
     unknown_odd = b"\x00\x01" + base_fields + tlv_record(0x09, bytes.fromhex("deadbeef"))
     with pytest.raises(ValueError, match="field"):
-        parse_taproot_leaf(unknown_odd)
+        parse_nutroot_leaf(unknown_odd)
 
     at_limit = (
         b"\x00\x01"
@@ -149,20 +149,20 @@ def test_leaf_parsing_fails_closed():
     # At the cap the length check passes and parsing reaches the padding
     # field, which rejects as unknown; one byte more and the length fires.
     with pytest.raises(ValueError, match="Unknown leaf field"):
-        parse_taproot_leaf(at_limit)
+        parse_nutroot_leaf(at_limit)
     over_limit = (
         b"\x00\x01" + base_fields + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
     )
     with pytest.raises(ValueError, match="body exceeds"):
-        parse_taproot_leaf(over_limit)
+        parse_nutroot_leaf(over_limit)
 
     bad_keys = b"\x00\x01" + tlv_record(0x02, b"\x01") + tlv_record(0x04, b"\x02" * 32)
     with pytest.raises(ValueError, match="multiple of 33"):
-        parse_taproot_leaf(bad_keys)
+        parse_nutroot_leaf(bad_keys)
 
     threshold_with_time = b"\x00\x01" + base_fields + tlv_record(0x06, b"\x01")
     with pytest.raises(ValueError, match="must not carry a time"):
-        parse_taproot_leaf(threshold_with_time)
+        parse_nutroot_leaf(threshold_with_time)
 
     after_with_hash = (
         b"\x00\x02"
@@ -171,10 +171,10 @@ def test_leaf_parsing_fails_closed():
         + tlv_record(0x08, b"\x00" * 32)
     )
     with pytest.raises(ValueError, match="must not carry a hash"):
-        parse_taproot_leaf(after_with_hash)
+        parse_nutroot_leaf(after_with_hash)
     with pytest.raises(ValueError, match="must not carry a time"):
-        serialize_taproot_leaf(
-            TaprootLeaf(
+        serialize_nutroot_leaf(
+            NutrootLeaf(
                 type="threshold",
                 n=1,
                 keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
@@ -187,7 +187,7 @@ def test_leaf_parsing_fails_closed():
         b"\x00\x01" + tlv_record(0x02, b"\x01") + tlv_record(0x04, invalid_key)
     )
     with pytest.raises(ValueError, match="valid compressed"):
-        parse_taproot_leaf(invalid_point)
+        parse_nutroot_leaf(invalid_point)
     with pytest.raises(ValueError):
         PublicKey(invalid_key)
 
@@ -197,10 +197,10 @@ def test_leaf_parsing_fails_closed():
         + tlv_record(0x04, bytes.fromhex(V61["carol_pub"]))
     )
     with pytest.raises(ValueError, match="key count"):
-        parse_taproot_leaf(impossible_threshold)
+        parse_nutroot_leaf(impossible_threshold)
     with pytest.raises(ValueError, match="key count"):
-        serialize_taproot_leaf(
-            TaprootLeaf(
+        serialize_nutroot_leaf(
+            NutrootLeaf(
                 type="threshold",
                 n=2,
                 keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
@@ -211,40 +211,40 @@ def test_leaf_parsing_fails_closed():
 def test_merkle_tree_6_2():
     h_melt = bytes.fromhex(V62["leaf_hash_melt_to"])
     h_after = bytes.fromhex(V62["leaf_hash_after"])
-    assert taproot_branch_hash(h_melt, h_after).hex() == V62["merkle_root"]
-    assert taproot_branch_hash(h_after, h_melt).hex() == V62["merkle_root"]
-    assert taproot_merkle_root([h_melt, h_after]).hex() == V62["merkle_root"]
+    assert nutroot_branch_hash(h_melt, h_after).hex() == V62["merkle_root"]
+    assert nutroot_branch_hash(h_after, h_melt).hex() == V62["merkle_root"]
+    assert nutroot_merkle_root([h_melt, h_after]).hex() == V62["merkle_root"]
 
-    path_melt = taproot_merkle_path([h_melt, h_after], 0)
+    path_melt = nutroot_merkle_path([h_melt, h_after], 0)
     assert [p.hex() for p in path_melt] == V62["melt_witness"]["control"]["path"]
-    assert taproot_root_from_path(h_melt, path_melt).hex() == V62["merkle_root"]
-    path_after = taproot_merkle_path([h_melt, h_after], 1)
+    assert nutroot_root_from_path(h_melt, path_melt).hex() == V62["merkle_root"]
+    path_after = nutroot_merkle_path([h_melt, h_after], 1)
     assert [p.hex() for p in path_after] == V62["after_witness_path"]
-    assert taproot_root_from_path(h_after, path_after).hex() == V62["merkle_root"]
+    assert nutroot_root_from_path(h_after, path_after).hex() == V62["merkle_root"]
 
 
 def test_merkle_tree_folding():
     hashes = [hashlib.sha256(bytes([i])).digest() for i in range(1, 5)]
     # The fold sorts, so build the expected tree over the sorted list.
     s = sorted(hashes)
-    b12 = taproot_branch_hash(s[0], s[1])
-    b34 = taproot_branch_hash(s[2], s[3])
-    root = taproot_branch_hash(b12, b34)
-    assert taproot_merkle_root(hashes) == root
+    b12 = nutroot_branch_hash(s[0], s[1])
+    b34 = nutroot_branch_hash(s[2], s[3])
+    root = nutroot_branch_hash(b12, b34)
+    assert nutroot_merkle_root(hashes) == root
     for i in range(4):
-        path = taproot_merkle_path(hashes, i)
+        path = nutroot_merkle_path(hashes, i)
         assert len(path) == 2
-        assert taproot_root_from_path(hashes[i], path) == root
+        assert nutroot_root_from_path(hashes[i], path) == root
 
     three = hashes[:3]
     s3 = sorted(three)
-    root3 = taproot_branch_hash(taproot_branch_hash(s3[0], s3[1]), s3[2])
-    assert taproot_merkle_root(three) == root3
+    root3 = nutroot_branch_hash(nutroot_branch_hash(s3[0], s3[1]), s3[2])
+    assert nutroot_merkle_root(three) == root3
     # The promoted (last sorted) leaf has the single-sibling path.
     promoted = three.index(s3[2])
-    path2 = taproot_merkle_path(three, promoted)
+    path2 = nutroot_merkle_path(three, promoted)
     assert len(path2) == 1
-    assert taproot_root_from_path(three[promoted], path2) == root3
+    assert nutroot_root_from_path(three[promoted], path2) == root3
 
 
 def test_merkle_root_is_order_independent():
@@ -254,13 +254,13 @@ def test_merkle_root_is_order_independent():
     from itertools import permutations
 
     hashes = [hashlib.sha256(bytes([i])).digest() for i in range(1, 4)]
-    root = taproot_merkle_root(hashes)
+    root = nutroot_merkle_root(hashes)
     for perm in permutations(hashes):
         order = list(perm)
-        assert taproot_merkle_root(order) == root
+        assert nutroot_merkle_root(order) == root
         for i in range(len(order)):
-            path = taproot_merkle_path(order, i)
-            assert taproot_root_from_path(order[i], path) == root
+            path = nutroot_merkle_path(order, i)
+            assert nutroot_root_from_path(order[i], path) == root
 
 
 def test_tweak_math_6_1():
@@ -268,13 +268,13 @@ def test_tweak_math_6_1():
         bytes.fromhex(V61["p2bk_r"])
     )
     root = bytes.fromhex(V61["merkle_root"])
-    assert format(taproot_tweak(K, root), "064x") == V61["tweak"]
-    assert taproot_tweak_pubkey(K, root).format().hex() == V61["secret"]
+    assert format(nutroot_tweak(K, root), "064x") == V61["tweak"]
+    assert nutroot_tweak_pubkey(K, root).format().hex() == V61["secret"]
 
     internal_seckey = (
         int(V61["carol_priv"], 16) + int(V61["p2bk_r"], 16)
     ) % SECP256K1_N
-    p_prime = taproot_tweak_seckey(
+    p_prime = nutroot_tweak_seckey(
         PrivateKey(internal_seckey.to_bytes(32, "big")), root
     )
     assert p_prime.secret.hex() == V61["keypath_priv"]
@@ -285,9 +285,9 @@ def test_tweak_math_6_1():
 def test_tweak_math_6_2():
     K = PrivateKey(bytes.fromhex(V62["parent_priv"])).public_key
     root = bytes.fromhex(V62["merkle_root"])
-    assert format(taproot_tweak(K, root), "064x") == V62["tweak"]
-    assert taproot_tweak_pubkey(K, root).format().hex() == V62["secret"]
-    p_prime = taproot_tweak_seckey(PrivateKey(bytes.fromhex(V62["parent_priv"])), root)
+    assert format(nutroot_tweak(K, root), "064x") == V62["tweak"]
+    assert nutroot_tweak_pubkey(K, root).format().hex() == V62["secret"]
+    p_prime = nutroot_tweak_seckey(PrivateKey(bytes.fromhex(V62["parent_priv"])), root)
     pub = p_prime.public_key
     assert pub and pub.format().hex() == V62["secret"]
 
@@ -319,7 +319,7 @@ def test_keypath_signature_reproduces():
 
 
 def test_script_path_commitment():
-    assert verify_taproot_commitment(
+    assert verify_nutroot_commitment(
         PrivateKey(bytes.fromhex(V61["keypath_priv"])).public_key,
         PrivateKey(bytes.fromhex(V61["carol_priv"])).public_key.add(
             bytes.fromhex(V61["p2bk_r"])
@@ -327,21 +327,21 @@ def test_script_path_commitment():
         bytes.fromhex(V61["scriptpath_witness"]["leaf"]),
         [bytes.fromhex(p) for p in V61["scriptpath_witness"]["control"]["path"]],
     )
-    assert verify_taproot_commitment(
+    assert verify_nutroot_commitment(
         PublicKey(bytes.fromhex(V62["secret"])),
         PublicKey(bytes.fromhex(V62["melt_witness"]["control"]["K"])),
         bytes.fromhex(V62["melt_witness"]["leaf"]),
         [bytes.fromhex(p) for p in V62["melt_witness"]["control"]["path"]],
     )
     # Wrong merkle path fails
-    assert not verify_taproot_commitment(
+    assert not verify_nutroot_commitment(
         PublicKey(bytes.fromhex(V62["secret"])),
         PublicKey(bytes.fromhex(V62["melt_witness"]["control"]["K"])),
         bytes.fromhex(V62["melt_witness"]["leaf"]),
         [bytes.fromhex(V62["leaf_hash_melt_to"])],
     )
     # Wrong internal key fails
-    assert not verify_taproot_commitment(
+    assert not verify_nutroot_commitment(
         PublicKey(bytes.fromhex(V62["secret"])),
         PublicKey(bytes.fromhex(V61["internal_key"])),
         bytes.fromhex(V62["melt_witness"]["leaf"]),
@@ -350,18 +350,18 @@ def test_script_path_commitment():
     # Depth cap
     filler = hashlib.sha256(b"\x09").digest()
     with pytest.raises(ValueError, match="depth"):
-        taproot_root_from_path(filler, [filler] * 9)
+        nutroot_root_from_path(filler, [filler] * 9)
     with pytest.raises(ValueError, match="32 bytes"):
-        taproot_root_from_path(filler, [filler[1:]])
+        nutroot_root_from_path(filler, [filler[1:]])
 
 
 def test_zero_tweak_keeps_internal_key(monkeypatch):
-    from cashu.core.crypto import taproot as taproot_crypto
+    from cashu.core.crypto import nutroot as nutroot_crypto
 
     internal_key = PublicKey(bytes.fromhex(V61["internal_key"]))
-    monkeypatch.setattr(taproot_crypto, "taproot_tweak", lambda *_: 0)
+    monkeypatch.setattr(nutroot_crypto, "nutroot_tweak", lambda *_: 0)
     assert (
-        taproot_crypto.taproot_tweak_pubkey(internal_key).format()
+        nutroot_crypto.nutroot_tweak_pubkey(internal_key).format()
         == internal_key.format()
     )
 
@@ -373,7 +373,7 @@ def test_bearer_contrast():
 
 @pytest.mark.asyncio
 async def test_nut13_v3_secret_derivation_vectors():
-    """The 0x00 branch derives the internal key; the secret is K = k*G (spec 2.4.2)."""
+    """The 0x00 branch derives the internal key; the secret is K = k*G (NUT-13)."""
     from cashu.wallet.secrets import WalletSecrets
 
     nut13 = VECTORS["nut13_v3"]
@@ -430,31 +430,31 @@ def test_v3_secret_must_be_lowercase_hex():
     """One spelling per secret: upper-case hex names the same point but the two
     sides hash it differently, so it is refused rather than accepted twice."""
     from cashu.core.crypto.bls_dhke import secret_to_hash_input
-    from cashu.core.crypto.taproot import is_taproot_point_secret
+    from cashu.core.crypto.nutroot import is_nutroot_point_secret
 
     low = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
     assert secret_to_hash_input(low) == bytes.fromhex(low)
     with pytest.raises(TransactionError, match="lowercase"):
         secret_to_hash_input(low.upper())
     v3_keyset = "029e18e63831fcf4764b1f1b574a2b415b07e6f86aa263b8948aae772e92fd3f70"
-    assert is_taproot_point_secret(low, v3_keyset)
-    assert not is_taproot_point_secret(low.upper(), v3_keyset)
-    assert not is_taproot_point_secret("02" + "ff" * 32, v3_keyset)
+    assert is_nutroot_point_secret(low, v3_keyset)
+    assert not is_nutroot_point_secret(low.upper(), v3_keyset)
+    assert not is_nutroot_point_secret("02" + "ff" * 32, v3_keyset)
 
 
 def test_threshold_leaf_rejects_parity_twin_keys():
     """A key and its parity twin share an x coordinate, so one signature would
     satisfy both entries and an n-of-m would need fewer signatures than it names."""
-    from cashu.core.crypto.taproot import serialize_taproot_leaf
+    from cashu.core.crypto.nutroot import serialize_nutroot_leaf
 
     priv = PrivateKey()
     assert priv.public_key
     pub = priv.public_key
     pub_bytes = pub.format()
     twin = PublicKey((b"\x03" if pub_bytes[0] == 2 else b"\x02") + pub_bytes[1:])
-    leaf = TaprootLeaf(type="threshold", n=2, keys=[pub, twin])
+    leaf = NutrootLeaf(type="threshold", n=2, keys=[pub, twin])
     with pytest.raises(ValueError, match="distinct keys"):
-        serialize_taproot_leaf(leaf)
+        serialize_nutroot_leaf(leaf)
 
 
 def test_point_secret_hashes_as_raw_bytes():
@@ -471,7 +471,7 @@ def test_point_secret_hashes_as_raw_bytes():
         with pytest.raises(TransactionError):
             secret_to_hash_input(rejected)
 
-    from cashu.core.crypto.taproot import secret_transcript_bytes
+    from cashu.core.crypto.nutroot import secret_transcript_bytes
 
     point = output["secret"]
     assert secret_transcript_bytes(
@@ -573,16 +573,16 @@ def _swap_vector_proofs_and_outputs():
     return tv, proofs, outputs
 
 
-def test_mint_verifies_taproot_transaction_witnesses():
+def test_mint_verifies_nutroot_transaction_witnesses():
     from cashu.core.errors import TransactionError
     from cashu.mint.verification import LedgerVerification
 
-    verify = LedgerVerification._verify_taproot_transaction_witnesses
+    verify = LedgerVerification._verify_nutroot_transaction_witnesses
 
     tv, proofs, outputs = _swap_vector_proofs_and_outputs()
 
-    # Absent witness rejects: inputs sign (spec 2.2.2).
-    with pytest.raises(TransactionError, match="missing taproot transaction witness"):
+    # Absent witness rejects: inputs sign (NUT-10).
+    with pytest.raises(TransactionError, match="missing nutroot transaction witness"):
         verify(proofs, outputs)
 
     # Valid witness passes, and the digest it signed is attached to the
@@ -594,22 +594,22 @@ def test_mint_verifies_taproot_transaction_witnesses():
     # Tampered signature rejects.
     bad_sig = tv["signature"][:-2] + ("00" if tv["signature"][-2:] != "00" else "01")
     proofs[0].witness = json.dumps({"signatures": [bad_sig]})
-    with pytest.raises(TransactionError, match="taproot transaction witness"):
+    with pytest.raises(TransactionError, match="nutroot transaction witness"):
         verify(proofs, outputs)
 
     # Key path takes exactly one signature: a valid one with an extra rejects.
     proofs[0].witness = json.dumps({"signatures": [tv["signature"], "00" * 64]})
-    with pytest.raises(TransactionError, match="taproot transaction witness"):
+    with pytest.raises(TransactionError, match="nutroot transaction witness"):
         verify(proofs, outputs)
 
     # Malformed witness rejects.
     proofs[0].witness = "not-json"
-    with pytest.raises(TransactionError, match="taproot transaction witness"):
+    with pytest.raises(TransactionError, match="nutroot transaction witness"):
         verify(proofs, outputs)
 
     # Witness over a different output set rejects (digest binds outputs).
     proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})
-    with pytest.raises(TransactionError, match="taproot transaction witness"):
+    with pytest.raises(TransactionError, match="nutroot transaction witness"):
         verify(proofs, outputs[:1])
 
     # Non-point secrets skip transaction-level verification entirely.
@@ -634,7 +634,7 @@ def test_quote_key_path_witness_takes_exactly_one_signature():
 
 
 @pytest.mark.asyncio
-async def test_wallet_attaches_taproot_witnesses():
+async def test_wallet_attaches_nutroot_witnesses():
     """The wallet re-derives k from the proof's derivation path and signs the transcript."""
     from cashu.core.base import BlindedMessage, Proof
     from cashu.wallet.wallet import Wallet
@@ -656,7 +656,7 @@ async def test_wallet_attaches_taproot_witnesses():
         BlindedMessage(amount=o["amount"], id=o["keyset_id"], B_=o["B_"])
         for o in tv["tx"]["blinded_outputs"]
     ]
-    out = wallet._attach_taproot_witnesses(proofs, outputs)
+    out = wallet._attach_nutroot_witnesses(proofs, outputs)
     assert out[0].witness is not None
     signatures = json.loads(out[0].witness)["signatures"]
     assert verify_schnorr_digest(
@@ -673,7 +673,7 @@ async def test_wallet_attaches_taproot_witnesses():
         C=tv["tx"]["proof_inputs"][0]["C"],
         derivation_path="m/129372'/0'/0'/0'",
     )
-    out2 = wallet._attach_taproot_witnesses([foreign], outputs)
+    out2 = wallet._attach_nutroot_witnesses([foreign], outputs)
     assert out2[0].witness is None
 
     # Mixed transactions include legacy inputs in the shared transcript while
@@ -684,11 +684,11 @@ async def test_wallet_attaches_taproot_witnesses():
         secret="legacy-secret",
         C=tv["tx"]["proof_inputs"][0]["C"],
     )
-    mixed = wallet._attach_taproot_witnesses([proofs[0], legacy], outputs)
+    mixed = wallet._attach_nutroot_witnesses([proofs[0], legacy], outputs)
     assert mixed[0].witness is not None
     assert mixed[1].witness is None
 
-    from cashu.core.crypto.taproot import keyset_id_transcript_bytes
+    from cashu.core.crypto.nutroot import keyset_id_transcript_bytes
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -772,12 +772,12 @@ def test_leaf_forms_match_the_shared_vectors():
     verifier that fold differently reject each other's valid proofs, so this
     has to agree across implementations.
     """
-    from cashu.core.crypto.taproot import (
-        TaprootLeaf,
-        serialize_taproot_leaf,
-        taproot_leaf_hash,
-        taproot_merkle_path,
-        taproot_merkle_root,
+    from cashu.core.crypto.nutroot import (
+        NutrootLeaf,
+        nutroot_leaf_hash,
+        nutroot_merkle_path,
+        nutroot_merkle_root,
+        serialize_nutroot_leaf,
     )
 
     lf = VECTORS["leaf_forms"]
@@ -786,18 +786,18 @@ def test_leaf_forms_match_the_shared_vectors():
     alice = PublicKey(bytes.fromhex(v["alice_refund_pub"]))
 
     assert (
-        serialize_taproot_leaf(TaprootLeaf(type="threshold", n=1, keys=[carol])).hex()
+        serialize_nutroot_leaf(NutrootLeaf(type="threshold", n=1, keys=[carol])).hex()
         == lf["threshold_1of1"]
     )
     assert (
-        serialize_taproot_leaf(
-            TaprootLeaf(type="threshold", n=2, keys=[carol, alice])
+        serialize_nutroot_leaf(
+            NutrootLeaf(type="threshold", n=2, keys=[carol, alice])
         ).hex()
         == lf["threshold_2of2"]
     )
     assert (
-        serialize_taproot_leaf(
-            TaprootLeaf(
+        serialize_nutroot_leaf(
+            NutrootLeaf(
                 type="hashlock",
                 n=1,
                 keys=[carol],
@@ -807,29 +807,29 @@ def test_leaf_forms_match_the_shared_vectors():
         == lf["hashlock"]
     )
 
-    hashes = [taproot_leaf_hash(bytes.fromhex(x)) for x in lf["three_leaf_tree"]]
-    assert taproot_merkle_root(hashes).hex() == lf["three_leaf_root"]
-    assert [h.hex() for h in taproot_merkle_path(hashes, 2)] == lf[
+    hashes = [nutroot_leaf_hash(bytes.fromhex(x)) for x in lf["three_leaf_tree"]]
+    assert nutroot_merkle_root(hashes).hex() == lf["three_leaf_root"]
+    assert [h.hex() for h in nutroot_merkle_path(hashes, 2)] == lf[
         "three_leaf_path_index_2"
     ]
 
 
 def test_empty_tweak_matches_the_shared_vector():
-    """Empty tweak (spec 3.8), the form an aggregated key MUST use.
+    """Empty tweak (NUT-10), the form an aggregated key MUST use.
 
     cashu-ts asserts the same vector. This side has the primitive but no
     receive cascade (that is a wallet-side check and this wallet does not run
     one), so what has to agree across implementations is the math.
     """
-    from cashu.core.crypto.taproot import taproot_tweak, taproot_tweak_pubkey
+    from cashu.core.crypto.nutroot import nutroot_tweak, nutroot_tweak_pubkey
 
     v = VECTORS["empty_tweak"]
     K = PublicKey(bytes.fromhex(v["internal_key"]))
-    assert taproot_tweak_pubkey(K).format().hex() == v["secret"]
-    assert f"{taproot_tweak(K):064x}" == v["tweak"]
+    assert nutroot_tweak_pubkey(K).format().hex() == v["secret"]
+    assert f"{nutroot_tweak(K):064x}" == v["tweak"]
     # With a root it is a different tweak entirely, which is what stops an empty-tweak secret
     # being mistaken for a tree-committed one.
-    assert taproot_tweak(K, bytes(32)) != taproot_tweak(K)
+    assert nutroot_tweak(K, bytes(32)) != nutroot_tweak(K)
 
 
 def test_shared_token_vectors_same_spend_info_from_either_encoder():
@@ -912,7 +912,7 @@ def _sign_digest(privkey_int: int, digest: bytes) -> str:
 
 def test_script_path_spend_after_leaf_vectors():
     """6.1: refund via the after leaf, evaluated with the vector witness."""
-    from cashu.core.crypto.taproot import verify_script_path_spend
+    from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v61 = VECTORS["example_6_1"]
     witness = {
@@ -943,7 +943,7 @@ def test_script_path_spend_after_leaf_vectors():
 
 def test_script_path_unknown_leaf_type_fails_closed():
     """6.2: the example melt_to leaf (0x04) is unknown and unsatisfiable."""
-    from cashu.core.crypto.taproot import verify_script_path_spend
+    from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v62 = VECTORS["example_6_2"]
     witness = {
@@ -963,34 +963,34 @@ def test_script_path_threshold_and_hashlock():
     """2-of-3 threshold and hashlock leaves, built from well-known test keys."""
     import hashlib as _hashlib
 
-    from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey
-    from cashu.core.crypto.taproot import (
-        TaprootLeaf,
-        serialize_taproot_leaf,
-        taproot_leaf_hash,
-        taproot_merkle_path,
-        taproot_merkle_root,
-        taproot_tweak_pubkey,
+    from cashu.core.crypto.nutroot import (
+        NutrootLeaf,
+        nutroot_leaf_hash,
+        nutroot_merkle_path,
+        nutroot_merkle_root,
+        nutroot_tweak_pubkey,
+        serialize_nutroot_leaf,
         verify_script_path_spend,
     )
+    from cashu.core.crypto.secp import PrivateKey as SecpPrivateKey
 
     keys = {i: SecpPrivateKey(i.to_bytes(32, "big")).public_key for i in (3, 4, 9)}
     internal_key = SecpPrivateKey((6).to_bytes(32, "big")).public_key
     preimage = b"\x07" * 32
-    leaf_threshold = serialize_taproot_leaf(
-        TaprootLeaf(type="threshold", n=2, keys=[keys[3], keys[4], keys[9]])
+    leaf_threshold = serialize_nutroot_leaf(
+        NutrootLeaf(type="threshold", n=2, keys=[keys[3], keys[4], keys[9]])
     )
-    leaf_hashlock = serialize_taproot_leaf(
-        TaprootLeaf(
+    leaf_hashlock = serialize_nutroot_leaf(
+        NutrootLeaf(
             type="hashlock",
             n=1,
             keys=[keys[3]],
             hash=_hashlib.sha256(preimage).digest(),
         )
     )
-    hashes = [taproot_leaf_hash(leaf_threshold), taproot_leaf_hash(leaf_hashlock)]
-    root = taproot_merkle_root(hashes)
-    secret = taproot_tweak_pubkey(internal_key, root)
+    hashes = [nutroot_leaf_hash(leaf_threshold), nutroot_leaf_hash(leaf_hashlock)]
+    root = nutroot_merkle_root(hashes)
+    secret = nutroot_tweak_pubkey(internal_key, root)
     digest = _hashlib.sha256(b"threshold test transcript").digest()
 
     # 2-of-3 threshold satisfied by keys 3 and 9.
@@ -1001,7 +1001,7 @@ def test_script_path_threshold_and_hashlock():
             "leaf": leaf_threshold.hex(),
             "control": {
                 "K": internal_key.format().hex(),
-                "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
+                "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
             },
             "signatures": [_sign_digest(3, digest), _sign_digest(9, digest)],
         },
@@ -1015,7 +1015,7 @@ def test_script_path_threshold_and_hashlock():
                 "leaf": leaf_threshold.hex(),
                 "control": {
                     "K": internal_key.format().hex(),
-                    "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest)],
             },
@@ -1029,7 +1029,7 @@ def test_script_path_threshold_and_hashlock():
                 "leaf": leaf_threshold.hex(),
                 "control": {
                     "K": internal_key.format().hex(),
-                    "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest), _sign_digest(3, digest)],
             },
@@ -1043,7 +1043,7 @@ def test_script_path_threshold_and_hashlock():
                 "leaf": leaf_hashlock.hex(),
                 "control": {
                     "K": internal_key.format().hex(),
-                    "path": [h.hex() for h in taproot_merkle_path(hashes, 1)],
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 1)],
                 },
                 "signatures": [_sign_digest(3, digest), "00" * 64],
                 "preimage": preimage.hex(),
@@ -1055,7 +1055,7 @@ def test_script_path_threshold_and_hashlock():
         "leaf": leaf_hashlock.hex(),
         "control": {
             "K": internal_key.format().hex(),
-            "path": [h.hex() for h in taproot_merkle_path(hashes, 1)],
+            "path": [h.hex() for h in nutroot_merkle_path(hashes, 1)],
         },
         "signatures": [_sign_digest(3, digest)],
         "preimage": preimage.hex(),
@@ -1078,7 +1078,7 @@ def test_mint_accepts_script_path_witness_on_swap():
     from cashu.core.errors import TransactionError
     from cashu.mint.verification import LedgerVerification
 
-    verify = LedgerVerification._verify_taproot_transaction_witnesses
+    verify = LedgerVerification._verify_nutroot_transaction_witnesses
     tv, proofs, outputs = _swap_vector_proofs_and_outputs()
     v61 = VECTORS["example_6_1"]
 
@@ -1124,7 +1124,7 @@ def test_mint_accepts_script_path_witness_on_swap():
 
     # Key-path signature by a leaf key does not satisfy the key path.
     proofs[0].witness = json.dumps({"signatures": [_sign_digest(4, digest)]})
-    with pytest.raises(TransactionError, match="invalid taproot transaction witness"):
+    with pytest.raises(TransactionError, match="invalid nutroot transaction witness"):
         verify(proofs, outputs)
 
 
@@ -1132,7 +1132,7 @@ def test_leaf_time_is_bounded():
     """Bounded so both implementations read the same leaf: unbounded here means
     a leaf a mint commits and spends that a wallet cannot parse, which strands
     the proof with its holder."""
-    from cashu.core.crypto.taproot import TAPROOT_MAX_LEAF_TIME
+    from cashu.core.crypto.nutroot import NUTROOT_MAX_LEAF_TIME
 
     huge = (
         b"\x00\x02"
@@ -1141,37 +1141,37 @@ def test_leaf_time_is_bounded():
         + tlv_record(0x06, bytes.fromhex("0fffffffffffffff"))
     )
     with pytest.raises(ValueError, match="time out of range"):
-        parse_taproot_leaf(huge)
+        parse_nutroot_leaf(huge)
     with pytest.raises(ValueError, match="time out of range"):
-        serialize_taproot_leaf(
-            TaprootLeaf(
+        serialize_nutroot_leaf(
+            NutrootLeaf(
                 type="after",
                 n=1,
                 keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
-                time=TAPROOT_MAX_LEAF_TIME + 1,
+                time=NUTROOT_MAX_LEAF_TIME + 1,
             )
         )
 
 
 def test_tree_depth_cap_applies_to_the_tree():
     """Past 2^8 leaves every merkle path is longer than a verifier accepts, so
-    the fallbacks a holder was told they had do not exist (spec 2.6)."""
-    from cashu.core.crypto.taproot import TAPROOT_MAX_TREE_DEPTH
+    the fallbacks a holder was told they had do not exist (NUT-10)."""
+    from cashu.core.crypto.nutroot import NUTROOT_MAX_TREE_DEPTH
 
     hashes = [
-        taproot_leaf_hash(i.to_bytes(32, "big"))
-        for i in range(2**TAPROOT_MAX_TREE_DEPTH)
+        nutroot_leaf_hash(i.to_bytes(32, "big"))
+        for i in range(2**NUTROOT_MAX_TREE_DEPTH)
     ]
-    taproot_merkle_root(hashes)
+    nutroot_merkle_root(hashes)
     with pytest.raises(ValueError, match="depth"):
-        taproot_merkle_root(hashes + [hashes[0]])
+        nutroot_merkle_root(hashes + [hashes[0]])
 
 
 def test_keyset_id_transcript_bytes_falls_back_to_utf8():
-    """Mixed transactions are normative (spec 5) and a pre-v1 keyset id is
+    """Mixed transactions are normative (NUT-10) and a pre-v1 keyset id is
     base64, so hex-decoding it unconditionally makes such a transaction
     impossible to sign or verify rather than merely unusual."""
-    from cashu.core.crypto.taproot import keyset_id_transcript_bytes
+    from cashu.core.crypto.nutroot import keyset_id_transcript_bytes
 
     assert keyset_id_transcript_bytes("0088553333aabbcc") == bytes.fromhex(
         "0088553333aabbcc"
