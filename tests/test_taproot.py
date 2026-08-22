@@ -132,14 +132,13 @@ def test_leaf_parsing_fails_closed():
         0x04, bytes.fromhex(V61["carol_pub"])
     )
     unknown_even = b"\x00\x01" + base_fields + tlv_record(0x0C, b"\x01")
-    with pytest.raises(ValueError, match="constraint"):
+    with pytest.raises(ValueError, match="field"):
         parse_taproot_leaf(unknown_even)
 
-    unknown_odd = b"\x00\x01" + base_fields + tlv_record(0x0D, b"label")
-    parsed = parse_taproot_leaf(unknown_odd)
-    assert parsed.type == "threshold"
-    assert parsed.n == 1
-    assert [key.format().hex() for key in parsed.keys] == [V61["carol_pub"]]
+    # Odd types are reserved, not ignorable: the NUT-10 rejection vector shape.
+    unknown_odd = b"\x00\x01" + base_fields + tlv_record(0x09, bytes.fromhex("deadbeef"))
+    with pytest.raises(ValueError, match="field"):
+        parse_taproot_leaf(unknown_odd)
 
     at_limit = (
         b"\x00\x01"
@@ -147,7 +146,10 @@ def test_leaf_parsing_fails_closed():
         + tlv_record(0x0D, bytes(1024 - 1 - len(base_fields) - 3))
     )
     assert len(at_limit) == 1025
-    assert parse_taproot_leaf(at_limit).type == "threshold"
+    # At the cap the length check passes and parsing reaches the padding
+    # field, which rejects as unknown; one byte more and the length fires.
+    with pytest.raises(ValueError, match="Unknown leaf field"):
+        parse_taproot_leaf(at_limit)
     over_limit = (
         b"\x00\x01" + base_fields + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
     )
@@ -595,6 +597,11 @@ def test_mint_verifies_taproot_transaction_witnesses():
     with pytest.raises(TransactionError, match="taproot transaction witness"):
         verify(proofs, outputs)
 
+    # Key path takes exactly one signature: a valid one with an extra rejects.
+    proofs[0].witness = json.dumps({"signatures": [tv["signature"], "00" * 64]})
+    with pytest.raises(TransactionError, match="taproot transaction witness"):
+        verify(proofs, outputs)
+
     # Malformed witness rejects.
     proofs[0].witness = "not-json"
     with pytest.raises(TransactionError, match="taproot transaction witness"):
@@ -609,6 +616,21 @@ def test_mint_verifies_taproot_transaction_witnesses():
     proofs[0].secret = "not-a-point-secret"
     proofs[0].witness = "not-json"
     verify(proofs, outputs)
+
+
+def test_quote_key_path_witness_takes_exactly_one_signature():
+    from cashu.core.nuts import nut20
+
+    privkey, pubkey = nut20.generate_keypair()
+    _, _, outputs = _swap_vector_proofs_and_outputs()
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
+    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig)
+    assert nut20.verify_mint_quote_v3(
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]})
+    )
+    assert not nut20.verify_mint_quote_v3(
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]})
+    )
 
 
 @pytest.mark.asyncio
@@ -1010,6 +1032,21 @@ def test_script_path_threshold_and_hashlock():
                     "path": [h.hex() for h in taproot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest), _sign_digest(3, digest)],
+            },
+        )
+    # More signatures than the leaf lists keys rejects outright.
+    with pytest.raises(ValueError, match="more signatures"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            {
+                "leaf": leaf_hashlock.hex(),
+                "control": {
+                    "K": internal_key.format().hex(),
+                    "path": [h.hex() for h in taproot_merkle_path(hashes, 1)],
+                },
+                "signatures": [_sign_digest(3, digest), "00" * 64],
+                "preimage": preimage.hex(),
             },
         )
 
