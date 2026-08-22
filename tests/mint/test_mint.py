@@ -69,7 +69,7 @@ async def test_mint(ledger: Ledger):
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
-            B_=step1_alice(b"test")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
     ]
@@ -134,7 +134,7 @@ async def test_generate_promises(ledger: Ledger):
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
-            B_=step1_alice(b"test")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
     ]
@@ -163,7 +163,9 @@ async def test_generate_change_promises(ledger: Ledger):
     expected_returned_fees = 1900
 
     n_blank_outputs = calculate_number_of_blank_outputs(fee_reserve)
-    blinded_msgs = [step1_alice(str(n).encode()) for n in range(n_blank_outputs)]
+    blinded_msgs = [
+        step1_alice(nut20.generate_keypair()[1]) for _ in range(n_blank_outputs)
+    ]
     outputs = [
         BlindedMessage(
             amount=1,
@@ -194,7 +196,9 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     expected_returned_fees = 1856
 
     n_blank_outputs = 4
-    blinded_msgs = [step1_alice(str(n).encode()) for n in range(n_blank_outputs)]
+    blinded_msgs = [
+        step1_alice(nut20.generate_keypair()[1]) for _ in range(n_blank_outputs)
+    ]
     outputs = [
         BlindedMessage(
             amount=1,
@@ -265,7 +269,7 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"change_blank_{i}".encode())[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)
@@ -325,7 +329,7 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"no_fee_blank_{i}".encode())[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)
