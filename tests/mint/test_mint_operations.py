@@ -11,7 +11,13 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+    use_v2_keyset,
+)
 
 
 async def assert_err(f, msg):
@@ -33,7 +39,28 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
+    # Inherited tests: pre-v3 secrets and no nutroot witnesses.
+    await use_v2_keyset(wallet1)
     yield wallet1
+
+
+async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **kwargs):
+    """ledger.melt with client-side nutroot witnesses attached (NUT-10)."""
+    quote_obj = await ledger.crud.get_melt_quote(quote_id=quote, db=ledger.db)
+    if quote_obj is not None:
+        signer_wallet._attach_nutroot_witnesses(
+            proofs,
+            outputs or [],
+            melt_quote_id=quote,
+            melt_quote_amount=quote_obj.amount,
+        )
+    return await ledger.melt(proofs=proofs, quote=quote, outputs=outputs, **kwargs)
+
+
+async def swap_signed(ledger, signer_wallet, *, proofs, outputs):
+    """ledger.swap with client-side nutroot witnesses attached (NUT-10)."""
+    signer_wallet._attach_nutroot_witnesses(proofs, outputs)
+    return await ledger.swap(proofs=proofs, outputs=outputs)
 
 
 @pytest.mark.asyncio
@@ -73,7 +100,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+    await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.state == MeltQuoteState.paid, (
@@ -119,7 +146,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+    await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.state == MeltQuoteState.paid, (
@@ -147,9 +174,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert wallet_mint_quote.privkey
-    signature = nut20.sign_mint_quote(
-        mint_quote.quote, outputs, wallet_mint_quote.privkey
-    )
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, wallet_mint_quote.privkey)
     await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     await assert_err(
@@ -211,7 +236,7 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
         [p.amount for p in send_proofs], secrets, rs
     )
 
-    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
+    promises = await swap_signed(ledger, wallet1, proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
@@ -230,7 +255,7 @@ async def test_verify_inputs_rejects_double_spent_proofs(
     outputs, rs = wallet1._construct_outputs(
         [p.amount for p in send_proofs], secrets, rs
     )
-    await ledger.swap(proofs=send_proofs, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=send_proofs, outputs=outputs)
 
     with pytest.raises(ProofsAlreadySpentError):
         await ledger._verify_inputs(send_proofs)
@@ -320,11 +345,11 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.swap(proofs=inputs1, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=inputs1, outputs=outputs)
 
     # try to spend other proofs with the same outputs again
     await assert_err(
-        ledger.swap(proofs=inputs2, outputs=outputs),
+        swap_signed(ledger, wallet1, proofs=inputs2, outputs=outputs),
         OutputsAlreadySignedError.detail,
     )
 
@@ -335,7 +360,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.swap(proofs=inputs2, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=inputs2, outputs=outputs)
 
 
 @pytest.mark.asyncio
@@ -388,7 +413,9 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
     )
     await assert_err(
-        ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
+        melt_signed(
+            ledger, wallet1, proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+        ),
         OutputsAlreadySignedError.detail,
     )
 
@@ -446,8 +473,8 @@ async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledge
 
     # make sure we have more inputs than the melt quote needs
     assert sum_proofs(wallet1.proofs) >= melt_quote.amount + melt_quote.fee_reserve
-    melt_resp = await ledger.melt(
-        proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+    melt_resp = await melt_signed(
+        ledger, wallet1, proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
     )
     # we get 2 sats back because we overpaid
     assert melt_resp.change
@@ -506,7 +533,7 @@ async def test_melt_preserves_change_signatures_order_integration(wallet1: Walle
     settings.fakewallet_payment_state_exception = False
     
     # Call melt with outputs
-    melt_response = await ledger.melt(proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
+    melt_response = await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
     assert melt_response.state == MeltQuoteState.pending.value
     
     # Now fake that payment settled

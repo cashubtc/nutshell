@@ -1,3 +1,6 @@
+import json
+import os
+
 import pytest
 
 from cashu.core.base import DLEQWallet, Proof, WalletKeyset
@@ -16,23 +19,30 @@ async def test_nut13_v3_secret_derivation():
         def __init__(self, seed: bytes):
             self.seed = seed
     
-    seed = b"nut13 v3 test seed"
-    ms = MockWalletSecrets(seed)
-    
-    keyset_id = "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
-    counter = 3
-    
-    secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(counter, keyset_id)
-    
-    assert secret_bytes.hex() == "7a45e04943504b25273e9569ab7019ab62f814dade23998c12f5f4cb1bb7978a"
-    
-    r = BlsPrivateKey(r_bytes)
-    assert r.to_hex() == "236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9" 
+    # Read the shared vectors rather than restating them: they are regenerated whenever the
+    # derivation message changes, and a copy here would silently go stale.
+    vectors_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "nutroot_v3_vectors.json"
+    )
+    with open(vectors_path) as f:
+        nut13 = json.load(f)["nut13_v3"]
+
+    ms = MockWalletSecrets(nut13["seed_utf8"].encode())
+    keyset_id = nut13["keyset_id"]
+
+    # Nutroot secrets (NUT-13): type 0x00 derives the internal key k with the attempt-counter
+    # retry over the framed V3 message; the secret is K = k*G compressed.
+    for output in nut13["outputs"]:
+        secret_bytes, r_bytes, _ = await ms._derive_secret_hmac_sha256_v3(
+            output["counter"], keyset_id
+        )
+        assert secret_bytes.hex() == output["secret"]
+        assert BlsPrivateKey(r_bytes).to_hex() == output["blinding_factor"]
 
 
 @pytest.mark.asyncio
 async def test_wallet_bls_signature_verification():
-    keyset_id = "02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd"
+    keyset_id = "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6"
     amount = 1
     
     priv_key = BlsPrivateKey()
@@ -51,8 +61,9 @@ async def test_wallet_bls_signature_verification():
             
     wallet = MockWallet()
     
-    secret_msg = "test_secret"
-    Y = bls_dhke.hash_to_curve(secret_msg.encode("utf-8"))
+    # v3 keysets take point secrets, and Y hashes the raw 33 bytes.
+    secret_msg = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    Y = bls_dhke.hash_to_curve(bytes.fromhex(secret_msg))
     C = Y * priv_key
     
     valid_proof = Proof(

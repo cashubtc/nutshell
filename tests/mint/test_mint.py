@@ -8,6 +8,7 @@ from cashu.core.crypto.bls_dhke import step1_alice
 from cashu.core.errors import TransactionError
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.mint.ledger import Ledger
@@ -59,16 +60,25 @@ async def test_get_keyset(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger):
-    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    # A quote is a transaction input and inputs sign, so a v3 mint needs a locked quote.
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
     await pay_if_regtest(quote.request)
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
-            B_=step1_alice("test")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
     ]
-    promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
+    signature = nut20.sign_mint_quote_v3(
+        quote.quote, quote.amount, blinded_messages_mock, privkey
+    )
+    promises = await ledger.mint(
+        outputs=blinded_messages_mock, quote_id=quote.quote, signature=signature
+    )
     assert len(promises)
     assert promises[0].amount == 8
     assert promises[0].C_
@@ -92,7 +102,10 @@ async def test_melt_invalid_quote(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_invalid_blinded_message(ledger: Ledger):
-    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
     await pay_if_regtest(quote.request)
     blinded_messages_mock_invalid_key = [
         BlindedMessage(
@@ -103,8 +116,15 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     ]
     # We will use an invalid compressed point hex for BLS
     blinded_messages_mock_invalid_key[0].B_ = "020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    signature = nut20.sign_mint_quote_v3(
+        quote.quote, quote.amount, blinded_messages_mock_invalid_key, privkey
+    )
     await assert_err(
-        ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
+        ledger.mint(
+            outputs=blinded_messages_mock_invalid_key,
+            quote_id=quote.quote,
+            signature=signature,
+        ),
         "invalid blinded message.",
     )
 
@@ -114,7 +134,7 @@ async def test_generate_promises(ledger: Ledger):
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
-            B_=step1_alice("test")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
     ]
@@ -143,7 +163,9 @@ async def test_generate_change_promises(ledger: Ledger):
     expected_returned_fees = 1900
 
     n_blank_outputs = calculate_number_of_blank_outputs(fee_reserve)
-    blinded_msgs = [step1_alice(str(n)) for n in range(n_blank_outputs)]
+    blinded_msgs = [
+        step1_alice(nut20.generate_keypair()[1]) for _ in range(n_blank_outputs)
+    ]
     outputs = [
         BlindedMessage(
             amount=1,
@@ -174,7 +196,9 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     expected_returned_fees = 1856
 
     n_blank_outputs = 4
-    blinded_msgs = [step1_alice(str(n)) for n in range(n_blank_outputs)]
+    blinded_msgs = [
+        step1_alice(nut20.generate_keypair()[1]) for _ in range(n_blank_outputs)
+    ]
     outputs = [
         BlindedMessage(
             amount=1,
@@ -245,7 +269,7 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"change_blank_{i}")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)
@@ -305,7 +329,7 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"no_fee_blank_{i}")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)

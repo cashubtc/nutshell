@@ -112,7 +112,7 @@ async def test_get_keys(wallet1: Wallet):
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
     assert (
         keyset.id
-        == "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
+        == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
@@ -556,12 +556,19 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == [
-        "022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
-    ]
+    # The mint also serves a v2 keyset for the pre-v3 secret formats, so assert
+    # the v3 keyset is the one loaded and selected rather than the only one.
+    assert (
+        "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
+        in wallet1.keysets
+    )
+    assert (
+        wallet1.keyset_id
+        == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
+    )
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
     await wallet1.activate_keyset(
-        keyset_id="022de6c59498cf5804d5ad4a28ad84f5ab69b3a4f00284e012988afd8514ea69c8"
+        keyset_id="02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     # expect deprecated keyset id to be present
     await assert_err(
@@ -617,6 +624,7 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
 
     # Save the real keyset ID that the wallet loaded from the mint
     real_keyset_id = list(wallet1.keysets.keys())[0]
+    loaded_from_mint = len(wallet1.keysets)
 
     # Seed a second fake keyset in the DB so we have 2 keysets
     fake_keyset_id = real_keyset_id[:2] + "f" * (len(real_keyset_id) - 2)
@@ -630,7 +638,9 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     await store_keyset(keyset=fake_keyset, db=wallet1.db)
     await wallet1.load_keysets_from_db()
 
-    assert len(wallet1.keysets) == 2, "Expected 2 keysets before test"
+    assert len(wallet1.keysets) == loaded_from_mint + 1, (
+        "Expected the seeded keyset on top of the mint's keysets"
+    )
 
     # Mock the mint API to only return the real keyset (fake one "disappeared")
     wallet1._get_keysets = AsyncMock(
@@ -648,8 +658,9 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     # Load keysets from mocked mint API
     await wallet1.load_mint_keysets()
 
-    # Assert only the real keyset remains in memory
-    assert len(wallet1.keysets) == 1
+    # Assert the seeded keyset is gone and the real one remains. The mint serves more
+    # than one keyset (a v2 alongside the v3), so count the change rather than the total.
+    assert fake_keyset_id not in wallet1.keysets
     assert real_keyset_id in wallet1.keysets
 
     # Assert the disappeared keyset is marked as deleted in the DB

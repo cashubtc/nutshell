@@ -5,6 +5,7 @@ from loguru import logger
 
 from ..core.base import (
     Proof,
+    SpendInfo,
     TokenV3,
     TokenV3Token,
     TokenV4,
@@ -13,6 +14,8 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
+from ..core.crypto.nutroot import is_nutroot_point_secret
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.db import Database
 from ..wallet.crud import (
     get_keysets,
@@ -24,6 +27,12 @@ from .protocols import SupportsDb, SupportsKeysets
 class WalletProofs(SupportsDb, SupportsKeysets):
     keyset_id: str
     db: Database
+
+    def derive_v3_secret_key(
+        self, counter: int, keyset_id: str
+    ) -> SecpPrivateKey:
+        """Provided by WalletSecrets in the concrete Wallet MRO."""
+        raise NotImplementedError
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
@@ -219,6 +228,33 @@ class WalletProofs(SupportsDb, SupportsKeysets):
 
         return token
 
+    def _attach_bearer_spend_info(self, proofs: List[Proof]) -> None:
+        """Attach bearer spend info (`k`) to v3 point-secret proofs (NUT-10).
+
+        The key re-derives from each proof's stored derivation path; proofs
+        without one (or non-v3) are left untouched. The receiver needs `k` to
+        run the receive cascade and sign the sweep's transaction witness.
+        """
+        for proof in proofs:
+            if proof.spend_info is not None:
+                continue
+            if not is_nutroot_point_secret(proof.secret, proof.id):
+                continue
+            path = proof.derivation_path or ""
+            if not path.startswith("HMAC-SHA256:"):
+                continue
+            try:
+                _, path_keyset_id, counter_str = path.split(":")
+                secret_key = self.derive_v3_secret_key(
+                    int(counter_str), path_keyset_id
+                )
+                pub = secret_key.public_key
+                if pub.format().hex() != proof.secret:
+                    continue
+            except Exception:
+                continue
+            proof.spend_info = SpendInfo(k=secret_key.secret.hex())
+
     async def _make_tokenv4(
         self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
     ) -> TokenV4:
@@ -256,6 +292,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         manager = KeysetManager()
         for keyset_id in keyset_ids:
             proofs_keyset = [p for p in proofs if p.id == keyset_id]
+            self._attach_bearer_spend_info(proofs_keyset)
             tokenv4_proofs = []
             for proof in proofs_keyset:
                 tokenv4_proofs.append(TokenV4Proof.from_proof(proof, include_dleq))

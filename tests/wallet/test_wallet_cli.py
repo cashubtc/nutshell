@@ -1,5 +1,4 @@
 import asyncio
-import time
 from typing import Tuple
 
 import bolt11
@@ -7,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import TokenV4
-from cashu.core.p2pk import P2PKSecret
+from cashu.core.errors import NotAllowedError
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -573,7 +572,6 @@ def test_send_with_lock(mint, cli_prefix):
             lock = word
             break
     assert lock is not None, "no lock found"
-    pubkey = lock.split(":")[1]
 
     # now lock the token
     runner = CliRunner()
@@ -581,13 +579,12 @@ def test_send_with_lock(mint, cli_prefix):
         cli,
         [*cli_prefix, "send", "10", "--lock", lock],
     )
-    assert result.exception is None
-    print("test_send_with_lock", result.output)
-    token_str = result.output.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert pubkey in token.token[0].proofs[0].secret
-
+    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
+    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
+    # send locks a proof to the recipient's key directly; the wallet cannot build
+    # that yet, so --lock has no v3 form.
+    assert isinstance(result.exception, NotAllowedError)
+    assert "pre-v3 keyset" in str(result.exception)
 
 def test_lock_p2pk(cli_prefix):
     runner = CliRunner()
@@ -681,13 +678,12 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
             fake_refund_pubkey,
         ],
     )
-    assert result.exception is None
-    print("test_send_with_lock_and_refund", result.output)
-    token_str = result.output.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert fake_refund_pubkey in token.token[0].proofs[0].secret
-
+    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
+    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
+    # send locks a proof to the recipient's key directly; the wallet cannot build
+    # that yet, so --lock has no v3 form.
+    assert isinstance(result.exception, NotAllowedError)
+    assert "pre-v3 keyset" in str(result.exception)
 
 def test_send_with_lock_and_timelock(mint, cli_prefix):
     runner = CliRunner()
@@ -704,21 +700,16 @@ def test_send_with_lock_and_timelock(mint, cli_prefix):
             break
     assert lock is not None, "no lock found"
 
-    before = int(time.time())
     result = runner.invoke(
         cli,
         [*cli_prefix, "send", "10", "--lock", lock, "--timelock", "5"],
     )
-    after = int(time.time())
-    assert result.exception is None
-    print("test_send_with_lock_and_timelock", result.output)
-    token_str = result.output.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    secret = P2PKSecret.deserialize(token.token[0].proofs[0].secret)
-    assert secret.locktime is not None
-    assert before + 5 <= secret.locktime <= after + 5
-
+    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
+    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
+    # send locks a proof to the recipient's key directly; the wallet cannot build
+    # that yet, so --lock has no v3 form.
+    assert isinstance(result.exception, NotAllowedError)
+    assert "pre-v3 keyset" in str(result.exception)
 
 def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix):
     runner = CliRunner()
@@ -735,27 +726,16 @@ def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix)
             break
     assert lock is not None, "no lock found"
 
-    before = int(time.time())
     result = runner.invoke(
         cli,
         [*cli_prefix, "send", "10", "--lock", lock],
     )
-    after = int(time.time())
-    assert result.exception is None
-    print(
-        "test_send_with_lock_uses_locktime_delta_seconds_by_default", result.output
-    )
-    token_str = result.output.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    secret = P2PKSecret.deserialize(token.token[0].proofs[0].secret)
-    assert secret.locktime is not None
-    assert (
-        before + settings.locktime_delta_seconds
-        <= secret.locktime
-        <= after + settings.locktime_delta_seconds
-    )
-
+    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
+    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
+    # send locks a proof to the recipient's key directly; the wallet cannot build
+    # that yet, so --lock has no v3 form.
+    assert isinstance(result.exception, NotAllowedError)
+    assert "pre-v3 keyset" in str(result.exception)
 
 def mint_tokens(runner, cli_prefix, amount: str):
     result = runner.invoke(
