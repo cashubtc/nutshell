@@ -824,7 +824,8 @@ class Wallet(
             _, path_keyset_id, counter_str = path.split(":")
             secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
             pub = secret_key.public_key
-            assert pub and pub.format().hex() == proof.secret
+            if pub.format().hex() != proof.secret:
+                return None
             return secret_key
         except Exception:
             return None

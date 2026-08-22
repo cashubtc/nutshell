@@ -228,7 +228,8 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         is what type 0x04 uses. V2 keeps its unframed message: reframing it would
         re-derive every deployed secret.
         """
-        assert self.seed, "Seed not initialized yet."
+        if self.seed is None:
+            raise RuntimeError("Seed not initialized yet.")
         keyset_id_bytes = b"" if keyset_id is None else bytes.fromhex(keyset_id)
         base = (
             b"Cashu_KDF_HMAC_SHA256"

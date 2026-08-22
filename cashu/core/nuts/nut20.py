@@ -1,4 +1,3 @@
-import json
 from hashlib import sha256
 from typing import List
 
@@ -6,7 +5,11 @@ from coincurve import PublicKeyXOnly
 from loguru import logger
 
 from ..base import BlindedMessage
-from ..crypto.nutroot import keyset_id_transcript_bytes, verify_script_path_spend
+from ..crypto.nutroot import (
+    NutrootWitness,
+    keyset_id_transcript_bytes,
+    verify_script_path_spend,
+)
 from ..crypto.secp import PrivateKey, PublicKey
 from ..crypto.transcript import (
     TransactionShape,
@@ -143,13 +146,13 @@ def verify_mint_quote_v3(
     digest = construct_batch_transaction_message(
         batch_quotes if batch_quotes is not None else [(quote_id, amount)], outputs
     )
-    witness = None
+    witness: NutrootWitness | None = None
     if signature.strip().startswith("{"):
         try:
-            witness = json.loads(signature)
+            witness = NutrootWitness.model_validate_json(signature)
         except ValueError:
             return False
-    if isinstance(witness, dict) and "leaf" in witness:
+    if witness is not None and witness.is_script_path:
         try:
             verify_script_path_spend(
                 PublicKey(bytes.fromhex(public_key)), digest, witness
@@ -157,16 +160,7 @@ def verify_mint_quote_v3(
             return True
         except Exception:
             return False
-    if isinstance(witness, dict):
-        # Key path witness: exactly one signature (NUT-10).
-        sigs = witness.get("signatures")
-        if not isinstance(sigs, list) or len(sigs) != 1:
-            return False
-        sig_hex = sigs[0]
-    else:
-        sig_hex = signature
-    if not isinstance(sig_hex, str):
-        return False
+    sig_hex = witness.signatures[0] if witness is not None else signature
     try:
         pubkey = PublicKeyXOnly(bytes.fromhex(public_key)[1:])
         return pubkey.verify(bytes.fromhex(sig_hex), digest)
