@@ -1,4 +1,3 @@
-import json
 from typing import List, Literal, Optional, Tuple, Union
 
 from coincurve import PublicKeyXOnly
@@ -19,6 +18,7 @@ from ..core.crypto.bls_dhke import keyed_verification
 from ..core.crypto.keys import PublicKey, is_bls_keyset
 from ..core.crypto.nutroot import (
     NUTROOT_MAX_WITNESS_LENGTH,
+    NutrootWitness,
     is_nutroot_point_secret,
     keyset_id_transcript_bytes,
     secret_transcript_bytes,
@@ -299,10 +299,10 @@ class LedgerVerification(
                 # every legitimate spender of a point secret can sign.
                 raise TransactionError("missing nutroot transaction witness.")
             try:
-                witness = json.loads(proof.witness)
+                witness = NutrootWitness.model_validate_json(proof.witness)
             except Exception:
                 raise TransactionError("invalid nutroot transaction witness.")
-            if isinstance(witness, dict) and "leaf" in witness:
+            if witness.is_script_path:
                 # Script path: leaf -> root -> tweak -> P, then evaluate (NUT-10).
                 try:
                     verify_script_path_spend(
@@ -316,9 +316,7 @@ class LedgerVerification(
             # Key path: exactly one BIP-340 signature by the secret's key
             # (NUT-10); anything more is rejected, not skipped.
             try:
-                signatures = witness.get("signatures")
-                assert isinstance(signatures, list) and len(signatures) == 1
-                signature = bytes.fromhex(signatures[0])
+                signature = bytes.fromhex(witness.signatures[0])
                 pubkey = PublicKeyXOnly(bytes.fromhex(proof.secret)[1:])
                 valid = pubkey.verify(signature, digest)
             except Exception:

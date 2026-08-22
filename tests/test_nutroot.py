@@ -16,6 +16,7 @@ from cashu.core.crypto.nutroot import (
     NUTROOT_LEAF_TAG,
     NUTROOT_TWEAK_TAG,
     NutrootLeaf,
+    NutrootWitness,
     nutroot_branch_hash,
     nutroot_leaf_hash,
     nutroot_merkle_path,
@@ -41,6 +42,10 @@ with open(os.path.join(os.path.dirname(__file__), "nutroot_v3_vectors.json")) as
 
 V61 = VECTORS["example_6_1"]
 V62 = VECTORS["example_6_2"]
+
+
+def nutroot_witness(data: dict) -> NutrootWitness:
+    return NutrootWitness.model_validate(data)
 
 
 def verify_schnorr_digest(signature: bytes, digest: bytes, pubkey33: bytes) -> bool:
@@ -915,11 +920,11 @@ def test_script_path_spend_after_leaf_vectors():
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v61 = VECTORS["example_6_1"]
-    witness = {
+    witness = nutroot_witness({
         "leaf": v61["scriptpath_witness"]["leaf"],
         "control": v61["scriptpath_witness"]["control"],
         "signatures": v61["scriptpath_witness"]["signatures"],
-    }
+    })
     digest = bytes.fromhex(v61["transcript_digest"])
     secret = PublicKey(bytes.fromhex(v61["secret"]))
     # After the locktime: passes.
@@ -928,14 +933,25 @@ def test_script_path_spend_after_leaf_vectors():
     with pytest.raises(ValueError, match="locktime"):
         verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] - 1)
     # Wrong merkle path: fails.
-    bad = dict(
-        witness, control={"K": witness["control"]["K"], "path": [v61["merkle_root"]]}
+    bad = nutroot_witness(
+        witness.model_dump(by_alias=True)
+        | {
+            "control": {
+                "K": witness.control.internal_key,
+                "path": [v61["merkle_root"]],
+            }
+        }
     )
     with pytest.raises(ValueError, match="commitment"):
         verify_script_path_spend(secret, digest, bad, now=v61["refund_time"] + 1)
     # Wrong signature (kid key 3 signed a different digest): threshold fails.
-    bad_sig = dict(
-        witness, signatures=[VECTORS["example_6_2"]["melt_witness"]["signatures"][0]]
+    bad_sig = nutroot_witness(
+        witness.model_dump(by_alias=True)
+        | {
+            "signatures": [
+                VECTORS["example_6_2"]["melt_witness"]["signatures"][0]
+            ]
+        }
     )
     with pytest.raises(ValueError, match="threshold"):
         verify_script_path_spend(secret, digest, bad_sig, now=v61["refund_time"] + 1)
@@ -946,11 +962,11 @@ def test_script_path_unknown_leaf_type_fails_closed():
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v62 = VECTORS["example_6_2"]
-    witness = {
+    witness = nutroot_witness({
         "leaf": v62["melt_witness"]["leaf"],
         "control": v62["melt_witness"]["control"],
         "signatures": v62["melt_witness"]["signatures"],
-    }
+    })
     with pytest.raises(ValueError, match="Unknown leaf type"):
         verify_script_path_spend(
             PublicKey(bytes.fromhex(v62["secret"])),
@@ -997,49 +1013,49 @@ def test_script_path_threshold_and_hashlock():
     verify_script_path_spend(
         secret,
         digest,
-        {
+        nutroot_witness({
             "leaf": leaf_threshold.hex(),
             "control": {
                 "K": internal_key.format().hex(),
                 "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
             },
             "signatures": [_sign_digest(3, digest), _sign_digest(9, digest)],
-        },
+        }),
     )
     # One signature is not enough.
     with pytest.raises(ValueError, match="threshold"):
         verify_script_path_spend(
             secret,
             digest,
-            {
+            nutroot_witness({
                 "leaf": leaf_threshold.hex(),
                 "control": {
                     "K": internal_key.format().hex(),
                     "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest)],
-            },
+            }),
         )
     # Duplicated signature cannot double-count.
     with pytest.raises(ValueError, match="threshold"):
         verify_script_path_spend(
             secret,
             digest,
-            {
+            nutroot_witness({
                 "leaf": leaf_threshold.hex(),
                 "control": {
                     "K": internal_key.format().hex(),
                     "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
                 },
                 "signatures": [_sign_digest(3, digest), _sign_digest(3, digest)],
-            },
+            }),
         )
     # More signatures than the leaf lists keys rejects outright.
     with pytest.raises(ValueError, match="more signatures"):
         verify_script_path_spend(
             secret,
             digest,
-            {
+            nutroot_witness({
                 "leaf": leaf_hashlock.hex(),
                 "control": {
                     "K": internal_key.format().hex(),
@@ -1047,11 +1063,11 @@ def test_script_path_threshold_and_hashlock():
                 },
                 "signatures": [_sign_digest(3, digest), "00" * 64],
                 "preimage": preimage.hex(),
-            },
+            }),
         )
 
     # Hashlock: preimage + signature passes; wrong preimage fails; missing preimage fails.
-    hashlock_witness = {
+    hashlock_witness = nutroot_witness({
         "leaf": leaf_hashlock.hex(),
         "control": {
             "K": internal_key.format().hex(),
@@ -1059,17 +1075,19 @@ def test_script_path_threshold_and_hashlock():
         },
         "signatures": [_sign_digest(3, digest)],
         "preimage": preimage.hex(),
-    }
+    })
     verify_script_path_spend(secret, digest, hashlock_witness)
     with pytest.raises(ValueError, match="preimage"):
         verify_script_path_spend(
-            secret, digest, dict(hashlock_witness, preimage="00" * 32)
+            secret,
+            digest,
+            hashlock_witness.model_copy(update={"preimage": "00" * 32}),
         )
     with pytest.raises(ValueError, match="preimage"):
         verify_script_path_spend(
             secret,
             digest,
-            {k: v for k, v in hashlock_witness.items() if k != "preimage"},
+            hashlock_witness.model_copy(update={"preimage": None}),
         )
 
 

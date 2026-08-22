@@ -32,6 +32,14 @@
 - Do not add imports inside functions, methods, or conditional blocks unless a
   documented circular dependency or optional dependency requires lazy loading.
 
+### Type safety
+
+- Do not use runtime type deduction (`isinstance`, `type`, `hasattr`, or
+  `getattr`) for internally typed values. Model types explicitly and rely on
+  mypy; validate untrusted data once at the protocol boundary.
+- Do not use `assert` in production code. Use explicit validation and raise an
+  appropriate exception when an invariant can fail.
+
 ### Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

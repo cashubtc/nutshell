@@ -489,7 +489,7 @@ def test_nut29_test_vector():
 def test_bls_step1():
     # Bytes: a raw hash input for the primitive's vector, not a proof secret.
     secret_msg = b"test_message"
-    B_, blinding_factor = bls_dhke.step1_alice(
+    B_, blinding_factor = bls_dhke.step1_alice_hash_input(
         secret_msg,
         blinding_factor=bls.PrivateKey(
             bytes.fromhex(
@@ -506,7 +506,7 @@ def test_bls_step1():
     assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000003"
 
 def test_bls_step2():
-    B_, _ = bls_dhke.step1_alice(
+    B_, _ = bls_dhke.step1_alice_hash_input(
         b"test_message",
         blinding_factor=bls.PrivateKey(
             bytes.fromhex(
@@ -556,7 +556,7 @@ def test_bls_batch_verification_vector():
     C_2 = bls.PublicKey(bytes.fromhex("9776497ad47a00f8a56233fb88f939b0572cf174a4c6d2446c0b1060434e305fae6845fd1f68b70376ba53ffe67f0414"), group="G1")
 
     # verify batch verification passes
-    assert bls_dhke.batch_pairing_verification(
+    assert bls_dhke.batch_pairing_verification_hash_inputs(
         [K, K], [C_1, C_2], [secret_1, secret_2]
     )
 
