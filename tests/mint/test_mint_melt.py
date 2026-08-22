@@ -512,6 +512,85 @@ async def test_fakewallet_pending_quote_get_melt_quote_error(ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_fakewallet_pending_quote_get_melt_quote_not_found(ledger: Ledger):
+    pending_proof, quote = await create_pending_melts(ledger)
+    settings.fakewallet_payment_state = PaymentStatusResult.NOT_FOUND.name
+
+    quote2 = await ledger.get_melt_quote(quote_id=quote.quote)
+    assert quote2.state == MeltQuoteState.pending
+
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
+    assert states[0].pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_fakewallet_pending_quote_get_melt_quote_exception(
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+):
+    pending_proof, quote = await create_pending_melts(ledger)
+    monkeypatch.setattr(settings, "fakewallet_payment_state_exception", True)
+
+    quote2 = await ledger.get_melt_quote(quote_id=quote.quote)
+    assert quote2.state == MeltQuoteState.pending
+
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
+    assert states[0].pending
+    assert not ledger.disable_melt
+
+
+@pytest.mark.asyncio
+async def test_execute_melt_failed_payment_uses_settled_status(
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+):
+    proof, quote = await create_pending_melts(ledger)
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def failed_payment(quote: MeltQuote, fee_limit_msat: int):
+        return PaymentResponse(
+            result=PaymentResult.FAILED,
+            checking_id=quote.checking_id,
+        )
+
+    async def settled_status(checking_id: str):
+        return PaymentStatus(result=PaymentStatusResult.SETTLED)
+
+    monkeypatch.setattr(backend, "pay_invoice", failed_payment)
+    monkeypatch.setattr(backend, "get_payment_status", settled_status)
+
+    response = await ledger._execute_melt_payment(quote, [proof], outputs=None)
+    assert response.state == MeltQuoteState.paid.value
+
+    states = await ledger.db_read.get_proofs_states([proof.Y])
+    assert states[0].spent
+
+
+@pytest.mark.asyncio
+async def test_execute_melt_payment_and_status_exceptions_keep_pending(
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+):
+    proof, quote = await create_pending_melts(ledger)
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def payment_exception(quote: MeltQuote, fee_limit_msat: int):
+        raise RuntimeError("payment error")
+
+    async def status_exception(checking_id: str):
+        raise RuntimeError("status error")
+
+    monkeypatch.setattr(backend, "pay_invoice", payment_exception)
+    monkeypatch.setattr(backend, "get_payment_status", status_exception)
+
+    response = await ledger._execute_melt_payment(quote, [proof], outputs=None)
+    assert response.state == MeltQuoteState.pending.value
+
+    states = await ledger.db_read.get_proofs_states([proof.Y])
+    assert states[0].pending
+    assert not ledger.disable_melt
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
@@ -573,6 +652,7 @@ async def test_melt_lightning_error_status_keeps_proofs_pending(
     assert response.state == MeltQuoteState.pending.value
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
     assert all(state.pending for state in states)
+    assert not ledger.disable_melt
 
 
 @pytest.mark.asyncio
@@ -593,10 +673,9 @@ async def test_melt_lightning_pay_invoice_failed_settled(
     settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
 
     melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-    assert melt_response.state == MeltQuoteState.pending.value
-    # expect that proofs are pending
+    assert melt_response.state == MeltQuoteState.paid.value
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
-    assert all([s.pending for s in states])
+    assert all([s.spent for s in states])
 
 
 @pytest.mark.asyncio
@@ -625,39 +704,26 @@ async def test_melt_lightning_pay_invoice_failed_pending(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
-async def test_melt_lightning_pay_invoice_exception_exception(
-    ledger: Ledger, wallet: Wallet
+async def test_melt_lightning_payment_exceptions_keep_pending(
+    ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
 ):
-    """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
-    settings.mint_disable_melt_on_error = True
-    mint_quote = await wallet.request_mint(128)
+    mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
-    await wallet.mint(128, quote_id=mint_quote.quote)
-    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    await wallet.mint(64, quote_id=mint_quote.quote)
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
         await ledger.melt_quote(
             PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
         )
     ).quote
-    # quote = await ledger.get_melt_quote(quote_id)
-    settings.fakewallet_payment_state_exception = True
-    settings.fakewallet_pay_invoice_state_exception = True
+    monkeypatch.setattr(settings, "fakewallet_payment_state_exception", True)
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state_exception", True)
 
-    # we expect a pending melt quote because something has gone wrong (for example has lost connection to backend)
     resp = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
     assert resp.state == MeltQuoteState.pending.value
-
-    # the mint should be locked now and not allow any other melts until it is restarted
-    quote_id = (
-        await ledger.melt_quote(
-            PostMeltQuoteRequest(unit="sat", request=invoice_64_sat)
-        )
-    ).quote
-    await assert_err(
-        ledger.melt(proofs=wallet.proofs, quote=quote_id),
-        "Melt is disabled. Please contact the operator.",
-    )
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.pending for state in states)
+    assert not ledger.disable_melt
 
 
 @pytest.mark.asyncio
