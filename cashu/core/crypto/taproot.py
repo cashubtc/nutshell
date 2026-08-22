@@ -31,8 +31,8 @@ TAPROOT_LEAF_TYPE: Dict[str, int] = {
 }
 _LEAF_TYPE_NAME = {v: k for k, v in TAPROOT_LEAF_TYPE.items()}
 
-# Leaf body field types. Even = constraint (unknown fails closed), odd =
-# annotation (ignorable).
+# Leaf body field types. Allocated types are even; odd types are reserved,
+# unknown fails closed.
 _FIELD_N = 0x02
 _FIELD_KEYS = 0x04
 _FIELD_TIME = 0x06
@@ -169,9 +169,9 @@ def serialize_taproot_leaf(leaf: TaprootLeaf) -> bytes:
 def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
     """Parse a serialized leaf.
 
-    Fails closed: unknown leaf version or type, unknown even (constraint)
-    fields, missing required fields, and non-canonical streams all raise.
-    Unknown odd (annotation) fields are ignored.
+    Fails closed: unknown leaf version, type or field, missing required
+    fields, and non-canonical streams all raise. Odd field types are
+    reserved, so unknown rejects regardless of parity.
     """
     if len(data) < 2:
         raise ValueError("Leaf too short")
@@ -219,9 +219,9 @@ def parse_taproot_leaf(data: bytes) -> TaprootLeaf:
             if len(value) != 32:
                 raise ValueError("hash field must be 32 bytes")
             hash_ = value
-        elif record_type % 2 == 0:
-            raise ValueError(f"Unknown constraint field: {record_type}")
-        # Odd = annotation, safe to ignore.
+        else:
+            # Odd types are reserved, so an unknown field of either parity rejects.
+            raise ValueError(f"Unknown leaf field: {record_type}")
     if n is None or keys is None:
         raise ValueError("Leaf missing required n or keys field")
     if n > len(keys):
@@ -449,6 +449,10 @@ def verify_script_path_spend(
     signatures = witness.get("signatures") or []
     if not isinstance(signatures, list):
         raise ValueError("invalid signatures field")
+    # Bounded at the leaf's key count (spec 2.3.2): thresholds count satisfied
+    # keys, so extras beyond that can never verify and are rejected outright.
+    if len(signatures) > len(leaf.keys):
+        raise ValueError("more signatures than leaf keys")
     unique_sigs = list(dict.fromkeys(signatures))
     satisfied_keys = set()
     for key in leaf.keys:
