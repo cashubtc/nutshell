@@ -313,10 +313,11 @@ class LedgerVerification(
                         f"invalid taproot script path witness: {e}"
                     )
                 continue
-            # Key path: one BIP-340 signature by the secret's key.
+            # Key path: exactly one BIP-340 signature by the secret's key
+            # (spec 2.3.1); anything more is rejected, not skipped.
             try:
                 signatures = witness.get("signatures")
-                assert isinstance(signatures, list) and signatures
+                assert isinstance(signatures, list) and len(signatures) == 1
                 signature = bytes.fromhex(signatures[0])
                 pubkey = PublicKeyXOnly(bytes.fromhex(proof.secret)[1:])
                 valid = pubkey.verify(signature, digest)
