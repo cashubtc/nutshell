@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from coincurve import PublicKeyXOnly
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .keys import is_bls_keyset
 from .secp import PrivateKey, PublicKey
@@ -63,6 +64,38 @@ class NutrootLeaf:
     keys: List[PublicKey]
     time: Optional[int] = None
     hash: Optional[bytes] = None
+
+
+class NutrootControlBlock(BaseModel):
+    """Typed script-path commitment data from a Nutroot witness."""
+
+    model_config = ConfigDict(strict=True)
+
+    internal_key: str = Field(alias="K")
+    path: List[str] = Field(default_factory=list, max_length=NUTROOT_MAX_TREE_DEPTH)
+
+
+class NutrootWitness(BaseModel):
+    """Strict wire model shared by key-path and script-path witnesses."""
+
+    model_config = ConfigDict(strict=True)
+
+    signatures: List[str] = Field(min_length=1)
+    leaf: Optional[str] = None
+    control: Optional[NutrootControlBlock] = None
+    preimage: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_path(self) -> "NutrootWitness":
+        if (self.leaf is None) != (self.control is None):
+            raise ValueError("leaf and control must be provided together")
+        if self.leaf is None and len(self.signatures) != 1:
+            raise ValueError("key path witness requires exactly one signature")
+        return self
+
+    @property
+    def is_script_path(self) -> bool:
+        return self.leaf is not None
 
 
 def tagged_hash(tag: str, *messages: bytes) -> bytes:
@@ -348,7 +381,6 @@ def nutroot_tweak_seckey(
 ) -> PrivateKey:
     """Tweaked private key p' = (k + t) mod n for the key path."""
     K = private_key.public_key
-    assert K
     t = nutroot_tweak(K, merkle_root)
     return private_key.add(t.to_bytes(32, "big"))
 
@@ -412,7 +444,7 @@ def is_nutroot_point_secret(secret: str, keyset_id: str) -> bool:
 def verify_script_path_spend(
     secret: PublicKey,
     digest: bytes,
-    witness: dict,
+    witness: NutrootWitness,
     now: Optional[float] = None,
     preimage_max_len: int = 32,
 ) -> None:
@@ -422,23 +454,26 @@ def verify_script_path_spend(
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
     transaction digest. Raises ValueError on any failure (fail closed).
     """
-    leaf_bytes = bytes.fromhex(witness["leaf"])
-    control = witness["control"]
-    internal_key = PublicKey(bytes.fromhex(control["K"]))
-    path = [bytes.fromhex(h) for h in control.get("path", [])]
+    if witness.leaf is None or witness.control is None:
+        raise ValueError("script path witness requires leaf and control")
+    leaf_bytes = bytes.fromhex(witness.leaf)
+    internal_key = PublicKey(bytes.fromhex(witness.control.internal_key))
+    path = [bytes.fromhex(h) for h in witness.control.path]
     if not verify_nutroot_commitment(secret, internal_key, leaf_bytes, path):
         raise ValueError("script path commitment does not reach the secret")
     leaf = parse_nutroot_leaf(leaf_bytes)  # raises on unknown version/type/fields
 
     if leaf.type == "after":
-        assert leaf.time is not None
+        if leaf.time is None:
+            raise ValueError("after leaf missing time field")
         if (now if now is not None else time.time()) < leaf.time:
             raise ValueError("after leaf locktime not reached")
 
     if leaf.type == "hashlock":
-        assert leaf.hash is not None
-        preimage_hex = witness.get("preimage")
-        if not isinstance(preimage_hex, str):
+        if leaf.hash is None:
+            raise ValueError("hashlock leaf missing hash field")
+        preimage_hex = witness.preimage
+        if preimage_hex is None:
             raise ValueError("hashlock leaf requires a preimage")
         preimage = bytes.fromhex(preimage_hex)
         if len(preimage) > preimage_max_len:
@@ -446,9 +481,7 @@ def verify_script_path_spend(
         if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
 
-    signatures = witness.get("signatures") or []
-    if not isinstance(signatures, list):
-        raise ValueError("invalid signatures field")
+    signatures = witness.signatures
     # Bounded at the leaf's key count (NUT-10): thresholds count satisfied
     # keys, so extras beyond that can never verify and are rejected outright.
     if len(signatures) > len(leaf.keys):
