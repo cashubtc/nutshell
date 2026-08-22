@@ -1224,3 +1224,33 @@ def test_v3_witness_does_not_travel_in_a_token():
         t=[TokenV4Token(i=bytes.fromhex(v3_keyset), p=[carried])],
     )
     assert token.proofs[0].witness is None
+
+
+def test_duplicate_leaves_fold_and_spend():
+    """NUT-10 duplicate-pair vector: the fold commits the leaf multiset."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend
+
+    leaf = bytes.fromhex(VECTORS["leaf_forms"]["threshold_1of1"])
+    h = nutroot_leaf_hash(leaf)
+    root = nutroot_merkle_root([h, h])
+    assert root.hex() == "1eaf291448e2f3c3a4fc00bfd591917bbb807e63af0fb905d054002bddd2cbc6"
+    assert root != nutroot_merkle_root([h])
+    key6 = PrivateKey((6).to_bytes(32, "big")).public_key
+    secret = nutroot_tweak_pubkey(key6, root)
+    assert (
+        secret.format().hex()
+        == "03dd2f11ab23b670222ada50325b5d49cd07e1d7a721d9b52fa2039df1f1b0dbfd"
+    )
+    # Either copy spends with the other's hash as its path.
+    digest = hashlib.sha256(b"duplicate leaf test transcript").digest()
+    for index in (0, 1):
+        assert [p.hex() for p in nutroot_merkle_path([h, h], index)] == [h.hex()]
+    verify_script_path_spend(
+        secret,
+        digest,
+        nutroot_witness({
+            "leaf": leaf.hex(),
+            "control": {"K": key6.format().hex(), "path": [h.hex()]},
+            "signatures": [_sign_digest(3, digest)],
+        }),
+    )
