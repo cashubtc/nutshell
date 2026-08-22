@@ -25,7 +25,7 @@ async def test_async_melt(ledger):
         name="wallet_async_melt",
     )
     await wallet.load_mint()
-    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    # Inherited tests: pre-v3 secrets and no nutroot witnesses.
     await use_v2_keyset(wallet)
 
     # Setup: get some funds
@@ -82,7 +82,7 @@ async def test_async_melt_commits_pending_before_returning(ledger):
         name="wallet_async_melt_race",
     )
     await wallet.load_mint()
-    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    # Inherited tests: pre-v3 secrets and no nutroot witnesses.
     await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)

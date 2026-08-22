@@ -298,7 +298,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
     ) -> Tuple[bytes, bytes, str]:
         """
         Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "02".
-        NUT-13 (taproot secrets, spec 2.4.2):
+        NUT-13:
         - type 0x00: the first digest that is a valid secp256k1 private key is
           the internal key k; the secret is K = k*G compressed.
         - type 0x01: BLS Fr rejection sampling.
@@ -417,7 +417,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             raise NotAllowedError(
                 "Well-known secret locks (P2PK, HTLC) need a pre-v3 keyset. The active"
                 f" keyset {self.keyset_id} is v3, which locks a proof to a key"
-                " directly (NUT-10 taproot secrets)."
+                " directly (NUT-10 nutroot secrets)."
             )
         rs: List[PrivateKey] = []
         # generate secrets for receiver
