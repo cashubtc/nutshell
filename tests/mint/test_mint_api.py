@@ -493,11 +493,14 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert quote.fee_reserve == 2
 
     keep, send = await wallet.swap_to_send(wallet.proofs, 64)
-    inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    wallet._attach_nutroot_witnesses(
+        send, outputs, melt_quote_id=quote.quote, melt_quote_amount=quote.amount
+    )
+    inputs_payload = [p.to_dict() for p in send]
     outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
