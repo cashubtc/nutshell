@@ -157,9 +157,14 @@ def verify_mint_quote_v3(
             return True
         except Exception:
             return False
-    sig_hex = (
-        witness.get("signatures", [None])[0] if isinstance(witness, dict) else signature
-    )
+    if isinstance(witness, dict):
+        # Key path witness: exactly one signature (spec 2.3.1).
+        sigs = witness.get("signatures")
+        if not isinstance(sigs, list) or len(sigs) != 1:
+            return False
+        sig_hex = sigs[0]
+    else:
+        sig_hex = signature
     if not isinstance(sig_hex, str):
         return False
     try:
