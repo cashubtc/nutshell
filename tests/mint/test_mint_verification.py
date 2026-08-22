@@ -16,8 +16,8 @@ from cashu.core.base import (
 )
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.keys import is_bls_keyset
+from cashu.core.crypto.nutroot import NUTROOT_MAX_WITNESS_LENGTH
 from cashu.core.crypto.secp import PrivateKey
-from cashu.core.crypto.taproot import TAPROOT_MAX_WITNESS_LENGTH
 from cashu.core.errors import (
     InvalidProofsError,
     NoSecretInProofsError,
@@ -169,7 +169,7 @@ def test_verify_input_witness_criteria_uses_v3_protocol_bound(ledger: Ledger):
         amount=8,
         secret="02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
         C="02" + "ab" * 32,
-        witness="w" * TAPROOT_MAX_WITNESS_LENGTH,
+        witness="w" * NUTROOT_MAX_WITNESS_LENGTH,
     )
     assert ledger._verify_input_witness_criteria(p) is True
     p.witness += "w"

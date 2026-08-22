@@ -6,8 +6,8 @@ from coincurve import PublicKeyXOnly
 from loguru import logger
 
 from ..base import BlindedMessage
+from ..crypto.nutroot import keyset_id_transcript_bytes, verify_script_path_spend
 from ..crypto.secp import PrivateKey, PublicKey
-from ..crypto.taproot import keyset_id_transcript_bytes, verify_script_path_spend
 from ..crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
@@ -90,8 +90,8 @@ def verify_mint_quote(
 def construct_transaction_message(
     quote_id: str, amount: int, outputs: List[BlindedMessage]
 ) -> bytes:
-    """V3 (taproot secrets): the quote is a transaction input signing the
-    transaction digest (spec 2.2.2 / 5); NUT-20's separate message retires."""
+    """V3 (nutroot secrets): the quote is a transaction input signing the
+    transaction digest (NUT-10); NUT-20's separate message retires."""
     return construct_batch_transaction_message([(quote_id, amount)], outputs)
 
 
@@ -100,7 +100,7 @@ def construct_batch_transaction_message(
 ) -> bytes:
     """The one transaction digest for a (batch) mint: every quote input
     (quote_id, amount) in request order plus all blinded outputs. Every
-    quote's witness signs this same message (spec 2.2.2)."""
+    quote's witness signs this same message (NUT-10)."""
     return transaction_digest(
         TransactionShape(
             mint_quote_inputs=[
@@ -158,7 +158,7 @@ def verify_mint_quote_v3(
         except Exception:
             return False
     if isinstance(witness, dict):
-        # Key path witness: exactly one signature (spec 2.3.1).
+        # Key path witness: exactly one signature (NUT-10).
         sigs = witness.get("signatures")
         if not isinstance(sigs, list) or len(sigs) != 1:
             return False

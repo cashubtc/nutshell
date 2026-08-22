@@ -34,9 +34,9 @@ from .crypto.keys import (
     derive_pubkeys,
     is_bls_keyset,
 )
+from .crypto.nutroot import is_nutroot_point_secret
 from .crypto.secp import PrivateKey as SecpPrivateKey
 from .crypto.secp import PublicKey as SecpPublicKey
-from .crypto.taproot import is_taproot_point_secret
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
 
@@ -134,7 +134,7 @@ class P2PKWitness(BaseModel):
 
 
 class SpendInfo(BaseModel):
-    """Taproot spend info (spec 2.5): a key and, when conditions exist, the leaf tree.
+    """Nutroot spend info (NUT-10): a key and, when conditions exist, the leaf tree.
 
     `k` (32-byte scalar hex, bearer) and `E` (33-byte point hex, receiver-keyed)
     are mutually exclusive. `K` (33-byte point hex) is the internal key, needed
@@ -166,7 +166,7 @@ class Proof(BaseModel):
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
-    spend_info: Optional[SpendInfo] = None  # taproot spend info (local-only)
+    spend_info: Optional[SpendInfo] = None  # nutroot spend info (local-only)
     # Mint-side: v3 transaction digest the witness signed, stored with the
     # spent proof and served by NUT-07 (a v3 witness verifies only against it).
     digest: Union[None, str] = None
@@ -189,7 +189,7 @@ class Proof(BaseModel):
         super().__init__(**data)
         if is_bls_keyset(self.id):
             # V3: Y lives on BLS G1, hashed over the secret's raw bytes for
-            # point secrets (taproot) with utf8 fallback for legacy secrets.
+            # point secrets (nutroot) with utf8 fallback for legacy secrets.
             self.Y = bls_hash_to_curve(secret_to_hash_input(self.secret)).format().hex()
         else:
             self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
@@ -1410,7 +1410,7 @@ class TokenV4DLEQ(BaseModel):
 
 
 class TokenV4SpendInfo(BaseModel):
-    """Taproot spend info in a V4 token: bearer key, DH ephemeral, internal key, NUMS
+    """Nutroot spend info in a V4 token: bearer key, DH ephemeral, internal key, NUMS
     offset, leaf tree."""
 
     k: Optional[bytes] = None
@@ -1431,7 +1431,7 @@ class TokenV4Proof(BaseModel):
     d: Optional[TokenV4DLEQ] = None  # DLEQ proof
     w: Optional[str] = None  # witness
     pe: Optional[bytes] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1)
-    si: Optional[TokenV4SpendInfo] = None  # taproot spend info
+    si: Optional[TokenV4SpendInfo] = None  # nutroot spend info
 
     @classmethod
     def from_proof(cls, proof: Proof, include_dleq=False):
@@ -1452,7 +1452,7 @@ class TokenV4Proof(BaseModel):
             # outside that transaction and a token carries no transaction.
             # Emitting one would hand the next owner a witness that can never
             # verify, in place of the signature they have to produce.
-            w=None if is_taproot_point_secret(proof.secret, proof.id) else proof.witness,
+            w=None if is_nutroot_point_secret(proof.secret, proof.id) else proof.witness,
             pe=bytes.fromhex(proof.p2pk_e) if proof.p2pk_e else None,
             si=(
                 TokenV4SpendInfo(
@@ -1544,7 +1544,7 @@ class TokenV4(Token):
                 # and their sweep would be refused for it.
                 witness=(
                     None
-                    if is_taproot_point_secret(p.s, token.i.hex())
+                    if is_nutroot_point_secret(p.s, token.i.hex())
                     else p.w
                 ),
                 p2pk_e=p.pe.hex() if p.pe else None,

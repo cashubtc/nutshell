@@ -17,14 +17,14 @@ from ..core.crypto import b_dhke
 from ..core.crypto.bls import PublicKey as BlsPublicKey
 from ..core.crypto.bls_dhke import keyed_verification
 from ..core.crypto.keys import PublicKey, is_bls_keyset
-from ..core.crypto.secp import PublicKey as SecpPublicKey
-from ..core.crypto.taproot import (
-    TAPROOT_MAX_WITNESS_LENGTH,
-    is_taproot_point_secret,
+from ..core.crypto.nutroot import (
+    NUTROOT_MAX_WITNESS_LENGTH,
+    is_nutroot_point_secret,
     keyset_id_transcript_bytes,
     secret_transcript_bytes,
     verify_script_path_spend,
 )
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
@@ -92,11 +92,11 @@ class LedgerVerification(
             # 3. Verify inputs and outputs together
             self._verify_inputs_and_outputs_together(proofs, outputs)
 
-        # 4. Verify taproot transaction witnesses (v3 point secrets).
+        # 4. Verify nutroot transaction witnesses (v3 point secrets).
         # For melt, `outputs` is None here (change blanks are verified earlier)
         # and the request's outputs arrive as `transcript_outputs`.
         if outputs is not None or transcript_outputs is not None or melt_quote is not None:
-            self._verify_taproot_transaction_witnesses(
+            self._verify_nutroot_transaction_witnesses(
                 proofs,
                 outputs if outputs is not None else (transcript_outputs or []),
                 melt_quote,
@@ -144,10 +144,10 @@ class LedgerVerification(
                 # the spent inputs and the created outputs.
                 self._verify_inputs_and_outputs_together(proofs, outputs)
 
-        # 5. Verify taproot transaction witnesses (v3 point secrets). One
+        # 5. Verify nutroot transaction witnesses (v3 point secrets). One
         # transcript per transaction, so this runs on every path, including a
         # melt whose only output is the quote itself.
-        self._verify_taproot_transaction_witnesses(proofs, outputs or [], melt_quote)
+        self._verify_nutroot_transaction_witnesses(proofs, outputs or [], melt_quote)
 
     async def _verify_inputs(
         self,
@@ -243,14 +243,14 @@ class LedgerVerification(
         logger.trace(f"Verified {len(outputs)} outputs.")
 
     @staticmethod
-    def _verify_taproot_transaction_witnesses(
+    def _verify_nutroot_transaction_witnesses(
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         melt_quote: Optional[MeltQuote] = None,
     ) -> None:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
-        One transcript per transaction, checked per input (spec 5): every v3
+        One transcript per transaction, checked per input (NUT-10): every v3
         input must carry a witness, a key path signature being a BIP-340
         signature over the digest by the secret's key and a script path witness
         resolving leaf to root to tweak before evaluating. Anything missing or
@@ -259,7 +259,7 @@ class LedgerVerification(
         """
         if not proofs or (not outputs and melt_quote is None):
             return
-        if not any(is_taproot_point_secret(p.secret, p.id) for p in proofs):
+        if not any(is_nutroot_point_secret(p.secret, p.id) for p in proofs):
             return
         digest = transaction_digest(
             TransactionShape(
@@ -288,33 +288,33 @@ class LedgerVerification(
             )
         )
         for proof in proofs:
-            if not is_taproot_point_secret(proof.secret, proof.id):
+            if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
             # Stored with the spent proof and served by NUT-07: the witness
             # verifies only against this digest. A failure below aborts the
             # transaction, so nothing unverified is ever persisted.
             proof.digest = digest.hex()
             if proof.witness is None:
-                # Inputs sign (spec 2.2.2): with spend_info live in both wallets,
+                # Inputs sign (NUT-10): with spend_info live in both wallets,
                 # every legitimate spender of a point secret can sign.
-                raise TransactionError("missing taproot transaction witness.")
+                raise TransactionError("missing nutroot transaction witness.")
             try:
                 witness = json.loads(proof.witness)
             except Exception:
-                raise TransactionError("invalid taproot transaction witness.")
+                raise TransactionError("invalid nutroot transaction witness.")
             if isinstance(witness, dict) and "leaf" in witness:
-                # Script path: leaf -> root -> tweak -> P, then evaluate (spec 2.3.2).
+                # Script path: leaf -> root -> tweak -> P, then evaluate (NUT-10).
                 try:
                     verify_script_path_spend(
                         SecpPublicKey(bytes.fromhex(proof.secret)), digest, witness
                     )
                 except Exception as e:
                     raise TransactionError(
-                        f"invalid taproot script path witness: {e}"
+                        f"invalid nutroot script path witness: {e}"
                     )
                 continue
             # Key path: exactly one BIP-340 signature by the secret's key
-            # (spec 2.3.1); anything more is rejected, not skipped.
+            # (NUT-10); anything more is rejected, not skipped.
             try:
                 signatures = witness.get("signatures")
                 assert isinstance(signatures, list) and len(signatures) == 1
@@ -322,9 +322,9 @@ class LedgerVerification(
                 pubkey = PublicKeyXOnly(bytes.fromhex(proof.secret)[1:])
                 valid = pubkey.verify(signature, digest)
             except Exception:
-                raise TransactionError("invalid taproot transaction witness.")
+                raise TransactionError("invalid nutroot transaction witness.")
             if not valid:
-                raise TransactionError("invalid taproot transaction witness.")
+                raise TransactionError("invalid nutroot transaction witness.")
 
     def _verify_inputs_and_outputs_together(
         self,
@@ -374,7 +374,7 @@ class LedgerVerification(
     def _verify_input_witness_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies max length of input witness data"""
         max_length = (
-            TAPROOT_MAX_WITNESS_LENGTH
+            NUTROOT_MAX_WITNESS_LENGTH
             if is_bls_keyset(proof.id)
             else settings.mint_max_witness_length
         )
@@ -540,9 +540,9 @@ class LedgerVerification(
         """Verify signature on quote id and outputs"""
         if not quote.pubkey:
             if outputs and is_bls_keyset(outputs[0].id):
-                # A quote is a transaction input and inputs sign (spec 2.2.2), so an
+                # A quote is a transaction input and inputs sign (NUT-10), so an
                 # unlocked quote has no key to sign with: minting onto a v3 keyset
-                # requires a locked quote (spec 5).
+                # requires a locked quote (NUT-10).
                 raise TransactionError(
                     "minting on a v3 keyset requires a locked quote."
                 )

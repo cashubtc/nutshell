@@ -39,16 +39,16 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
-    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    # Inherited tests: pre-v3 secrets and no nutroot witnesses.
     await use_v2_keyset(wallet1)
     yield wallet1
 
 
 async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **kwargs):
-    """ledger.melt with client-side taproot witnesses attached (spec 2.2.2)."""
+    """ledger.melt with client-side nutroot witnesses attached (NUT-10)."""
     quote_obj = await ledger.crud.get_melt_quote(quote_id=quote, db=ledger.db)
     if quote_obj is not None:
-        signer_wallet._attach_taproot_witnesses(
+        signer_wallet._attach_nutroot_witnesses(
             proofs,
             outputs or [],
             melt_quote_id=quote,
@@ -58,8 +58,8 @@ async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **k
 
 
 async def swap_signed(ledger, signer_wallet, *, proofs, outputs):
-    """ledger.swap with client-side taproot witnesses attached (spec 2.2.2)."""
-    signer_wallet._attach_taproot_witnesses(proofs, outputs)
+    """ledger.swap with client-side nutroot witnesses attached (NUT-10)."""
+    signer_wallet._attach_nutroot_witnesses(proofs, outputs)
     return await ledger.swap(proofs=proofs, outputs=outputs)
 
 

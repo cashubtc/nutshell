@@ -13,7 +13,7 @@ class PostMintRequest(BaseModel):
         ..., max_length=settings.mint_max_request_length
     )
     signature: Optional[str] = Field(
-        # Taproot (v3): a script-path quote witness is a JSON object (leaf,
+        # Nutroot (v3): a script-path quote witness is a JSON object (leaf,
         # control block, signatures), far larger than one hex signature.
         default=None, max_length=MAX_WITNESS_LEN
     )  # NUT-20 quote signature

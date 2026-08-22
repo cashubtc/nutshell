@@ -39,7 +39,7 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
-    # Inherited tests: pre-v3 secrets and no taproot witnesses.
+    # Inherited tests: pre-v3 secrets and no nutroot witnesses.
     await use_v2_keyset(wallet1)
     yield wallet1
 

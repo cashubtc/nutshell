@@ -189,7 +189,7 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
-    wallet._attach_taproot_witnesses(wallet.proofs, outputs)
+    wallet._attach_nutroot_witnesses(wallet.proofs, outputs)
     inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.model_dump() for o in outputs]
     payload = {"inputs": inputs_payload, "outputs": outputs_payload}
@@ -436,7 +436,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
-    wallet._attach_taproot_witnesses(
+    wallet._attach_nutroot_witnesses(
         wallet.proofs, outputs, melt_quote_id=quote.quote, melt_quote_amount=quote.amount
     )
     inputs_payload = [p.to_dict() for p in wallet.proofs]
@@ -559,7 +559,7 @@ async def test_api_check_state_v3_serves_witness_digest(
     """A spent v3 proof's state carries the transaction digest its witness
     signed (NUT-07): the witness verifies only against it."""
     from cashu.core.base import ProofSpentState
-    from cashu.core.crypto.taproot import (
+    from cashu.core.crypto.nutroot import (
         keyset_id_transcript_bytes,
         secret_transcript_bytes,
     )
@@ -576,7 +576,7 @@ async def test_api_check_state_v3_serves_witness_digest(
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     inputs = wallet.proofs
-    wallet._attach_taproot_witnesses(inputs, outputs)
+    wallet._attach_nutroot_witnesses(inputs, outputs)
     payload = {
         "inputs": [p.to_dict() for p in inputs],
         "outputs": [o.model_dump() for o in outputs],

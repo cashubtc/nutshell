@@ -1,5 +1,5 @@
 {
-  "description": "Shared taproot-v3 test vectors from taproot-secrets.md worked examples 6.1 and 6.2. Canonical copy: cashu-ts test/vectors/taproot-v3.json; nutshell copy: tests/taproot_v3_vectors.json. If vectors change, update both copies in the same commit set. All signatures are BIP-340 with aux randomness = 32 zero bytes.",
+  "description": "Shared nutroot-v3 test vectors from taproot-secrets.md worked examples 6.1 and 6.2. Canonical copy: cashu-ts test/vectors/nutroot-v3.json; nutshell copy: tests/nutroot_v3_vectors.json. If vectors change, update both copies in the same commit set. All signatures are BIP-340 with aux randomness = 32 zero bytes.",
   "tags": {
     "leaf": "Cashu_NutrootLeaf",
     "branch": "Cashu_NutrootBranch",
