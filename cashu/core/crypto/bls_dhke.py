@@ -1,5 +1,5 @@
 import hashlib
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import pyblst
 from loguru import logger
@@ -19,7 +19,7 @@ def hash_to_curve(message: bytes) -> PublicKey:
     pt = pyblst.BlstP1Element().hash_to_group(message, DST)
     return PublicKey(point=pt, group="G1")
 
-def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
+def secret_to_hash_input(secret_msg: str) -> bytes:
     """Map a v3 secret string to its hash-to-curve input.
 
     v3 keysets carry nutroot point secrets only: 33-byte compressed points,
@@ -27,11 +27,7 @@ def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
     secrets and plain text secrets belong to legacy/v1/v2 keysets and are
     refused here. Only BLS (v3) code paths reach this function.
 
-    Bytes pass through as an already-mapped hash input, which is how the
-    primitive's own test vectors drive it.
     """
-    if isinstance(secret_msg, bytes):
-        return secret_msg
     # Lowercase is the canonical wire form (one spelling per secret): the wallet
     # side hashes upper-case hex differently, so accepting both here would let a
     # proof verify at the mint while its owner computes another Y for it.
@@ -48,16 +44,26 @@ def secret_to_hash_input(secret_msg: Union[str, bytes]) -> bytes:
 
 
 def step1_alice(
-    secret_msg: Union[str, bytes], blinding_factor: Optional[PrivateKey] = None
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
 ) -> tuple[PublicKey, PrivateKey]:
     """
     Alice blinds the message: B' = Y * r
     where Y = hash_to_curve(secret_msg)
     """
-    Y: PublicKey = hash_to_curve(secret_to_hash_input(secret_msg))
+    return step1_alice_hash_input(secret_to_hash_input(secret_msg), blinding_factor)
+
+
+def step1_alice_hash_input(
+    hash_input: bytes, blinding_factor: Optional[PrivateKey] = None
+) -> tuple[PublicKey, PrivateKey]:
+    """Blind an already validated hash input for low-level protocol vectors."""
+    Y: PublicKey = hash_to_curve(hash_input)
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y * r
-    logger.trace(f"BLS step1: secret={secret_msg!r} -> Y={Y.format().hex()} B_={B_.format().hex()} r={r.to_hex()}")
+    logger.trace(
+        f"BLS step1: hash_input={hash_input!r} -> Y={Y.format().hex()} "
+        f"B_={B_.format().hex()} r={r.to_hex()}"
+    )
     return B_, r
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
@@ -104,7 +110,9 @@ def pairing_verification(K2: PublicKey, C: PublicKey, secret_msg: str) -> bool:
     p2 = pyblst.miller_loop(Y.point, K2.point)
     return pyblst.final_verify(p1 * p2, pyblst.BlstFP12Element())
 
-def derive_batch_random_scalars(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> list[int]:
+def derive_batch_random_scalars(
+    K2s: list[PublicKey], Cs: list[PublicKey], hash_inputs: list[bytes]
+) -> list[int]:
     """
     Derives deterministic random scalars for batch verification using the Fiat-Shamir heuristic
     and rejection sampling to ensure scalars are uniformly distributed over Fr*.
@@ -112,7 +120,7 @@ def derive_batch_random_scalars(K2s: list[PublicKey], Cs: list[PublicKey], secre
     n = len(Cs)
     transcript = BLS_BATCH_DST
     for i in range(n):
-        secret_bytes = secret_to_hash_input(secret_msgs[i])
+        secret_bytes = hash_inputs[i]
         transcript += Cs[i].format()
         transcript += K2s[i].format()
         transcript += len(secret_bytes).to_bytes(4, "big")
@@ -133,18 +141,29 @@ def derive_batch_random_scalars(K2s: list[PublicKey], Cs: list[PublicKey], secre
             
     return rs
 
-def batch_pairing_verification(K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]) -> bool:
+def batch_pairing_verification(
+    K2s: list[PublicKey], Cs: list[PublicKey], secret_msgs: list[str]
+) -> bool:
     """
     Batch verifies BLS12-381 signatures using random linear combinations.
     This significantly improves performance over checking each signature individually.
     """
+    return batch_pairing_verification_hash_inputs(
+        K2s, Cs, [secret_to_hash_input(msg) for msg in secret_msgs]
+    )
+
+
+def batch_pairing_verification_hash_inputs(
+    K2s: list[PublicKey], Cs: list[PublicKey], hash_inputs: list[bytes]
+) -> bool:
+    """Batch-verify already validated hash inputs for low-level vectors."""
     n = len(Cs)
     if n == 0:
         return True
     
-    rs = derive_batch_random_scalars(K2s, Cs, secret_msgs)
+    rs = derive_batch_random_scalars(K2s, Cs, hash_inputs)
         
-    Ys = [hash_to_curve(secret_to_hash_input(msg)) for msg in secret_msgs]
+    Ys = [hash_to_curve(hash_input) for hash_input in hash_inputs]
     
     # Left side: sum(r_i * C_i)
     sum_C = Cs[0].point.scalar_mul(rs[0])
