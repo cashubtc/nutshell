@@ -22,13 +22,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke, bls_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.bls import PublicKey as BlsPublicKey
-from ..core.crypto.keys import (
-    V2_KEYSET_VERSION,
-    PublicKey,
-    derive_pubkey,
-    generate_uuid_v7,
-    is_bls_keyset,
-)
+from ..core.crypto.keys import PublicKey, derive_pubkey, generate_uuid_v7, is_bls_keyset
 from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -160,13 +154,6 @@ class Ledger(
         for derivation_path in settings.mint_derivation_path_list:
             derivation_path = self.maybe_update_derivation_path(derivation_path)
             await self.activate_keyset(derivation_path=derivation_path)
-        if settings.mint_v2_keyset_derivation_path:
-            await self.activate_keyset(
-                derivation_path=self.maybe_update_derivation_path(
-                    settings.mint_v2_keyset_derivation_path
-                ),
-                version=V2_KEYSET_VERSION,
-            )
 
     async def _run_regular_tasks(self) -> None:
         """

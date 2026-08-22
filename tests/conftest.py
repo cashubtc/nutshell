@@ -45,11 +45,6 @@ assert settings.mint_test_database != settings.mint_database, (
 settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = ["m/0'/2'/0'"]  # USD
-# A v2 keyset next to the v3 ones: NUT-10 well-known secrets (P2PK, HTLC) and
-# plain text secrets are only valid on pre-v3 keysets. Suites that use them
-# bind to it with tests.helpers.use_v2_keyset; everything else keeps the v3
-# keyset, which stays first in selection order.
-settings.mint_v2_keyset_derivation_path = "m/0'/0'/1'"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
@@ -60,6 +55,19 @@ settings.mint_input_fee_ppk = 0
 settings.db_connection_pool = True
 settings.mint_require_auth = False
 settings.mint_watchdog_enabled = False
+
+# Legacy compatibility tests share the integration-test mint with v3 tests.
+# Provision their v2 keyset in the test harness rather than exposing a production
+# setting that makes a fresh v3 mint advertise newly generated legacy keysets.
+_startup_keysets = Ledger._startup_keysets
+
+
+async def _startup_test_keysets(ledger: Ledger) -> None:
+    await _startup_keysets(ledger)
+    await ledger.activate_keyset(derivation_path="m/0'/0'/1'", version="0.20.0")
+
+
+Ledger._startup_keysets = _startup_test_keysets
 
 settings.mint_rpc_server_enable = True
 settings.mint_rpc_server_mutual_tls = False

@@ -171,12 +171,6 @@ def is_base64_keyset_id(keyset_id: str) -> bool:
         return False
 
 
-# Mint software version that still generates v2 (secp256k1, "01" prefix)
-# keysets. Keyset flavour follows the mint's version, so this is how a v3 mint
-# asks for a pre-v3 keyset explicitly.
-V2_KEYSET_VERSION = "0.20.0"
-
-
 def get_keyset_id_version(keyset_id: str) -> str:
     """
     Extract the version from a keyset ID.

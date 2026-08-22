@@ -53,11 +53,6 @@ class MintSettings(CashuSettings):
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
-    # Activates an additional v2 (secp256k1) keyset on a mint whose own version
-    # would only ever generate v3 keysets. A mint that upgraded into v3 already
-    # has its old keysets in the database; a fresh one needs this to serve the
-    # pre-v3 secret formats (NUT-10 well-known and plain text).
-    mint_v2_keyset_derivation_path: str = Field(default="")
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
 

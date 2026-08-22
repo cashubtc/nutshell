@@ -211,7 +211,7 @@ async def use_v2_keyset(wallet) -> str:
         for kid, ks in wallet.keysets.items()
         if ks.unit == wallet.unit and ks.active and not is_bls_keyset(kid)
     ]
-    assert v2_ids, "mint serves no pre-v3 keyset: check mint_v2_keyset_derivation_path"
+    assert v2_ids, "the legacy test mint serves no pre-v3 keyset"
     await wallet.activate_keyset(v2_ids[-1])
     return v2_ids[-1]
 
