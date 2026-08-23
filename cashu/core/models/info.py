@@ -15,7 +15,7 @@ class MintMethodSetting(BaseModel):
     method_name: Optional[str] = None
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
-    options: Optional[MintMethodBolt11OptionSetting] = None
+    options: Optional[Dict[str, Any]] = None
 
 
 class MeltMethodSetting(BaseModel):
@@ -24,6 +24,7 @@ class MeltMethodSetting(BaseModel):
     method_name: Optional[str] = None
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
+    options: Optional[Dict[str, Any]] = None
 
 
 class MintInfoContact(BaseModel):

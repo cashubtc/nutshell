@@ -1384,3 +1384,16 @@ async def m042_add_melt_execution_leases(db: Database):
         await conn.execute(
             f"UPDATE {table} SET payment_uncertain = 1 WHERE state = 'PENDING'"
         )
+
+
+async def m043_add_payment_method_data_to_quotes(db: Database):
+    """Add opaque, server-internal storage for method-specific quote state."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} "
+            "ADD COLUMN method_data TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            "ADD COLUMN method_data TEXT"
+        )
