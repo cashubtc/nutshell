@@ -370,3 +370,54 @@ async def m019_add_p2pk_e_to_proofs(db: Database):
     async with db.connect() as conn:
         await conn.execute("ALTER TABLE proofs ADD COLUMN p2pk_e TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN p2pk_e TEXT")
+
+
+async def m020_add_generic_payment_quote_tables(db: Database):
+    """Add quote storage for non-BOLT11 plugins without touching legacy tables."""
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payment_mint_quotes (
+                quote TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                created_time INTEGER,
+                paid_time INTEGER,
+                issued_time INTEGER,
+                expiry INTEGER,
+                privkey TEXT,
+                pubkey TEXT,
+                amount_paid INTEGER,
+                amount_issued INTEGER,
+                updated_at INTEGER,
+                method_data TEXT
+            );
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS payment_melt_quotes (
+                quote TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee_reserve INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                created_time INTEGER,
+                paid_time INTEGER,
+                fee_paid INTEGER,
+                payment_preimage TEXT,
+                expiry INTEGER,
+                change TEXT,
+                method_data TEXT
+            );
+            """
+        )
