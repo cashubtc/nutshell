@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 
-from ..core.errors import KeysetNotFoundError
+from ..core.base import Method
+from ..core.errors import KeysetNotFoundError, NotAllowedError
 from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
@@ -50,6 +51,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
+from ..payment import payment_method_registry
 from .cache import RedisCache
 from .limit import limit_websocket, limiter
 
@@ -109,7 +111,12 @@ async def index(request: Request) -> HTMLResponse:
     mint_methods = []
     melt_methods = []
     backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
+        list(
+            set(
+                (m.name if isinstance(m, Method) else m).upper()
+                for m in ledger.backends.keys()
+            )
+        )
     )
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
@@ -351,7 +358,7 @@ async def keysets() -> KeysetsResponse:
 
 
 @router.post(
-    "/v1/mint/quote/bolt11",
+    "/v1/mint/quote/{method}",
     name="Request mint quote",
     summary="Request a quote for minting of new tokens",
     response_model=PostMintQuoteResponse,
@@ -359,7 +366,7 @@ async def keysets() -> KeysetsResponse:
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_quote(
-    request: Request, payload: PostMintQuoteRequest
+    request: Request, method: str, payload: PostMintQuoteRequest
 ) -> PostMintQuoteResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
@@ -368,56 +375,38 @@ async def mint_quote(
     Call `POST /v1/mint/bolt11` after paying the invoice.
     """
     logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
-    quote = await ledger.mint_quote(payload)
-    resp = PostMintQuoteResponse(
-        quote=quote.quote,
-        request=quote.request,
-        amount=quote.amount,
-        unit=quote.unit,
-        method=quote.method,
-        state=str(quote.state.value),
-        expiry=quote.expiry,
-        pubkey=quote.pubkey,
-        amount_paid=quote.amount_paid,
-        amount_issued=quote.amount_issued,
-        updated_at=quote.updated_at,
-    )
+    plugin = payment_method_registry.get(method)
+    validated_payload = plugin.validate_mint_quote_request(payload.model_dump())
+    quote = await ledger.mint_quote(validated_payload, method)
+    resp = PostMintQuoteResponse.from_mint_quote(quote)
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
 
 
 @router.get(
-    "/v1/mint/quote/bolt11/{quote}",
+    "/v1/mint/quote/{method}/{quote}",
     summary="Get mint quote",
     response_model=PostMintQuoteResponse,
     response_description="Get an existing mint quote to check its status.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
+async def get_mint_quote(
+    request: Request, method: str, quote: str
+) -> PostMintQuoteResponse:
     """
     Get mint quote state.
     """
     logger.trace(f"> GET /v1/mint/quote/bolt11/{quote}")
     mint_quote = await ledger.get_mint_quote(quote)
-    resp = PostMintQuoteResponse(
-        quote=mint_quote.quote,
-        request=mint_quote.request,
-        amount=mint_quote.amount,
-        unit=mint_quote.unit,
-        method=mint_quote.method,
-        state=str(mint_quote.state.value),
-        expiry=mint_quote.expiry,
-        pubkey=mint_quote.pubkey,
-        amount_paid=mint_quote.amount_paid,
-        amount_issued=mint_quote.amount_issued,
-        updated_at=mint_quote.updated_at,
-    )
+    if mint_quote.method != method:
+        raise NotAllowedError("quote payment method does not match endpoint")
+    resp = PostMintQuoteResponse.from_mint_quote(mint_quote)
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
 
 
 @router.post(
-    "/v1/mint/quote/bolt11/check",
+    "/v1/mint/quote/{method}/check",
     name="Batch check mint quotes",
     summary="Batch check mint quotes",
     response_model=list[PostMintQuoteResponse],
@@ -425,32 +414,19 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_quote_check(
-    request: Request, payload: PostMintQuoteCheckRequest
+    request: Request, method: str, payload: PostMintQuoteCheckRequest
 ) -> list[PostMintQuoteResponse]:
     logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
     quotes = await ledger.mint_quote_check(payload)
-    resp = [
-        PostMintQuoteResponse(
-            quote=quote.quote,
-            request=quote.request,
-            amount=quote.amount,
-            unit=quote.unit,
-            method=quote.method,
-            state=str(quote.state.value),
-            expiry=quote.expiry,
-            pubkey=quote.pubkey,
-            amount_paid=quote.amount_paid,
-            amount_issued=quote.amount_issued,
-            updated_at=quote.updated_at,
-        )
-        for quote in quotes
-    ]
+    if any(quote.method != method for quote in quotes):
+        raise NotAllowedError("quote payment method does not match endpoint")
+    resp = [PostMintQuoteResponse.from_mint_quote(quote) for quote in quotes]
     logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")
     return resp
 
 
 @router.post(
-    "/v1/mint/bolt11/batch",
+    "/v1/mint/{method}/batch",
     name="Batch mint tokens",
     summary="Batch mint tokens",
     response_model=PostMintBatchResponse,
@@ -458,10 +434,10 @@ async def mint_quote_check(
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_batch(
-    request: Request, payload: PostMintBatchRequest
+    request: Request, method: str, payload: PostMintBatchRequest
 ) -> PostMintBatchResponse:
     logger.trace(f"> POST /v1/mint/bolt11/batch: payload={payload}")
-    signatures = await ledger.mint_batch(payload)
+    signatures = await ledger.mint_batch(payload, method_str=method)
     resp = PostMintBatchResponse(signatures=signatures)
     logger.trace(f"< POST /v1/mint/bolt11/batch: {resp}")
     return resp
@@ -493,7 +469,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @router.post(
-    "/v1/mint/bolt11",
+    "/v1/mint/{method}",
     name="Mint tokens with a Lightning payment",
     summary="Mint tokens by paying a bolt11 Lightning invoice.",
     response_model=PostMintResponse,
@@ -505,6 +481,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @redis.cache()
 async def mint(
     request: Request,
+    method: str,
     payload: PostMintRequest,
 ) -> PostMintResponse:
     """
@@ -515,7 +492,10 @@ async def mint(
     logger.trace(f"> POST /v1/mint/bolt11: {payload}")
 
     promises = await ledger.mint(
-        outputs=payload.outputs, quote_id=payload.quote, signature=payload.signature
+        outputs=payload.outputs,
+        quote_id=payload.quote,
+        signature=payload.signature,
+        method_str=method,
     )
     blinded_signatures = PostMintResponse(signatures=promises)
     logger.trace(f"< POST /v1/mint/bolt11: {blinded_signatures}")
@@ -523,55 +503,50 @@ async def mint(
 
 
 @router.post(
-    "/v1/melt/quote/bolt11",
+    "/v1/melt/quote/{method}",
     summary="Request a quote for melting tokens",
     response_model=PostMeltQuoteResponse,
     response_description="Melt tokens for a payment on a supported payment method.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def melt_quote(
-    request: Request, payload: PostMeltQuoteRequest
+    request: Request, method: str, payload: PostMeltQuoteRequest
 ) -> PostMeltQuoteResponse:
     """
     Request a quote for melting tokens.
     """
     logger.trace(f"> POST /v1/melt/quote/bolt11: {payload}")
-    quote = await ledger.melt_quote(payload)  # TODO
+    plugin = payment_method_registry.get(method)
+    validated_payload = plugin.validate_melt_quote_request(payload.model_dump())
+    quote = await ledger.melt_quote(validated_payload, method)
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
     return quote
 
 
 @router.get(
-    "/v1/melt/quote/bolt11/{quote}",
+    "/v1/melt/quote/{method}/{quote}",
     summary="Get melt quote",
     response_model=PostMeltQuoteResponse,
     response_description="Get an existing melt quote to check its status.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
+async def get_melt_quote(
+    request: Request, method: str, quote: str
+) -> PostMeltQuoteResponse:
     """
     Get melt quote state.
     """
     logger.trace(f"> GET /v1/melt/quote/bolt11/{quote}")
     melt_quote = await ledger.get_melt_quote(quote)
-    resp = PostMeltQuoteResponse(
-        quote=melt_quote.quote,
-        amount=melt_quote.amount,
-        unit=melt_quote.unit,
-        method=melt_quote.method,
-        request=melt_quote.request,
-        fee_reserve=melt_quote.fee_reserve,
-        state=melt_quote.state.value,
-        expiry=melt_quote.expiry,
-        payment_preimage=melt_quote.payment_preimage,
-        change=melt_quote.change,
-    )
+    if melt_quote.method != method:
+        raise NotAllowedError("quote payment method does not match endpoint")
+    resp = PostMeltQuoteResponse.from_melt_quote(melt_quote)
     logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")
     return resp
 
 
 @router.post(
-    "/v1/melt/bolt11",
+    "/v1/melt/{method}",
     name="Melt tokens",
     summary=(
         "Melt tokens for a Bitcoin payment that the mint will make for the user in"
@@ -585,18 +560,26 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @redis.cache()
-async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
+async def melt(
+    request: Request, method: str, payload: PostMeltRequest
+) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
     if payload.prefer_async:
         resp = await ledger.async_melt(
-            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+            proofs=payload.inputs,
+            quote=payload.quote,
+            outputs=payload.outputs,
+            method_str=method,
         )
     else:
         resp = await ledger.melt(
-            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+            proofs=payload.inputs,
+            quote=payload.quote,
+            outputs=payload.outputs,
+            method_str=method,
         )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp

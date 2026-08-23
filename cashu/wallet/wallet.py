@@ -38,6 +38,7 @@ from ..core.migrations import migrate_databases
 from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
+    PostMeltQuoteRequest,
     PostMeltQuoteResponse,
 )
 from ..core.nuts import nut20
@@ -52,6 +53,8 @@ from .crud import (
     get_bolt11_mint_quote,
     get_keysets,
     get_mint_by_url,
+    get_payment_melt_quote,
+    get_payment_mint_quote,
     get_proofs,
     invalidate_proof,
     secret_used,
@@ -60,11 +63,15 @@ from .crud import (
     store_bolt11_mint_quote,
     store_keyset,
     store_mint,
+    store_payment_melt_quote,
+    store_payment_mint_quote,
     store_proof,
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
     update_mint,
+    update_payment_melt_quote,
+    update_payment_mint_quote,
     update_proof,
 )
 from .errors import BalanceTooLowError
@@ -584,6 +591,36 @@ class Wallet(
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
+    async def request_mint_for_method(
+        self,
+        method: str,
+        amount: int,
+        memo: Optional[str] = None,
+        method_options: Optional[dict] = None,
+    ) -> MintQuote:
+        """Request and persist a mint quote for a selected payment method."""
+        active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            await self.load_mint()
+            active_keysets = [k for k in self.keysets.values() if k.active]
+        if not active_keysets:
+            raise KeysetNotFoundError(
+                f"Cannot request mint quote: no active keysets found for unit {self.unit.name}."
+            )
+        privkey_hex, pubkey_hex = nut20.generate_keypair()
+        response = await super().mint_quote_for_method(
+            method,
+            amount,
+            self.unit,
+            memo=memo,
+            pubkey=pubkey_hex,
+            method_options=method_options,
+        )
+        quote = MintQuote.from_resp_wallet(response, self.url)
+        quote.privkey = privkey_hex
+        await store_payment_mint_quote(self.db, quote)
+        return quote
+
     async def get_mint_quote(
         self,
         quote_id: str,
@@ -633,11 +670,29 @@ class Wallet(
 
         return mint_quote
 
+    async def get_mint_quote_for_method(self, method: str, quote_id: str) -> MintQuote:
+        response = await super().get_mint_quote_for_method(method, quote_id)
+        local = await get_payment_mint_quote(self.db, quote_id, method)
+        quote = MintQuote.check_stale_and_from_resp_wallet(
+            mint_quote_resp=response,
+            mint=self.url,
+            mint_quote_local=local,
+        )
+        if local and local.privkey:
+            quote.privkey = local.privkey
+        if local:
+            await update_payment_mint_quote(self.db, quote)
+        else:
+            await store_payment_mint_quote(self.db, quote)
+        return quote
+
     async def mint(
         self,
         amount: int,
         quote_id: str,
         split: Optional[List[int]] = None,
+        *,
+        method: str = Method.bolt11.name,
     ) -> List[Proof]:
         """Mint tokens of a specific amount after an invoice has been paid.
 
@@ -678,7 +733,7 @@ class Wallet(
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
-        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+        quote = await get_payment_mint_quote(db=self.db, quote=quote_id, method=method)
         if not quote:
             raise Exception("Quote not found.")
         signature: str | None = None
@@ -686,7 +741,7 @@ class Wallet(
             signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
 
         # will raise exception if mint is unsuccessful
-        promises = await super().mint(outputs, quote_id, signature)
+        promises = await super().mint_for_method(method, outputs, quote_id, signature)
 
         promises_keyset_id = promises[0].id
         await bump_secret_derivation(
@@ -694,21 +749,30 @@ class Wallet(
         )
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
-        await update_bolt11_mint_quote(
-            db=self.db,
-            quote=quote_id,
-            state=MintQuoteState.issued,
-            paid_time=int(time.time()),
-            amount_paid=quote.amount,
-            amount_issued=quote.amount,
-            updated_at=int(time.time()),
+        quote.amount_issued = (quote.amount_issued or 0) + amount
+        quote.state_val = (
+            MintQuoteState.issued
+            if quote.amount_issued == quote.amount_paid
+            else MintQuoteState.paid
         )
+        quote.paid_time = quote.paid_time or int(time.time())
+        quote.updated_at = int(time.time())
+        await update_payment_mint_quote(self.db, quote)
         # store the mint_id in proofs
         async with self.db.connect() as conn:
             for p in proofs:
                 p.mint_id = quote_id
                 await update_proof(p, mint_id=quote_id, conn=conn)
         return proofs
+
+    async def mint_for_method(
+        self,
+        method: str,
+        amount: int,
+        quote_id: str,
+        split: Optional[List[int]] = None,
+    ) -> List[Proof]:
+        return await self.mint(amount, quote_id, split=split, method=method)
 
     async def redeem(
         self,
@@ -777,9 +841,9 @@ class Wallet(
                 send_outputs, keep_outputs, secret_lock
             )
 
-        assert len(secrets) == len(amounts), (
-            "number of secrets does not match number of outputs"
-        )
+        assert len(secrets) == len(
+            amounts
+        ), "number of secrets does not match number of outputs"
         # verify that we didn't accidentally reuse a secret
         await self._check_used_secrets(secrets)
 
@@ -841,6 +905,20 @@ class Wallet(
         await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
         return melt_quote
 
+    async def melt_quote_for_method(
+        self,
+        method: str,
+        request: str,
+        method_options: Optional[dict] = None,
+    ) -> MeltQuote:
+        payload = PostMeltQuoteRequest(unit=self.unit.name, request=request)
+        response = await super().melt_quote_for_method(
+            method, payload, method_options=method_options
+        )
+        quote = MeltQuote.from_resp_wallet(response, self.url)
+        await store_payment_melt_quote(self.db, quote)
+        return quote
+
     async def get_melt_quote(self, quote: str) -> Optional[MeltQuote]:
         """Fetches a melt quote from the mint and updates proofs in the database.
 
@@ -886,6 +964,25 @@ class Wallet(
                 await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
         return melt_quote
 
+    async def get_melt_quote_for_method(
+        self, method: str, quote_id: str
+    ) -> Optional[MeltQuote]:
+        response = await super().get_melt_quote_for_method(method, quote_id)
+        local = await get_payment_melt_quote(self.db, quote_id, method)
+        quote = MeltQuote.from_resp_wallet(response, self.url)
+        proofs = await get_proofs(db=self.db, melt_id=quote_id)
+        if local:
+            await update_payment_melt_quote(self.db, quote)
+        else:
+            await store_payment_melt_quote(self.db, quote)
+        if quote.state == MeltQuoteState.paid and (
+            not local or local.state != MeltQuoteState.paid
+        ):
+            await self.invalidate(proofs)
+        elif quote.state == MeltQuoteState.unpaid:
+            await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
+        return quote
+
     async def melt(
         self,
         proofs: List[Proof],
@@ -893,6 +990,9 @@ class Wallet(
         fee_reserve_sat: int,
         quote_id: str,
         prefer_async: Optional[bool] = None,
+        *,
+        method: str = Method.bolt11.name,
+        method_options: Optional[dict] = None,
     ) -> PostMeltQuoteResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
@@ -922,8 +1022,13 @@ class Wallet(
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
         try:
-            melt_quote_resp = await super().melt(
-                quote_id, proofs, change_outputs, prefer_async=prefer_async
+            melt_quote_resp = await super().melt_for_method(
+                method,
+                quote_id,
+                proofs,
+                change_outputs,
+                prefer_async=prefer_async,
+                method_options=method_options,
             )
         except Exception as e:
             logger.debug(f"Mint error: {e}")
@@ -952,14 +1057,9 @@ class Wallet(
         if melt_quote.change:
             fee_paid -= sum_promises(melt_quote.change)
 
-        await update_bolt11_melt_quote(
-            db=self.db,
-            quote=quote_id,
-            state=MeltQuoteState.paid,
-            paid_time=int(time.time()),
-            payment_preimage=melt_quote.payment_preimage or "",
-            fee_paid=fee_paid,
-        )
+        melt_quote.fee_paid = fee_paid
+        melt_quote.paid_time = int(time.time())
+        await update_payment_melt_quote(self.db, melt_quote)
 
         # handle change and produce proofs
         if melt_quote.change:
@@ -971,6 +1071,26 @@ class Wallet(
             )
             logger.debug(f"Received change: {self.unit.str(sum_proofs(change_proofs))}")
         return melt_quote_resp
+
+    async def melt_for_method(
+        self,
+        method: str,
+        proofs: List[Proof],
+        request: str,
+        fee_reserve: int,
+        quote_id: str,
+        prefer_async: Optional[bool] = None,
+        method_options: Optional[dict] = None,
+    ) -> PostMeltQuoteResponse:
+        return await self.melt(
+            proofs,
+            request,
+            fee_reserve,
+            quote_id,
+            prefer_async,
+            method=method,
+            method_options=method_options,
+        )
 
     async def check_proof_state(self, proofs) -> PostCheckStateResponse:
         return await super().check_proof_state(proofs)
@@ -1001,9 +1121,9 @@ class Wallet(
                 return
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
-            assert proof.id in self.keysets, (
-                f"Keyset {proof.id} not known, can not verify DLEQ."
-            )
+            assert (
+                proof.id in self.keysets
+            ), f"Keyset {proof.id} not known, can not verify DLEQ."
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C)),
@@ -1107,9 +1227,9 @@ class Wallet(
         Raises:
             AssertionError: if len(amounts) != len(secrets)
         """
-        assert len(amounts) == len(secrets), (
-            f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        )
+        assert len(amounts) == len(
+            secrets
+        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
