@@ -37,6 +37,7 @@ class SpendingRequirements:
 class WitnessForP2pkOrHtlc:
     preimage: str | None
     signatures: List[str]
+    malformed: bool = False
 
     @classmethod
     def from_p2pk_witness(cls, witness: Optional[str]) -> "WitnessForP2pkOrHtlc":
@@ -47,7 +48,7 @@ class WitnessForP2pkOrHtlc:
             parsed = P2PKWitness.from_witness(witness)
             return cls(preimage=None, signatures=parsed.signatures)
         except Exception:
-            return cls(preimage=None, signatures=[])
+            return cls(preimage=None, signatures=[], malformed=True)
 
     @classmethod
     def from_htlc_witness(cls, witness: Optional[str]) -> "WitnessForP2pkOrHtlc":
@@ -60,7 +61,7 @@ class WitnessForP2pkOrHtlc:
                 preimage=parsed.preimage, signatures=list(parsed.signatures or [])
             )
         except Exception:
-            return cls(preimage=None, signatures=[])
+            return cls(preimage=None, signatures=[], malformed=True)
 
 
 class LedgerSpendingConditions:
@@ -361,7 +362,12 @@ class LedgerSpendingConditions:
             except Exception as exc:
                 primary_path_error = exc
 
-        # No path succeeded, so surface the best available error.
+        # No path succeeded, so surface the best available error. A witness
+        # that could not be read outranks whichever path complained last:
+        # the client did send something, so "no signatures" would mislead.
+        if witness.malformed:
+            raise TransactionError("witness could not be parsed.")
+
         if primary_path_error:
             raise primary_path_error
 
