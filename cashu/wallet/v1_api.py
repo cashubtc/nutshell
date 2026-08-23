@@ -11,6 +11,7 @@ from ..core.base import (
     AuthProof,
     BlindedMessage,
     BlindedSignature,
+    Method,
     Proof,
     Unit,
     WalletKeyset,
@@ -371,21 +372,43 @@ class LedgerAPI(SupportsAuth):
         Raises:
             Exception: If the mint request fails
         """
-        logger.trace("Requesting mint: POST /v1/mint/bolt11")
+        return await LedgerAPI.mint_quote_for_method(
+            self, Method.bolt11.name, amount, unit, memo=memo, pubkey=pubkey
+        )
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def mint_quote_for_method(
+        self,
+        method: str,
+        amount: int,
+        unit: Unit,
+        memo: Optional[str] = None,
+        pubkey: Optional[str] = None,
+        method_options: Optional[dict] = None,
+    ) -> PostMintQuoteResponse:
+        """Request a mint quote for an explicitly selected payment method."""
+        logger.trace(f"Requesting mint: POST /v1/mint/quote/{method}")
         payload = PostMintQuoteRequest(
             unit=unit.name, amount=amount, description=memo, pubkey=pubkey
         )
+        payload_dict = payload.model_dump()
+        if method_options:
+            payload_dict.update(method_options)
         resp = await self._request(
             POST,
-            "mint/quote/bolt11",
-            json=payload.model_dump(),
+            f"mint/quote/{method}",
+            json=payload_dict,
         )
 
         # if mint doesn't support v1 endpoint, fail explicitly
-        self.raise_on_unsupported_version(resp, "POST /v1/mint/quote/bolt11")
+        self.raise_on_unsupported_version(resp, f"POST /v1/mint/quote/{method}")
 
         return_dict = resp.json()
-        return PostMintQuoteResponse.model_validate(return_dict)
+        quote_response = PostMintQuoteResponse.model_validate(return_dict)
+        if quote_response.method != method:
+            raise Exception("mint returned a quote for a different payment method")
+        return quote_response
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -398,10 +421,22 @@ class LedgerAPI(SupportsAuth):
         Returns:
             PostMintQuoteResponse: Mint Quote Response
         """
-        resp = await self._request(GET, f"mint/quote/bolt11/{quote}")
-        self.raise_on_unsupported_version(resp, f"GET /v1/mint/quote/bolt11/{quote}")
+        return await LedgerAPI.get_mint_quote_for_method(
+            self, Method.bolt11.name, quote
+        )
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def get_mint_quote_for_method(
+        self, method: str, quote: str
+    ) -> PostMintQuoteResponse:
+        resp = await self._request(GET, f"mint/quote/{method}/{quote}")
+        self.raise_on_unsupported_version(resp, f"GET /v1/mint/quote/{method}/{quote}")
         return_dict = resp.json()
-        return PostMintQuoteResponse.model_validate(return_dict)
+        quote_response = PostMintQuoteResponse.model_validate(return_dict)
+        if quote_response.method != method:
+            raise Exception("mint returned a quote for a different payment method")
+        return quote_response
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -421,6 +456,19 @@ class LedgerAPI(SupportsAuth):
         Raises:
             Exception: If the minting fails
         """
+        return await LedgerAPI.mint_for_method(
+            self, Method.bolt11.name, outputs, quote, signature=signature
+        )
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def mint_for_method(
+        self,
+        method: str,
+        outputs: List[BlindedMessage],
+        quote: str,
+        signature: Optional[str] = None,
+    ) -> List[BlindedSignature]:
         outputs_payload = PostMintRequest(
             outputs=outputs, quote=quote, signature=signature
         )
@@ -442,14 +490,14 @@ class LedgerAPI(SupportsAuth):
         )  # type: ignore
         resp = await self._request(
             POST,
-            "mint/bolt11",
+            f"mint/{method}",
             json=payload,  # type: ignore
         )
 
         # fail explicitly if mint doesn't support v1 mint endpoint
         self.raise_on_unsupported_version(resp, f"POST /v1/mint/{quote}")
         response_dict = resp.json()
-        logger.trace(f"Lightning invoice checked. POST {self.api_prefix}/mint/bolt11")
+        logger.trace(f"Payment checked. POST {self.api_prefix}/mint/{method}")
         promises = PostMintResponse.model_validate(response_dict).signatures
         return promises
 
@@ -473,16 +521,33 @@ class LedgerAPI(SupportsAuth):
             unit=unit.name, request=payment_request, options=melt_options
         )
 
+        return await LedgerAPI.melt_quote_for_method(self, Method.bolt11.name, payload)
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def melt_quote_for_method(
+        self,
+        method: str,
+        payload: PostMeltQuoteRequest,
+        method_options: Optional[dict] = None,
+    ) -> PostMeltQuoteResponse:
+        payload_dict = payload.model_dump()
+        if method_options:
+            payload_dict.update(method_options)
+
         resp = await self._request(
             POST,
-            "melt/quote/bolt11",
-            json=payload.model_dump(),
+            f"melt/quote/{method}",
+            json=payload_dict,
         )
 
         # if mint doesn't support v1 melt-quote endpoint, fail explicitly
         self.raise_on_unsupported_version(resp, "POST /v1/melt/quote")
         return_dict = resp.json()
-        return PostMeltQuoteResponse.model_validate(return_dict)
+        quote_response = PostMeltQuoteResponse.model_validate(return_dict)
+        if quote_response.method != method:
+            raise Exception("mint returned a quote for a different payment method")
+        return quote_response
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -495,10 +560,22 @@ class LedgerAPI(SupportsAuth):
         Returns:
             PostMeltQuoteResponse: Melt Quote Response
         """
-        resp = await self._request(GET, f"melt/quote/bolt11/{quote}")
+        return await LedgerAPI.get_melt_quote_for_method(
+            self, Method.bolt11.name, quote
+        )
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def get_melt_quote_for_method(
+        self, method: str, quote: str
+    ) -> PostMeltQuoteResponse:
+        resp = await self._request(GET, f"melt/quote/{method}/{quote}")
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-        return PostMeltQuoteResponse.model_validate(return_dict)
+        quote_response = PostMeltQuoteResponse.model_validate(return_dict)
+        if quote_response.method != method:
+            raise Exception("mint returned a quote for a different payment method")
+        return quote_response
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -513,6 +590,26 @@ class LedgerAPI(SupportsAuth):
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
+        return await LedgerAPI.melt_for_method(
+            self,
+            Method.bolt11.name,
+            quote,
+            proofs,
+            outputs,
+            prefer_async=prefer_async,
+        )
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def melt_for_method(
+        self,
+        method: str,
+        quote: str,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]],
+        prefer_async: Optional[bool] = None,
+        method_options: Optional[dict] = None,
+    ) -> PostMeltQuoteResponse:
         payload = PostMeltRequest(
             quote=quote, inputs=proofs, outputs=outputs, prefer_async=prefer_async
         )
@@ -531,16 +628,22 @@ class LedgerAPI(SupportsAuth):
                 include["outputs"] = {i: outputs_include for i in range(len(outputs))}
             return include
 
+        payload_dict = payload.model_dump(
+            include=_meltrequest_include_fields(proofs, outputs)
+        )
+        if method_options:
+            payload_dict.update(method_options)
         resp = await self._request(
             POST,
-            "melt/bolt11",
-            json=payload.model_dump(
-                include=_meltrequest_include_fields(proofs, outputs)
-            ),  # type: ignore
+            f"melt/{method}",
+            json=payload_dict,
             timeout=None,
         )
         self.raise_on_error_request(resp)
-        return PostMeltQuoteResponse.model_validate(resp.json())
+        quote_response = PostMeltQuoteResponse.model_validate(resp.json())
+        if quote_response.method != method:
+            raise Exception("mint returned a quote for a different payment method")
+        return quote_response
 
     @async_set_httpx_client
     @async_ensure_mint_loaded

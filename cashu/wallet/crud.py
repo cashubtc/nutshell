@@ -533,6 +533,149 @@ async def update_bolt11_melt_quote(
     )
 
 
+async def store_payment_mint_quote(
+    db: Database, quote: MintQuote, conn: Optional[Connection] = None
+) -> None:
+    if quote.method == "bolt11":
+        await store_bolt11_mint_quote(db, quote, conn)
+        return
+    await (conn or db).execute(
+        """
+        INSERT INTO payment_mint_quotes
+            (quote, mint, method, request, checking_id, unit, amount, state,
+             created_time, paid_time, issued_time, expiry, privkey, pubkey,
+             amount_paid, amount_issued, updated_at, method_data)
+        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount,
+                :state, :created_time, :paid_time, :issued_time, :expiry,
+                :privkey, :pubkey, :amount_paid, :amount_issued, :updated_at,
+                :method_data)
+        """,
+        {
+            **quote.model_dump(),
+            "state": quote.state.value,
+            "method_data": json.dumps(quote.method_data),
+        },
+    )
+
+
+async def get_payment_mint_quote(
+    db: Database,
+    quote: str,
+    method: str = "bolt11",
+    conn: Optional[Connection] = None,
+) -> Optional[MintQuote]:
+    if method == "bolt11":
+        return await get_bolt11_mint_quote(db, quote=quote, conn=conn)
+    row = await (conn or db).fetchone(
+        "SELECT * FROM payment_mint_quotes WHERE quote = :quote AND method = :method",
+        {"quote": quote, "method": method},
+    )
+    return MintQuote.from_row(row) if row else None  # type: ignore[arg-type]
+
+
+async def update_payment_mint_quote(
+    db: Database, quote: MintQuote, conn: Optional[Connection] = None
+) -> None:
+    if quote.method == "bolt11":
+        await update_bolt11_mint_quote(
+            db,
+            quote.quote,
+            quote.state,
+            paid_time=quote.paid_time,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
+            conn=conn,
+        )
+        return
+    await (conn or db).execute(
+        """
+        UPDATE payment_mint_quotes
+        SET state = :state, paid_time = :paid_time, issued_time = :issued_time,
+            amount_paid = :amount_paid, amount_issued = :amount_issued,
+            updated_at = :updated_at, method_data = :method_data
+        WHERE quote = :quote AND method = :method
+        """,
+        {
+            **quote.model_dump(),
+            "state": quote.state.value,
+            "method_data": json.dumps(quote.method_data),
+        },
+    )
+
+
+async def store_payment_melt_quote(
+    db: Database, quote: MeltQuote, conn: Optional[Connection] = None
+) -> None:
+    if quote.method == "bolt11":
+        await store_bolt11_melt_quote(db, quote, conn)
+        return
+    values = quote.model_dump()
+    values.update(
+        state=quote.state.value,
+        change=json.dumps([c.model_dump() for c in quote.change])
+        if quote.change
+        else "",
+        method_data=json.dumps(quote.method_data),
+    )
+    await (conn or db).execute(
+        """
+        INSERT INTO payment_melt_quotes
+            (quote, mint, method, request, checking_id, unit, amount, fee_reserve,
+             state, created_time, paid_time, fee_paid, payment_preimage, expiry,
+             change, method_data)
+        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount,
+                :fee_reserve, :state, :created_time, :paid_time, :fee_paid,
+                :payment_preimage, :expiry, :change, :method_data)
+        """,
+        values,
+    )
+
+
+async def get_payment_melt_quote(
+    db: Database,
+    quote: str,
+    method: str = "bolt11",
+    conn: Optional[Connection] = None,
+) -> Optional[MeltQuote]:
+    if method == "bolt11":
+        return await get_bolt11_melt_quote(db, quote=quote, conn=conn)
+    row = await (conn or db).fetchone(
+        "SELECT * FROM payment_melt_quotes WHERE quote = :quote AND method = :method",
+        {"quote": quote, "method": method},
+    )
+    return MeltQuote.from_row(row) if row else None  # type: ignore[arg-type]
+
+
+async def update_payment_melt_quote(
+    db: Database, quote: MeltQuote, conn: Optional[Connection] = None
+) -> None:
+    if quote.method == "bolt11":
+        await update_bolt11_melt_quote(
+            db,
+            quote.quote,
+            quote.state,
+            quote.paid_time or 0,
+            quote.fee_paid,
+            quote.payment_preimage or "",
+            conn,
+        )
+        return
+    await (conn or db).execute(
+        """
+        UPDATE payment_melt_quotes
+        SET state = :state, paid_time = :paid_time, fee_paid = :fee_paid,
+            payment_preimage = :payment_preimage, method_data = :method_data
+        WHERE quote = :quote AND method = :method
+        """,
+        {
+            **quote.model_dump(),
+            "state": quote.state.value,
+            "method_data": json.dumps(quote.method_data),
+        },
+    )
+
+
 async def bump_secret_derivation(
     db: Database,
     keyset_id: str,

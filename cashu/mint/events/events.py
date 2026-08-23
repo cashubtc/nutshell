@@ -51,6 +51,10 @@ class LedgerEventManager:
 
         # check if any clients are subscribed to this event
         for client in self.clients:
+            # NUT-17 only defines subscription kinds for standardized methods.
+            # A plugin-specific event is therefore not published over websocket.
+            if isinstance(event.kind, str):
+                continue
             kind_sub = client.subscriptions.get(event.kind, {})
             for sub in kind_sub.get(event.identifier, []):
                 logger.trace(
