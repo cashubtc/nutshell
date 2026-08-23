@@ -143,6 +143,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         logger.debug("gRPC GetNut04Quote has been called")
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
         mint_quote_dict = mint_quote.model_dump()
+        mint_quote_dict.pop("method_data", None)
         mint_quote_dict['state'] = str(mint_quote.state)
         mint_quote_dict.pop('state_val', None)
         del mint_quote_dict['mint'] # unused
@@ -165,6 +166,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
         melt_quote_dict = melt_quote.model_dump()
+        melt_quote_dict.pop("method_data", None)
         melt_quote_dict['state'] = str(melt_quote_dict['state'])
         del melt_quote_dict['mint']
         return management_pb2.GetNut05QuoteResponse(

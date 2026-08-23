@@ -1,9 +1,11 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class MintMethodBolt11OptionSetting(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     description: Optional[bool] = None
 
 
@@ -13,7 +15,9 @@ class MintMethodSetting(BaseModel):
     method_name: Optional[str] = None
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
-    options: Optional[Dict[str, Any]] = None
+    # BOLT11 historically exposes an attribute-based options model. Keep this
+    # field open so other methods may publish their own typed option model.
+    options: Optional[Union[MintMethodBolt11OptionSetting, Dict[str, Any]]] = None
 
 
 class MeltMethodSetting(BaseModel):

@@ -377,8 +377,26 @@ async def mint_quote(
     logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
     plugin = payment_method_registry.get(method)
     validated_payload = plugin.validate_mint_quote_request(payload.model_dump())
-    quote = await ledger.mint_quote(validated_payload, method)
-    resp = PostMintQuoteResponse.from_mint_quote(quote)
+    if method == Method.bolt11.name:
+        quote = await ledger.mint_quote(validated_payload)
+    else:
+        quote = await ledger.mint_quote(validated_payload, method)
+    if method == Method.bolt11.name:
+        resp = PostMintQuoteResponse(
+            quote=quote.quote,
+            request=quote.request,
+            amount=quote.amount,
+            unit=quote.unit,
+            method=quote.method,
+            state=str(quote.state.value),
+            expiry=quote.expiry,
+            pubkey=quote.pubkey,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
+        )
+    else:
+        resp = PostMintQuoteResponse.from_mint_quote(quote)
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
 
@@ -400,7 +418,22 @@ async def get_mint_quote(
     mint_quote = await ledger.get_mint_quote(quote)
     if mint_quote.method != method:
         raise NotAllowedError("quote payment method does not match endpoint")
-    resp = PostMintQuoteResponse.from_mint_quote(mint_quote)
+    if method == Method.bolt11.name:
+        resp = PostMintQuoteResponse(
+            quote=mint_quote.quote,
+            request=mint_quote.request,
+            amount=mint_quote.amount,
+            unit=mint_quote.unit,
+            method=mint_quote.method,
+            state=str(mint_quote.state.value),
+            expiry=mint_quote.expiry,
+            pubkey=mint_quote.pubkey,
+            amount_paid=mint_quote.amount_paid,
+            amount_issued=mint_quote.amount_issued,
+            updated_at=mint_quote.updated_at,
+        )
+    else:
+        resp = PostMintQuoteResponse.from_mint_quote(mint_quote)
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
 
@@ -518,9 +551,16 @@ async def melt_quote(
     logger.trace(f"> POST /v1/melt/quote/bolt11: {payload}")
     plugin = payment_method_registry.get(method)
     validated_payload = plugin.validate_melt_quote_request(payload.model_dump())
-    quote = await ledger.melt_quote(validated_payload, method)
+    if method == Method.bolt11.name:
+        quote = await ledger.melt_quote(validated_payload)
+    else:
+        quote = await ledger.melt_quote(validated_payload, method)
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
-    return quote
+    return (
+        quote
+        if method == Method.bolt11.name
+        else PostMeltQuoteResponse.from_melt_quote(quote)
+    )
 
 
 @router.get(
@@ -540,7 +580,21 @@ async def get_melt_quote(
     melt_quote = await ledger.get_melt_quote(quote)
     if melt_quote.method != method:
         raise NotAllowedError("quote payment method does not match endpoint")
-    resp = PostMeltQuoteResponse.from_melt_quote(melt_quote)
+    if method == Method.bolt11.name:
+        resp = PostMeltQuoteResponse(
+            quote=melt_quote.quote,
+            amount=melt_quote.amount,
+            unit=melt_quote.unit,
+            method=melt_quote.method,
+            request=melt_quote.request,
+            fee_reserve=melt_quote.fee_reserve,
+            state=str(melt_quote.state.value),
+            expiry=melt_quote.expiry,
+            payment_preimage=melt_quote.payment_preimage,
+            change=melt_quote.change,
+        )
+    else:
+        resp = PostMeltQuoteResponse.from_melt_quote(melt_quote)
     logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")
     return resp
 
