@@ -555,11 +555,7 @@ async def melt_quote(
     else:
         quote = await ledger.melt_quote(validated_payload, method)
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
-    return (
-        quote
-        if method == Method.bolt11.name
-        else PostMeltQuoteResponse.from_melt_quote(quote)
-    )
+    return quote
 
 
 @router.get(
