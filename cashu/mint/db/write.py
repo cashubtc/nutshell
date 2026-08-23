@@ -46,13 +46,43 @@ class DbWriteHelper:
         self.db_read = db_read
 
     @staticmethod
-    def _set_mint_quote_state(quote: MintQuote, state: MintQuoteState) -> None:
-        """Set a mint quote state and its corresponding timestamps."""
+    def _update_mint_quote_state_timestamps(
+        quote: MintQuote, state: MintQuoteState
+    ) -> None:
+        """Update timestamps associated with a mint quote state transition."""
         now = int(time.time())
-        quote.state = state
         quote.updated_at = now
         if state == MintQuoteState.issued and not quote.issued_time:
             quote.issued_time = now
+
+    @classmethod
+    def _set_mint_quote_state(cls, quote: MintQuote, state: MintQuoteState) -> None:
+        """Set a mint quote state and its corresponding timestamps."""
+        quote.state = state
+        cls._update_mint_quote_state_timestamps(quote, state)
+
+    @classmethod
+    def _apply_mint_quote_issuance(
+        cls, quote: MintQuote, issued_amount: int
+    ) -> None:
+        """Apply an issuance amount and derive the quote's resulting state."""
+        amount_paid = quote.amount_paid or 0
+        new_amount_issued = (quote.amount_issued or 0) + issued_amount
+        if new_amount_issued > amount_paid:
+            raise TransactionError("mint amount exceeds paid quote balance")
+
+        previous_updated_at = quote.updated_at or 0
+        quote.amount_issued = new_amount_issued
+        next_state = (
+            MintQuoteState.issued
+            if new_amount_issued == amount_paid
+            else MintQuoteState.paid
+        )
+        # Do not use quote.state here: its legacy setter resets cumulative
+        # accounting fields, which reusable payment methods must preserve.
+        quote.state_val = next_state
+        cls._update_mint_quote_state_timestamps(quote, next_state)
+        quote.updated_at = max(quote.updated_at or 0, previous_updated_at + 1)
 
     async def _verify_spent_proofs_and_set_pending(
         self,
@@ -265,19 +295,7 @@ class DbWriteHelper:
             # Reusable payment methods may issue only part of the currently paid
             # balance. Keep accounting changes inside the quote lock.
             if state == MintQuoteState.issued and issued_amount is not None:
-                new_amount_issued = (quote.amount_issued or 0) + issued_amount
-                if new_amount_issued > (quote.amount_paid or 0):
-                    raise TransactionError("mint amount exceeds paid quote balance")
-                quote.amount_issued = new_amount_issued
-                quote.state_val = (
-                    MintQuoteState.issued
-                    if new_amount_issued == (quote.amount_paid or 0)
-                    else MintQuoteState.paid
-                )
-                now = int(time.time())
-                quote.updated_at = max(now, (quote.updated_at or 0) + 1)
-                if quote.state_val == MintQuoteState.issued and not quote.issued_time:
-                    quote.issued_time = now
+                self._apply_mint_quote_issuance(quote, issued_amount)
             else:
                 self._set_mint_quote_state(quote, state)
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
