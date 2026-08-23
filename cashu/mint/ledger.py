@@ -439,7 +439,8 @@ class Ledger(
                 emit_events=False,
             )
 
-            melt_quote.state = MeltQuoteState.paid
+            if not melt_quote.paid:
+                melt_quote.state = MeltQuoteState.paid
             await self.crud.update_melt_quote(
                 quote=melt_quote,
                 db=self.db,
