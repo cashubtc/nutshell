@@ -1347,3 +1347,16 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_add_payment_method_data_to_quotes(db: Database):
+    """Add opaque, server-internal storage for method-specific quote state."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} "
+            "ADD COLUMN method_data TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            "ADD COLUMN method_data TEXT"
+        )

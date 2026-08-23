@@ -1,7 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 import bolt11
 from loguru import logger
@@ -31,7 +31,6 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database, LockOptions
 from ..core.errors import (
-    AmountlessInvoiceNotSupportedError,
     AmountMismatchError,
     BatchDuplicateQuotesError,
     CashuError,
@@ -60,8 +59,6 @@ from ..core.models import (
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
-    InvoiceResponse,
-    LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentResult,
@@ -70,6 +67,7 @@ from ..lightning.base import (
     StatusResponse,
 )
 from ..mint.crud import LedgerCrudSqlite
+from ..payment import payment_method_registry
 from .conditions import LedgerSpendingConditions
 from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
@@ -89,7 +87,7 @@ class Ledger(
     LedgerWatchdog,
     LedgerKeysets,
 ):
-    backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
+    backends: Mapping[Union[Method, str], Mapping[Unit, Any]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
     db: Database
@@ -107,12 +105,12 @@ class Ledger(
         seed: str,
         derivation_path="",
         amounts: Optional[List[int]] = None,
-        backends: Optional[Mapping[Method, Mapping[Unit, LightningBackend]]] = None,
+        backends: Optional[Mapping[Union[Method, str], Mapping[Unit, Any]]] = None,
         seed_decryption_key: Optional[str] = None,
         crud=LedgerCrudSqlite(),
     ) -> None:
         self.keysets: Dict[str, MintKeyset] = {}
-        self.backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
+        self.backends: Mapping[Union[Method, str], Mapping[Unit, Any]] = {}
         self.events = LedgerEventManager()
         self.db_read: DbReadHelper
         self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
@@ -186,12 +184,14 @@ class Ledger(
     async def _check_backends(self) -> None:
         for method in self.backends:
             for unit in self.backends[method]:
+                method_name = self._method_name(method)
+                plugin = payment_method_registry.get(method_name)
                 logger.info(
                     f"Using {self.backends[method][unit].__class__.__name__} backend for"
-                    f" method: '{method.name}' and unit: '{unit.name}'"
+                    f" method: '{method_name}' and unit: '{unit.name}'"
                 )
                 try:
-                    status = await self.backends[method][unit].status()
+                    status = await plugin.status(self._get_backend(method, unit))
                 except Exception as e:
                     logger.debug(
                         f"Backend status check failed: {traceback.format_exc()}"
@@ -586,7 +586,11 @@ class Ledger(
 
     # ------- TRANSACTIONS -------
 
-    async def mint_quote(self, quote_request: PostMintQuoteRequest) -> MintQuote:
+    async def mint_quote(
+        self,
+        quote_request: PostMintQuoteRequest,
+        method_str: str = Method.bolt11.name,
+    ) -> MintQuote:
         """Creates a mint quote and stores it in the database.
 
         Args:
@@ -602,23 +606,22 @@ class Ledger(
         if not quote_request.amount > 0:
             raise TransactionError("amount must be positive")
         if (
-            settings.mint_max_mint_bolt11_sat
+            method_str == Method.bolt11.name
+            and settings.mint_max_mint_bolt11_sat
             and quote_request.amount > settings.mint_max_mint_bolt11_sat
         ):
             raise TransactionAmountExceedsLimitError(
                 f"Maximum mint amount is {settings.mint_max_mint_bolt11_sat} sat."
             )
-        if settings.mint_bolt11_disable_mint:
+        if method_str == Method.bolt11.name and settings.mint_bolt11_disable_mint:
             raise MintingDisabledError("Minting with bolt11 is disabled.")
 
-        unit, method = self._verify_and_get_unit_method(
-            quote_request.unit, Method.bolt11.name
-        )
+        unit, method = self._verify_and_get_unit_method(quote_request.unit, method_str)
+        method_name = self._method_name(method)
+        plugin = payment_method_registry.get(method_name)
+        backend = self._get_backend(method, unit)
 
-        if (
-            quote_request.description
-            and not self.backends[method][unit].supports_description
-        ):
+        if quote_request.description and not plugin.supports_description(backend):
             raise NotAllowedError("Backend does not support descriptions.")
 
         # Check maximum balance.
@@ -629,40 +632,32 @@ class Ledger(
                 raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
-        invoice_response: InvoiceResponse = await self.backends[method][
-            unit
-        ].create_invoice(
-            amount=Amount(unit=unit, amount=quote_request.amount),
-            memo=quote_request.description,
-        )
+        invoice_response = await plugin.create_incoming_payment(backend, quote_request)
         logger.trace(
             f"got invoice {invoice_response.payment_request} with checking id"
             f" {invoice_response.checking_id}"
         )
 
         if not (invoice_response.payment_request and invoice_response.checking_id):
-            raise LightningError("could not fetch bolt11 payment request from backend")
+            raise LightningError("could not fetch payment request from backend")
 
-        # get invoice expiry time
-        invoice_obj = bolt11.decode(invoice_response.payment_request)
-        self._verify_mint_quote_invoice_amount(
-            invoice_obj, Amount(unit, quote_request.amount)
-        )
-
-        # NOTE: we normalize the request to lowercase to avoid case sensitivity
-        # This works with Lightning but might not work with other methods
-        request = invoice_response.payment_request.lower()
+        if method_name == Method.bolt11.name:
+            self._verify_mint_quote_invoice_amount(
+                bolt11.decode(invoice_response.payment_request),
+                Amount(unit, quote_request.amount),
+            )
+        request = plugin.canonicalize_request(invoice_response.payment_request)
 
         now = int(time.time())
         expiry = None
         if settings.mint_quote_ttl is not None:
             expiry = now + settings.mint_quote_ttl
-        elif invoice_obj.expiry is not None:
-            expiry = invoice_obj.date + invoice_obj.expiry
+        else:
+            expiry = plugin.quote_expiry(invoice_response.payment_request)
 
         quote = MintQuote(
             quote=generate_uuid_v7(),
-            method=method.name,
+            method=method_name,
             request=request,
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
@@ -671,6 +666,7 @@ class Ledger(
             created_time=now,
             expiry=expiry,
             pubkey=quote_request.pubkey,
+            method_data=invoice_response.model_extra or {},
         )
         await self.crud.store_mint_quote(quote=quote, db=self.db)
         await self.events.submit(quote)
@@ -714,10 +710,16 @@ class Ledger(
             quote.last_checked = now
 
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
-            status: PaymentStatus = await self.backends[method][
-                unit
-            ].get_invoice_status(quote.checking_id)
-            if status.settled:
+            plugin = payment_method_registry.get(quote.method)
+            status = await plugin.get_incoming_payment_status(
+                self._get_backend(method, unit), quote
+            )
+            reported_paid = (
+                status.amount_paid.to(unit).amount if status.amount_paid else None
+            )
+            if status.settled and reported_paid is None:
+                reported_paid = quote.amount
+            if reported_paid is not None and reported_paid > (quote.amount_paid or 0):
                 # change state to paid in one transaction, it could have been marked paid
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
@@ -736,7 +738,8 @@ class Ledger(
                         raise Exception("quote not found")
                     if quote.unpaid:
                         logger.trace(f"Setting quote {quote_id} as paid")
-                        quote.state = MintQuoteState.paid
+                        quote.amount_paid = reported_paid
+                        quote.state_val = MintQuoteState.paid
                         quote.paid_time = now
                         quote.last_checked = now
                         quote.updated_at = now
@@ -772,6 +775,7 @@ class Ledger(
         outputs: List[BlindedMessage],
         quote_id: str,
         signature: Optional[str] = None,
+        method_str: Optional[str] = None,
     ) -> List[BlindedSignature]:
         """Mints new coins if quote with `quote_id` was paid. Ingest blind messages `outputs` and returns blind signatures `promises`.
 
@@ -796,24 +800,32 @@ class Ledger(
         output_unit = self.keysets[outputs[0].id].unit
 
         quote = await self.get_mint_quote(quote_id)
+        if method_str is not None and quote.method != method_str:
+            raise NotAllowedError("quote payment method does not match endpoint")
         if quote.pending:
             raise QuotePendingError("Mint quote already pending.")
         if quote.issued:
             raise QuoteAlreadyIssuedError()
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
+        plugin = payment_method_registry.get(quote.method)
 
         # Also validate quotes created before invoice amount checks were added.
-        self._verify_mint_quote_invoice_amount(
-            bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
-        )
+        if quote.method == Method.bolt11.name:
+            self._verify_mint_quote_invoice_amount(
+                bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
+            )
 
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
-            if not quote.amount == sum_amount_outputs:
+            available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
+            if plugin.allows_partial_mint:
+                if sum_amount_outputs > available:
+                    raise TransactionError("amount to mint exceeds paid quote balance")
+            elif not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
                 raise QuoteExpiredError("quote expired")
@@ -827,7 +839,9 @@ class Ledger(
             )
             raise e
         await self.db_write._unset_mint_quote_pending(
-            quote_id=quote_id, state=MintQuoteState.issued
+            quote_id=quote_id,
+            state=MintQuoteState.issued,
+            issued_amount=sum_amount_outputs if plugin.allows_partial_mint else None,
         )
 
         return promises
@@ -835,6 +849,7 @@ class Ledger(
     async def mint_batch(
         self,
         payload: PostMintBatchRequest,
+        method_str: Optional[str] = None,
     ) -> List[BlindedSignature]:
         """Batch mint tokens.
 
@@ -870,13 +885,15 @@ class Ledger(
             if not quote:
                 raise TransactionError(f"quote {quote_id} not found")
             quotes.append(quote)
+        if method_str is not None and any(q.method != method_str for q in quotes):
+            raise NotAllowedError("quote payment method does not match endpoint")
 
         # Check payment method consistency
         methods = set([q.method for q in quotes])
         if len(methods) > 1:
             raise TransactionError("all quotes must have the same method")
-        if Method.bolt11.name not in methods:
-            raise TransactionError("all quotes must be of bolt11 method")
+        batch_method = next(iter(methods))
+        plugin = payment_method_registry.get(batch_method)
 
         # Check currency unit consistency
         units = set([q.unit for q in quotes])
@@ -902,7 +919,7 @@ class Ledger(
                 raise TransactionError("quote_amounts length must match quotes length")
             for i, quote in enumerate(quotes):
                 if (
-                    quote.method == Method.bolt11.name
+                    not plugin.allows_partial_mint
                     and payload.quote_amounts[i] != quote.amount
                 ):
                     raise TransactionError(
@@ -914,7 +931,7 @@ class Ledger(
                     )
 
         quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
-        if Method.bolt11.name in methods:
+        if not plugin.allows_partial_mint:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
                     "amount to mint does not match quote amounts sum"
@@ -964,25 +981,26 @@ class Ledger(
         return promises
 
     def create_internal_melt_quote(
-        self, mint_quote: MintQuote, melt_quote: PostMeltQuoteRequest
+        self,
+        mint_quote: MintQuote,
+        melt_quote: PostMeltQuoteRequest,
+        method_str: str = Method.bolt11.name,
     ) -> PaymentQuoteResponse:
-        unit, method = self._verify_and_get_unit_method(
-            melt_quote.unit, Method.bolt11.name
-        )
-        # NOTE: we normalize the request to lowercase to avoid case sensitivity
-        # This works with Lightning but might not work with other methods
-        request = melt_quote.request.lower()
+        unit, method = self._verify_and_get_unit_method(melt_quote.unit, method_str)
+        method_name = self._method_name(method)
+        plugin = payment_method_registry.get(method_name)
+        request = plugin.canonicalize_request(melt_quote.request)
 
         if not request == mint_quote.request:
-            raise TransactionError("bolt11 requests do not match")
+            raise TransactionError("payment requests do not match")
         if not mint_quote.unit == melt_quote.unit:
             raise TransactionError("units do not match")
-        if not mint_quote.method == method.name:
+        if not mint_quote.method == method_name:
             raise TransactionError("methods do not match")
         if mint_quote.paid:
             raise InvoiceAlreadyPaidError("mint quote already paid")
         if mint_quote.issued:
-            raise QuoteAlreadyIssuedError("mint quote already issued")
+            raise TransactionError("mint quote already issued")
         if not mint_quote.unpaid:
             raise TransactionError("mint quote is not unpaid")
 
@@ -1007,12 +1025,13 @@ class Ledger(
         return payment_quote
 
     def validate_payment_quote(
-        self, melt_quote: PostMeltQuoteRequest, payment_quote: PaymentQuoteResponse
+        self,
+        melt_quote: PostMeltQuoteRequest,
+        payment_quote: PaymentQuoteResponse,
+        method_str: str = Method.bolt11.name,
     ):
         # payment quote validation
-        unit, method = self._verify_and_get_unit_method(
-            melt_quote.unit, Method.bolt11.name
-        )
+        unit, method = self._verify_and_get_unit_method(melt_quote.unit, method_str)
         if not payment_quote.checking_id:
             raise Exception("quote has no checking id")
         # verify that payment quote amount is as expected
@@ -1032,7 +1051,9 @@ class Ledger(
             raise TransactionError("payment quote fee units do not match")
 
     async def melt_quote(
-        self, melt_quote: PostMeltQuoteRequest
+        self,
+        melt_quote: PostMeltQuoteRequest,
+        method_str: str = Method.bolt11.name,
     ) -> PostMeltQuoteResponse:
         """Creates a melt quote and stores it in the database.
 
@@ -1047,64 +1068,64 @@ class Ledger(
         Returns:
             PostMeltQuoteResponse: Melt quote response.
         """
-        if settings.mint_bolt11_disable_melt:
+        if method_str == Method.bolt11.name and settings.mint_bolt11_disable_melt:
             raise NotAllowedError("Melting with bol11 is disabled.")
 
-        unit, method = self._verify_and_get_unit_method(
-            melt_quote.unit, Method.bolt11.name
-        )
+        unit, method = self._verify_and_get_unit_method(melt_quote.unit, method_str)
+        method_name = self._method_name(method)
+        plugin = payment_method_registry.get(method_name)
+        backend = self._get_backend(method, unit)
 
-        # NOTE: we normalize the request to lowercase to avoid case sensitivity
-        # This works with Lightning but might not work with other methods
-        request = melt_quote.request.lower()
+        request = plugin.canonicalize_request(melt_quote.request)
 
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
         # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
-        if mint_quote and mint_quote.unit == melt_quote.unit:
+        if (
+            mint_quote
+            and mint_quote.unit == melt_quote.unit
+            and mint_quote.method == method_name
+        ):
             # check if the melt quote is partial and error if it is.
             # it's just not possible to handle this case
             if melt_quote.is_mpp:
                 raise TransactionError("internal mpp not allowed.")
-            payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
+            payment_quote = self.create_internal_melt_quote(
+                mint_quote, melt_quote, method_name
+            )
         else:
             # not internal
             # verify that the backend supports mpp if the quote request has an amount
-            if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
+            if melt_quote.is_mpp and not plugin.supports_mpp(
+                self.backends[method][unit]
+            ):
                 raise TransactionError("backend does not support mpp.")
             # get payment quote by backend
-            payment_quote = await self.backends[method][unit].get_payment_quote(
-                melt_quote=melt_quote
-            )
+            payment_quote = await plugin.quote_outgoing_payment(backend, melt_quote)
 
-        self.validate_payment_quote(melt_quote, payment_quote)
+        self.validate_payment_quote(melt_quote, payment_quote, method_name)
 
         # verify that the amount of the proofs is not larger than the maximum allowed
         if (
-            settings.mint_max_melt_bolt11_sat
+            method_name == Method.bolt11.name
+            and settings.mint_max_melt_bolt11_sat
             and payment_quote.amount.to(unit).amount > settings.mint_max_melt_bolt11_sat
         ):
             raise NotAllowedError(
                 f"Maximum melt amount is {settings.mint_max_melt_bolt11_sat} sat."
             )
 
-        # We assume that the request is a bolt11 invoice, this works since we
-        # support only the bol11 method for now.
-        invoice_obj = bolt11.decode(melt_quote.request)
-        if not invoice_obj.amount_msat:
-            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
-        # we set the expiry of this quote to the expiry of the bolt11 invoice
         now = int(time.time())
         expiry = None
         if settings.melt_quote_ttl is not None:
             expiry = now + settings.melt_quote_ttl
-        elif invoice_obj.expiry is not None:
-            expiry = invoice_obj.date + invoice_obj.expiry
+        else:
+            expiry = plugin.quote_expiry(melt_quote.request)
 
         quote = MeltQuote(
             quote=generate_uuid_v7(),
-            method=method.name,
+            method=method_name,
             request=request,
             checking_id=payment_quote.checking_id,
             unit=unit.name,
@@ -1113,20 +1134,12 @@ class Ledger(
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=now,
             expiry=expiry,
+            method_data=payment_quote.model_extra or {},
         )
         await self.db_write._store_melt_quote(quote)
         await self.events.submit(quote)
 
-        return PostMeltQuoteResponse(
-            quote=quote.quote,
-            amount=quote.amount,
-            unit=quote.unit,
-            method=quote.method,
-            request=quote.request,
-            fee_reserve=quote.fee_reserve,
-            state=quote.state.value,
-            expiry=quote.expiry,
-        )
+        return PostMeltQuoteResponse.from_melt_quote(quote)
 
     async def _resolve_melt_payment_status(
         self, melt_quote: MeltQuote
@@ -1135,8 +1148,9 @@ class Ledger(
             melt_quote.unit, melt_quote.method
         )
         try:
-            status = await self.backends[method][unit].get_payment_status(
-                melt_quote.checking_id
+            plugin = payment_method_registry.get(melt_quote.method)
+            status = await plugin.get_outgoing_payment_status(
+                self._get_backend(method, unit), melt_quote
             )
         except Exception as e:
             logger.error(
@@ -1292,17 +1306,13 @@ class Ledger(
             if not melt_quote.pending:
                 raise TransactionError("melt quote is not pending")
 
-            bolt11_request = melt_quote.request
-            invoice_obj = bolt11.decode(bolt11_request)
-
-            if not invoice_obj.amount_msat:
-                raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
-            if mint_quote.amount != melt_quote.amount:
-                raise AmountMismatchError("amounts do not match")
-            if bolt11_request != mint_quote.request:
-                raise TransactionError("bolt11 requests do not match")
             if mint_quote.method != melt_quote.method:
                 raise TransactionError("methods do not match")
+            plugin = payment_method_registry.get(melt_quote.method)
+            try:
+                plugin.validate_internal_settlement(mint_quote, melt_quote)
+            except ValueError as exc:
+                raise TransactionError(str(exc)) from exc
 
             if mint_quote.paid:
                 raise InvoiceAlreadyPaidError("mint quote already paid")
@@ -1312,7 +1322,7 @@ class Ledger(
                 raise TransactionError("mint quote is not unpaid")
 
             logger.info(
-                f"Settling bolt11 payment internally: {melt_quote.quote} ->"
+                f"Settling {melt_quote.method} payment internally: {melt_quote.quote} ->"
                 f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
             )
 
@@ -1347,6 +1357,7 @@ class Ledger(
         proofs: List[Proof],
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
+        method_str: Optional[str] = None,
     ) -> PostMeltQuoteResponse:
         """Invalidates proofs and pays a Lightning invoice asynchronously.
 
@@ -1362,7 +1373,10 @@ class Ledger(
             PostMeltQuoteResponse: Melt quote response after PENDING is committed.
         """
         melt_quote = await self._prepare_melt(
-            proofs=proofs, quote=quote, outputs=outputs
+            proofs=proofs,
+            quote=quote,
+            outputs=outputs,
+            method_str=method_str,
         )
 
         async def melt_task():
@@ -1380,6 +1394,7 @@ class Ledger(
         proofs: List[Proof],
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
+        method_str: Optional[str] = None,
     ) -> PostMeltQuoteResponse:
         """Invalidates proofs and pays a Lightning invoice.
 
@@ -1395,7 +1410,10 @@ class Ledger(
             PostMeltQuoteResponse: Melt quote response.
         """
         melt_quote = await self._prepare_melt(
-            proofs=proofs, quote=quote, outputs=outputs
+            proofs=proofs,
+            quote=quote,
+            outputs=outputs,
+            method_str=method_str,
         )
         return await self._execute_melt_payment(melt_quote, proofs, outputs)
 
@@ -1405,6 +1423,7 @@ class Ledger(
         proofs: List[Proof],
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
+        method_str: Optional[str] = None,
     ) -> MeltQuote:
         """Validates a melt request and durably sets the quote and proofs to pending."""
         # make sure we're allowed to melt
@@ -1413,6 +1432,8 @@ class Ledger(
 
         # get melt quote and check if it was already paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
+        if method_str is not None and melt_quote.method != method_str:
+            raise NotAllowedError("quote payment method does not match endpoint")
         if melt_quote.paid:
             raise InvoiceAlreadyPaidError(
                 f"melt quote is not unpaid: {melt_quote.state}"
@@ -1505,13 +1526,11 @@ class Ledger(
         # quote not paid yet (not internal), pay it with the backend
         logger.debug(f"Lightning: pay invoice {melt_quote.request}")
         try:
-            fee_limit_msat = (
-                Amount(Unit[melt_quote.unit], melt_quote.fee_reserve)
-                .to(Unit.msat)
-                .amount
-            )
-            payment = await self.backends[method][unit].pay_invoice(
-                melt_quote, fee_limit_msat
+            plugin = payment_method_registry.get(melt_quote.method)
+            payment = await plugin.execute_outgoing_payment(
+                self._get_backend(method, unit),
+                melt_quote,
+                Amount(Unit[melt_quote.unit], melt_quote.fee_reserve),
             )
             logger.debug(
                 f"Melt – Result: {payment.result.name}: preimage: {payment.preimage},"
