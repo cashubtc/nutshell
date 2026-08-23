@@ -100,7 +100,10 @@ class RedisCache:
         except RedisError:
             self._redis_failed()
 
-    async def _execute(self, func, request: Request, payload: BaseModel, key: str):
+    async def _execute(
+        self, func, request: Request, payload: BaseModel, key: str,
+        route_parameters: dict[str, Any],
+    ):
         # Retain the existing Redis key format so deployed caches remain readable.
         memory_key = hashlib.sha256(key.encode()).hexdigest()
         try:
@@ -116,7 +119,7 @@ class RedisCache:
                 except RedisError:
                     self._redis_failed()
 
-            result = await func(request, payload)
+            result = await func(request=request, payload=payload, **route_parameters)
             serialized = result.model_dump_json()
             self.memory.set(
                 memory_key, serialized.encode(), settings.mint_redis_cache_ttl
@@ -142,11 +145,13 @@ class RedisCache:
     def cache(self):
         def decorator(func):
             @functools.wraps(func)
-            async def wrapper(request: Request, payload: BaseModel):
+            async def wrapper(
+                request: Request, payload: BaseModel, **route_parameters: Any
+            ):
                 key = request.url.path + payload.model_dump_json()
                 task = self._inflight.get(key)
                 if task is None:
-                    task = asyncio.create_task(self._execute(func, request, payload, key))
+                    task = asyncio.create_task(self._execute(func, request, payload, key, route_parameters))
                     self._inflight[key] = task
                     task.add_done_callback(self._consume_exception)
                 # Finish and cache successful operations even if the caller disconnects.
