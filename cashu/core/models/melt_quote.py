@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from cashu.core.base import BlindedSignature, MeltQuote
 from cashu.core.constants import MAX_PAYMENT_REQUEST_LEN, MAX_UNIT_LEN
@@ -15,6 +15,8 @@ class PostMeltRequestOptions(BaseModel):
 
 
 class PostMeltQuoteRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     unit: str = Field(..., max_length=MAX_UNIT_LEN)  # input unit
     request: str = Field(
         ..., max_length=MAX_PAYMENT_REQUEST_LEN
@@ -38,6 +40,8 @@ class PostMeltQuoteRequest(BaseModel):
 
 
 class PostMeltQuoteResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     quote: str  # quote id
     amount: int  # input amount
     unit: str  # input unit
@@ -51,7 +55,19 @@ class PostMeltQuoteResponse(BaseModel):
 
     @classmethod
     def from_melt_quote(cls, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
-        to_dict = melt_quote.model_dump()
-        # turn state into string
-        to_dict["state"] = melt_quote.state.value
-        return cls.model_validate(to_dict)
+        # Keep internal settlement identifiers and timestamps off the wire while
+        # allowing a payment method to add its own protocol fields.
+        response = {
+            "quote": melt_quote.quote,
+            "amount": melt_quote.amount,
+            "unit": melt_quote.unit,
+            "method": melt_quote.method,
+            "request": melt_quote.request,
+            "fee_reserve": melt_quote.fee_reserve,
+            "state": melt_quote.state.value,
+            "expiry": melt_quote.expiry,
+            "payment_preimage": melt_quote.payment_preimage,
+            "change": melt_quote.change,
+        }
+        response.update(melt_quote.method_data)
+        return cls.model_validate(response)

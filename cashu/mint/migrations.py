@@ -1356,3 +1356,16 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
             f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
             "WHERE encrypted_seed IS NOT NULL AND seed != ''"
         )
+
+
+async def m041_add_payment_method_data_to_quotes(db: Database):
+    """Add opaque, server-internal storage for method-specific quote state."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes')} "
+            "ADD COLUMN method_data TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            "ADD COLUMN method_data TEXT"
+        )

@@ -7,7 +7,6 @@ from ..core.models import (
     MeltMethodSetting,
     MintInfoContact,
     MintInfoProtectedEndpoint,
-    MintMethodBolt11OptionSetting,
     MintMethodSetting,
 )
 from ..core.nuts.nuts import (
@@ -30,6 +29,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
+from ..payment import payment_method_registry
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -81,26 +81,50 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
+                method_name = method.name if isinstance(method, Method) else method
+                plugin = payment_method_registry.get(method_name)
+                plugin_settings = plugin.settings_for(unit_dict[unit], unit)
                 mint_setting = MintMethodSetting(
-                    method=method.name, unit=unit.name, method_name=method.name
+                    method=method_name,
+                    unit=unit.name,
+                    method_name=plugin_settings.method_name,
                 )
-                if settings.mint_max_mint_bolt11_sat:
+                if (
+                    method_name == Method.bolt11.name
+                    and settings.mint_max_mint_bolt11_sat
+                ):
                     mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
                     mint_setting.min_amount = 0
-                mint_setting.options = MintMethodBolt11OptionSetting(
-                    description=unit_dict[unit].supports_description
-                )
-                mint_method_settings.append(mint_setting)
+                else:
+                    mint_setting.min_amount = plugin_settings.min_amount
+                    mint_setting.max_amount = plugin_settings.max_amount
+                mint_setting.options = plugin_settings.options
+                if plugin_settings.mint_enabled:
+                    mint_method_settings.append(mint_setting)
         melt_method_settings: List[MeltMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                melt_setting = MeltMethodSetting(
-                    method=method.name, unit=unit.name, method_name=method.name
+                method_name = method.name if isinstance(method, Method) else method
+                plugin_settings = payment_method_registry.get(method_name).settings_for(
+                    unit_dict[unit], unit
                 )
-                if settings.mint_max_melt_bolt11_sat:
+                melt_setting = MeltMethodSetting(
+                    method=method_name,
+                    unit=unit.name,
+                    method_name=plugin_settings.method_name,
+                )
+                if (
+                    method_name == Method.bolt11.name
+                    and settings.mint_max_melt_bolt11_sat
+                ):
                     melt_setting.max_amount = settings.mint_max_melt_bolt11_sat
                     melt_setting.min_amount = 0
-                melt_method_settings.append(melt_setting)
+                else:
+                    melt_setting.min_amount = plugin_settings.min_amount
+                    melt_setting.max_amount = plugin_settings.max_amount
+                melt_setting.options = plugin_settings.options
+                if plugin_settings.melt_enabled:
+                    melt_method_settings.append(melt_setting)
 
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
@@ -134,7 +158,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[BATCH_MINT_NUT] = {
             "supported": True,
             "max_batch_size": settings.mint_max_request_length,
-            "methods": list(set([m.name for m in self.backends.keys()])),
+            "methods": list(
+                set([m.name if isinstance(m, Method) else m for m in self.backends])
+            ),
         }
         return mint_features
 
@@ -145,8 +171,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mpp_features = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                if unit_dict[unit].supports_mpp:
-                    mpp_features.append({"method": method.name, "unit": unit.name})
+                method_name = method.name if isinstance(method, Method) else method
+                plugin = payment_method_registry.get(method_name)
+                if plugin.supports_mpp(unit_dict[unit]):
+                    mpp_features.append({"method": method_name, "unit": unit.name})
 
         if mpp_features:
             mint_features[MPP_NUT] = dict(methods=mpp_features)
