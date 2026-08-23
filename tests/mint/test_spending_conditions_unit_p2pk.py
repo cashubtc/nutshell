@@ -207,3 +207,34 @@ def test_verify_p2pk_sig_inputs_allows_anyone_after_locktime_without_refund_pubk
         extra_tags=[["locktime", past]],
     )
     assert cond._verify_input_spending_conditions(proof(raw_secret))
+
+
+def test_verify_p2pk_sig_inputs_absent_witness_reports_no_signatures():
+    # Pins the wire contract for an absent witness (cashubtc/nutshell#1126):
+    # code 11000 with "no signatures in proof.". Clients assert on both.
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-absent-witness")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub)
+    p = proof(raw_secret)
+    assert p.witness is None
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "no signatures in proof" in str(exc_info.value)
+
+
+def test_verify_p2pk_sig_inputs_empty_signature_list_reports_no_signatures():
+    # A witness that parses cleanly to zero signatures is the absent case too,
+    # and reaches it by a different route than witness=None: it goes through
+    # the parser rather than returning ahead of it.
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-empty-signature-list")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub)
+    p = proof(raw_secret, signatures=[])
+    assert p.witness == '{"signatures":[]}'
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "no signatures in proof" in str(exc_info.value)
