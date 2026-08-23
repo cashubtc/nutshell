@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Any, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -379,9 +379,12 @@ class LedgerVerification(
 
     def _verify_and_get_unit_method(
         self, unit_str: str, method_str: str
-    ) -> Tuple[Unit, Method]:
+    ) -> Tuple[Unit, Union[Method, str]]:
         """Verify that the unit is supported by the ledger."""
-        method = Method[method_str]
+        try:
+            method: Union[Method, str] = Method[method_str]
+        except KeyError:
+            method = method_str
         unit = Unit[unit_str]
 
         if not any([unit == k.unit for k in self.keysets.values()]):
@@ -391,10 +394,17 @@ class LedgerVerification(
 
         if not self.backends.get(method) or unit not in self.backends[method]:
             raise NotAllowedError(
-                f"no support for method '{method.name}' with unit '{unit.name}'."
+                f"no support for method '{self._method_name(method)}' with unit '{unit.name}'."
             )
 
         return unit, method
+
+    @staticmethod
+    def _method_name(method: Union[Method, str]) -> str:
+        return method.name if isinstance(method, Method) else method
+
+    def _get_backend(self, method: Union[Method, str], unit: Unit) -> Any:
+        return self.backends[method][unit]
 
     def _verify_mint_quote_witness(
         self,

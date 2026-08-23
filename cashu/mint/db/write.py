@@ -235,7 +235,10 @@ class DbWriteHelper:
         return quotes
 
     async def _unset_mint_quote_pending(
-        self, quote_id: str, state: MintQuoteState
+        self,
+        quote_id: str,
+        state: MintQuoteState,
+        issued_amount: Optional[int] = None,
     ) -> MintQuote:
         """Unsets the mint quote as pending.
 
@@ -259,8 +262,24 @@ class DbWriteHelper:
                 raise TransactionError(
                     f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
                 )
-            # set the quote to previous state
-            self._set_mint_quote_state(quote, state)
+            # Reusable payment methods may issue only part of the currently paid
+            # balance. Keep accounting changes inside the quote lock.
+            if state == MintQuoteState.issued and issued_amount is not None:
+                new_amount_issued = (quote.amount_issued or 0) + issued_amount
+                if new_amount_issued > (quote.amount_paid or 0):
+                    raise TransactionError("mint amount exceeds paid quote balance")
+                quote.amount_issued = new_amount_issued
+                quote.state_val = (
+                    MintQuoteState.issued
+                    if new_amount_issued == (quote.amount_paid or 0)
+                    else MintQuoteState.paid
+                )
+                now = int(time.time())
+                quote.updated_at = max(now, (quote.updated_at or 0) + 1)
+                if quote.state_val == MintQuoteState.issued and not quote.issued_time:
+                    quote.issued_time = now
+            else:
+                self._set_mint_quote_state(quote, state)
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
