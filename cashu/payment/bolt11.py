@@ -31,7 +31,7 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
 
     def settings_for(self, backend: Any, unit: Unit) -> PaymentMethodSettings:
         return PaymentMethodSettings(
-            method_name="Bolt11",
+            method_name="bolt11",
             options={"description": bool(backend.supports_description)},
         )
 
