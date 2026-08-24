@@ -20,6 +20,12 @@ from .base import (
 USDT = "USDT"
 
 
+class StrikeBalance(BaseModel):
+    currency: str
+    total: str
+    available: str | None = None
+
+
 class StrikeAmount(BaseModel):
     amount: str
     currency: str
@@ -144,7 +150,8 @@ class StrikeWallet(LightningBackend):
             )
 
         try:
-            data = r.json()
+            raw_data = r.json()
+            balances = [StrikeBalance.model_validate(b) for b in raw_data]
         except Exception:
             return StatusResponse(
                 error_message=(
@@ -153,21 +160,21 @@ class StrikeWallet(LightningBackend):
                 balance=Amount(self.unit, 0),
             )
 
-        for balance in data:
-            if balance["currency"] == self.currency:
+        for balance in balances:
+            if balance.currency == self.currency:
                 return StatusResponse(
                     error_message=None,
-                    balance=Amount.from_float(float(balance["total"]), self.unit),
+                    balance=Amount.from_float(float(balance.total), self.unit),
                 )
 
         # if the unit is USD but no USD balance was found, we try USDT
         if self.unit == Unit.usd:
-            for balance in data:
-                if balance["currency"] == USDT:
+            for balance in balances:
+                if balance.currency == USDT:
                     self.currency = USDT
                     return StatusResponse(
                         error_message=None,
-                        balance=Amount.from_float(float(balance["total"]), self.unit),
+                        balance=Amount.from_float(float(balance.total), self.unit),
                     )
 
         return StatusResponse(

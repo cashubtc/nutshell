@@ -11,6 +11,7 @@ from bolt11 import (
     decode,
 )
 from loguru import logger
+from pydantic import BaseModel
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
@@ -44,6 +45,88 @@ INVOICE_RESULT_MAP = {
 MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
+
+
+class LndBalanceResponse(BaseModel):
+    balance: str
+    pending_open_balance: str | None = None
+    local_balance: dict | None = None
+    remote_balance: dict | None = None
+    unsettled_local_balance: dict | None = None
+    unsettled_remote_balance: dict | None = None
+    pending_open_local_balance: dict | None = None
+    pending_open_remote_balance: dict | None = None
+
+
+class LndAddInvoiceResponse(BaseModel):
+    r_hash: str
+    payment_request: str
+    add_index: str | None = None
+    payment_addr: str | None = None
+
+
+class LndInvoiceStatusResponse(BaseModel):
+    state: str
+    memo: str | None = None
+    r_preimage: str | None = None
+    r_hash: str | None = None
+    value: str | None = None
+    value_msat: str | None = None
+    settled: bool | None = None
+    creation_date: str | None = None
+    settle_date: str | None = None
+    payment_request: str | None = None
+    description_hash: str | None = None
+    expiry: str | None = None
+    fallback_addr: str | None = None
+    cltv_expiry: str | None = None
+    route_hints: list | None = None
+    private: bool | None = None
+    add_index: str | None = None
+    settle_index: str | None = None
+    amt_paid: str | None = None
+    amt_paid_sat: str | None = None
+    amt_paid_msat: str | None = None
+    features: dict | None = None
+    is_keysend: bool | None = None
+    payment_addr: str | None = None
+    is_amp: bool | None = None
+
+
+class LndHop(BaseModel):
+    chan_id: str | None = None
+    chan_capacity: str | None = None
+    amt_to_forward: str | None = None
+    fee: str | None = None
+    expiry: int | None = None
+    amt_to_forward_msat: str | None = None
+    fee_msat: str | None = None
+    pub_key: str | None = None
+    tlv_payload: bool | None = None
+    mpp_record: dict | None = None
+    custom_records: dict | None = None
+
+
+class LndRoute(BaseModel):
+    total_time_lock: int | None = None
+    total_fees: str | None = None
+    total_amt: str | None = None
+    hops: list[dict] = []
+    total_fees_msat: str | None = None
+    total_amt_msat: str | None = None
+
+
+class LndQueryRoutesResponse(BaseModel):
+    routes: list[dict] = []
+    success_prob: float | None = None
+
+
+class LndSendToRouteResponse(BaseModel):
+    preimage: str | None = None
+    route: LndRoute | None = None
+    payment_error: str | None = None
+    failure: dict | None = None
+    status: str | None = None
 
 
 class LndRestWallet(LightningBackend):
@@ -120,16 +203,17 @@ class LndRestWallet(LightningBackend):
             )
 
         try:
-            data = r.json()
+            raw_data = r.json()
             if r.is_error:
                 raise Exception
+            balance_resp = LndBalanceResponse.model_validate(raw_data)
         except Exception:
             return StatusResponse(
                 error_message=r.text[:200], balance=Amount(self.unit, 0)
             )
 
         return StatusResponse(
-            error_message=None, balance=Amount(self.unit, int(data["balance"]))
+            error_message=None, balance=Amount(self.unit, int(balance_resp.balance))
         )
 
     async def create_invoice(
@@ -175,9 +259,9 @@ class LndRestWallet(LightningBackend):
                 error_message=error_message,
             )
 
-        data = r.json()
-        payment_request = data["payment_request"]
-        payment_hash = base64.b64decode(data["r_hash"]).hex()
+        invoice_resp = LndAddInvoiceResponse.model_validate(r.json())
+        payment_request = invoice_resp.payment_request
+        payment_hash = base64.b64decode(invoice_resp.r_hash).hex()
         checking_id = payment_hash
 
         return InvoiceResponse(
@@ -376,6 +460,7 @@ class LndRestWallet(LightningBackend):
 
         assert response and route
 
+        send_to_route_resp = LndSendToRouteResponse.model_validate(response.json())
         data = response.json()
         if response.is_error or data.get("message") or data.get("status") == "FAILED":
             error_message = f"Sending to route failed with code {data.get('failure').get('code')} after {attempts} tries."
@@ -385,9 +470,15 @@ class LndRestWallet(LightningBackend):
 
         result = PAYMENT_RESULT_MAP.get(data.get("status"), PaymentResult.UNKNOWN)
         checking_id = invoice.payment_hash
-        fee_msat = int(data["route"]["total_fees_msat"]) if data.get("route") else None
+        fee_msat = (
+            int(send_to_route_resp.route.total_fees_msat)
+            if send_to_route_resp.route and send_to_route_resp.route.total_fees_msat
+            else None
+        )
         preimage = (
-            base64.b64decode(data["preimage"]).hex() if data.get("preimage") else None
+            base64.b64decode(send_to_route_resp.preimage).hex()
+            if send_to_route_resp.preimage
+            else None
         )
 
         logger.debug(f"Partial payment succeeded after {attempts} different tries!")
@@ -408,18 +499,17 @@ class LndRestWallet(LightningBackend):
             logger.error(f"Couldn't get invoice status: {r.text}")
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=r.text)
 
-        data = None
         try:
-            data = r.json()
-        except json.JSONDecodeError as e:
+            inv_status = LndInvoiceStatusResponse.model_validate(r.json())
+        except Exception as e:
             logger.error(f"Incomprehensible response: {e}")
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
-        if not data or not data.get("state"):
+        if not inv_status.state:
             return PaymentStatus(
                 result=PaymentResult.UNKNOWN, error_message="no invoice state"
             )
         return PaymentStatus(
-            result=INVOICE_RESULT_MAP[data["state"]],
+            result=INVOICE_RESULT_MAP[inv_status.state],
         )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
