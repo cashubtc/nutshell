@@ -846,3 +846,89 @@ async def test_spark_get_payment_quote_rejects_non_bolt11():
     melt_quote = PostMeltQuoteRequest(unit="sat", request="non-bolt11")
     with pytest.raises(Exception, match="Only BOLT11 payments are supported"):
         await wallet.get_payment_quote(melt_quote)
+
+
+@pytest.mark.asyncio
+async def test_cln_models_validation_in_backends():
+    from cashu.lightning.clnrest import (
+        CLNInvoiceResponse,
+        CLNListFundsResponse,
+        CLNListInvoicesResponse,
+        CLNListPaysResponse,
+        CLNXPayResponse,
+    )
+
+    # Test CLNListFundsResponse
+    funds = CLNListFundsResponse.model_validate(
+        {"channels": [{"our_amount_msat": 1000000, "connected": True}]}
+    )
+    assert len(funds.channels) == 1
+    assert int(funds.channels[0].our_amount_msat) == 1000000
+
+    # Test CLNInvoiceResponse
+    inv = CLNInvoiceResponse.model_validate(
+        {"payment_hash": "hash123", "bolt11": "lnbc1..."}
+    )
+    assert inv.payment_hash == "hash123"
+    assert inv.bolt11 == "lnbc1..."
+
+    # Test CLNXPayResponse
+    xpay = CLNXPayResponse.model_validate(
+        {
+            "payment_preimage": "preimage123",
+            "amount_msat": 1000,
+            "amount_sent_msat": 1050,
+        }
+    )
+    assert xpay.payment_preimage == "preimage123"
+    assert int(xpay.amount_sent_msat) - int(xpay.amount_msat) == 50
+
+    # Test CLNListInvoicesResponse
+    list_inv = CLNListInvoicesResponse.model_validate(
+        {"invoices": [{"status": "paid", "pay_index": 5}]}
+    )
+    assert list_inv.invoices[0].status == "paid"
+    assert list_inv.invoices[0].pay_index == 5
+
+    # Test CLNListPaysResponse
+    list_pays = CLNListPaysResponse.model_validate(
+        {"pays": [{"status": "complete", "amount_sent_msat": 2000, "amount_msat": 1900, "preimage": "p1"}]}
+    )
+    assert list_pays.pays[0].status == "complete"
+    assert list_pays.pays[0].preimage == "p1"
+
+
+@pytest.mark.asyncio
+async def test_lnd_models_validation_in_backends():
+    from cashu.lightning.lndrest import (
+        LndAddInvoiceResponse,
+        LndBalanceResponse,
+        LndInvoiceStatusResponse,
+        LndSendToRouteResponse,
+    )
+
+    # Test LndBalanceResponse
+    bal = LndBalanceResponse.model_validate({"balance": "50000"})
+    assert int(bal.balance) == 50000
+
+    # Test LndAddInvoiceResponse
+    add_inv = LndAddInvoiceResponse.model_validate(
+        {"r_hash": "aGV4", "payment_request": "lnbc1..."}
+    )
+    assert add_inv.payment_request == "lnbc1..."
+
+    # Test LndInvoiceStatusResponse
+    inv_stat = LndInvoiceStatusResponse.model_validate({"state": "SETTLED"})
+    assert inv_stat.state == "SETTLED"
+
+    # Test LndSendToRouteResponse
+    send_route = LndSendToRouteResponse.model_validate(
+        {
+            "preimage": "aGV4",
+            "route": {"total_fees_msat": "100", "hops": []},
+            "status": "SUCCEEDED",
+        }
+    )
+    assert send_route.status == "SUCCEEDED"
+    assert send_route.route and send_route.route.total_fees_msat == "100"
+
