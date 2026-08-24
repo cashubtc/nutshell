@@ -25,6 +25,19 @@ VECTOR = {
 }
 
 
+# nuts tests/22-tests.md: the target is the origin-form request-target as sent,
+# query string unsorted and percent-encoded as transmitted; no body.
+QUERY_VECTOR = {
+    "secret": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "method": "GET",
+    "target": "/v1/mint/quote/bolt11/quote123?b=2&a=1&q=a%20b",
+    "body": b"",
+    "transcript": "05005a01000347455402002e2f76312f6d696e742f71756f74652f626f6c7431312f71756f74653132333f623d3226613d3126713d6125323062030020e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "digest": "6ed8e3a69429d4845ddcfa8728c7461c97b0c189592228c25266c630f62b1680",
+    "signature": "9306bc19ad0e497185a34ec9a49de0bd8161bcdf1c58f0fd9f108a7603affb1d24b1a2fd6d513bf843ac92c29c95614beb535ace4e3a4a8677d688388209fb88",
+}
+
+
 def _vector_auth_proof(witness=None) -> AuthProof:
     return AuthProof(
         id=V3_KEYSET_ID, secret=VECTOR["secret"], C="00" * 48, witness=witness
@@ -61,6 +74,39 @@ def test_witness_binds_the_request():
     )
     assert not nut22.verify_bat_request_witness(
         proof, VECTOR["method"], VECTOR["target"], b"substituted body"
+    )
+
+
+def test_query_string_transcript_pins_the_vector():
+    transcript = build_request_transcript(
+        QUERY_VECTOR["method"], QUERY_VECTOR["target"], QUERY_VECTOR["body"]
+    )
+    assert transcript.hex() == QUERY_VECTOR["transcript"]
+    digest = request_digest(
+        QUERY_VECTOR["method"], QUERY_VECTOR["target"], QUERY_VECTOR["body"]
+    )
+    assert digest.hex() == QUERY_VECTOR["digest"]
+
+
+def test_query_string_witness_verifies_as_sent_only():
+    proof = AuthProof(
+        id=V3_KEYSET_ID,
+        secret=QUERY_VECTOR["secret"],
+        C="00" * 48,
+        witness=json.dumps({"signatures": [QUERY_VECTOR["signature"]]}),
+    )
+    assert nut22.verify_bat_request_witness(
+        proof, QUERY_VECTOR["method"], QUERY_VECTOR["target"], QUERY_VECTOR["body"]
+    )
+    # A verifier rebuilding the target from parsed components must not re-sort
+    # the parameters or re-encode the escapes.
+    resorted = "/v1/mint/quote/bolt11/quote123?a=1&b=2&q=a%20b"
+    assert not nut22.verify_bat_request_witness(
+        proof, QUERY_VECTOR["method"], resorted, QUERY_VECTOR["body"]
+    )
+    reencoded = "/v1/mint/quote/bolt11/quote123?b=2&a=1&q=a+b"
+    assert not nut22.verify_bat_request_witness(
+        proof, QUERY_VECTOR["method"], reencoded, QUERY_VECTOR["body"]
     )
 
 
