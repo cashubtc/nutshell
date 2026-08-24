@@ -150,6 +150,78 @@ async def test_db_get_connection_adds_locks_to_reused_connection(ledger: Ledger)
             assert reused_conn is conn
 
 
+def test_db_orders_locks_globally():
+    database = object.__new__(db.Database)
+    locks = database._order_locks(
+        [
+            LockOptions(table="proofs_pending"),
+            LockOptions(table="mint_quotes"),
+            LockOptions(table="melt_quotes"),
+        ]
+    )
+
+    assert [lock.table for lock in locks] == [
+        "mint_quotes",
+        "melt_quotes",
+        "proofs_pending",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_postgres or is_github_actions,
+    reason="Requires PostgreSQL table locks",
+)
+async def test_db_global_lock_order_avoids_deadlock(ledger: Ledger, monkeypatch):
+    first_lock_acquired = asyncio.Event()
+    competing_transaction_started = asyncio.Event()
+    acquired: dict[str, List[str]] = {"lock-order-a": [], "lock-order-b": []}
+    acquire_lock = ledger.db._acquire_lock
+
+    async def acquire_lock_with_barrier(conn: Connection, lock: LockOptions):
+        task = asyncio.current_task()
+        task_name = task.get_name() if task else ""
+
+        if task_name == "lock-order-b" and lock.table == "mint_quotes":
+            competing_transaction_started.set()
+
+        await acquire_lock(conn, lock)
+        acquired[task_name].append(lock.table)
+
+        if task_name == "lock-order-a" and lock.table == "mint_quotes":
+            first_lock_acquired.set()
+            await competing_transaction_started.wait()
+
+    monkeypatch.setattr(ledger.db, "_acquire_lock", acquire_lock_with_barrier)
+
+    async def run_transaction(locks: List[LockOptions]):
+        async with ledger.db.get_connection(locks=locks):
+            pass
+
+    transaction_a = asyncio.create_task(
+        run_transaction(
+            [LockOptions(table="mint_quotes"), LockOptions(table="melt_quotes")]
+        ),
+        name="lock-order-a",
+    )
+    await asyncio.wait_for(first_lock_acquired.wait(), timeout=1)
+
+    transaction_b = asyncio.create_task(
+        run_transaction(
+            [LockOptions(table="melt_quotes"), LockOptions(table="mint_quotes")]
+        ),
+        name="lock-order-b",
+    )
+
+    await asyncio.wait_for(
+        asyncio.gather(transaction_a, transaction_b),
+        timeout=3,
+    )
+
+    assert acquired["lock-order-a"] == ["mint_quotes", "melt_quotes"]
+    assert acquired["lock-order-b"] == ["mint_quotes", "melt_quotes"]
+
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_github_actions, reason="Hangs on GitHub Actions")
 async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
