@@ -21,6 +21,7 @@ _CONTAINER_PROOF_INPUT = 0x01
 _CONTAINER_MINT_QUOTE_INPUT = 0x02
 _CONTAINER_BLINDED_OUTPUT = 0x03
 _CONTAINER_MELT_QUOTE_OUTPUT = 0x04
+_CONTAINER_AUTHORIZED_REQUEST = 0x05
 
 
 @dataclass
@@ -112,4 +113,29 @@ def transaction_digest(tx: TransactionShape) -> bytes:
     """The 32-byte digest every input signs: SHA256(domain tag || transcript)."""
     return hashlib.sha256(
         TRANSCRIPT_DOMAIN_TAG.encode("utf-8") + build_transaction_transcript(tx)
+    ).digest()
+
+
+def build_request_transcript(method: str, target: str, body: bytes) -> bytes:
+    """Serialize a request to its authorized-request transcript (NUT-22).
+
+    One 0x05 container: 01 the uppercase HTTP method, 02 the origin-form
+    request-target as sent, 03 SHA256 over the exact body bytes (a request
+    without a body hashes the empty byte string).
+    """
+    if not method or not target:
+        raise ValueError("Request transcript requires a method and a target")
+    return tlv_record(
+        _CONTAINER_AUTHORIZED_REQUEST,
+        tlv_record(0x01, method.upper().encode("ascii"))
+        + tlv_record(0x02, target.encode("utf-8"))
+        + tlv_record(0x03, hashlib.sha256(body).digest()),
+    )
+
+
+def request_digest(method: str, target: str, body: bytes) -> bytes:
+    """The 32-byte digest a version 02 BAT witness signs (NUT-22)."""
+    return hashlib.sha256(
+        TRANSCRIPT_DOMAIN_TAG.encode("utf-8")
+        + build_request_transcript(method, target, body)
     ).digest()
