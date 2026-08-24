@@ -24,6 +24,10 @@ from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
 
 class AuthLedger(Ledger):
+    # BATs carry no transaction fees; a v3 keyset id commits the fee, so the
+    # auth keyset must be generated with the fee it serves.
+    keyset_input_fee_ppk = 0
+
     auth_crud: AuthLedgerCrud
     jwks_url: str
     jwks_client: jwt.PyJWKClient
@@ -173,7 +177,8 @@ class AuthLedger(Ledger):
             self._verify_oicd_issuer(clear_auth_token)
             decoded = self._verify_decode_jwt(clear_auth_token)
             user = await self._get_user(decoded)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Clear auth error: {e}")
             raise ClearAuthFailedError()
 
         logger.info(f"User authenticated: {user.id}")
