@@ -498,6 +498,8 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     reason="cashu-regtest open-ssp does not support nonzero swap fees",
 )
 async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
+    # Raw melt payload without a v3 witness, so mint on the pre-v3 keyset.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(128, quote_id=mint_quote.quote)
@@ -562,6 +564,8 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     reason="cashu-regtest open-ssp does not support nonzero swap fees",
 )
 async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
+    # Raw melt payload without a v3 witness, so mint on the pre-v3 keyset.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(1024)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(1024, quote_id=mint_quote.quote)
