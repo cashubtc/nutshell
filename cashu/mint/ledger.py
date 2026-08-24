@@ -1713,7 +1713,7 @@ class Ledger(
                 if output.id != keyset.id:
                     raise TransactionError("keyset id does not match output id")
                 if not keyset.active:
-                    raise TransactionError("keyset is not active")
+                    raise KeysetInactiveError()
                 logger.trace(f"Storing blinded message with keyset {keyset.id}.")
                 await self.crud.store_blinded_message(
                     id=keyset.id,
@@ -1771,7 +1771,7 @@ class Ledger(
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
             if not keyset.active:
-                raise TransactionError("keyset is not active")
+                raise KeysetInactiveError()
             keyset_id = output.id
             logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
