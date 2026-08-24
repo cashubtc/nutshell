@@ -504,8 +504,17 @@ class DbWriteHelper:
         Returns:
             MeltQuote: Updated melt quote object.
         """
+        # Locks are ordered by table name (melt_quotes before proofs_pending),
+        # so declare both upfront to keep the global lock order.
         async with self.db.get_connection(
-            locks=[LockOptions(table="proofs_pending", timeout=1)],
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="checking_id = :checking_id",
+                    parameters={"checking_id": quote.checking_id},
+                ),
+                LockOptions(table="proofs_pending", timeout=1),
+            ],
         ) as conn:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn
@@ -529,8 +538,17 @@ class DbWriteHelper:
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
             state (MeltQuoteState): New state for the melt quote (e.g. UNPAID).
         """
+        # Locks are ordered by table name (melt_quotes before proofs_pending),
+        # so declare both upfront to keep the global lock order.
         async with self.db.get_connection(
-            locks=[LockOptions(table="proofs_pending", timeout=1)],
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote.quote},
+                ),
+                LockOptions(table="proofs_pending", timeout=1),
+            ],
         ) as conn:
             await self._unset_proofs_pending(proofs, keysets, spent=False, conn=conn)
             quote = await self._unset_melt_quote_pending(quote, state, conn=conn)
@@ -610,8 +628,17 @@ class DbWriteHelper:
         """
         quote_copy = quote.model_copy()
 
+        # Locks are ordered by table name (melt_quotes before proofs_pending),
+        # so declare both upfront to keep the global lock order.
         async with self.db.get_connection(
-            locks=[LockOptions(table="proofs_pending", timeout=1)],
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote.quote},
+                ),
+                LockOptions(table="proofs_pending", timeout=1),
+            ],
         ) as conn:
             # 1. Unset proofs PENDING
             # This bumps balance back up.
