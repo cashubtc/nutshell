@@ -1121,20 +1121,20 @@ class Wallet(
         bls_proofs: List[Proof] = []
         
         for proof in proofs:
-            if not proof.dleq:
-                logger.trace("No DLEQ proof in proof.")
-                return
-            logger.trace("Verifying DLEQ proof.")
             assert proof.id
             assert proof.id in self.keysets, (
                 f"Keyset {proof.id} not known, can not verify DLEQ."
             )
-            
-            is_v3 = is_bls_keyset(proof.id)
-            if is_v3:
+            # v3 proofs verify by pairing and carry no DLEQ (NUT-12 is
+            # version-scoped); pre-v3 proofs keep the DLEQ path.
+            if is_bls_keyset(proof.id):
                 bls_proofs.append(proof)
-            else:
-                secp_proofs.append(proof)
+                continue
+            if not proof.dleq:
+                logger.trace("No DLEQ proof in proof.")
+                return
+            logger.trace("Verifying DLEQ proof.")
+            secp_proofs.append(proof)
                 
         if bls_proofs:
             try:
