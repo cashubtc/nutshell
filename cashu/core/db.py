@@ -19,30 +19,6 @@ POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
 SQLITE = "SQLITE"
 
-# All persistent tables are ordered here. Keep existing entries in place and
-# append new tables so rolling deployments do not disagree about lock order.
-# Unknown extension tables sort after these tables by name.
-LOCK_TABLE_ORDER = (
-    "dbversions",
-    "users",
-    "seed",
-    "mints",
-    "keysets",
-    "mint_pubkeys",
-    "mint_quotes",
-    "melt_quotes",
-    "bolt11_mint_quotes",
-    "bolt11_melt_quotes",
-    "invoices",
-    "promises",
-    "proofs",
-    "proofs_pending",
-    "proofs_used",
-    "balance_log",
-    "nostr",
-)
-
-
 @dataclass(frozen=True)
 class LockOptions:
     """Describes one table or row lock in an ordered transaction lock set."""
@@ -324,15 +300,8 @@ class Database(Compat):
     def _order_locks(
         self, locks: Sequence[LockOptions]
     ) -> tuple[LockOptions, ...]:
-        """Return locks in the process-wide canonical acquisition order."""
-        return tuple(sorted(locks, key=self._lock_order_key))
-
-    @staticmethod
-    def _lock_order_key(lock: LockOptions) -> tuple[int, str]:
-        try:
-            return (LOCK_TABLE_ORDER.index(lock.table), lock.table)
-        except ValueError:
-            return (len(LOCK_TABLE_ORDER), lock.table)
+        """Return locks ordered by table name."""
+        return tuple(sorted(locks, key=lambda lock: lock.table))
 
     async def _acquire_lock(
         self,

@@ -152,25 +152,7 @@ async def test_db_get_connection_adds_locks_to_reused_connection(ledger: Ledger)
 
 def test_db_orders_locks_globally():
     database = object.__new__(db.Database)
-    expected_order = [
-        "dbversions",
-        "users",
-        "seed",
-        "mints",
-        "keysets",
-        "mint_pubkeys",
-        "mint_quotes",
-        "melt_quotes",
-        "bolt11_mint_quotes",
-        "bolt11_melt_quotes",
-        "invoices",
-        "promises",
-        "proofs",
-        "proofs_pending",
-        "proofs_used",
-        "balance_log",
-        "nostr",
-    ]
+    expected_order = ["keysets", "melt_quotes", "mint_quotes", "new_table"]
     locks = database._order_locks(
         [LockOptions(table=table) for table in reversed(expected_order)]
     )
@@ -193,13 +175,13 @@ async def test_db_global_lock_order_avoids_deadlock(ledger: Ledger, monkeypatch)
         task = asyncio.current_task()
         task_name = task.get_name() if task else ""
 
-        if task_name == "lock-order-b" and lock.table == "mint_quotes":
+        if task_name == "lock-order-b" and lock.table == "melt_quotes":
             competing_transaction_started.set()
 
         await acquire_lock(conn, lock)
         acquired[task_name].append(lock.table)
 
-        if task_name == "lock-order-a" and lock.table == "mint_quotes":
+        if task_name == "lock-order-a" and lock.table == "melt_quotes":
             first_lock_acquired.set()
             await competing_transaction_started.wait()
 
@@ -229,8 +211,8 @@ async def test_db_global_lock_order_avoids_deadlock(ledger: Ledger, monkeypatch)
         timeout=3,
     )
 
-    assert acquired["lock-order-a"] == ["mint_quotes", "melt_quotes"]
-    assert acquired["lock-order-b"] == ["mint_quotes", "melt_quotes"]
+    assert acquired["lock-order-a"] == ["melt_quotes", "mint_quotes"]
+    assert acquired["lock-order-b"] == ["melt_quotes", "mint_quotes"]
 
 
 @pytest.mark.asyncio
