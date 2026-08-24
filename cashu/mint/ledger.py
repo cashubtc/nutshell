@@ -29,6 +29,7 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     BatchDuplicateQuotesError,
+    BatchSizeExceededError,
     CashuError,
     KeysetInactiveError,
     LightningError,
@@ -47,8 +48,9 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
+    PostMintQuotesByPubkeyRequest,
 )
-from ..core.p2pk import verify_schnorr_signature
+from ..core.nuts import nutxx
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -480,41 +482,40 @@ class Ledger(
             quotes.append(quote)
         return quotes
 
-    async def get_mint_quotes_by_pubkeys(
-        self, pubkeys: List[str], pubkey_signatures: List[str]
+    async def mint_quotes_by_pubkey(
+        self, payload: PostMintQuotesByPubkeyRequest
     ) -> List[MintQuote]:
-        """Returns mint quotes associated with given public keys."""
-        if len(pubkeys) != len(pubkey_signatures):
-            raise Exception("pubkeys and pubkey_signatures must have the same length")
-
-        for pubkey, signature in zip(pubkeys, pubkey_signatures):
-            pk = PublicKey(bytes.fromhex(pubkey))
-            if not verify_schnorr_signature(
-                bytes.fromhex(pubkey), pk, bytes.fromhex(signature)
-            ):
-                raise Exception(f"invalid signature for pubkey {pubkey}")
-
-        quotes = await self.crud.get_mint_quotes_by_pubkeys(
-            pubkeys=pubkeys, db=self.db
-        )
-
-        # update unpaid quotes
-        unpaid_quotes = [q for q in quotes if q.unpaid][
-            : settings.mint_max_request_length
-        ]
-        for quote in unpaid_quotes:
-            try:
-                await self.get_mint_quote(quote.quote)
-            except Exception as e:
-                logger.debug(f"Error checking quote status: {e}")
-
-        # get quotes again to get the updated states
-        if unpaid_quotes:
-            quotes = await self.crud.get_mint_quotes_by_pubkeys(
-                pubkeys=pubkeys, db=self.db
+        """Return NUT-20 mint quotes after proving control of every pubkey."""
+        if len(payload.pubkeys) > nutxx.MAX_LOOKUP_PUBKEYS:
+            raise BatchSizeExceededError(
+                f"Maximum number of pubkeys is {nutxx.MAX_LOOKUP_PUBKEYS}."
             )
+        if len(payload.pubkeys) != len(payload.pubkey_signatures):
+            raise CashuError("Mint quote lookup signature missing or invalid.")
+        if not self.pubkey:
+            raise CashuError("Mint public key is not available.")
 
-        return quotes
+        mint_pubkey = self.pubkey.format().hex()
+        verified_pubkeys: List[str] = []
+        for pubkey_hex, signature_hex in zip(
+            payload.pubkeys, payload.pubkey_signatures
+        ):
+            try:
+                pubkey = PublicKey(bytes.fromhex(pubkey_hex))
+                signature = bytes.fromhex(signature_hex)
+                if not nutxx.verify_signature(mint_pubkey, pubkey, signature):
+                    raise ValueError("invalid signature")
+            except Exception as exc:
+                raise CashuError(
+                    "Mint quote lookup signature missing or invalid."
+                ) from exc
+            verified_pubkeys.append(pubkey.format().hex())
+
+        return await self.crud.get_mint_quotes_by_pubkeys(
+            pubkeys=verified_pubkeys,
+            method=Method.bolt11.name,
+            db=self.db,
+        )
 
     async def mint(
         self,

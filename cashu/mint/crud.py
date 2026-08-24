@@ -257,6 +257,7 @@ class LedgerCrud(ABC):
         self,
         *,
         pubkeys: List[str],
+        method: str,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[MintQuote]: ...
@@ -710,6 +711,7 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         pubkeys: List[str],
+        method: str,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[MintQuote]:
@@ -718,10 +720,14 @@ class LedgerCrudSqlite(LedgerCrud):
 
         query = f"""
         SELECT * from {db.table_with_schema('mint_quotes')}
-        WHERE pubkey IN ({','.join([f":pubkey_{i}" for i in range(len(pubkeys))])})
+        WHERE method = :method
+          AND pubkey IN ({','.join([f":pubkey_{i}" for i in range(len(pubkeys))])})
         ORDER BY created_time DESC
         """
-        values = {f"pubkey_{i}": pubkeys[i] for i in range(len(pubkeys))}
+        values = {
+            "method": method,
+            **{f"pubkey_{i}": pubkeys[i] for i in range(len(pubkeys))},
+        }
         rows = await (conn or db).fetchall(query, values)
         return [MintQuote.from_row(r) for r in rows] if rows else []
 

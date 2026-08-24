@@ -399,21 +399,9 @@ async def get_mint_quotes_by_pubkey(
     Get mint quotes by pubkey.
     """
     logger.trace(f"> POST /v1/mint/quote/bolt11/pubkey: payload={payload}")
-    mint_quotes = await ledger.get_mint_quotes_by_pubkeys(
-        payload.pubkeys, payload.pubkey_signatures
-    )
+    mint_quotes = await ledger.mint_quotes_by_pubkey(payload)
     quotes_response = [
-        PostMintQuoteResponse(
-            quote=mint_quote.quote,
-            request=mint_quote.request,
-            state=mint_quote.state.value,
-            amount=mint_quote.amount,
-            unit=mint_quote.unit,
-            method=mint_quote.method,
-            expiry=mint_quote.expiry,
-            pubkey=mint_quote.pubkey,
-        )
-        for mint_quote in mint_quotes
+        PostMintQuoteResponse.from_mint_quote(mint_quote) for mint_quote in mint_quotes
     ]
     resp = PostMintQuotesByPubkeyResponse(quotes=quotes_response)
     logger.trace(f"< POST /v1/mint/quote/bolt11/pubkey: {resp}")

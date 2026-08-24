@@ -1,3 +1,5 @@
+from hashlib import sha256
+
 import bolt11
 import httpx
 import pytest
@@ -15,9 +17,8 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
-from cashu.core.nuts import nut20
+from cashu.core.nuts import nut20, nutxx
 from cashu.core.nuts.nuts import MINT_NUT
-from cashu.core.p2pk import schnorr_sign
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
@@ -272,7 +273,9 @@ async def test_mint_quotes_by_pubkey(ledger: Ledger):
     result = response.json()
     quote_id = result["quote"]
 
-    signature = schnorr_sign(bytes.fromhex(pubkey), privkey).hex()
+    signature = privkey.sign_schnorr(
+        sha256(nutxx.construct_message(ledger.pubkey.format().hex(), pubkey)).digest()
+    ).hex()
 
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11/pubkey",
@@ -284,6 +287,10 @@ async def test_mint_quotes_by_pubkey(ledger: Ledger):
     assert len(result2["quotes"]) == 1
     assert result2["quotes"][0]["quote"] == quote_id
     assert result2["quotes"][0]["pubkey"] == pubkey
+    assert result2["quotes"][0]["method"] == "bolt11"
+    assert result2["quotes"][0]["amount_paid"] == 0
+    assert result2["quotes"][0]["amount_issued"] == 0
+    assert result2["quotes"][0]["updated_at"] == result["updated_at"]
 
     # Test invalid signature
     bad_signature = signature[:-2] + "00"
@@ -291,7 +298,7 @@ async def test_mint_quotes_by_pubkey(ledger: Ledger):
         f"{BASE_URL}/v1/mint/quote/bolt11/pubkey",
         json={"pubkeys": [pubkey], "pubkey_signatures": [bad_signature]},
     )
-    assert response.status_code == 400 or response.status_code == 500
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio
