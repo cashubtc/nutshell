@@ -6,6 +6,7 @@ import jwt
 from loguru import logger
 
 from ...core.base import AuthProof, BlindedMessage, BlindedSignature
+from ...core.crypto.keys import is_bls_keyset
 from ...core.db import Database
 from ...core.errors import (
     BlindAuthAmountExceededError,
@@ -13,7 +14,7 @@ from ...core.errors import (
     BlindAuthRateLimitExceededError,
     ClearAuthFailedError,
 )
-from ...core.nuts import nut10
+from ...core.nuts import nut10, nut22
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
@@ -219,10 +220,21 @@ class AuthLedger(Ledger):
         return promises
 
     @asynccontextmanager
-    async def verify_blind_auth(self, blind_auth_token):
+    async def verify_blind_auth(
+        self,
+        blind_auth_token,
+        *,
+        method: str = "",
+        target: str = "",
+        body: bytes = b"",
+    ):
         """Wrapper context that puts blind auth tokens into pending list and
         melts them if the wrapped call succeeds. If it fails, the blind auth
         token is not invalidated.
+
+        On a version 02 (v3) auth keyset the BAT is a point secret and its
+        witness must sign this request's transcript (NUT-22); method, target
+        and body are the request as received.
 
         Args:
             blind_auth_token (str): Blind auth token.
@@ -231,14 +243,21 @@ class AuthLedger(Ledger):
             Exception: Blind auth token validation failed.
         """
         try:
-            proof = AuthProof.from_base64(blind_auth_token).to_proof()
-            condition = nut10.parse_spending_condition(proof.secret)
-            if condition is not None:
-                logger.warning(
-                    "Blind-auth token uses a NUT-10-style secret, but blind-auth "
-                    "does not enforce spending conditions in this path. Treating it "
-                    "as a plain secret."
-                )
+            auth_proof = AuthProof.from_base64(blind_auth_token)
+            proof = auth_proof.to_proof()
+            if is_bls_keyset(proof.id):
+                if not nut22.verify_bat_request_witness(
+                    auth_proof, method, target, body
+                ):
+                    raise BlindAuthFailedError()
+            else:
+                condition = nut10.parse_spending_condition(proof.secret)
+                if condition is not None:
+                    logger.warning(
+                        "Blind-auth token uses a NUT-10-style secret, but blind-auth "
+                        "does not enforce spending conditions in this path. Treating it "
+                        "as a plain secret."
+                    )
             await self.verify_inputs_and_outputs(proofs=[proof])
             await self.db_write._verify_spent_proofs_and_set_pending(
                 [proof], self.keysets

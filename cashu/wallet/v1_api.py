@@ -1,6 +1,7 @@
 import json
 from posixpath import join
 from typing import List, Optional, Tuple, Union
+from urllib.parse import urlencode, urlparse
 
 import bolt11
 import httpx
@@ -41,6 +42,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts import nut22
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .crud import (
@@ -175,6 +177,25 @@ class LedgerAPI(SupportsAuth):
                 )
             # select one auth proof
             proof = proofs[0]
+            bat_key = nut22.bat_private_key(proof.derivation_path)
+            if bat_key is not None:
+                # NUT-22: a version 02 BAT signs the request it authorizes.
+                # Pre-encode the body so the signed bytes are the sent bytes.
+                body = b""
+                if "json" in kwargs:
+                    body = json.dumps(
+                        kwargs.pop("json"), separators=(",", ":")
+                    ).encode("utf-8")
+                    kwargs["content"] = body
+                    kwargs.setdefault("headers", {})["Content-Type"] = (
+                        "application/json"
+                    )
+                # The origin-form request-target as sent: derive from the full
+                # URL, so a mint served under a subpath signs its full path.
+                target = urlparse(join(self.url, path)).path or "/"
+                if kwargs.get("params"):
+                    target += "?" + urlencode(kwargs["params"])
+                proof.witness = nut22.sign_request(bat_key, method, target, body)
             auth_token = AuthProof.from_proof(proof).to_base64()
             kwargs.setdefault("headers", {}).update(
                 {
