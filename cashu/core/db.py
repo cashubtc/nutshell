@@ -19,14 +19,27 @@ POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
 SQLITE = "SQLITE"
 
-# Locks that can participate in the same transaction must always be acquired in
-# this order. Unknown tables sort after the known tables by name, which keeps
-# extension locks deterministic without silently interleaving them with core
-# locks.
+# All persistent tables are ordered here. Keep existing entries in place and
+# append new tables so rolling deployments do not disagree about lock order.
+# Unknown extension tables sort after these tables by name.
 LOCK_TABLE_ORDER = (
+    "dbversions",
+    "users",
+    "seed",
+    "mints",
+    "keysets",
+    "mint_pubkeys",
     "mint_quotes",
     "melt_quotes",
+    "bolt11_mint_quotes",
+    "bolt11_melt_quotes",
+    "invoices",
+    "promises",
+    "proofs",
     "proofs_pending",
+    "proofs_used",
+    "balance_log",
+    "nostr",
 )
 
 

@@ -152,19 +152,30 @@ async def test_db_get_connection_adds_locks_to_reused_connection(ledger: Ledger)
 
 def test_db_orders_locks_globally():
     database = object.__new__(db.Database)
-    locks = database._order_locks(
-        [
-            LockOptions(table="proofs_pending"),
-            LockOptions(table="mint_quotes"),
-            LockOptions(table="melt_quotes"),
-        ]
-    )
-
-    assert [lock.table for lock in locks] == [
+    expected_order = [
+        "dbversions",
+        "users",
+        "seed",
+        "mints",
+        "keysets",
+        "mint_pubkeys",
         "mint_quotes",
         "melt_quotes",
+        "bolt11_mint_quotes",
+        "bolt11_melt_quotes",
+        "invoices",
+        "promises",
+        "proofs",
         "proofs_pending",
+        "proofs_used",
+        "balance_log",
+        "nostr",
     ]
+    locks = database._order_locks(
+        [LockOptions(table=table) for table in reversed(expected_order)]
+    )
+
+    assert [lock.table for lock in locks] == expected_order
 
 
 @pytest.mark.asyncio
