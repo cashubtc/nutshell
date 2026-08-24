@@ -19,6 +19,16 @@ POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
 SQLITE = "SQLITE"
 
+# Locks that can participate in the same transaction must always be acquired in
+# this order. Unknown tables sort after the known tables by name, which keeps
+# extension locks deterministic without silently interleaving them with core
+# locks.
+LOCK_TABLE_ORDER = (
+    "mint_quotes",
+    "melt_quotes",
+    "proofs_pending",
+)
+
 
 @dataclass(frozen=True)
 class LockOptions:
@@ -284,6 +294,8 @@ class Database(Compat):
         if not locks:
             return
 
+        locks = self._order_locks(locks)
+
         # SQLite locks the entire database for writes. One exclusive lock
         # covers every requested table and must not be started twice on the
         # same transaction.
@@ -295,6 +307,19 @@ class Database(Compat):
 
         for lock in locks:
             await self._acquire_lock(wconn, lock)
+
+    def _order_locks(
+        self, locks: Sequence[LockOptions]
+    ) -> tuple[LockOptions, ...]:
+        """Return locks in the process-wide canonical acquisition order."""
+        return tuple(sorted(locks, key=self._lock_order_key))
+
+    @staticmethod
+    def _lock_order_key(lock: LockOptions) -> tuple[int, str]:
+        try:
+            return (LOCK_TABLE_ORDER.index(lock.table), lock.table)
+        except ValueError:
+            return (len(LOCK_TABLE_ORDER), lock.table)
 
     async def _acquire_lock(
         self,
