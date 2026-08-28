@@ -62,9 +62,30 @@ class DbWriteHelper:
         cls._update_mint_quote_state_timestamps(quote, state)
 
     @classmethod
-    def _apply_mint_quote_issuance(
-        cls, quote: MintQuote, issued_amount: int
-    ) -> None:
+    def _restore_mint_quote_state(cls, quote: MintQuote, state: MintQuoteState) -> None:
+        """Restore a transient state without changing cumulative accounting."""
+        quote.state_val = state
+        cls._update_mint_quote_state_timestamps(quote, state)
+
+    @staticmethod
+    def _ensure_mint_quote_accounting(quote: MintQuote) -> None:
+        """Initialize cumulative fields on quotes created before accounting existed."""
+        if quote.amount_paid is not None and quote.amount_issued is not None:
+            return
+        state = quote.state
+        quote.amount_paid = (
+            quote.amount
+            if state
+            in {
+                MintQuoteState.paid,
+                MintQuoteState.issued,
+            }
+            else 0
+        )
+        quote.amount_issued = quote.amount if state == MintQuoteState.issued else 0
+
+    @classmethod
+    def _apply_mint_quote_issuance(cls, quote: MintQuote, issued_amount: int) -> None:
         """Apply an issuance amount and derive the quote's resulting state."""
         amount_paid = quote.amount_paid or 0
         new_amount_issued = (quote.amount_issued or 0) + issued_amount
@@ -211,6 +232,7 @@ class DbWriteHelper:
             if not quote.paid:
                 raise QuoteNotPaidError("Mint quote is not paid yet.")
             # set the quote as pending
+            self._ensure_mint_quote_accounting(quote)
             self._set_mint_quote_state(quote, MintQuoteState.pending)
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
@@ -258,6 +280,7 @@ class DbWriteHelper:
                     raise QuoteNotPaidError(f"Mint quote {quote_id} is not paid yet.")
 
                 # set the quote as pending
+                self._ensure_mint_quote_accounting(quote)
                 self._set_mint_quote_state(quote, MintQuoteState.pending)
                 logger.trace(f"crud: setting quote {quote_id} as PENDING")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
@@ -297,7 +320,7 @@ class DbWriteHelper:
             if state == MintQuoteState.issued and issued_amount is not None:
                 self._apply_mint_quote_issuance(quote, issued_amount)
             else:
-                self._set_mint_quote_state(quote, state)
+                self._restore_mint_quote_state(quote, state)
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -307,7 +330,10 @@ class DbWriteHelper:
         return quote
 
     async def _unset_mint_quotes_pending(
-        self, quote_ids: List[str], state: MintQuoteState
+        self,
+        quote_ids: List[str],
+        state: MintQuoteState,
+        issued_amounts: Optional[List[int]] = None,
     ) -> List[MintQuote]:
         """Unsets multiple mint quotes as pending.
 
@@ -331,7 +357,11 @@ class DbWriteHelper:
             lock_select_statement=lock_select_statement,
             lock_parameters=lock_parameters,
         ) as conn:
-            for quote_id in quote_ids:
+            if issued_amounts is not None and len(issued_amounts) != len(quote_ids):
+                raise TransactionError(
+                    "issued amounts length must match quote ids length"
+                )
+            for i, quote_id in enumerate(quote_ids):
                 quote = await self.crud.get_mint_quote(
                     quote_id=quote_id, db=self.db, conn=conn
                 )
@@ -341,8 +371,10 @@ class DbWriteHelper:
                     raise TransactionError(
                         f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot set as {state.value}."
                     )
-                # set the quote to previous state
-                self._set_mint_quote_state(quote, state)
+                if state == MintQuoteState.issued and issued_amounts is not None:
+                    self._apply_mint_quote_issuance(quote, issued_amounts[i])
+                else:
+                    self._restore_mint_quote_state(quote, state)
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)

@@ -392,7 +392,9 @@ class Ledger(
 
         return quote
 
-    async def get_mint_quote(self, quote_id: str) -> MintQuote:
+    async def get_mint_quote(
+        self, quote_id: str, *, force_backend_check: bool = False
+    ) -> MintQuote:
         """Returns a mint quote. If the quote is not paid, checks with the backend if the associated request is paid.
 
         Args:
@@ -410,16 +412,19 @@ class Ledger(
 
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
-        if quote.unpaid:
+        plugin = payment_method_registry.get(quote.method)
+        if not quote.pending and (quote.unpaid or plugin.allows_partial_mint):
             if not quote.checking_id:
                 raise CashuError("quote has no checking id")
 
             now = int(time.time())
-            updated = await self.crud.try_update_mint_quote_last_checked(
-                quote_id=quote_id,
-                last_checked=now,
-                rate_limit=settings.mint_quote_backend_check_rate_limit,
-                db=self.db,
+            updated = force_backend_check or (
+                await self.crud.try_update_mint_quote_last_checked(
+                    quote_id=quote_id,
+                    last_checked=now,
+                    rate_limit=settings.mint_quote_backend_check_rate_limit,
+                    db=self.db,
+                )
             )
             if not updated:
                 logger.trace(
@@ -429,7 +434,6 @@ class Ledger(
             quote.last_checked = now
 
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
-            plugin = payment_method_registry.get(quote.method)
             status = await plugin.get_incoming_payment_status(
                 self._get_backend(method, unit), quote
             )
@@ -451,11 +455,15 @@ class Ledger(
                     )
                     if not quote:
                         raise Exception("quote not found")
-                    if quote.unpaid:
+                    if reported_paid > (quote.amount_paid or 0):
                         logger.trace(f"Setting quote {quote_id} as paid")
                         quote.amount_paid = reported_paid
-                        quote.state_val = MintQuoteState.paid
-                        quote.paid_time = now
+                        quote.state_val = (
+                            MintQuoteState.issued
+                            if reported_paid == (quote.amount_issued or 0)
+                            else MintQuoteState.paid
+                        )
+                        quote.paid_time = quote.paid_time or now
                         quote.last_checked = now
                         quote.updated_at = now
                         await self.crud.update_mint_quote(
@@ -526,7 +534,7 @@ class Ledger(
         plugin = payment_method_registry.get(quote.method)
 
         previous_state = quote.state
-        await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+        quote = await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
@@ -550,7 +558,7 @@ class Ledger(
         await self.db_write._unset_mint_quote_pending(
             quote_id=quote_id,
             state=MintQuoteState.issued,
-            issued_amount=sum_amount_outputs if plugin.allows_partial_mint else None,
+            issued_amount=sum_amount_outputs,
         )
 
         return promises
@@ -631,20 +639,29 @@ class Ledger(
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
                     )
-                if payload.quote_amounts[i] > quote.amount:
+                available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
+                if plugin.allows_partial_mint and payload.quote_amounts[i] > available:
                     raise TransactionError(
-                        f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}"
+                        f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} paid balance"
                     )
 
-        quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
+        quote_amounts = payload.quote_amounts or (
+            [(q.amount_paid or 0) - (q.amount_issued or 0) for q in quotes]
+            if plugin.allows_partial_mint
+            else [q.amount for q in quotes]
+        )
+        if any(amount <= 0 for amount in quote_amounts):
+            raise TransactionError("quote amounts must be positive")
         if not plugin.allows_partial_mint:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
                     "amount to mint does not match quote amounts sum"
                 )
         else:
-            if sum_amount_outputs > sum(quote_amounts):
-                raise TransactionError("amount to mint exceeds quote amounts sum")
+            if sum_amount_outputs != sum(quote_amounts):
+                raise TransactionError(
+                    "amount to mint does not match quote amounts sum"
+                )
 
         # Signature validation (NUT-20)
         for i, quote in enumerate(quotes):
@@ -662,9 +679,14 @@ class Ledger(
         quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
-            for quote in quotes:
+            for i, quote in enumerate(quotes):
                 if quote.expiry and quote.expiry < int(time.time()):
                     raise QuoteExpiredError("quote expired")
+                available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
+                if quote_amounts[i] > available:
+                    raise TransactionError(
+                        f"quote amount {quote_amounts[i]} exceeds quote {quote.quote} paid balance"
+                    )
 
             # Store all blinded messages
             await self._store_blinded_messages(
@@ -681,7 +703,9 @@ class Ledger(
 
         # Set all quotes to issued
         await self.db_write._unset_mint_quotes_pending(
-            quote_ids=payload.quotes, state=MintQuoteState.issued
+            quote_ids=payload.quotes,
+            state=MintQuoteState.issued,
+            issued_amounts=quote_amounts,
         )
 
         return promises
