@@ -322,10 +322,12 @@ async def test_ledger_mint_batch_post_sign_failure_leaves_pending(
 
     original_unset_mint_quotes_pending = ledger.db_write._unset_mint_quotes_pending
 
-    async def mock_unset_mint_quotes_pending(quote_ids, state):
+    async def mock_unset_mint_quotes_pending(quote_ids, state, issued_amounts=None):
         if state == MintQuoteState.issued:
             raise Exception("failed to acquire database lock on mint_quotes")
-        return await original_unset_mint_quotes_pending(quote_ids, state)
+        return await original_unset_mint_quotes_pending(
+            quote_ids, state, issued_amounts=issued_amounts
+        )
 
     monkeypatch.setattr(
         ledger.db_write,
@@ -626,9 +628,9 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     q1_after = await ledger.crud.get_mint_quote(
         quote_id=mint_quote1.quote, db=ledger.db
     )
-    assert q1_after.state.value == "PAID", (
-        f"Quote1 should still be PAID, got {q1_after.state.value}"
-    )
+    assert (
+        q1_after.state.value == "PAID"
+    ), f"Quote1 should still be PAID, got {q1_after.state.value}"
 
     secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
         10002, 10002
