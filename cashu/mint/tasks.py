@@ -1,5 +1,4 @@
 import asyncio
-import time
 from typing import Any, List, Union
 
 from loguru import logger
@@ -81,14 +80,8 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
             logger.trace(
                 f"Invoice callback dispatcher: quote {quote} trying to set as {MintQuoteState.paid}"
             )
-            # set the quote as paid
-            if quote.unpaid:
-                quote.state = MintQuoteState.paid
-                quote.paid_time = int(time.time())
-                quote.updated_at = int(time.time())
-                await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
-                logger.trace(
-                    f"Quote {quote.quote} with {MintQuoteState.unpaid} set as {quote.state.value}"
-                )
-
-        await self.events.submit(quote)
+        # Fetch the cumulative paid amount through the normal quote refresh path.
+        # Reusable methods may emit more than one event for the same checking ID.
+        await self.get_mint_quote(  # type: ignore[attr-defined]
+            quote.quote, force_backend_check=True
+        )
