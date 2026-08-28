@@ -1277,6 +1277,20 @@ async def m036_add_mint_quote_accounting_fields(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN updated_at TIMESTAMP DEFAULT NULL"
         )
+        await conn.execute(
+            f"""
+                UPDATE {db.table_with_schema('mint_quotes')}
+                SET amount_paid = CASE
+                        WHEN state IN ('PAID', 'ISSUED') THEN amount
+                        ELSE 0
+                    END,
+                    amount_issued = CASE
+                        WHEN state = 'ISSUED' THEN amount
+                        ELSE 0
+                    END,
+                    updated_at = COALESCE(issued_time, paid_time, created_time)
+            """
+        )
 
 
 async def m037_remove_paid_from_melt_quote(db: Database):
