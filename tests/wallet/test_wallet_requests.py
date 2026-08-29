@@ -44,7 +44,10 @@ async def test_swap_outputs_are_sorted(wallet1: Wallet):
         route = mock.post(test_url).mock(
             return_value=Response(200, json=mock_response_data)
         )
-        await wallet1.select_to_send(wallet1.proofs, 5)
+        # The mocked response's C_ is garbage; receive-side pairing
+        # verification rejects it, after the request under test was sent.
+        with pytest.raises(Exception, match="pairing"):
+            await wallet1.select_to_send(wallet1.proofs, 5)
 
         assert route.called
         assert route.call_count == 1

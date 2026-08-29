@@ -867,7 +867,8 @@ class Ledger(
             if len(change_outputs) != len(melt_quote.change):
                 raise TransactionError("could not reconstruct melt change promises")
             for output, promise in zip(change_outputs, melt_quote.change):
-                promise.dleq = self._generate_dleq(output, promise)
+                if not is_bls_keyset(promise.id):
+                    promise.dleq = self._generate_dleq(output, promise)
 
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
@@ -1391,7 +1392,8 @@ class Ledger(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
-                    promise.dleq = self._generate_dleq(output, promise)
+                    if not is_bls_keyset(promise.id):
+                        promise.dleq = self._generate_dleq(output, promise)
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
@@ -1409,11 +1411,7 @@ class Ledger(
             )
         private_key_amount = keyset.private_keys[promise.amount]
         if is_bls_keyset(promise.id):
-            B_ = BlsPublicKey(bytes.fromhex(output.B_))
-            C_, e, s = bls_dhke.step2_bob(B_, private_key_amount)  # type: ignore[arg-type]
-            if C_.format().hex() != promise.C_:
-                raise TransactionError("restored signature does not match promise")
-            return DLEQ(e=e.to_hex(), s=s.to_hex())
+            raise TransactionError("v3 keysets carry no DLEQ")
         else:
             secp_B_ = SecpPublicKey(bytes.fromhex(output.B_))
             secp_C_, secp_e, secp_s = b_dhke.step2_bob(
@@ -1539,7 +1537,13 @@ class Ledger(
                     id=keyset_id,
                     amount=amount,
                     C_=C_.format().hex(),
-                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
+                    # NUT-12 is version-scoped: no DLEQ on v3 keysets, whose
+                    # signatures are publicly verifiable by pairing.
+                    dleq=(
+                        None
+                        if is_bls_keyset(keyset_id)
+                        else DLEQ(e=e.to_hex(), s=s.to_hex())
+                    ),
                 )
                 signatures.append(signature)
 

@@ -471,7 +471,8 @@ def test_send_with_dleq(mint, cli_prefix):
     token_str = result.output.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert token.token[0].proofs[0].dleq is not None, "no dleq included"
+    # NUT-12 is version-scoped: v3 proofs carry no DLEQ even when requested.
+    assert token.token[0].proofs[0].dleq is None
 
 
 def test_send_legacy(mint, cli_prefix):
@@ -779,7 +780,7 @@ def test_proofs_basic(cli_prefix):
 
     # Each proof should have the expected fields
     for proof in proofs:
-        assert sorted(proof.keys()) == ["C", "amount", "dleq", "id", "secret"]
+        assert sorted(proof.keys()) in (["C", "amount", "dleq", "id", "secret"], ["C", "amount", "id", "secret"])
 
 
 def test_proofs_json_structure(cli_prefix):
@@ -810,7 +811,8 @@ def test_proofs_json_structure(cli_prefix):
         assert isinstance(proof["amount"], int), "'amount' should be integer"
         assert isinstance(proof["secret"], str), "'secret' should be string"
         assert isinstance(proof["C"], str), "'C' should be string"
-        assert "dleq" in proof.keys()  # will not be present if '--no-dleq' is passed
+        # Pre-v3 proofs carry dleq unless '--no-dleq' is passed; v3 proofs never do.
+        assert "dleq" not in proof.keys() or proof["dleq"]
 
 
 def test_proofs_with_no_dleq_flag(cli_prefix):

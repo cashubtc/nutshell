@@ -145,9 +145,8 @@ async def test_generate_promises(ledger: Ledger):
     assert promises[0].id == ledger.keyset.id
 
     # DLEQ proof present
-    assert promises[0].dleq
-    assert promises[0].dleq.s
-    assert promises[0].dleq.e
+    # NUT-12 is version-scoped: v3 signatures carry no DLEQ.
+    assert promises[0].dleq is None
 
 
 @pytest.mark.asyncio
