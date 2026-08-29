@@ -253,6 +253,16 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
+    async def get_mint_quotes_by_pubkeys(
+        self,
+        *,
+        pubkeys: List[str],
+        method: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]: ...
+
+    @abstractmethod
     async def update_mint_quote(
         self,
         *,
@@ -696,6 +706,30 @@ class LedgerCrudSqlite(LedgerCrud):
             {"request": request},
         )
         return MintQuote.from_row(row) if row else None  # type: ignore
+
+    async def get_mint_quotes_by_pubkeys(
+        self,
+        *,
+        pubkeys: List[str],
+        method: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MintQuote]:
+        if not pubkeys:
+            return []
+
+        query = f"""
+        SELECT * from {db.table_with_schema('mint_quotes')}
+        WHERE method = :method
+          AND pubkey IN ({','.join([f":pubkey_{i}" for i in range(len(pubkeys))])})
+        ORDER BY created_time DESC
+        """
+        values = {
+            "method": method,
+            **{f"pubkey_{i}": pubkeys[i] for i in range(len(pubkeys))},
+        }
+        rows = await (conn or db).fetchall(query, values)
+        return [MintQuote.from_row(r) for r in rows] if rows else []
 
     async def update_mint_quote(
         self,

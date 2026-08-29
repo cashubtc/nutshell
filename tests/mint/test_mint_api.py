@@ -1,9 +1,12 @@
+from hashlib import sha256
+
 import bolt11
 import httpx
 import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -14,7 +17,7 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
-from cashu.core.nuts import nut20
+from cashu.core.nuts import nut20, nutxx
 from cashu.core.nuts.nuts import MINT_NUT
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
@@ -255,6 +258,47 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.updated_at >= result["updated_at"]
 
     assert resp_quote.pubkey == "02" + "00" * 32
+
+
+@pytest.mark.asyncio
+async def test_mint_quotes_by_pubkey(ledger: Ledger):
+    privkey = PrivateKey()
+    pubkey = privkey.public_key.format(compressed=True).hex()
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11",
+        json={"unit": "sat", "amount": 100, "pubkey": pubkey},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    quote_id = result["quote"]
+
+    signature = privkey.sign_schnorr(
+        sha256(nutxx.construct_message(ledger.pubkey.format().hex(), pubkey)).digest()
+    ).hex()
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/pubkey",
+        json={"pubkeys": [pubkey], "pubkey_signatures": [signature]},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result2 = response.json()
+    assert "quotes" in result2
+    assert len(result2["quotes"]) == 1
+    assert result2["quotes"][0]["quote"] == quote_id
+    assert result2["quotes"][0]["pubkey"] == pubkey
+    assert result2["quotes"][0]["method"] == "bolt11"
+    assert result2["quotes"][0]["amount_paid"] == 0
+    assert result2["quotes"][0]["amount_issued"] == 0
+    assert result2["quotes"][0]["updated_at"] == result["updated_at"]
+
+    # Test invalid signature
+    bad_signature = signature[:-2] + "00"
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/pubkey",
+        json={"pubkeys": [pubkey], "pubkey_signatures": [bad_signature]},
+    )
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -540,9 +584,9 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
 
     # change must compensate exactly for the unspent part of the reserve
     change_sat = sum([c.amount for c in resp_quote.change or []])
-    assert change_sat == quote.fee_reserve - melt_quote.fee_paid, (
-        "Wrong change returned"
-    )
+    assert (
+        change_sat == quote.fee_reserve - melt_quote.fee_paid
+    ), "Wrong change returned"
 
 
 @pytest.mark.asyncio
@@ -706,9 +750,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert response.status_code == 200, (
-        f"{response.url} {response.status_code} {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"{response.url} {response.status_code} {response.text}"
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -46,9 +46,9 @@ class GetInfoResponse(BaseModel):
     tos_url: Optional[str] = None
     urls: Optional[List[str]] = None
     time: Optional[int] = None
-    nuts: Optional[Dict[int, Any]] = None
+    nuts: Optional[Dict[Union[int, str], Any]] = None
 
-    def supports(self, nut: int) -> Optional[bool]:
+    def supports(self, nut: Union[int, str]) -> Optional[bool]:
         return nut in self.nuts if self.nuts else None
 
 

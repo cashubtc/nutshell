@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -40,7 +40,7 @@ class MintInfo(BaseModel):
     urls: Optional[List[str]]
     tos_url: Optional[str]
     time: Optional[int]
-    nuts: Dict[int, Any]
+    nuts: Dict[Union[int, str], Any]
 
     def __str__(self):
         return f"{self.name} ({self.description})"
@@ -49,7 +49,7 @@ class MintInfo(BaseModel):
     def from_json_str(cls, json_str: str):
         return cls.model_validate(json.loads(json_str))
 
-    def supports_nut(self, nut: int) -> bool:
+    def supports_nut(self, nut: Union[int, str]) -> bool:
         if self.nuts is None:
             return False
         return nut in self.nuts
