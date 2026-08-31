@@ -16,6 +16,8 @@ import statistics
 import time
 from typing import Dict, List, Optional, Tuple
 
+from coincurve import PublicKeyXOnly
+
 from cashu.core.base import BlindedMessage, Proof
 from cashu.core.crypto.nutroot import (
     NutrootLeaf,
@@ -323,7 +325,7 @@ def build_cases() -> Dict[str, Tuple[List[Proof], List[BlindedMessage]]]:
 
 
 def _time_case(
-    proofs: List[Proof], outputs: List[BlindedMessage]
+    proofs: List[Proof], outputs: List[BlindedMessage], min_n: int = 2000
 ) -> Tuple[float, float, float, int]:
     """Return (mean, median, min) per-call in microseconds and iteration count."""
     for _ in range(50):  # warmup
@@ -333,7 +335,7 @@ def _time_case(
     for _ in range(probe):
         VERIFY(proofs, outputs)
     per_call_s = (time.perf_counter_ns() - start) / probe / 1e9
-    n = min(200_000, max(2000, int(0.3 / per_call_s)))
+    n = min(200_000, max(min_n, int(0.3 / per_call_s)))
     samples = []
     for _ in range(n):
         t0 = time.perf_counter_ns()
@@ -341,6 +343,101 @@ def _time_case(
         samples.append(time.perf_counter_ns() - t0)
     us = [s / 1000 for s in samples]
     return statistics.mean(us), statistics.median(us), min(us), n
+
+
+INPUT_SIZES = [1, 2, 4, 8, 16, 32, 64]
+LEAF_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+THRESHOLD_NM = [(1, 1), (2, 3), (3, 5), (5, 8), (8, 15)]
+
+
+def build_inputs_sweep() -> Dict[str, Dict[int, Tuple[List[Proof], List[BlindedMessage]]]]:
+    """N inputs / N outputs; key-path series and script-path 1-of-1 series."""
+    sweep: Dict[str, Dict[int, Tuple[List[Proof], List[BlindedMessage]]]] = {
+        "inputs_keypath": {},
+        "inputs_script_1of1": {},
+    }
+    for n in INPUT_SIZES:
+        secrets = [_pub(20000 + i) for i in range(n)]
+        proofs, outputs = _make_tx(secrets, n, f"inputs_keypath:{n}")
+        digest = _tx_digest(proofs, outputs)
+        for i, proof in enumerate(proofs):
+            proof.witness = _keypath_witness(_key(20000 + i), digest)
+        sweep["inputs_keypath"][n] = (proofs, outputs)
+
+        secrets = []
+        trees = []
+        for i in range(n):
+            leaf = _threshold_leaf(1, [21000 + i * 2])
+            secret, hashes, _ = _script_tree([leaf], 21000 + i * 2 + 1)
+            secrets.append(secret)
+            trees.append((leaf, hashes))
+        proofs, outputs = _make_tx(secrets, n, f"inputs_script_1of1:{n}")
+        digest = _tx_digest(proofs, outputs)
+        for i, proof in enumerate(proofs):
+            leaf, hashes = trees[i]
+            proof.witness = _script_witness(
+                leaf, hashes, 0, 21000 + i * 2 + 1, [_sign(_key(21000 + i * 2), digest)]
+            )
+        sweep["inputs_script_1of1"][n] = (proofs, outputs)
+    return sweep
+
+
+def build_leaves_sweep() -> Dict[int, Tuple[List[Proof], List[BlindedMessage], int]]:
+    """One script-path 1-of-1 input on an L-leaf tree; spend leaf index 0."""
+    sweep: Dict[int, Tuple[List[Proof], List[BlindedMessage], int]] = {}
+    for li, size in enumerate(LEAF_SIZES):
+        base = 30000 + li * 2000
+        leaves = [_threshold_leaf(1, [base])]  # spent leaf at index 0
+        for i in range(1, size):
+            kind = i % 3
+            if kind == 1:
+                leaves.append(_threshold_leaf(1, [base + i]))
+            elif kind == 2:
+                leaves.append(_after_leaf(base + i))
+            else:
+                leaves.append(_hashlock_leaf(base + i, bytes([i % 256]) * 32))
+        secret, hashes, _ = _script_tree(leaves, base + 1000)
+        path_len = len(nutroot_merkle_path(hashes, 0))
+        proofs, outputs = _make_tx([secret], 1, f"leaves:{size}")
+        digest = _tx_digest(proofs, outputs)
+        proofs[0].witness = _script_witness(
+            leaves[0], hashes, 0, base + 1000, [_sign(_key(base), digest)]
+        )
+        sweep[size] = (proofs, outputs, path_len)
+    return sweep
+
+
+def build_threshold_sweep() -> Dict[str, Tuple[List[Proof], List[BlindedMessage]]]:
+    """Single-leaf threshold n-of-m; signed by the first n keys in key order."""
+    sweep: Dict[str, Tuple[List[Proof], List[BlindedMessage]]] = {}
+    for ti, (n, m) in enumerate(THRESHOLD_NM):
+        base = 50000 + ti * 100
+        leaf = _threshold_leaf(n, [base + i for i in range(m)])
+        secret, hashes, _ = _script_tree([leaf], base + 50)
+        proofs, outputs = _make_tx([secret], 1, f"threshold:{n}of{m}")
+        digest = _tx_digest(proofs, outputs)
+        sigs = [_sign(_key(base + i), digest) for i in range(n)]
+        proofs[0].witness = _script_witness(leaf, hashes, 0, base + 50, sigs)
+        sweep[f"threshold_{n}of{m}"] = (proofs, outputs)
+    return sweep
+
+
+def _count_schnorr_verifies(proofs: List[Proof], outputs: List[BlindedMessage]) -> int:
+    """Run one verification with PublicKeyXOnly.verify wrapped in a counter."""
+    calls = 0
+    original = PublicKeyXOnly.verify
+
+    def counting(self, signature, message):  # type: ignore[no-untyped-def]
+        nonlocal calls
+        calls += 1
+        return original(self, signature, message)
+
+    PublicKeyXOnly.verify = counting  # type: ignore[method-assign]
+    try:
+        VERIFY(proofs, outputs)
+    finally:
+        PublicKeyXOnly.verify = original  # type: ignore[method-assign]
+    return calls
 
 
 def _cpu_model() -> str:
@@ -366,6 +463,58 @@ def _profile_case(name: str, proofs: List[Proof], outputs: List[BlindedMessage])
     stats.print_stats(15)
 
 
+def _sanity(name: str, proofs: List[Proof], outputs: List[BlindedMessage]) -> None:
+    try:
+        VERIFY(proofs, outputs)
+    except Exception as exc:
+        print(f"SANITY FAILED for {name}: {exc}")
+        raise
+
+
+def run_sweeps() -> None:
+    print("\n=== inputs sweep (N inputs + N outputs per call) ===")
+    inputs = build_inputs_sweep()
+    header = f"{'series':<20} {'inputs':>6} {'mean_us':>10} {'median_us':>10} {'min_us':>10} {'us/input':>9} {'N':>6}"
+    print(header)
+    print("-" * len(header))
+    for series, sizes in inputs.items():
+        for n, (proofs, outputs) in sizes.items():
+            _sanity(f"{series}[{n}]", proofs, outputs)
+            min_n = 500 if n >= 32 else 2000  # keep total runtime bounded
+            mean, median, minimum, iters = _time_case(proofs, outputs, min_n=min_n)
+            print(
+                f"{series:<20} {n:>6} {mean:>10.2f} {median:>10.2f} "
+                f"{minimum:>10.2f} {mean / n:>9.2f} {iters:>6}"
+            )
+
+    print("\n=== leaves sweep (1 script-path 1-of-1 input, L-leaf tree) ===")
+    leaves = build_leaves_sweep()
+    header = f"{'leaves':>6} {'path_len':>8} {'mean_us':>10} {'median_us':>10} {'min_us':>10} {'N':>6}"
+    print(header)
+    print("-" * len(header))
+    for size, (proofs, outputs, path_len) in leaves.items():
+        _sanity(f"leaves[{size}]", proofs, outputs)
+        mean, median, minimum, iters = _time_case(proofs, outputs)
+        print(
+            f"{size:>6} {path_len:>8} {mean:>10.2f} {median:>10.2f} "
+            f"{minimum:>10.2f} {iters:>6}"
+        )
+
+    print("\n=== threshold n-of-m sweep (single-leaf tree) ===")
+    thresholds = build_threshold_sweep()
+    header = f"{'case':<18} {'schnorr_verifies':>16} {'mean_us':>10} {'median_us':>10} {'min_us':>10} {'N':>6}"
+    print(header)
+    print("-" * len(header))
+    for name, (proofs, outputs) in thresholds.items():
+        _sanity(name, proofs, outputs)
+        verifies = _count_schnorr_verifies(proofs, outputs)
+        mean, median, minimum, iters = _time_case(proofs, outputs)
+        print(
+            f"{name:<18} {verifies:>16} {mean:>10.2f} {median:>10.2f} "
+            f"{minimum:>10.2f} {iters:>6}"
+        )
+
+
 def main() -> None:
     print(f"python: {platform.python_version()}")
     print(f"cpu: {_cpu_model()}")
@@ -387,6 +536,8 @@ def main() -> None:
     for name, (proofs, outputs) in cases.items():
         mean, median, minimum, n = _time_case(proofs, outputs)
         print(f"{name:<24} {mean:>10.2f} {median:>10.2f} {minimum:>10.2f} {n:>8}")
+
+    run_sweeps()
 
     _profile_case("keypath_bare", *cases["keypath_bare"])
     _profile_case("script_threshold_2of3", *cases["script_threshold_2of3"])
