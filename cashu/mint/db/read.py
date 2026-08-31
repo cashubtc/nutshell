@@ -1,9 +1,38 @@
 from typing import Dict, List, Optional
 
 from ...core.base import Proof, ProofSpentState, ProofState
+from ...core.crypto.nutroot import witness_discloses
+from ...core.crypto.transcript import spend_commitment
 from ...core.db import Connection, Database
 from ...core.errors import ProofsAlreadySpentError
 from ..crud import LedgerCrud
+
+
+def _spent_proof_state(Y: str, proof: Proof) -> ProofState:
+    """The NUT-07 entry for a spent proof.
+
+    Pre-v3 (no stored input digest): the witness as always. v3: the spend
+    commitment for every spent proof, and the exact witness string with its
+    input digest only when the exercised leaf carries disclosure mode 0x01;
+    everything else stays with the mint (NUT-07).
+    """
+    if proof.digest is None:
+        return ProofState(Y=Y, state=ProofSpentState.spent, witness=proof.witness)
+    commitment = (
+        spend_commitment(
+            bytes.fromhex(Y), bytes.fromhex(proof.digest), proof.witness
+        ).hex()
+        if proof.witness is not None
+        else None
+    )
+    disclosed = proof.witness is not None and witness_discloses(proof.witness)
+    return ProofState(
+        Y=Y,
+        state=ProofSpentState.spent,
+        witness=proof.witness if disclosed else None,
+        input_digest=proof.digest if disclosed else None,
+        commitment=commitment,
+    )
 
 
 class DbReadHelper:
@@ -67,14 +96,7 @@ class DbReadHelper:
                 elif Y not in proofs_spent and Y in proofs_pending:
                     states.append(ProofState(Y=Y, state=ProofSpentState.pending))
                 else:
-                    states.append(
-                        ProofState(
-                            Y=Y,
-                            state=ProofSpentState.spent,
-                            witness=proofs_spent[Y].witness,
-                            digest=proofs_spent[Y].digest,
-                        )
-                    )
+                    states.append(_spent_proof_state(Y, proofs_spent[Y]))
         return states
 
     async def _verify_proofs_spendable(

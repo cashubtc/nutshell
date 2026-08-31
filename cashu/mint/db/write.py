@@ -27,7 +27,7 @@ from ...core.errors import (
 from ...core.settings import settings
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
-from .read import DbReadHelper
+from .read import DbReadHelper, _spent_proof_state
 
 
 def _uuid7() -> str:
@@ -850,13 +850,7 @@ class DbWriteHelper:
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
                 if emit_events:
-                    await self.events.submit(
-                        ProofState(
-                            Y=p.Y,
-                            state=ProofSpentState.spent,
-                            witness=p.witness or None,
-                        )
-                    )
+                    await self.events.submit(_spent_proof_state(p.Y, p))
 
             # Update fees
             if keyset_fees:

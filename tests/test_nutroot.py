@@ -7,6 +7,8 @@ test/vectors/nutroot-v3.json; update both in the same commit set).
 import hashlib
 import json
 import os
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from coincurve import PublicKeyXOnly
@@ -14,6 +16,7 @@ from coincurve import PublicKeyXOnly
 from cashu.core.crypto.nutroot import (
     NUTROOT_BRANCH_TAG,
     NUTROOT_LEAF_TAG,
+    NUTROOT_MAX_LEAF_BYTES,
     NUTROOT_TWEAK_TAG,
     NutrootLeaf,
     NutrootWitness,
@@ -148,15 +151,17 @@ def test_leaf_parsing_fails_closed():
     at_limit = (
         b"\x00\x01"
         + base_fields
-        + tlv_record(0x0D, bytes(1024 - 1 - len(base_fields) - 3))
+        + tlv_record(0x0D, bytes(NUTROOT_MAX_LEAF_BYTES - 1 - len(base_fields) - 3))
     )
-    assert len(at_limit) == 1025
+    assert len(at_limit) == NUTROOT_MAX_LEAF_BYTES + 1
     # At the cap the length check passes and parsing reaches the padding
     # field, which rejects as unknown; one byte more and the length fires.
     with pytest.raises(ValueError, match="Unknown leaf field"):
         parse_nutroot_leaf(at_limit)
     over_limit = (
-        b"\x00\x01" + base_fields + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
+        b"\x00\x01"
+        + base_fields
+        + tlv_record(0x0D, bytes(NUTROOT_MAX_LEAF_BYTES - len(base_fields) - 3))
     )
     with pytest.raises(ValueError, match="body exceeds"):
         parse_nutroot_leaf(over_limit)
@@ -300,17 +305,17 @@ def test_tweak_math_6_2():
 def test_vector_signatures_verify():
     assert verify_schnorr_digest(
         bytes.fromhex(V61["keypath_signature"]),
-        bytes.fromhex(V61["transcript_digest"]),
+        bytes.fromhex(V61["illustrative_input_digest"]),
         bytes.fromhex(V61["secret"]),
     )
     assert verify_schnorr_digest(
         bytes.fromhex(V61["scriptpath_witness"]["signatures"][0]),
-        bytes.fromhex(V61["transcript_digest"]),
+        bytes.fromhex(V61["illustrative_input_digest"]),
         bytes.fromhex(V61["alice_refund_pub"]),
     )
     assert verify_schnorr_digest(
         bytes.fromhex(V62["melt_witness"]["signatures"][0]),
-        bytes.fromhex(V62["transcript_digest"]),
+        bytes.fromhex(V62["illustrative_input_digest"]),
         bytes.fromhex(V62["kid_pub"]),
     )
 
@@ -318,7 +323,7 @@ def test_vector_signatures_verify():
 def test_keypath_signature_reproduces():
     p_prime = bytes.fromhex(V61["keypath_priv"])
     sig = PrivateKey(p_prime).sign_schnorr(
-        bytes.fromhex(V61["transcript_digest"]), b"\x00" * 32
+        bytes.fromhex(V61["illustrative_input_digest"]), b"\x00" * 32
     )
     assert sig.hex() == V61["keypath_signature"]
 
@@ -539,12 +544,39 @@ def test_transaction_transcript_vectors():
 
 
 def test_transcript_swap_signature_is_keypath_witness():
+    from cashu.core.crypto.transcript import transaction_inputs
+
     tv = VECTORS["transcript"]["swap"]
-    assert verify_schnorr_digest(
-        bytes.fromhex(tv["signature"]),
-        bytes.fromhex(tv["digest"]),
-        bytes.fromhex(tv["tx"]["proof_inputs"][0]["secret"]),
+    _, proof_contexts, _ = transaction_inputs(_tx_from_vector(tv["tx"]))
+    secret = bytes.fromhex(tv["tx"]["proof_inputs"][0]["secret"])
+    context = proof_contexts[secret]
+    # The vector pins the container hash and the derived per-input digest.
+    assert hashlib.sha256(context.container).hexdigest() == tv["input_id"]
+    assert context.digest.hex() == tv["input_digest"]
+    assert verify_schnorr_digest(bytes.fromhex(tv["signature"]), context.digest, secret)
+    # The shared transaction digest is never signed directly (NUT-10).
+    assert not verify_schnorr_digest(
+        bytes.fromhex(tv["signature"]), bytes.fromhex(tv["digest"]), secret
     )
+
+
+def test_transcript_multi_input_vector_uses_per_input_digests():
+    from cashu.core.crypto.transcript import transaction_digest, transaction_inputs
+
+    vector = VECTORS["transcript"]["multi_input"]
+    tx = _tx_from_vector(vector["tx"])
+    digest, proof_contexts, _ = transaction_inputs(tx)
+    assert digest == bytes.fromhex(vector["digest"])
+    for proof, expected in zip(vector["tx"]["proof_inputs"], vector["inputs"]):
+        secret = bytes.fromhex(proof["secret"])
+        context = proof_contexts[secret]
+        assert hashlib.sha256(context.container).hexdigest() == expected["input_id"]
+        assert context.digest.hex() == expected["input_digest"]
+        assert verify_schnorr_digest(
+            bytes.fromhex(expected["signature"]), context.digest, secret
+        )
+    assert vector["inputs"][0]["input_digest"] != vector["inputs"][1]["input_digest"]
+    assert transaction_digest(tx) == digest
 
 
 def test_transcript_rejects_empty_sections():
@@ -590,11 +622,11 @@ def test_mint_verifies_nutroot_transaction_witnesses():
     with pytest.raises(TransactionError, match="missing nutroot transaction witness"):
         verify(proofs, outputs)
 
-    # Valid witness passes, and the digest it signed is attached to the
-    # proof for NUT-07 storage.
+    # Valid witness passes, and the input digest it signed is attached to
+    # the proof for NUT-07 storage.
     proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})
     verify(proofs, outputs)
-    assert proofs[0].digest == tv["digest"]
+    assert proofs[0].digest == tv["input_digest"]
 
     # Tampered signature rejects.
     bad_sig = tv["signature"][:-2] + ("00" if tv["signature"][-2:] != "00" else "01")
@@ -666,7 +698,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     signatures = json.loads(out[0].witness)["signatures"]
     assert verify_schnorr_digest(
         bytes.fromhex(signatures[0]),
-        bytes.fromhex(tv["digest"]),
+        bytes.fromhex(tv["input_digest"]),
         bytes.fromhex(proofs[0].secret),
     )
 
@@ -698,10 +730,10 @@ async def test_wallet_attaches_nutroot_witnesses():
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        transaction_digest,
+        transaction_inputs,
     )
 
-    mixed_digest = transaction_digest(
+    _, mixed_contexts, _ = transaction_inputs(
         TransactionShape(
             proof_inputs=[
                 TranscriptProofInput(
@@ -729,7 +761,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     mixed_signature = json.loads(mixed[0].witness)["signatures"][0]
     assert verify_schnorr_digest(
         bytes.fromhex(mixed_signature),
-        mixed_digest,
+        mixed_contexts[bytes.fromhex(mixed[0].secret)].digest,
         bytes.fromhex(mixed[0].secret),
     )
 
@@ -925,7 +957,7 @@ def test_script_path_spend_after_leaf_vectors():
         "control": v61["scriptpath_witness"]["control"],
         "signatures": v61["scriptpath_witness"]["signatures"],
     })
-    digest = bytes.fromhex(v61["transcript_digest"])
+    digest = bytes.fromhex(v61["illustrative_input_digest"])
     secret = PublicKey(bytes.fromhex(v61["secret"]))
     # After the locktime: passes.
     verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] + 1)
@@ -970,7 +1002,7 @@ def test_script_path_unknown_leaf_type_fails_closed():
     with pytest.raises(ValueError, match="Unknown leaf type"):
         verify_script_path_spend(
             PublicKey(bytes.fromhex(v62["secret"])),
-            bytes.fromhex(v62["transcript_digest"]),
+            bytes.fromhex(v62["illustrative_input_digest"]),
             witness,
         )
 
@@ -1107,10 +1139,10 @@ def test_mint_accepts_script_path_witness_on_swap():
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        transaction_digest,
+        transaction_inputs,
     )
 
-    digest = transaction_digest(
+    _, proof_contexts, _ = transaction_inputs(
         TransactionShape(
             proof_inputs=[
                 TranscriptProofInput(
@@ -1131,6 +1163,7 @@ def test_mint_accepts_script_path_witness_on_swap():
             ],
         )
     )
+    digest = proof_contexts[bytes.fromhex(proofs[0].secret)].digest
     proofs[0].witness = json.dumps(
         {
             "leaf": v61["scriptpath_witness"]["leaf"],
@@ -1254,3 +1287,146 @@ def test_duplicate_leaves_fold_and_spend():
             "signatures": [_sign_digest(3, digest)],
         }),
     )
+
+
+def test_disclosure_field_parses_and_fails_closed():
+    """disclosure (0x0a) accepts mode 0x01 only; a private leaf has one encoding."""
+    lf = VECTORS["leaf_forms"]
+    leaf = parse_nutroot_leaf(bytes.fromhex(lf["threshold_1of1_disclosure"]))
+    assert leaf.disclosure == 0x01
+    assert serialize_nutroot_leaf(leaf).hex() == lf["threshold_1of1_disclosure"]
+    for bad in ("leaf_disclosure_mode0", "leaf_disclosure_empty", "leaf_disclosure_mode2"):
+        with pytest.raises(ValueError, match="disclosure mode"):
+            parse_nutroot_leaf(bytes.fromhex(lf[bad]))
+    with pytest.raises(ValueError, match="disclosure mode"):
+        serialize_nutroot_leaf(
+            NutrootLeaf(
+                type="threshold",
+                n=1,
+                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
+                disclosure=2,
+            )
+        )
+
+
+def test_auditable_lock_vector_reconstructs():
+    """The canonical auditable lock (NUMS offset, disclosure leaf) matches the vector."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend, witness_discloses
+    from cashu.core.crypto.transcript import (
+        build_transaction_transcript,
+        transaction_digest,
+        transaction_inputs,
+    )
+
+    aud = VECTORS["auditable_lock"]
+    leaf = bytes.fromhex(aud["leaf"])
+    root = nutroot_leaf_hash(leaf)
+    assert root.hex() == aud["merkle_root"]
+    K = PublicKey(bytes.fromhex(aud["K"]))
+    assert nutroot_tweak_pubkey(K, root).format().hex() == aud["secret"]
+    tx = _tx_from_vector(aud["tx"])
+    digest, contexts, _ = transaction_inputs(tx)
+    context = contexts[bytes.fromhex(aud["secret"])]
+    assert build_transaction_transcript(tx).hex() == aud["transcript"]
+    assert transaction_digest(tx).hex() == aud["digest"]
+    assert hashlib.sha256(context.container).hexdigest() == aud["input_id"]
+    assert context.digest.hex() == aud["input_digest"]
+    # The spend's witness verifies and is marked for publication.
+    revealed = verify_script_path_spend(
+        PublicKey(bytes.fromhex(aud["secret"])),
+        bytes.fromhex(aud["input_digest"]),
+        NutrootWitness.model_validate_json(aud["witness"]),
+    )
+    assert revealed.disclosure == 0x01
+    assert witness_discloses(aud["witness"])
+    # A key-path witness discloses nothing, whatever the tree held.
+    assert not witness_discloses(json.dumps({"signatures": ["00" * 64]}))
+
+
+def test_spend_commitment_vectors():
+    """NUT-07: tagged_hash(tag, Y || input_digest || SHA256(witness)) over the exact string."""
+    from cashu.core.crypto.transcript import spend_commitment
+
+    for name in ("keypath_private", "disclosed_script_path"):
+        v = VECTORS["nut07_commitments"][name]
+        assert hashlib.sha256(v["witness"].encode()).hexdigest() == v["witness_hash"]
+        assert (
+            spend_commitment(
+                bytes.fromhex(v["Y"]),
+                bytes.fromhex(v["input_digest"]),
+                v["witness"],
+            ).hex()
+            == v["commitment"]
+        )
+
+
+def test_nut07_spent_state_discloses_only_flagged_spends():
+    """Checkstate: v3 spends return the commitment; the witness and input digest
+    only when the exercised leaf carries disclosure mode 0x01."""
+    from cashu.core.base import Proof
+    from cashu.mint.db.read import _spent_proof_state
+
+    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    private = _spent_proof_state(
+        kp["Y"], Proof(witness=kp["witness"], digest=kp["input_digest"])
+    )
+    assert private.witness is None
+    assert private.input_digest is None
+    assert private.commitment == kp["commitment"]
+
+    aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
+    disclosed = _spent_proof_state(
+        aud["Y"], Proof(witness=aud["witness"], digest=aud["input_digest"])
+    )
+    assert disclosed.witness == aud["witness"]
+    assert disclosed.input_digest == aud["input_digest"]
+    assert disclosed.commitment == aud["commitment"]
+
+    # Pre-v3 (no stored input digest): the witness serves as always.
+    legacy = _spent_proof_state("02" + "ab" * 32, Proof(witness='{"signatures":["00"]}'))
+    assert legacy.witness == '{"signatures":["00"]}'
+    assert legacy.commitment is None
+
+
+@pytest.mark.asyncio
+async def test_nut17_spent_event_uses_the_nut07_disclosure_filter():
+    """Live proof_state events must not reopen the witness leak closed by checkstate."""
+    from cashu.core.base import Proof
+    from cashu.mint.db.write import DbWriteHelper
+
+    class Connection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    proof_input = VECTORS["transcript"]["swap"]["tx"]["proof_inputs"][0]
+    proof = Proof(
+        id=proof_input["keyset_id"],
+        amount=proof_input["amount"],
+        secret=proof_input["secret"],
+        C=proof_input["C"],
+        witness=kp["witness"],
+        digest=kp["input_digest"],
+    )
+    crud = SimpleNamespace(
+        invalidate_proof=AsyncMock(),
+        bump_keyset_balance=AsyncMock(),
+    )
+    events = SimpleNamespace(submit=AsyncMock())
+    helper = DbWriteHelper(
+        SimpleNamespace(get_connection=lambda _: Connection()),
+        crud,
+        events,
+        SimpleNamespace(),
+    )
+
+    await helper.invalidate_proofs([proof], {proof.id: SimpleNamespace()})
+
+    state = events.submit.await_args.args[0]
+    assert state.Y == kp["Y"]
+    assert state.witness is None
+    assert state.input_digest is None
+    assert state.commitment == kp["commitment"]
