@@ -38,13 +38,14 @@ _FIELD_N = 0x02
 _FIELD_KEYS = 0x04
 _FIELD_TIME = 0x06
 _FIELD_HASH = 0x08
+_FIELD_DISCLOSURE = 0x0A
 
 # Normative caps from NUT-10. The leaf body excludes the leading version byte.
-NUTROOT_MAX_LEAF_BYTES = 1024
-NUTROOT_MAX_TREE_DEPTH = 8
-# A maximal leaf (hex), 30 Schnorr signatures, an eight-node control path,
-# a preimage, and JSON framing fit below this protocol-specific DoS ceiling.
-NUTROOT_MAX_WITNESS_LENGTH = 8192
+NUTROOT_MAX_LEAF_BYTES = 512
+NUTROOT_MAX_TREE_DEPTH = 3
+# A maximal leaf (hex), 15 Schnorr signatures, a three-node control path,
+# a preimage, and JSON framing fit below this protocol-specific ceiling.
+NUTROOT_MAX_WITNESS_LENGTH = 4096
 # Largest unix time an `after` leaf may name (2^53 - 1), the point where
 # implementations built on IEEE-754 integers stop counting exactly.
 NUTROOT_MAX_LEAF_TIME = 2**53 - 1
@@ -64,6 +65,9 @@ class NutrootLeaf:
     keys: List[PublicKey]
     time: Optional[int] = None
     hash: Optional[bytes] = None
+    # Disclosure mode (NUT-10): 1 publishes the exercised witness via
+    # NUT-07/NUT-17. Valid on every leaf type; satisfaction is unaffected.
+    disclosure: Optional[int] = None
 
 
 class NutrootControlBlock(BaseModel):
@@ -193,6 +197,10 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
         fields += tlv_record(_FIELD_HASH, leaf.hash)
     elif leaf.hash is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a hash field")
+    if leaf.disclosure is not None:
+        if leaf.disclosure != 0x01:
+            raise ValueError("disclosure mode must be 0x01")
+        fields += tlv_record(_FIELD_DISCLOSURE, bytes([0x01]))
     out = bytes([NUTROOT_LEAF_VERSION, NUTROOT_LEAF_TYPE[leaf.type]]) + fields
     if len(out) - 1 > NUTROOT_MAX_LEAF_BYTES:
         raise ValueError(f"Leaf body exceeds {NUTROOT_MAX_LEAF_BYTES} bytes")
@@ -219,6 +227,7 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
     keys: Optional[List[PublicKey]] = None
     time: Optional[int] = None
     hash_: Optional[bytes] = None
+    disclosure: Optional[int] = None
     for record_type, value in read_tlv_records(data[2:], unique_ascending=True):
         if record_type == _FIELD_N:
             if len(value) != 1 or value[0] == 0:
@@ -252,6 +261,12 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
             if len(value) != 32:
                 raise ValueError("hash field must be 32 bytes")
             hash_ = value
+        elif record_type == _FIELD_DISCLOSURE:
+            # Mode 0x00 and every unallocated mode reject, so a private leaf
+            # has one encoding.
+            if len(value) != 1 or value[0] != 0x01:
+                raise ValueError("disclosure mode must be 0x01")
+            disclosure = value[0]
         else:
             # Odd types are reserved, so an unknown field of either parity rejects.
             raise ValueError(f"Unknown leaf field: {record_type}")
@@ -267,7 +282,9 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
         raise ValueError(f"{type_name} leaf must not carry a time field")
     if type_name != "hashlock" and hash_ is not None:
         raise ValueError(f"{type_name} leaf must not carry a hash field")
-    return NutrootLeaf(type=type_name, n=n, keys=keys, time=time, hash=hash_)
+    return NutrootLeaf(
+        type=type_name, n=n, keys=keys, time=time, hash=hash_, disclosure=disclosure
+    )
 
 
 def nutroot_leaf_hash(serialized_leaf: bytes) -> bytes:
@@ -291,10 +308,10 @@ def nutroot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
     walks the transmitted order; receivers match slot keys by value.
 
     Depth is a property of the tree, not of one leaf, so the cap is checked
-    here and not only on a witness path. A tree of more than 2^8 leaves is
+    here and not only on a witness path. A tree of more than 2^3 leaves is
     deeper than the cap, so its long paths cannot be spent. A few of its
     leaves still can: the fold promotes an unpaired leaf to the next level,
-    and a leaf promoted often enough keeps a short path (at 300 leaves, 44
+    and a leaf promoted often enough keeps a short path (at 12 leaves, 4
     are within the cap). So an oversized tree is part spendable and part
     not, and which part is which falls out of the fold rather than out of
     anything the builder chose. Refuse the whole tree.
@@ -399,6 +416,21 @@ def verify_nutroot_commitment(
     return nutroot_tweak_pubkey(internal_key, root).format() == secret.format()
 
 
+def witness_discloses(witness_json: str) -> bool:
+    """True when a spent v3 witness exercised a leaf carrying disclosure mode 0x01.
+
+    Decides what NUT-07 publishes; a witness that does not parse discloses
+    nothing (fail closed to private).
+    """
+    try:
+        witness = NutrootWitness.model_validate_json(witness_json)
+        if witness.leaf is None:
+            return False  # key path: byte-identical to a bare-key spend
+        return parse_nutroot_leaf(bytes.fromhex(witness.leaf)).disclosure == 0x01
+    except Exception:
+        return False
+
+
 def secret_transcript_bytes(secret: str, keyset_id: str) -> bytes:
     """Bytes a proof secret contributes to the transaction transcript (NUT-10).
 
@@ -447,12 +479,13 @@ def verify_script_path_spend(
     witness: NutrootWitness,
     now: Optional[float] = None,
     preimage_max_len: int = 32,
-) -> None:
+) -> NutrootLeaf:
     """Verify a script-path witness: commitment, then evaluate the revealed leaf.
 
     Witness shape (NUT-10): {"leaf": hex, "control": {"K": hex, "path": [hex]},
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
-    transaction digest. Raises ValueError on any failure (fail closed).
+    input digest. Raises ValueError on any failure (fail closed); returns the
+    parsed leaf so callers can act on its disclosure mode.
     """
     if witness.leaf is None or witness.control is None:
         raise ValueError("script path witness requires leaf and control")
@@ -501,3 +534,4 @@ def verify_script_path_spend(
         raise ValueError(
             f"threshold not met: {len(satisfied_keys)} of {leaf.n} signatures"
         )
+    return leaf

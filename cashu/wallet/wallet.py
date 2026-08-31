@@ -42,7 +42,7 @@ from ..core.crypto.transcript import (
     TranscriptBlindedOutput,
     TranscriptProofInput,
     TranscriptQuote,
-    transaction_digest,
+    transaction_inputs,
 )
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
@@ -703,7 +703,7 @@ class Wallet(
         signature: str | None = None
         if quote.privkey:
             if is_bls_keyset(outputs[0].id):
-                # V3: sign the transaction digest (quote input + outputs).
+                # V3: sign the quote input digest (quote input + outputs).
                 signature = nut20.sign_mint_quote_v3(
                     quote_id, quote.amount, outputs, quote.privkey
                 )
@@ -757,47 +757,60 @@ class Wallet(
         """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
 
         Builds the transcript from the request's own inputs and outputs and signs
-        its digest with each input's internal key, re-derived from the proof's
-        stored derivation path. Inputs without a re-derivable key are left
-        unsigned. Legacy inputs are included in mixed-transaction transcripts
-        but do not receive a nutroot witness.
+        each input's own input digest with its internal key, re-derived from the
+        proof's stored derivation path (NUT-10). Inputs without a re-derivable
+        key are left unsigned. Legacy inputs are included in mixed-transaction
+        transcripts but do not receive a nutroot witness.
         """
         if not proofs or not any(
             is_nutroot_point_secret(p.secret, p.id) for p in proofs
         ):
             return proofs
-        digest = transaction_digest(
-            TransactionShape(
-                proof_inputs=[
-                    TranscriptProofInput(
-                        amount=p.amount,
-                        keyset_id=keyset_id_transcript_bytes(p.id),
-                        secret=secret_transcript_bytes(p.secret, p.id),
-                        C=bytes.fromhex(p.C),
-                    )
-                    for p in proofs
-                ],
-                blinded_outputs=[
-                    TranscriptBlindedOutput(
-                        amount=o.amount,
-                        keyset_id=keyset_id_transcript_bytes(o.id),
-                        B_=bytes.fromhex(o.B_),
-                    )
-                    for o in outputs
-                ],
-                melt_quote_outputs=(
-                    [TranscriptQuote(amount=melt_quote_amount, quote_id=melt_quote_id)]
-                    if melt_quote_id is not None and melt_quote_amount is not None
-                    else None
-                ),
+        try:
+            _, proof_contexts, _ = transaction_inputs(
+                TransactionShape(
+                    proof_inputs=[
+                        TranscriptProofInput(
+                            amount=p.amount,
+                            keyset_id=keyset_id_transcript_bytes(p.id),
+                            secret=secret_transcript_bytes(p.secret, p.id),
+                            C=bytes.fromhex(p.C),
+                        )
+                        for p in proofs
+                    ],
+                    blinded_outputs=[
+                        TranscriptBlindedOutput(
+                            amount=o.amount,
+                            keyset_id=keyset_id_transcript_bytes(o.id),
+                            B_=bytes.fromhex(o.B_),
+                        )
+                        for o in outputs
+                    ],
+                    melt_quote_outputs=(
+                        [
+                            TranscriptQuote(
+                                amount=melt_quote_amount, quote_id=melt_quote_id
+                            )
+                        ]
+                        if melt_quote_id is not None and melt_quote_amount is not None
+                        else None
+                    ),
+                )
             )
-        )
+        except ValueError:
+            # A structurally invalid transaction (eg a repeated input) has no
+            # input digests to sign; send it unsigned and let the mint name
+            # the actual problem.
+            return proofs
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue
             secret_key = self._resolve_v3_secret_key(proof)
             if secret_key is None:
                 continue
+            digest = proof_contexts[
+                secret_transcript_bytes(proof.secret, proof.id)
+            ].digest
             signature = secret_key.sign_schnorr(
                 digest,
                 None,  # type: ignore

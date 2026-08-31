@@ -1359,7 +1359,7 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
 
 
 async def m041_add_digest_to_proofs(db: Database):
-    """Store the v3 transaction digest beside the spent proof's witness
+    """Store the v3 input digest beside the spent proof's witness
     (served by NUT-07; a v3 witness verifies only against its digest).
     The pending table carries it across a melt's payment window."""
     async with db.connect() as conn:
