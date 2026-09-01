@@ -1,3 +1,4 @@
+import json
 import time
 from hashlib import sha256
 
@@ -12,7 +13,7 @@ from cashu.core.p2pk import (
     schnorr_sign,
 )
 from cashu.core.secret import Secret, SecretKind
-from cashu.mint.conditions import LedgerSpendingConditions, WitnessForP2pkOrHtlc
+from cashu.mint.conditions import LedgerSpendingConditions
 from tests.mint.spending_conditions_test_helpers import proof, secret_str
 
 
@@ -79,7 +80,9 @@ def test_p2pk_requirements_ignore_stray_preimage_in_normalized_witness():
         P2PKSecret.from_secret(Secret.deserialize(secret))
     )
     sig = p2pk_sig_inputs_signature(secret, signer)
-    witness = WitnessForP2pkOrHtlc(preimage="11" * 32, signatures=[sig])
+    # A P2PK witness carrying a stray preimage: P2PKWitness ignores the extra
+    # key, so the preimage never reaches the requirements verifier.
+    witness = json.dumps({"preimage": "11" * 32, "signatures": [sig]})
     assert cond._verify_p2pk_or_htlc_spending_requirements(
         requirements,
         witness,
