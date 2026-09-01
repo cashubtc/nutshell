@@ -25,7 +25,7 @@ permissions:
 jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')

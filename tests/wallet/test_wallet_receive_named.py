@@ -8,7 +8,7 @@ from cashu.core.settings import settings
 from cashu.wallet.helpers import receive, redeem_TokenV3
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import pay_if_regtest
+from tests.helpers import pay_if_regtest, use_v2_keyset
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -17,6 +17,8 @@ async def wallet_sender():
         SERVER_ENDPOINT, "test_data/wallet_receive_named_sender", name="sender"
     )
     await wallet.load_mint()
+    # NUT-10 well-known secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet)
     yield wallet
 
 
@@ -28,6 +30,8 @@ async def wallet_bob():
         SERVER_ENDPOINT, os.path.join(settings.cashu_dir, "bob"), name="bob"
     )
     await wallet.load_mint()
+    # NUT-10 well-known secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet)
     yield wallet
 
 
@@ -93,6 +97,8 @@ async def test_redeem_tokenv3_custom_db_dir_reuses_receivers_private_key(
         SERVER_ENDPOINT, "test_data/wallet_receive_named_custom_dir", name="bob"
     )
     await wallet_receiver.load_mint()
+    # NUT-10 well-known secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet_receiver)
 
     send_proofs = await _mint_p2pk_locked_proofs_to(wallet_sender, wallet_receiver, 8)
     token = TokenV3(token=[TokenV3Token(mint=wallet_sender.url, proofs=send_proofs)])

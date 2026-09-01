@@ -15,6 +15,8 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
+from cashu.core.crypto.keys import is_bls_keyset
+from cashu.core.crypto.nutroot import NUTROOT_MAX_WITNESS_LENGTH
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     InvalidProofsError,
@@ -48,7 +50,7 @@ def _blinded_output(
     return BlindedMessage(
         amount=amount,
         B_=B_.format().hex(),
-        id=ledger.keyset.id,
+        id=v2_keyset_id(ledger),
     )
 
 
@@ -83,20 +85,41 @@ def _mint_quote_with_pubkey(pubkey: str) -> MintQuote:
 # ---------------------------------------------------------------------------
 
 
+def v2_keyset(ledger: Ledger):
+    """The mint's pre-v3 keyset."""
+    return next(
+        ks
+        for kid, ks in ledger.keysets.items()
+        if ks.active and ks.unit == ledger.keyset.unit and not is_bls_keyset(kid)
+    )
+
+
+def v2_keyset_id(ledger: Ledger) -> str:
+    """The mint's pre-v3 keyset.
+
+    These tests build NUT-10 well-known and plain text secrets, which are valid
+    on pre-v3 keysets only; the mint's own keyset is v3 and takes point secrets.
+    """
+    return next(
+        kid
+        for kid, ks in ledger.keysets.items()
+        if ks.active and ks.unit == ledger.keyset.unit and not is_bls_keyset(kid)
+    )
+
 def test_verify_secret_criteria_accepts_present_secret(ledger: Ledger):
-    p = Proof(id=ledger.keyset.id, amount=8, secret="hello", C="02" + "ab" * 32)
+    p = Proof(id=v2_keyset_id(ledger), amount=8, secret="hello", C="02" + "ab" * 32)
     assert ledger._verify_secret_criteria(p) is True
 
 
 def test_verify_secret_criteria_rejects_empty_secret(ledger: Ledger):
-    p = Proof(id=ledger.keyset.id, amount=8, secret="", C="02" + "ab" * 32)
+    p = Proof(id=v2_keyset_id(ledger), amount=8, secret="", C="02" + "ab" * 32)
     with pytest.raises(NoSecretInProofsError):
         ledger._verify_secret_criteria(p)
 
 
 def test_verify_secret_criteria_rejects_too_long_secret(ledger: Ledger):
     p = Proof(
-        id=ledger.keyset.id,
+        id=v2_keyset_id(ledger),
         amount=8,
         secret="x" * (settings.mint_max_secret_length + 1),
         C="02" + "ab" * 32,
@@ -130,7 +153,7 @@ async def test_witness_too_long(ledger: Ledger):
 
 def test_verify_input_witness_criteria_accepts_short_witness(ledger: Ledger):
     p = Proof(
-        id=ledger.keyset.id,
+        id=v2_keyset_id(ledger),
         amount=8,
         secret="s",
         C="02" + "ab" * 32,
@@ -139,14 +162,18 @@ def test_verify_input_witness_criteria_accepts_short_witness(ledger: Ledger):
     assert ledger._verify_input_witness_criteria(p) is True
 
 
-def test_verify_input_witness_criteria_rejects_long_witness(ledger: Ledger):
+def test_verify_input_witness_criteria_uses_v3_protocol_bound(ledger: Ledger):
+    # A v3 keyset takes point secrets only (M5), so this proof needs one: with a
+    # plain secret the constructor raises and the bound below is never reached.
     p = Proof(
         id=ledger.keyset.id,
         amount=8,
-        secret="s",
+        secret="02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
         C="02" + "ab" * 32,
-        witness="w" * (settings.mint_max_witness_length + 1),
+        witness="w" * NUTROOT_MAX_WITNESS_LENGTH,
     )
+    assert ledger._verify_input_witness_criteria(p) is True
+    p.witness += "w"
     with pytest.raises(WitnessTooLongError):
         ledger._verify_input_witness_criteria(p)
 
@@ -181,8 +208,8 @@ def test_verify_amount_rejects_too_large(ledger: Ledger):
 
 
 def test_verify_no_duplicate_proofs(ledger: Ledger):
-    a = Proof(id=ledger.keyset.id, amount=1, secret="a", C="02" + "aa" * 32)
-    b = Proof(id=ledger.keyset.id, amount=1, secret="b", C="02" + "bb" * 32)
+    a = Proof(id=v2_keyset_id(ledger), amount=1, secret="a", C="02" + "aa" * 32)
+    b = Proof(id=v2_keyset_id(ledger), amount=1, secret="b", C="02" + "bb" * 32)
     assert ledger._verify_no_duplicate_proofs([a, b]) is True
     assert ledger._verify_no_duplicate_proofs([a, a.model_copy()]) is False
 
@@ -196,14 +223,14 @@ def test_verify_no_duplicate_outputs(ledger: Ledger):
 
 
 def test_verify_input_output_amounts_rejects_outputs_exceed_inputs(ledger: Ledger):
-    p = Proof(id=ledger.keyset.id, amount=4, secret="s", C="02" + "cc" * 32)
+    p = Proof(id=v2_keyset_id(ledger), amount=4, secret="s", C="02" + "cc" * 32)
     outs = [_blinded_output(ledger, amount=8, label="big")]
     with pytest.raises(TransactionError, match="less than output amounts"):
         ledger._verify_input_output_amounts([p], outs)
 
 
 def test_verify_input_output_amounts_accepts_equal_or_greater(ledger: Ledger):
-    p = Proof(id=ledger.keyset.id, amount=16, secret="s", C="02" + "dd" * 32)
+    p = Proof(id=v2_keyset_id(ledger), amount=16, secret="s", C="02" + "dd" * 32)
     outs = [_blinded_output(ledger, amount=8, label="half")]
     ledger._verify_input_output_amounts([p], outs)
 
@@ -214,7 +241,7 @@ def test_verify_input_output_amounts_accepts_equal_or_greater(ledger: Ledger):
 
 
 def test_verify_units_match_accepts_same_unit(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     p = Proof(id=kid, amount=8, secret="s", C="02" + "ee" * 32)
     o = _blinded_output(ledger, label="u")
     assert ledger._verify_units_match([p], [o]) == ledger.keysets[kid].unit
@@ -235,7 +262,7 @@ def test_verify_units_match_rejects_mismatched_units(ledger: Ledger):
 
 
 def test_verify_inputs_outputs_units_match(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     proofs = [
         Proof(id=kid, amount=8, secret="a", C="02" + "12" * 32),
         Proof(id=kid, amount=8, secret="b", C="02" + "13" * 32),
@@ -265,7 +292,7 @@ def test_verify_inputs_outputs_units_match_rejects_multi_unit_inputs(ledger: Led
 
 
 def test_get_fees_for_proofs_single_proof(ledger: Ledger):
-    p = Proof(id=ledger.keyset.id, amount=8, secret="s", C="02" + "17" * 32)
+    p = Proof(id=v2_keyset_id(ledger), amount=8, secret="s", C="02" + "17" * 32)
     fee = ledger.get_fees_for_proofs([p])
     assert isinstance(fee, int)
     assert fee >= 0
@@ -300,13 +327,13 @@ def test_verify_equation_balanced_rejects_no_proofs(ledger: Ledger):
 
 
 def test_verify_equation_balanced_rejects_no_outputs(ledger: Ledger):
-    p = Proof(id=ledger.keyset.id, amount=8, secret="s", C="02" + "18" * 32)
+    p = Proof(id=v2_keyset_id(ledger), amount=8, secret="s", C="02" + "18" * 32)
     with pytest.raises(TransactionError, match="no outputs provided"):
         ledger._verify_equation_balanced([p], [])
 
 
 def test_verify_equation_balanced_accepts_balanced_with_fees(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     proofs = [
         Proof(id=kid, amount=8, secret="a", C="02" + "19" * 32),
         Proof(id=kid, amount=8, secret="b", C="02" + "1a" * 32),
@@ -319,7 +346,7 @@ def test_verify_equation_balanced_accepts_balanced_with_fees(ledger: Ledger):
 
 
 def test_verify_equation_balanced_rejects_unbalanced(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     proofs = [Proof(id=kid, amount=8, secret="a", C="02" + "1b" * 32)]
     outs = [_blinded_output(ledger, amount=1, label="tiny")]
     with pytest.raises(TransactionError, match="not balanced"):
@@ -400,7 +427,7 @@ def test_verify_mint_quote_witness_legacy_fallback(ledger: Ledger):
 
 
 def test_verify_proof_bdhke_rejects_invalid_token(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     p = Proof(
         id=kid,
         amount=8,
@@ -421,17 +448,17 @@ def test_verify_proof_bdhke_rejects_legacy_hash_to_curve_alias(ledger: Ledger):
         )
     ).decode("utf-8")
     amount = 8
-    private_key = ledger.keyset.private_keys[amount]
+    private_key = v2_keyset(ledger).private_keys[amount]
     C = (hash_to_curve(current_secret.encode()) * private_key).format().hex()  # type: ignore
 
     current_proof = Proof(
-        id=ledger.keyset.id,
+        id=v2_keyset_id(ledger),
         amount=amount,
         secret=current_secret,
         C=C,
     )
     alias_proof = Proof(
-        id=ledger.keyset.id,
+        id=v2_keyset_id(ledger),
         amount=amount,
         secret=legacy_alias,
         C=C,
@@ -465,7 +492,7 @@ async def test_verify_inputs_rejects_empty_list(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     p = Proof(id=kid, amount=8, secret="same", C="02" + "1c" * 32)
     with (
         patch.object(ledger, "_verify_proof_bdhke", return_value=True),
@@ -482,7 +509,7 @@ async def test_verify_inputs_rejects_duplicate_secrets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_verify_inputs_rejects_invalid_bdhke(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     p = Proof(id=kid, amount=8, secret="s", C="02" + "1d" * 32)
     with patch.object(
         ledger.db_read,
@@ -532,7 +559,7 @@ async def test_verify_outputs_rejects_unknown_keyset(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_verify_outputs_rejects_inactive_keyset(ledger: Ledger):
     o = _blinded_output(ledger, label="inact")
-    ks = ledger.keysets[ledger.keyset.id]
+    ks = ledger.keysets[v2_keyset_id(ledger)]
     prev = ks.active
     try:
         ks.active = False
@@ -639,7 +666,7 @@ async def test_check_outputs_pending_or_issued_before_returns_empty_for_unknown_
 
 
 def test_verify_inputs_and_outputs_together_runs_balance_and_spending(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     proofs = [
         Proof(id=kid, amount=8, secret="a", C="02" + "1e" * 32),
         Proof(id=kid, amount=8, secret="b", C="02" + "1f" * 32),
@@ -668,7 +695,7 @@ async def test_verify_inputs_and_outputs_outputs_none_skips_output_pipeline(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=None
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=None
         )
     vo.assert_not_called()
     together.assert_not_called()
@@ -682,7 +709,7 @@ async def test_verify_inputs_and_outputs_with_outputs_calls_together(ledger: Led
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs
         )
     together.assert_called_once()
 
@@ -694,7 +721,7 @@ async def test_verify_inputs_and_outputs_empty_outputs_list_fails_after_inputs(
     with patch.object(ledger, "_verify_inputs", AsyncMock(return_value=None)):
         await assert_err(
             ledger.verify_inputs_and_outputs(
-                proofs=[MagicMock(spec=Proof)], outputs=[]
+                proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=[]
             ),
             TransactionError(),
         )
@@ -709,7 +736,7 @@ async def test_verify_inputs_and_outputs_happy_path_outputs_only_phase(ledger: L
         patch.object(ledger, "_verify_inputs_and_outputs_together", return_value=None),
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs
         )
 
 
@@ -742,7 +769,7 @@ def _proof_plain(
     ledger: Ledger, *, amount: int = 8, secret: str = "plain-secret-ok"
 ) -> Proof:
     return Proof(
-        id=ledger.keyset.id,
+        id=v2_keyset_id(ledger),
         amount=amount,
         secret=secret,
         C="02" + secrets.token_hex(32),
@@ -796,6 +823,7 @@ async def test_verify_inputs_secret_too_long_raises(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_verify_inputs_witness_too_long_raises(ledger: Ledger):
     p = _proof_plain(ledger)
+    p.id = "009a1f293253e41e"
     p.witness = "w" * (settings.mint_max_witness_length + 1)
     with pytest.raises(WitnessTooLongError):
         await ledger._verify_inputs([p])
@@ -1012,7 +1040,7 @@ def test_together_fails_unit_mismatch_sat_proof_usd_output(ledger: Ledger):
 
 
 def test_together_fails_sig_all_secrets_not_equal(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     a = PrivateKey()
     b = PrivateKey()
     sa = _p2pk_sig_all_secret(a.public_key.format().hex())
@@ -1040,7 +1068,7 @@ def test_together_fails_sig_all_secrets_not_equal(ledger: Ledger):
 
 
 def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     signer = PrivateKey()
     pub = signer.public_key.format().hex()
     secret_str = _p2pk_sig_all_secret(pub)
@@ -1059,7 +1087,7 @@ def test_together_sig_all_fails_wrong_signature(ledger: Ledger):
 
 
 def test_together_sig_all_succeeds_when_signed(ledger: Ledger):
-    kid = ledger.keyset.id
+    kid = v2_keyset_id(ledger)
     signer = PrivateKey()
     pub = signer.public_key.format().hex()
     secret_str = _p2pk_sig_all_secret(pub)
@@ -1169,7 +1197,7 @@ async def test_vio_forwards_conn_to_verify_outputs(ledger: Ledger):
         patch.object(ledger, "_verify_outputs", side_effect=vo),
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs, conn=mock_conn
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs, conn=mock_conn
         )
     assert captured["conn"] is mock_conn
     assert captured["outputs"] == outs
@@ -1184,7 +1212,7 @@ async def test_vio_does_not_call_together_when_outputs_fail(ledger: Ledger):
     ):
         await assert_err(
             ledger.verify_inputs_and_outputs(
-                proofs=[MagicMock(spec=Proof)], outputs=[]
+                proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=[]
             ),
             TransactionError(),
         )
@@ -1210,7 +1238,7 @@ async def test_vio_full_pipeline_order_outputs_then_together(ledger: Ledger):
         ),
     ):
         await ledger.verify_inputs_and_outputs(
-            proofs=[MagicMock(spec=Proof)], outputs=outs
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs
         )
     assert calls == ["outputs", "together"]
 
@@ -1246,7 +1274,7 @@ async def test_verify_transaction_swap_orders_inputs_nut10_outputs_together(
             ledger, "_verify_inputs_and_outputs_together", side_effect=together
         ),
     ):
-        await ledger._verify_transaction(proofs=[MagicMock(spec=Proof)], outputs=outs)
+        await ledger._verify_transaction(proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=outs)
 
     assert calls == ["inputs", "nut10", "outputs", "together"]
 
@@ -1280,7 +1308,7 @@ async def test_verify_transaction_melt_passes_quote_and_skips_balance_check(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger._verify_transaction(
-            proofs=[MagicMock(spec=Proof)],
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))],
             outputs=outs,
             quote="quote-1",
             skip_output_amount_check=True,
@@ -1320,7 +1348,7 @@ async def test_verify_transaction_without_outputs_only_runs_nut10_and_inputs(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger._verify_transaction(
-            proofs=[MagicMock(spec=Proof)], outputs=None, quote="quote-2"
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))], outputs=None, quote="quote-2"
         )
 
     assert calls == ["inputs", "nut10"]
@@ -1352,7 +1380,7 @@ async def test_verify_transaction_melt_empty_outputs_skips_output_pipeline(
         patch.object(ledger, "_verify_inputs_and_outputs_together") as together,
     ):
         await ledger._verify_transaction(
-            proofs=[MagicMock(spec=Proof)],
+            proofs=[MagicMock(spec=Proof, secret="mock", id=v2_keyset_id(ledger))],
             outputs=[],
             quote="quote-3",
             verify_input_output_balance=False,

@@ -26,6 +26,7 @@ from tests.helpers import (
     is_fake,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 BASE_URL = "http://localhost:3337"
@@ -99,18 +100,12 @@ async def test_api_keysets(ledger: Ledger):
         "keysets": [
             {
                 "final_expiry": None,
-                "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
-                "unit": "sat",
+                "id": keyset.id,
+                "unit": keyset.unit.name,
                 "active": True,
                 "input_fee_ppk": 0,
-            },
-            {
-                "final_expiry": None,
-                "id": "01dadff4bbb5719ea6119c6b134d79cadfdd49b7483ca4b422a5e9fbdadbb32006",
-                "unit": "usd",
-                "active": True,
-                "input_fee_ppk": 0,
-            },
+            }
+            for keyset in ledger.keysets.values()
         ]
     }
     assert response.json() == expected
@@ -118,24 +113,20 @@ async def test_api_keysets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(
-        f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    response = httpx.get(f"{BASE_URL}/v1/keys/{ledger.keyset.id}")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
                 "final_expiry": None,
-                "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+                "id": ledger.keyset.id,
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
-                    for k, v in ledger.keysets[
-                        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-                    ].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets[ledger.keyset.id].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -145,24 +136,20 @@ async def test_api_keyset_keys(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
-    response = httpx.get(
-        f"{BASE_URL}/v1/keys/01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    response = httpx.get(f"{BASE_URL}/v1/keys/{ledger.keyset.id}")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
                 "final_expiry": None,
-                "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+                "id": ledger.keyset.id,
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
                 "keys": {
                     str(k): v.format().hex()
-                    for k, v in ledger.keysets[
-                        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-                    ].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets[ledger.keyset.id].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -179,6 +166,7 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
+    wallet._attach_nutroot_witnesses(wallet.proofs, outputs)
     inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.model_dump() for o in outputs]
     payload = {"inputs": inputs_payload, "outputs": outputs_payload}
@@ -188,10 +176,7 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert (
-        result["signatures"][0]["id"]
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    assert result["signatures"][0]["id"] == ledger.keyset.id
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -264,7 +249,9 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     assert mint_quote.privkey
-    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    signature = nut20.sign_mint_quote_v3(
+        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
+    )
     outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
@@ -280,10 +267,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert (
-        result["signatures"][0]["id"]
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    assert result["signatures"][0]["id"] == ledger.keyset.id
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -293,8 +277,10 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
     """
     For backwards compatibility, we do not require a NUT-20 signature
-    for minting with bolt11.
+    for minting with bolt11 on pre-v3 keysets. A v3 quote must be locked,
+    so this mints onto the v2 keyset.
     """
+    await use_v2_keyset(wallet)
 
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
@@ -400,11 +386,13 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert quote.amount == 64
     assert quote.fee_reserve == 0
 
-    inputs_payload = [p.to_dict() for p in wallet.proofs]
-
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    wallet._attach_nutroot_witnesses(
+        wallet.proofs, outputs, melt_quote_id=quote.quote, melt_quote_amount=quote.amount
+    )
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
@@ -454,11 +442,14 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert quote.fee_reserve == 2
 
     keep, send = await wallet.swap_to_send(wallet.proofs, 64)
-    inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    wallet._attach_nutroot_witnesses(
+        send, outputs, melt_quote_id=quote.quote, melt_quote_amount=quote.amount
+    )
+    inputs_payload = [p.to_dict() for p in send]
     outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
@@ -497,6 +488,8 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     reason="only works on regtest",
 )
 async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
+    # Raw melt payload without a v3 witness, so mint on the pre-v3 keyset.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(64, quote_id=mint_quote.quote)
@@ -555,6 +548,8 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     reason="CLN pathfinding is randomized, the exact fee is not deterministic",
 )
 async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
+    # Raw melt payload without a v3 witness, so mint on the pre-v3 keyset.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(1024)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(1024, quote_id=mint_quote.quote)
@@ -613,6 +608,73 @@ async def test_api_check_state(ledger: Ledger):
     assert check_state_response
     assert len(check_state_response.states) == 2
     assert check_state_response.states[0].state.unspent
+
+
+@pytest.mark.asyncio
+async def test_api_check_state_v3_serves_witness_digest(
+    ledger: Ledger, wallet: Wallet
+):
+    """A spent v3 proof's state carries the transaction digest its witness
+    signed (NUT-07): the witness verifies only against it."""
+    from cashu.core.base import ProofSpentState
+    from cashu.core.crypto.nutroot import (
+        keyset_id_transcript_bytes,
+        secret_transcript_bytes,
+    )
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        transaction_digest,
+    )
+
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
+    outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    inputs = wallet.proofs
+    wallet._attach_nutroot_witnesses(inputs, outputs)
+    payload = {
+        "inputs": [p.to_dict() for p in inputs],
+        "outputs": [o.model_dump() for o in outputs],
+    }
+    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+
+    expected_digest = transaction_digest(
+        TransactionShape(
+            proof_inputs=[
+                TranscriptProofInput(
+                    amount=p.amount,
+                    keyset_id=keyset_id_transcript_bytes(p.id),
+                    secret=secret_transcript_bytes(p.secret, p.id),
+                    C=bytes.fromhex(p.C),
+                )
+                for p in inputs
+            ],
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=o.amount,
+                    keyset_id=keyset_id_transcript_bytes(o.id),
+                    B_=bytes.fromhex(o.B_),
+                )
+                for o in outputs
+            ],
+        )
+    ).hex()
+
+    state_payload = PostCheckStateRequest(Ys=[p.Y for p in inputs])
+    response = httpx.post(
+        f"{BASE_URL}/v1/checkstate", json=state_payload.model_dump()
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    states = PostCheckStateResponse.model_validate(response.json()).states
+    assert states
+    for state in states:
+        assert state.state == ProofSpentState.spent
+        assert state.witness
+        assert state.digest == expected_digest
 
 
 @pytest.mark.asyncio
@@ -689,9 +751,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    # Signatures covering all outputs
-    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+    # Signatures over the one batch transaction digest (all quote inputs + outputs)
+    batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
+    sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey)
 
     outputs_payload = [o.model_dump() for o in outputs]
 

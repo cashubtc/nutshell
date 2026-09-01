@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from types import SimpleNamespace
 from typing import List, Union
@@ -111,7 +112,7 @@ async def test_get_keys(wallet1: Wallet):
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
     assert (
         keyset.id
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+        == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
@@ -491,8 +492,6 @@ async def test_split_race_condition(wallet1: Wallet):
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     # run two splits in parallel
-    import asyncio
-
     await assert_err_multiple(
         asyncio.gather(
             wallet1.split(wallet1.proofs, 20),
@@ -582,12 +581,19 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == [
-        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    ]
+    # The mint also serves a v2 keyset for the pre-v3 secret formats, so assert
+    # the v3 keyset is the one loaded and selected rather than the only one.
+    assert (
+        "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
+        in wallet1.keysets
+    )
+    assert (
+        wallet1.keyset_id
+        == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
+    )
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
     await wallet1.activate_keyset(
-        keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+        keyset_id="02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     )
     # expect deprecated keyset id to be present
     await assert_err(
@@ -643,9 +649,10 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
 
     # Save the real keyset ID that the wallet loaded from the mint
     real_keyset_id = list(wallet1.keysets.keys())[0]
+    loaded_from_mint = len(wallet1.keysets)
 
     # Seed a second fake keyset in the DB so we have 2 keysets
-    fake_keyset_id = "01" + "f" * 62
+    fake_keyset_id = real_keyset_id[:2] + "f" * (len(real_keyset_id) - 2)
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,
@@ -656,7 +663,9 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     await store_keyset(keyset=fake_keyset, db=wallet1.db)
     await wallet1.load_keysets_from_db()
 
-    assert len(wallet1.keysets) == 2, "Expected 2 keysets before test"
+    assert len(wallet1.keysets) == loaded_from_mint + 1, (
+        "Expected the seeded keyset on top of the mint's keysets"
+    )
 
     # Mock the mint API to only return the real keyset (fake one "disappeared")
     wallet1._get_keysets = AsyncMock(
@@ -674,8 +683,9 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     # Load keysets from mocked mint API
     await wallet1.load_mint_keysets()
 
-    # Assert only the real keyset remains in memory
-    assert len(wallet1.keysets) == 1
+    # Assert the seeded keyset is gone and the real one remains. The mint serves more
+    # than one keyset (a v2 alongside the v3), so count the change rather than the total.
+    assert fake_keyset_id not in wallet1.keysets
     assert real_keyset_id in wallet1.keysets
 
     # Assert the disappeared keyset is marked as deleted in the DB
@@ -701,7 +711,7 @@ async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
     """
 
     real_keyset_id = list(wallet1.keysets.keys())[0]
-    fake_keyset_id = "01" + "e" * 62
+    fake_keyset_id = real_keyset_id[:2] + "e" * (len(real_keyset_id) - 2)
     fake_keyset = WalletKeyset(
         id=fake_keyset_id,
         unit=wallet1.unit.name,

@@ -22,9 +22,28 @@ from ..core.base import (
     WalletKeyset,
     WalletMint,
 )
-from ..core.crypto import b_dhke
-from ..core.crypto.keys import is_supported_keyset_version
-from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.crypto import b_dhke, bls_dhke
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import (
+    PrivateKey,
+    PublicKey,
+    is_bls_keyset,
+    is_supported_keyset_version,
+)
+from ..core.crypto.nutroot import (
+    is_nutroot_point_secret,
+    keyset_id_transcript_bytes,
+    secret_transcript_bytes,
+)
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
+from ..core.crypto.transcript import (
+    TransactionShape,
+    TranscriptBlindedOutput,
+    TranscriptProofInput,
+    TranscriptQuote,
+    transaction_digest,
+)
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
@@ -683,7 +702,13 @@ class Wallet(
             raise Exception("Quote not found.")
         signature: str | None = None
         if quote.privkey:
-            signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
+            if is_bls_keyset(outputs[0].id):
+                # V3: sign the transaction digest (quote input + outputs).
+                signature = nut20.sign_mint_quote_v3(
+                    quote_id, quote.amount, outputs, quote.privkey
+                )
+            else:
+                signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
 
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, quote_id, signature)
@@ -721,6 +746,89 @@ class Wallet(
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
+
+    def _attach_nutroot_witnesses(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        melt_quote_id: Optional[str] = None,
+        melt_quote_amount: Optional[int] = None,
+    ) -> List[Proof]:
+        """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
+
+        Builds the transcript from the request's own inputs and outputs and signs
+        its digest with each input's internal key, re-derived from the proof's
+        stored derivation path. Inputs without a re-derivable key are left
+        unsigned. Legacy inputs are included in mixed-transaction transcripts
+        but do not receive a nutroot witness.
+        """
+        if not proofs or not any(
+            is_nutroot_point_secret(p.secret, p.id) for p in proofs
+        ):
+            return proofs
+        digest = transaction_digest(
+            TransactionShape(
+                proof_inputs=[
+                    TranscriptProofInput(
+                        amount=p.amount,
+                        keyset_id=keyset_id_transcript_bytes(p.id),
+                        secret=secret_transcript_bytes(p.secret, p.id),
+                        C=bytes.fromhex(p.C),
+                    )
+                    for p in proofs
+                ],
+                blinded_outputs=[
+                    TranscriptBlindedOutput(
+                        amount=o.amount,
+                        keyset_id=keyset_id_transcript_bytes(o.id),
+                        B_=bytes.fromhex(o.B_),
+                    )
+                    for o in outputs
+                ],
+                melt_quote_outputs=(
+                    [TranscriptQuote(amount=melt_quote_amount, quote_id=melt_quote_id)]
+                    if melt_quote_id is not None and melt_quote_amount is not None
+                    else None
+                ),
+            )
+        )
+        for proof in proofs:
+            if not is_nutroot_point_secret(proof.secret, proof.id):
+                continue
+            secret_key = self._resolve_v3_secret_key(proof)
+            if secret_key is None:
+                continue
+            signature = secret_key.sign_schnorr(
+                digest,
+                None,  # type: ignore
+            )
+            proof.witness = json.dumps({"signatures": [signature.hex()]})
+        return proofs
+
+    def _resolve_v3_secret_key(self, proof: Proof) -> Optional[SecpPrivateKey]:
+        """The internal key behind a v3 point secret: bearer spend info first,
+        then re-derivation from the stored derivation path. None if neither
+        yields a key matching the secret."""
+        if proof.spend_info and proof.spend_info.k:
+            try:
+                secret_key = SecpPrivateKey(bytes.fromhex(proof.spend_info.k))
+                pub = secret_key.public_key
+                if pub and pub.format().hex() == proof.secret:
+                    return secret_key
+            except Exception:
+                pass
+        path = proof.derivation_path or ""
+        if not path.startswith("HMAC-SHA256:"):
+            return None
+        try:
+            _, path_keyset_id, counter_str = path.split(":")
+            secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
+            pub = secret_key.public_key
+            if pub.format().hex() != proof.secret:
+                return None
+            return secret_key
+        except Exception:
+            return None
 
     async def split(
         self,
@@ -794,6 +902,9 @@ class Wallet(
             enumerate(outputs), key=lambda p: p[1].amount
         )
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
+
+        # Attach nutroot transaction witnesses (v3 keysets)
+        proofs = self._attach_nutroot_witnesses(proofs, list(sorted_outputs))
 
         # Call swap API
         sorted_promises = await super().split(proofs, list(sorted_outputs))
@@ -921,6 +1032,17 @@ class Wallet(
 
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
+
+        # Attach nutroot transaction witnesses (v3 keysets); the quote amount
+        # comes from the locally stored melt quote.
+        melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote_id)
+        if melt_quote_local is not None:
+            proofs = self._attach_nutroot_witnesses(
+                proofs,
+                change_outputs,
+                melt_quote_id=quote_id,
+                melt_quote_amount=melt_quote_local.amount,
+            )
         try:
             melt_quote_resp = await super().melt(
                 quote_id, proofs, change_outputs, prefer_async=prefer_async
@@ -995,6 +1117,9 @@ class Wallet(
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
+        secp_proofs: List[Proof] = []
+        bls_proofs: List[Proof] = []
+        
         for proof in proofs:
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
@@ -1004,13 +1129,36 @@ class Wallet(
             assert proof.id in self.keysets, (
                 f"Keyset {proof.id} not known, can not verify DLEQ."
             )
+            
+            is_v3 = is_bls_keyset(proof.id)
+            if is_v3:
+                bls_proofs.append(proof)
+            else:
+                secp_proofs.append(proof)
+                
+        if bls_proofs:
+            try:
+                K2s = [self.keysets[proof.id].public_keys[proof.amount] for proof in bls_proofs]
+                Cs = [BlsPublicKey(bytes.fromhex(proof.C)) for proof in bls_proofs]
+                secrets = [proof.secret for proof in bls_proofs]
+                if not bls_dhke.batch_pairing_verification(
+                    K2s=K2s,  # type: ignore[arg-type]
+                    Cs=Cs,
+                    secret_msgs=secrets,
+                ):
+                    raise Exception("BLS pairing verification invalid.")
+            except Exception as exc:
+                raise Exception(f"BLS pairing verification invalid: {exc}")
+                
+        for proof in secp_proofs:
+            assert proof.dleq is not None
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
-                C=PublicKey(bytes.fromhex(proof.C)),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r)),
-                e=PrivateKey(bytes.fromhex(proof.dleq.e)),
-                s=PrivateKey(bytes.fromhex(proof.dleq.s)),
-                A=self.keysets[proof.id].public_keys[proof.amount],
+                C=SecpPublicKey(bytes.fromhex(proof.C)),
+                r=SecpPrivateKey(bytes.fromhex(proof.dleq.r)),
+                e=SecpPrivateKey(bytes.fromhex(proof.dleq.e)),
+                s=SecpPrivateKey(bytes.fromhex(proof.dleq.s)),
+                A=self.keysets[proof.id].public_keys[proof.amount], # type: ignore[arg-type]
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
@@ -1046,12 +1194,26 @@ class Wallet(
                 # we don't have the keyset for this promise, so we load all keysets from the mint
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
-            C_ = PublicKey(bytes.fromhex(promise.C_))
-            C = b_dhke.step3_alice(
-                C_, r, self.keysets[promise.id].public_keys[promise.amount]
-            )
+                
+            is_v3 = is_bls_keyset(promise.id)
+            C_: PublicKey
+            C: PublicKey
+            B_: PublicKey
+            if is_v3:
+                C_ = BlsPublicKey(bytes.fromhex(promise.C_))
+                C = bls_dhke.step3_alice( # type: ignore[assignment]
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount] # type: ignore[arg-type]
+                )
+            else:
+                C_ = SecpPublicKey(bytes.fromhex(promise.C_))
+                C = b_dhke.step3_alice( # type: ignore[assignment]
+                    C_, r, self.keysets[promise.id].public_keys[promise.amount] # type: ignore[arg-type]
+                )
 
-            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(secret, r) # type: ignore[arg-type, assignment]
+            else:
+                B_, r = b_dhke.step1_alice(secret, r)  # type: ignore[arg-type, assignment] # recompute B_ for dleq proofs
 
             proof = Proof(
                 id=promise.id,
@@ -1098,7 +1260,7 @@ class Wallet(
         Args:
             amounts (List[int]): list of amounts
             secrets (List[str]): list of secrets
-            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+            rs (list[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
 
         Returns:
             List[BlindedMessage]: list of blinded messages that can be sent to the mint
@@ -1114,8 +1276,13 @@ class Wallet(
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
+        
         for secret, amount, r in zip(secrets, amounts, rs_):
-            B_, r = b_dhke.step1_alice(secret, r or None)
+            is_v3 = is_bls_keyset(keyset_id)
+            if is_v3:
+                B_, r = bls_dhke.step1_alice(secret, r or None) # type: ignore[arg-type, assignment]
+            else:
+                B_, r = b_dhke.step1_alice(secret, r or None) # type: ignore[arg-type, assignment]
 
             assert r
             rs_return.append(r)
@@ -1319,6 +1486,9 @@ class Wallet(
         keep_proofs, send_proofs = await self.split(
             swap_proofs, amount, secret_lock, include_fees=include_fees, p2pk_e=p2pk_e
         )
+        # Bearer spend info: the receiver needs `k` to run the receive cascade
+        # and sign the sweep's transaction witness (NUT-10).
+        self._attach_bearer_spend_info(send_proofs)
         if set_reserved:
             await self.set_reserved_for_send(send_proofs, reserved=True)
         return keep_proofs, send_proofs

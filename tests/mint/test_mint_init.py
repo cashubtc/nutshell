@@ -61,7 +61,9 @@ async def wallet(ledger: Ledger):
 async def test_init_keysets(ledger: Ledger):
     ledger.keysets = {}
     await ledger.init_keysets()
-    assert len(ledger.keysets) == 2
+    # sat and usd on v3, plus the v2 sat keyset conftest activates for the
+    # pre-v3 secret formats.
+    assert len(ledger.keysets) == 3
 
 
 @pytest.mark.asyncio
@@ -94,13 +96,13 @@ async def test_decrypt_seed():
     )
     assert (
         private_key_1
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
+        == "51cfc6ff65fc935718ce8be4d4903c7c439b2c3e6cfe3866cddfc7effab70402"
     )
     pubkeys = ledger.keysets[list(ledger.keysets.keys())[0]].public_keys
     assert pubkeys
     assert (
         pubkeys[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+        == "b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8abe24c66581adc4a849ab8c4b2fe512334c6beeca1d05548d1663e7e04f6ed6c845eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
     )
 
     ledger_encrypted = Ledger(
@@ -120,7 +122,11 @@ async def test_decrypt_seed():
     )
     assert (
         private_key_1
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
+        == "51cfc6ff65fc935718ce8be4d4903c7c439b2c3e6cfe3866cddfc7effab70402"
+    )
+    assert (
+        private_key_1
+        == "51cfc6ff65fc935718ce8be4d4903c7c439b2c3e6cfe3866cddfc7effab70402"
     )
     pubkeys_encrypted = ledger_encrypted.keysets[
         list(ledger_encrypted.keysets.keys())[0]
@@ -128,7 +134,7 @@ async def test_decrypt_seed():
     assert pubkeys_encrypted
     assert (
         pubkeys_encrypted[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+        == "b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8abe24c66581adc4a849ab8c4b2fe512334c6beeca1d05548d1663e7e04f6ed6c845eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
     )
 
 
@@ -153,7 +159,13 @@ async def create_pending_melts(
         quote=quote,
         db=ledger.db,
     )
-    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=ledger.keyset.id)
+    # v3 keysets take point secrets, so the placeholder is a compressed point.
+    pending_proof = Proof(
+        amount=123,
+        C="asdasd",
+        secret="02" + "ab" * 32,
+        id=ledger.keyset.id,
+    )
     await ledger.crud.set_proof_pending(
         db=ledger.db,
         proof=pending_proof,

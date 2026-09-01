@@ -19,17 +19,29 @@ from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
+from .crypto.bls import PrivateKey as BlsPrivateKey
+from .crypto.bls import PublicKey as BlsPublicKey
+from .crypto.bls_dhke import hash_to_curve as bls_hash_to_curve
+from .crypto.bls_dhke import secret_to_hash_input
 from .crypto.keys import (
     derive_keys,
     derive_keys_deprecated_pre_0_15,
+    derive_keys_v3,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
+    derive_keyset_id_v3,
     derive_pubkeys,
+    is_bls_keyset,
 )
-from .crypto.secp import PrivateKey, PublicKey
+from .crypto.nutroot import is_nutroot_point_secret
+from .crypto.secp import PrivateKey as SecpPrivateKey
+from .crypto.secp import PublicKey as SecpPublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .settings import settings
+
+PrivateKey = Union[SecpPrivateKey, BlsPrivateKey]
+PublicKey = Union[SecpPublicKey, BlsPublicKey]
 
 
 class DLEQ(BaseModel):
@@ -67,11 +79,15 @@ class ProofState(LedgerEvent):
     Y: str
     state: ProofSpentState
     witness: Optional[str] = None
+    # NUT-07: v3 transaction digest the witness's signatures cover.
+    digest: Optional[str] = None
 
     @model_validator(mode="after")
     def check_witness(self):
         if self.witness is not None and self.state != ProofSpentState.spent:
             raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        if self.digest is not None and self.state != ProofSpentState.spent:
+            raise ValueError('Digest can only be set if the spent state is "SPENT"')
         return self
 
     @property
@@ -117,6 +133,26 @@ class P2PKWitness(BaseModel):
         return cls(**json.loads(witness))
 
 
+class SpendInfo(BaseModel):
+    """Nutroot spend info (NUT-10): a key and, when conditions exist, the leaf tree.
+
+    `k` (32-byte scalar hex, bearer) and `E` (33-byte point hex, receiver-keyed)
+    are mutually exclusive. `K` (33-byte point hex) is the internal key, needed
+    when neither yields one: a script-only proof discloses its tree and `K` so
+    the tree can be checked complete. `u` (32-byte scalar hex) is present iff `K`
+    is a NUMS offset `H + u*G`, which is what proves the proof has no key path;
+    holders check `K - u*G == H`. It is not the blinding factor `r`, which never
+    travels. `tree` lists serialized leaves (hex) in slot-map order. Local-only:
+    never sent to the mint.
+    """
+
+    k: Optional[str] = None
+    E: Optional[str] = None
+    K: Optional[str] = None
+    u: Optional[str] = None
+    tree: Optional[List[str]] = None
+
+
 class Proof(BaseModel):
     """
     Value token
@@ -130,6 +166,10 @@ class Proof(BaseModel):
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
+    spend_info: Optional[SpendInfo] = None  # nutroot spend info (local-only)
+    # Mint-side: v3 transaction digest the witness signed, stored with the
+    # spent proof and served by NUT-07 (a v3 witness verifies only against it).
+    digest: Union[None, str] = None
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
@@ -147,7 +187,12 @@ class Proof(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
+        if is_bls_keyset(self.id):
+            # V3: Y lives on BLS G1, hashed over the secret's raw bytes for
+            # point secrets (nutroot) with utf8 fallback for legacy secrets.
+            self.Y = bls_hash_to_curve(secret_to_hash_input(self.secret)).format().hex()
+        else:
+            self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
@@ -890,12 +935,16 @@ class WalletKeyset:
         )
 
     @classmethod
-    def from_row(cls, row: Row):
+    def from_row(cls, row: RowMapping):
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
-            return {
-                int(amount): PublicKey(bytes.fromhex(hex_key))
-                for amount, hex_key in dict(json.loads(serialized)).items()
-            }
+            is_v3 = is_bls_keyset(row["id"])
+            pub_keys: Dict[int, PublicKey] = {}
+            for amount, hex_key in dict(json.loads(serialized)).items():
+                if is_v3:
+                    pub_keys[int(amount)] = BlsPublicKey(bytes.fromhex(hex_key), group="G2")
+                else:
+                    pub_keys[int(amount)] = SecpPublicKey(bytes.fromhex(hex_key))
+            return pub_keys
 
         return cls(
             id=row["id"],
@@ -1103,7 +1152,7 @@ class MintKeyset:
                 assert self.public_keys is not None
                 self.id = derive_keyset_id(self.public_keys)
                 logger.info(f"Generated keyset v1 ID: {self.id}")
-        else:
+        elif self.version_tuple < (0, 21):
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )
@@ -1122,6 +1171,19 @@ class MintKeyset:
                     self.input_fee_ppk,
                 )
                 logger.info(f"Generated keyset v2 ID: {self.id}")
+        else:
+            self.private_keys = derive_keys_v3(
+                self.seed, self.derivation_path, self.amounts
+            )  # type: ignore[assignment]
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
+            
+            # KEYSETS V3: BLS12-381 cryptography
+            if id_in_db:
+                self.id = id_in_db
+            else:
+                assert self.public_keys is not None
+                self.id = derive_keyset_id_v3(self.public_keys, self.unit.name, self.input_fee_ppk)  # type: ignore[arg-type]
+                logger.info(f"Generated keyset v3 (BLS) ID: {self.id}")
 
 
 # ------- TOKEN -------
@@ -1291,6 +1353,17 @@ class TokenV4DLEQ(BaseModel):
     r: bytes
 
 
+class TokenV4SpendInfo(BaseModel):
+    """Nutroot spend info in a V4 token: bearer key, DH ephemeral, internal key, NUMS
+    offset, leaf tree."""
+
+    k: Optional[bytes] = None
+    e: Optional[bytes] = None
+    i: Optional[bytes] = None
+    u: Optional[bytes] = None
+    t: Optional[List[bytes]] = None
+
+
 class TokenV4Proof(BaseModel):
     """
     Value token
@@ -1302,6 +1375,7 @@ class TokenV4Proof(BaseModel):
     d: Optional[TokenV4DLEQ] = None  # DLEQ proof
     w: Optional[str] = None  # witness
     pe: Optional[bytes] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1)
+    si: Optional[TokenV4SpendInfo] = None  # nutroot spend info
 
     @classmethod
     def from_proof(cls, proof: Proof, include_dleq=False):
@@ -1318,8 +1392,27 @@ class TokenV4Proof(BaseModel):
                 if proof.dleq
                 else None
             ),
-            w=proof.witness,
+            # A v3 witness signs one transaction's digest, so it means nothing
+            # outside that transaction and a token carries no transaction.
+            # Emitting one would hand the next owner a witness that can never
+            # verify, in place of the signature they have to produce.
+            w=None if is_nutroot_point_secret(proof.secret, proof.id) else proof.witness,
             pe=bytes.fromhex(proof.p2pk_e) if proof.p2pk_e else None,
+            si=(
+                TokenV4SpendInfo(
+                    k=bytes.fromhex(proof.spend_info.k) if proof.spend_info.k else None,
+                    e=bytes.fromhex(proof.spend_info.E) if proof.spend_info.E else None,
+                    i=bytes.fromhex(proof.spend_info.K) if proof.spend_info.K else None,
+                    u=bytes.fromhex(proof.spend_info.u) if proof.spend_info.u else None,
+                    t=(
+                        [bytes.fromhex(leaf) for leaf in proof.spend_info.tree]
+                        if proof.spend_info.tree
+                        else None
+                    ),
+                )
+                if proof.spend_info
+                else None
+            ),
         )
 
 
@@ -1389,8 +1482,27 @@ class TokenV4(Token):
                     if p.d
                     else None
                 ),
-                witness=p.w,
+                # A v3 witness signs one transaction's digest, so a token
+                # cannot carry a usable one. Keeping it would leave a stranger's
+                # witness in place of the signature the new owner must produce,
+                # and their sweep would be refused for it.
+                witness=(
+                    None
+                    if is_nutroot_point_secret(p.s, token.i.hex())
+                    else p.w
+                ),
                 p2pk_e=p.pe.hex() if p.pe else None,
+                spend_info=(
+                    SpendInfo(
+                        k=p.si.k.hex() if p.si.k else None,
+                        E=p.si.e.hex() if p.si.e else None,
+                        K=p.si.i.hex() if p.si.i else None,
+                        u=p.si.u.hex() if p.si.u else None,
+                        tree=[leaf.hex() for leaf in p.si.t] if p.si.t else None,
+                    )
+                    if p.si
+                    else None
+                ),
             )
             for token in self.t
             for p in token.p
@@ -1462,6 +1574,15 @@ class TokenV4(Token):
                 if not proof.get("pe"):
                     if "pe" in proof:
                         del proof["pe"]
+                # strip absent spend info; drop None subfields from present ones
+                if not proof.get("si"):
+                    proof.pop("si", None)
+                else:
+                    proof["si"] = {
+                        key: value
+                        for key, value in proof["si"].items()
+                        if value is not None
+                    }
         # optional memo
         if self.d:
             return_dict.update(dict(d=self.d))

@@ -6,7 +6,7 @@ from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import pay_if_regtest
+from tests.helpers import pay_if_regtest, use_v2_keyset
 
 BASE_URL = "http://localhost:3337"
 invoice_32sat = "lnbc320n1pnsuamsdqqxqrrsssp5w3tlpw2zss396qh28l3a07u35zdx8nmknzryk89ackn23eywdu2spp5ckt298t835ejzh2xepyxlg57f54q27ffc2zjsjh3t5pmx4wghpcqne0vycw5dfalx5y45d2jtwqfwz437hduyccn9nxk2feay0ytxldjpf3fcjrcf5k2s56q3erj86ymlqdp703y89vt4lr4lun5z5duulcqwuwutn"
@@ -20,6 +20,9 @@ async def wallet(ledger: Ledger):
         name="wallet_mint_api",
     )
     await wallet1.load_mint()
+    # Inherited tests: they sign the quote with the v2 NUT-20 message, so the
+    # outputs must be on a pre-v3 keyset.
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 

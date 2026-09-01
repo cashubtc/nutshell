@@ -497,8 +497,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("proofs_used")}
-            (amount, c, secret, y, id, witness, created, melt_quote)
-            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
+            (amount, c, secret, y, id, witness, digest, created, melt_quote)
+            VALUES (:amount, :c, :secret, :y, :id, :witness, :digest, :created, :melt_quote)
             """,
             {
                 "amount": proof.amount,
@@ -507,6 +507,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "y": proof.Y,
                 "id": proof.id,
                 "witness": proof.witness,
+                "digest": proof.digest,
                 "created": db.to_timestamp(db.timestamp_now_str()),
                 "melt_quote": quote_id,
             },
@@ -567,8 +568,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("proofs_pending")}
-            (amount, c, secret, y, id, witness, created, melt_quote)
-            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
+            (amount, c, secret, y, id, witness, digest, created, melt_quote)
+            VALUES (:amount, :c, :secret, :y, :id, :witness, :digest, :created, :melt_quote)
             """,
             {
                 "amount": proof.amount,
@@ -577,6 +578,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "y": proof.Y,
                 "id": proof.id,
                 "witness": proof.witness,
+                # Survives a restart between melt-pending and settle, so the
+                # digest can move to proofs_used at invalidation.
+                "digest": proof.digest,
                 "created": db.to_timestamp(db.timestamp_now_str()),
                 "melt_quote": quote_id,
             },

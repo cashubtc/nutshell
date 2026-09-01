@@ -24,7 +24,7 @@ from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import pay_if_regtest
+from tests.helpers import pay_if_regtest, use_v2_keyset
 
 
 def blind_pubkeys_from_slot(
@@ -79,6 +79,8 @@ async def wallet1():
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
+    # NUT-10 well-known secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 
@@ -90,6 +92,8 @@ async def wallet2():
     await migrate_databases(wallet2.db, migrations)
     wallet2.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet2.load_mint()
+    # NUT-10 well-known secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet2)
     yield wallet2
 
 
