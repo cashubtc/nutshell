@@ -6,7 +6,7 @@
     "tweak": "Cashu_NutrootTweak",
     "p2bk": "Cashu_P2BK_v1"
   },
-  "example_6_1": {
+  "receiver_keyed_refund": {
     "comment": "Alice pays Carol 8 sats, refundable to Alice after time t. Receiver-keyed (P2BK slot 0) internal key, one after leaf.",
     "carol_priv": "0000000000000000000000000000000000000000000000000000000000000003",
     "carol_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
@@ -41,8 +41,8 @@
     "illustrative_input_digest_preimage": "illustrative transaction transcript",
     "illustrative_input_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd"
   },
-  "example_6_2": {
-    "comment": "Allowance covenant: kid may melt toward family node until vesting, parent holds key path. Two leaves, one branch.",
+  "two_leaf_covenant": {
+    "comment": "Allowance covenant: kid may melt toward family node until vesting, parent holds key path. Two leaves, one branch. The melt_to leaf type (0x04) is unallocated in NUT-10, so the nuts tests reuse this tree as the fail-closed unknown-type vector.",
     "kid_priv": "0000000000000000000000000000000000000000000000000000000000000003",
     "kid_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
     "parent_priv": "0000000000000000000000000000000000000000000000000000000000000006",
@@ -71,7 +71,7 @@
     "illustrative_input_digest": "c3530da6be5c8425076a9235228d3ffd24998b9595a5b548b6ee6a4342361765"
   },
   "nut13_v3": {
-    "comment": "NUT-13 v3 derivation (spec 2.4.2): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(keyset_id_bytes)) || keyset_id_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key on its own quote counter, derived with an EMPTY keyset id field (a quote precedes any keyset), so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
+    "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(keyset_id_bytes)) || keyset_id_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key on its own quote counter, derived with an EMPTY keyset id field (a quote precedes any keyset), so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
     "seed_utf8": "nut13 v3 test seed",
     "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
     "outputs": [
@@ -290,10 +290,49 @@
           "signature": "30d4dd3aa65aa2c74bfd05c9f3edc5d4097742e38554a5909f8bcbaf274728d491ddecc967bda42f222c0af57f96ff76e407bbada00d8ab09370d589760453f8"
         }
       ]
+    },
+    "batch_mint": {
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 5,
+            "quote_id": "quote-mint-0002"
+          },
+          {
+            "amount": 3,
+            "quote_id": "quote-mint-0003"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "0200160100010502000f71756f74652d6d696e742d303030320200160100010302000f71756f74652d6d696e742d3030303303005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "577f67746c7255f031f409601229309982b5a3ec1b32f1a5c75ad271346d0c32",
+      "inputs": [
+        {
+          "quote_id": "quote-mint-0002",
+          "lock_pubkey": "039b390a9a298305cc43dbec906ceb1caae1187a8d16a3f45b945442ae7339d746",
+          "input_id": "aaf0905f583d015ad1640e530c768797eab855034051e74fb7f725b5bdb96131",
+          "input_digest": "ca742311db92f0829e44d3760d48a4ea1c524d58880a5fae3281cdeb54e9ce00",
+          "signature": "52cdccf807eb622af34c5b31bff51db40971a49398d7f1d2b8b085e0772d3b76d5b4e4cdfeef409abb8505f09200a6e80f59bbebb6567958cc63ba0cfeb56444"
+        },
+        {
+          "quote_id": "quote-mint-0003",
+          "lock_pubkey": "0332ef3eb87a93da987406ed1fe96a44541ea0daa175e53e7ffc1155bb09b47b38",
+          "input_id": "9976dbe45223a102e176fa2ede6973244157c5b82257d6e3e0f4977b32f0c706",
+          "input_digest": "6d0c4ea825ae8550ef7438299079b4bc656d67c480884475df5b425c8bca45c4",
+          "signature": "7b041b52eed0c9568b8ddd58d779665765f28ceaa4e773389da789e5512d5eda850666b576c5e6955aad5ba43c5624f398e763a79e4199a3828f117d26cc1807"
+        }
+      ]
     }
   },
   "tokens_v4": {
-    "comment": "Cross-implementation V4 token vectors (spec 2.5.2 shapes). One 8-sat proof per token, mint https://mint.test, unit sat, keyset nut13_v3.keyset_id, C fixed. The `si` CBOR map carries k (bearer scalar), e (ephemeral E), i (internal key K), u (NUMS offset, present iff i is H + u*G), t (serialized leaves). The two encoders legitimately differ on things NUT-00 leaves free: cashu-ts writes the short (8-byte) keyset id and orders the top-level map m,u,t; nutshell writes the full 33-byte id and orders it t,m,u. What must agree is the spend_info: each side decodes BOTH strings to the same fields, and reproduces its own string exactly, so encoder drift shows up here.",
+    "comment": "Cross-implementation V4 token vectors (NUT-10 spend-info shapes). One 8-sat proof per token, mint https://mint.test, unit sat, keyset nut13_v3.keyset_id, C fixed. The `si` CBOR map carries k (bearer scalar), e (ephemeral E), i (internal key K), u (NUMS offset, present iff i is H + u*G), t (serialized leaves). The two encoders legitimately differ on things NUT-00 leaves free: cashu-ts writes the short (8-byte) keyset id and orders the top-level map m,u,t; nutshell writes the full 33-byte id and orders it t,m,u. What must agree is the spend_info: each side decodes BOTH strings to the same fields, and reproduces its own string exactly, so encoder drift shows up here.",
     "mint": "https://mint.test",
     "unit": "sat",
     "amount": 8,
@@ -352,14 +391,14 @@
     }
   },
   "empty_tweak": {
-    "comment": "Empty tweak (spec 3.8): an aggregated key commits to having no script path by tweaking with the key alone. t = tagged_hash(\"Cashu_NutrootTweak\", K) with no merkle root, secret = K + t*G. The key is example_6_1.carol_priv, so the internal key is example_6_1.carol_pub. keypath_priv is (k + t) mod n, the key that signs a spend.",
+    "comment": "Empty tweak (NUT-10, the internal key): an aggregated key commits to having no script path by tweaking with the key alone. t = tagged_hash(\"Cashu_NutrootTweak\", K) with no merkle root, secret = K + t*G. The key is receiver_keyed_refund.carol_priv, so the internal key is receiver_keyed_refund.carol_pub. keypath_priv is (k + t) mod n, the key that signs a spend.",
     "internal_key": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
     "tweak": "764c0e0da0d17acb5cc863fbe939211869e04e522c017171a0b71e91d5b69908",
     "secret": "03b2bb251c006ae42d9c19f3157d02b3c347b1fb6512885225a8699a06d9233aee",
     "keypath_priv": "764c0e0da0d17acb5cc863fbe939211869e04e522c017171a0b71e91d5b6990b"
   },
   "leaf_forms": {
-    "comment": "The leaf types and tree shapes the worked examples of section 6 never show. Keys are example_6_1's, so everything ties back to it. three_leaf_* exercises the odd-count sorted fold of 2.3.4: ascending by leaf hash the order is leaf 0, leaf 2, leaf 1, so leaves 0 and 2 pair, leaf 1 is promoted unchanged, and the path for leaf 2 is two siblings. blind_slot1_* is the positional slot map of 2.7: alice_refund_pub blinded at slot 1 under example_6_1's ephemeral.",
+    "comment": "The leaf types and tree shapes the worked examples never show. Keys are receiver_keyed_refund's, so everything ties back to it. three_leaf_* exercises NUT-10's odd-count sorted fold: ascending by leaf hash the order is leaf 0, leaf 2, leaf 1, so leaves 0 and 2 pair, leaf 1 is promoted unchanged, and the path for leaf 2 is two siblings. blind_slot1_* is NUT-28's positional slot map: alice_refund_pub blinded at slot 1 under receiver_keyed_refund's ephemeral.",
     "threshold_1of1": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
     "threshold_2of2": "00010200010204004202f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f902e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
     "hashlock_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
