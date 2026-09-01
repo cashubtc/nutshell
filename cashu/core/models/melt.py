@@ -17,3 +17,4 @@ class PostMeltRequest(BaseModel):
         None, max_length=settings.mint_max_request_length
     )
     prefer_async: Optional[bool] = None
+    fee_index: Optional[int] = Field(default=None, ge=0)

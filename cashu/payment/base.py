@@ -40,6 +40,7 @@ class PaymentMethodPlugin(ABC):
     mint_quote_request_model: type[BaseModel] = PostMintQuoteRequest
     melt_quote_request_model: type[BaseModel] = PostMeltQuoteRequest
     allows_partial_mint: bool = False
+    supports_mint_quote_expiry: bool = True
 
     def create_backend(self, unit: Unit, config: dict[str, Any]) -> Any:
         """Construct a configured mint backend for this method.
@@ -105,6 +106,12 @@ class PaymentMethodPlugin(ABC):
     @abstractmethod
     def quote_expiry(self, payment_request: str) -> Optional[int]:
         """Return the payment request's absolute expiry, if it has one."""
+
+    def mint_quote_expiry(self, payment_request: str) -> Optional[int]:
+        return self.quote_expiry(payment_request)
+
+    def melt_quote_expiry(self, payment_request: str) -> Optional[int]:
+        return self.quote_expiry(payment_request)
 
     def validate_internal_settlement(
         self, mint_quote: MintQuote, melt_quote: MeltQuote

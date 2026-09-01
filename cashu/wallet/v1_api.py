@@ -389,10 +389,13 @@ class LedgerAPI(SupportsAuth):
     ) -> PostMintQuoteResponse:
         """Request a mint quote for an explicitly selected payment method."""
         logger.trace(f"Requesting mint: POST /v1/mint/quote/{method}")
-        payload = PostMintQuoteRequest(
-            unit=unit.name, amount=amount, description=memo, pubkey=pubkey
-        )
-        payload_dict = payload.model_dump()
+        if method == "onchain":
+            payload_dict = {"unit": unit.name, "pubkey": pubkey}
+        else:
+            payload = PostMintQuoteRequest(
+                unit=unit.name, amount=amount, description=memo, pubkey=pubkey
+            )
+            payload_dict = payload.model_dump()
         if method_options:
             payload_dict.update(method_options)
         resp = await self._request(

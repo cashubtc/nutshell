@@ -133,6 +133,9 @@ async def ledger():
 # # This fixture is used for tests that require API access to the mint
 @pytest.fixture(autouse=True, scope="session")
 def mint():
+    if os.getenv("ONCHAIN_REGTEST") == "1":
+        yield None
+        return
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,

@@ -434,6 +434,11 @@ async def pay(
         quote = await wallet.melt_quote_for_method(
             method, invoice, parsed_method_options
         )
+        if method == "onchain" and "fee_index" not in parsed_method_options:
+            fee_options = quote.method_data.get("fee_options", [])
+            if fee_options:
+                selected = min(fee_options, key=lambda option: option["fee_reserve"])
+                parsed_method_options["fee_index"] = selected["fee_index"]
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs

@@ -24,7 +24,6 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintBatchResponse,
     PostMintQuoteCheckRequest,
-    PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
     PostMintResponse,
@@ -361,11 +360,12 @@ async def keysets() -> KeysetsResponse:
     name="Request mint quote",
     summary="Request a quote for minting of new tokens",
     response_model=PostMintQuoteResponse,
+    response_model_exclude_none=True,
     response_description="A payment request to mint tokens of a denomination",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_quote(
-    request: Request, method: str, payload: PostMintQuoteRequest
+    request: Request, method: str, payload: dict
 ) -> PostMintQuoteResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
@@ -375,7 +375,7 @@ async def mint_quote(
     """
     logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
     plugin = payment_method_registry.get(method)
-    validated_payload = plugin.validate_mint_quote_request(payload.model_dump())
+    validated_payload = plugin.validate_mint_quote_request(payload)
     if method == Method.bolt11.name:
         quote = await ledger.mint_quote(validated_payload)
     else:
@@ -404,6 +404,7 @@ async def mint_quote(
     "/v1/mint/quote/{method}/{quote}",
     summary="Get mint quote",
     response_model=PostMintQuoteResponse,
+    response_model_exclude_none=True,
     response_description="Get an existing mint quote to check its status.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -442,6 +443,7 @@ async def get_mint_quote(
     name="Batch check mint quotes",
     summary="Batch check mint quotes",
     response_model=list[PostMintQuoteResponse],
+    response_model_exclude_none=True,
     response_description="A list of mint quotes",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -616,12 +618,13 @@ async def melt(
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
-    if payload.prefer_async:
+    if method == "onchain" or payload.prefer_async:
         resp = await ledger.async_melt(
             proofs=payload.inputs,
             quote=payload.quote,
             outputs=payload.outputs,
             method_str=method,
+            fee_index=payload.fee_index,
         )
     else:
         resp = await ledger.melt(
@@ -629,6 +632,7 @@ async def melt(
             quote=payload.quote,
             outputs=payload.outputs,
             method_str=method,
+            fee_index=payload.fee_index,
         )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp

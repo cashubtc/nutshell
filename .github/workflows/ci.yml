@@ -89,3 +89,9 @@ jobs:
       python-version: ${{ matrix.python-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}
+
+  regtest-onchain:
+    uses: ./.github/workflows/regtest-onchain.yml
+    with:
+      python-version: "3.12"
+      poetry-version: "2.3.2"

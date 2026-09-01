@@ -36,7 +36,7 @@ class PostMintQuoteResponse(BaseModel):
 
     quote: str  # quote id
     request: str  # input payment request
-    amount: int  # output amount
+    amount: Optional[int] = None  # fixed output amount (not used by NUT-30)
     unit: str  # output unit
     method: str  # payment method
     amount_paid: Optional[int] = None
@@ -53,7 +53,6 @@ class PostMintQuoteResponse(BaseModel):
         response = {
             "quote": mint_quote.quote,
             "request": mint_quote.request,
-            "amount": mint_quote.amount,
             "unit": mint_quote.unit,
             "method": mint_quote.method,
             "amount_paid": mint_quote.amount_paid,
@@ -63,5 +62,7 @@ class PostMintQuoteResponse(BaseModel):
             "expiry": mint_quote.expiry,
             "pubkey": mint_quote.pubkey,
         }
+        if mint_quote.method != "onchain":
+            response["amount"] = mint_quote.amount
         response.update(mint_quote.method_data)
         return cls.model_validate(response)

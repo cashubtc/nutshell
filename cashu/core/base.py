@@ -531,7 +531,7 @@ class MintQuote(LedgerEvent):
             request=mint_quote_resp.request,
             checking_id="",
             unit=mint_quote_resp.unit,
-            amount=mint_quote_resp.amount,
+            amount=mint_quote_resp.amount or 0,
             state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
