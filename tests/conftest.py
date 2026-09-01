@@ -255,6 +255,9 @@ def start_mint_server():
 # This fixture is used for tests that require API access to the mint.
 @pytest.fixture(autouse=True, scope="session")
 def mint(request):
+    if os.getenv("ONCHAIN_REGTEST") == "1":
+        yield None
+        return
     if MINT_IMAGE:
         log_file = Path(settings.cashu_dir) / "released-mint.log"
         with run_mint_container(MINT_IMAGE, SERVER_PORT, log_file) as url:

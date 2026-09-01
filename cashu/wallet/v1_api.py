@@ -415,6 +415,9 @@ class LedgerAPI(SupportsAuth):
             unit=unit.name, amount=amount, description=memo, pubkey=pubkey
         )
         payload_dict = _payload_with_method_options(payload, method_options)
+        if method == "onchain":
+            payload_dict.pop("amount", None)
+            payload_dict.pop("description", None)
         resp = await self._request(
             POST,
             f"mint/quote/{method}",
@@ -632,8 +635,16 @@ class LedgerAPI(SupportsAuth):
         prefer_async: Optional[bool] = None,
         method_options: Optional[dict] = None,
     ) -> PostMeltQuoteResponse:
+        execution_options = dict(method_options or {})
+        fee_index = (
+            execution_options.pop("fee_index", None) if method == "onchain" else None
+        )
         payload = PostMeltRequest(
-            quote=quote, inputs=proofs, outputs=outputs, prefer_async=prefer_async
+            quote=quote,
+            inputs=proofs,
+            outputs=outputs,
+            prefer_async=prefer_async,
+            fee_index=fee_index,
         )
 
         def _meltrequest_include_fields(
@@ -648,11 +659,13 @@ class LedgerAPI(SupportsAuth):
             }
             if outputs is not None:
                 include["outputs"] = {i: outputs_include for i in range(len(outputs))}
+            if payload.fee_index is not None:
+                include["fee_index"] = ...
             return include
 
         payload_dict = _payload_with_method_options(
             payload,
-            method_options,
+            execution_options,
             include=_meltrequest_include_fields(proofs, outputs),
         )
         resp = await self._request(

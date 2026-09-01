@@ -1,0 +1,47 @@
+name: regtest-onchain
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.12"
+        type: string
+      poetry-version:
+        default: "2.3.2"
+        type: string
+      os-version:
+        default: "ubuntu-latest"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  regtest-onchain:
+    runs-on: ${{ inputs.os-version }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Start Bitcoin Core regtest
+        run: |
+          git clone https://github.com/callebtc/cashu-regtest.git regtest
+          docker compose -f regtest/docker-compose.yml up -d bitcoind
+          BITCOIND_CONTAINER=$(docker compose -f regtest/docker-compose.yml ps -q bitcoind)
+          docker exec "$BITCOIND_CONTAINER" bitcoin-cli -regtest -rpcuser=cashu -rpcpassword=cashu -rpcwait getblockchaininfo
+          BITCOIND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$BITCOIND_CONTAINER")
+          echo "ONCHAIN_REGTEST_RPC_URL=http://${BITCOIND_IP}:18443" >> "$GITHUB_ENV"
+
+      - name: Run BDK onchain regtests
+        env:
+          ONCHAIN_REGTEST: "1"
+        run: poetry run pytest tests/test_onchain_regtest.py -v
+
+      - name: Show Bitcoin Core logs
+        if: failure()
+        run: docker compose -f regtest/docker-compose.yml logs bitcoind

@@ -628,12 +628,18 @@ async def melt(
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
-    if payload.prefer_async:
+    execution_options = (
+        {"fee_index": payload.fee_index}
+        if method == "onchain" or payload.fee_index is not None
+        else {}
+    )
+    if method == "onchain" or payload.prefer_async:
         resp = await ledger.async_melt(
             proofs=payload.inputs,
             quote=payload.quote,
             outputs=payload.outputs,
             method_str=method,
+            **execution_options,
         )
     else:
         resp = await ledger.melt(
@@ -641,6 +647,7 @@ async def melt(
             quote=payload.quote,
             outputs=payload.outputs,
             method_str=method,
+            **execution_options,
         )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp

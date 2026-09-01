@@ -618,6 +618,8 @@ class Ledger(
         expected_attempt: Optional[str] = None,
         lock_token: Optional[str] = None,
         payment_uncertain: Optional[bool] = None,
+        preimage: Optional[str] = None,
+        method_data: Optional[Dict[str, Any]] = None,
     ) -> MeltQuote:
         """Update the backend checking ID within the quote transaction."""
         async with self.db.get_connection(
@@ -641,6 +643,10 @@ class Ledger(
             ):
                 raise TransactionError("Melt execution lease lost.")
             melt_quote.checking_id = checking_id
+            if preimage:
+                melt_quote.payment_preimage = preimage
+            if method_data:
+                melt_quote.method_data.update(method_data)
             if payment_uncertain is not None:
                 melt_quote.payment_uncertain = payment_uncertain
             await self.crud.update_melt_quote(
@@ -721,7 +727,9 @@ class Ledger(
         if not (invoice_response.payment_request and invoice_response.checking_id):
             raise LightningError("could not fetch payment request from backend")
 
-        quote_amount = invoice_response.amount or Amount(unit, quote_request.amount or 0)
+        quote_amount = invoice_response.amount or Amount(
+            unit, quote_request.amount or 0
+        )
         if (
             quote_amount.unit != unit
             or quote_amount.amount < 0
@@ -750,7 +758,9 @@ class Ledger(
 
         now = int(time.time())
         expiry = None
-        if settings.mint_quote_ttl is not None:
+        if not plugin.supports_mint_quote_expiry:
+            expiry = None
+        elif settings.mint_quote_ttl is not None:
             expiry = now + settings.mint_quote_ttl
         else:
             expiry = (
@@ -759,7 +769,7 @@ class Ledger(
                 else None
             )
             if expiry is None:
-                expiry = plugin.quote_expiry(invoice_response.payment_request)
+                expiry = plugin.mint_quote_expiry(invoice_response.payment_request)
 
         quote = MintQuote(
             quote=quote_id,
@@ -961,6 +971,12 @@ class Ledger(
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
 
+        min_amount = plugin.settings_for(backend, Unit[quote.unit]).min_amount
+        if min_amount is not None and sum_amount_outputs < min_amount:
+            raise TransactionError(
+                f"amount to mint is below minimum amount {min_amount}"
+            )
+
         # Also validate quotes created before invoice amount checks were added.
         if quote.method == Method.bolt11.name:
             self._verify_mint_quote_invoice_amount(
@@ -1100,6 +1116,13 @@ class Ledger(
         quote_amounts = payload.quote_amounts or default_amounts
         if any(amount <= 0 for amount in quote_amounts):
             raise TransactionError("quote amounts must be positive")
+        min_amount = plugin.settings_for(backend, output_unit).min_amount
+        if min_amount is not None and any(
+            amount < min_amount for amount in quote_amounts
+        ):
+            raise TransactionError(
+                f"amount to mint is below minimum amount {min_amount}"
+            )
         if sum_amount_outputs != sum(quote_amounts):
             raise TransactionError("amount to mint does not match quote amounts sum")
 
@@ -1175,11 +1198,14 @@ class Ledger(
             raise TransactionError("units do not match")
         if not mint_quote.method == method_name:
             raise TransactionError("methods do not match")
-        if mint_quote.paid:
+        repeated_payments = plugin.supports_repeated_payments(
+            self._get_backend(method, unit)
+        )
+        if mint_quote.paid and not repeated_payments:
             raise InvoiceAlreadyPaidError("mint quote already paid")
-        if mint_quote.issued:
+        if mint_quote.issued and not repeated_payments:
             raise TransactionError("mint quote already issued")
-        if not mint_quote.unpaid:
+        if mint_quote.pending or (not mint_quote.unpaid and not repeated_payments):
             raise TransactionError("mint quote is not unpaid")
 
         if not mint_quote.checking_id:
@@ -1188,7 +1214,14 @@ class Ledger(
             raise TransactionError("internal payments do not support mpp")
 
         internal_fee = Amount(unit, 0)  # no internal fees
-        amount = Amount(unit, mint_quote.amount)
+        amount = Amount(
+            unit,
+            melt_quote.amount
+            if repeated_payments and melt_quote.amount is not None
+            else mint_quote.amount,
+        )
+        if amount.amount <= 0:
+            raise TransactionError("internal payment requires an amount")
 
         payment_quote = PaymentQuoteResponse(
             checking_id=mint_quote.checking_id,
@@ -1566,11 +1599,14 @@ class Ledger(
             except ValueError as exc:
                 raise TransactionError(str(exc)) from exc
 
-            if mint_quote.paid:
+            repeated_payments = plugin.supports_repeated_payments(
+                self._get_backend(melt_quote.method, Unit[melt_quote.unit])
+            )
+            if mint_quote.paid and not repeated_payments:
                 raise InvoiceAlreadyPaidError("mint quote already paid")
-            if mint_quote.issued:
+            if mint_quote.issued and not repeated_payments:
                 raise QuoteAlreadyIssuedError("mint quote already issued")
-            if mint_quote.state != MintQuoteState.unpaid:
+            if mint_quote.pending or (not mint_quote.unpaid and not repeated_payments):
                 raise TransactionError("mint quote is not unpaid")
 
             logger.info(
@@ -1614,6 +1650,7 @@ class Ledger(
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
         method_str: Optional[str] = None,
+        fee_index: Optional[int] = None,
     ) -> PostMeltQuoteResponse:
         """Invalidates proofs and pays a Lightning invoice asynchronously.
 
@@ -1633,6 +1670,7 @@ class Ledger(
             quote=quote,
             outputs=outputs,
             method_str=method_str,
+            fee_index=fee_index,
         )
 
         async def melt_task():
@@ -1653,6 +1691,7 @@ class Ledger(
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
         method_str: Optional[str] = None,
+        fee_index: Optional[int] = None,
     ) -> PostMeltQuoteResponse:
         """Invalidates proofs and pays a Lightning invoice.
 
@@ -1672,6 +1711,7 @@ class Ledger(
             quote=quote,
             outputs=outputs,
             method_str=method_str,
+            fee_index=fee_index,
         )
         return await self._execute_melt_payment(melt_quote, proofs, outputs)
 
@@ -1682,6 +1722,7 @@ class Ledger(
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
         method_str: Optional[str] = None,
+        fee_index: Optional[int] = None,
     ) -> MeltQuote:
         """Validates a melt request and durably sets the quote and proofs to pending."""
         # make sure we're allowed to melt
@@ -1698,6 +1739,23 @@ class Ledger(
             )
         if melt_quote.pending:
             raise QuotePendingError(f"melt quote is not unpaid: {melt_quote.state}")
+
+        if melt_quote.method == "onchain":
+            options = melt_quote.method_data.get("fee_options", [])
+            selected = next(
+                (option for option in options if option.get("fee_index") == fee_index),
+                None,
+            )
+            # Internal transfers have no onchain fee tiers.
+            if not options and fee_index is None and melt_quote.fee_reserve == 0:
+                selected = {"fee_reserve": 0}
+            if selected is None:
+                raise TransactionError("fee_index was not offered for this quote")
+            previous = melt_quote.method_data.get("selected_fee_index")
+            if previous is not None and previous != fee_index:
+                raise TransactionError("onchain fee option was already selected")
+            melt_quote.method_data["selected_fee_index"] = fee_index
+            melt_quote.fee_reserve = int(selected["fee_reserve"])
 
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
@@ -1867,6 +1925,8 @@ class Ledger(
             expected_attempt=melt_quote.attempt,
             lock_token=melt_quote.melt_lock,
             payment_uncertain=payment.error,
+            preimage=payment.preimage,
+            method_data=payment.model_extra,
         )
 
         match payment.result:

@@ -920,11 +920,12 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id, attempt = :attempt, melt_lock = :melt_lock, melt_lock_expires_at = :melt_lock_expires_at, payment_uncertain = :payment_uncertain, method_data = :method_data, amountless_msat = :amountless_msat WHERE quote = :quote
+            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, fee_reserve = :fee_reserve, paid_time = :paid_time, proof = :proof, checking_id = :checking_id, attempt = :attempt, melt_lock = :melt_lock, melt_lock_expires_at = :melt_lock_expires_at, payment_uncertain = :payment_uncertain, method_data = :method_data, amountless_msat = :amountless_msat WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
                 "fee_paid": quote.fee_paid,
+                "fee_reserve": quote.fee_reserve,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 )

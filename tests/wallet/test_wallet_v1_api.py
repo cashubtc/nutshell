@@ -594,6 +594,44 @@ async def test_method_options_preserve_extra_payment_fields(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["mint_quote", "melt"])
+async def test_onchain_wallet_sends_amountless_quote_and_selected_fee(
+    monkeypatch, api: LedgerAPI, operation
+):
+    cast(Any, api).keysets = {"loaded": object()}
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    request = AsyncMock(
+        return_value=_response(
+            200,
+            {
+                "quote": "q-1",
+                "request": "address",
+                "amount": None if operation == "mint_quote" else 16,
+                "unit": "sat",
+                "method": "onchain",
+                "state": "UNPAID",
+            },
+        )
+    )
+    monkeypatch.setattr(api, "_request", request)
+    if operation == "mint_quote":
+        response = await api.mint_quote_for_method(
+            "onchain", None, Unit.sat, pubkey="02" + "01" * 32
+        )
+        assert response.amount is None
+        assert request.await_args.kwargs["json"] == {
+            "unit": "sat", "pubkey": "02" + "01" * 32
+        }
+    else:
+        await api.melt_for_method(
+            "onchain", "q-1", [], None, method_options={"fee_index": 0}
+        )
+        assert request.await_args.kwargs["json"]["fee_index"] == 0
+
+
+@pytest.mark.asyncio
 async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: LedgerAPI):
     output = BlindedMessage(id="kid", amount=1, B_="ab")
     proof = Proof(

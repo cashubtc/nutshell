@@ -48,6 +48,19 @@ for key, value in settings.model_dump().items():
     if key in ["mint_database", "mint_test_database", "mint_auth_database"]:
         value = mask_db_location(value)
 
+    if key == "mint_payment_backends":
+        value = [
+            {
+                option: (
+                    "********"
+                    if option in {"mnemonic", "password", "rpc_password"}
+                    else setting
+                )
+                for option, setting in backend.items()
+            }
+            for backend in value
+        ]
+
     logger.debug(f"{key}: {value}")
 
 wallets_module = importlib.import_module("cashu.lightning")

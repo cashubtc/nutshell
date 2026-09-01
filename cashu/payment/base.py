@@ -44,6 +44,7 @@ class PaymentMethodPlugin(ABC):
     allows_amountless_mint: bool = False
     requires_quote_id: bool = False
     supports_balance: bool = True
+    supports_mint_quote_expiry: bool = True
 
     def supports_partial_mint(self, backend: Any) -> bool:
         return self.allows_partial_mint
@@ -140,6 +141,12 @@ class PaymentMethodPlugin(ABC):
     @abstractmethod
     def quote_expiry(self, payment_request: str) -> Optional[int]:
         """Return the payment request's absolute expiry, if it has one."""
+
+    def mint_quote_expiry(self, payment_request: str) -> Optional[int]:
+        return self.quote_expiry(payment_request)
+
+    def melt_quote_expiry(self, payment_request: str) -> Optional[int]:
+        return self.quote_expiry(payment_request)
 
     def validate_internal_settlement(
         self, mint_quote: MintQuote, melt_quote: MeltQuote

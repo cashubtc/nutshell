@@ -159,6 +159,36 @@ files = [
 tests = ["PyHamcrest (>=2.0.2)", "mypy", "pytest (>=4.6)", "pytest-benchmark", "pytest-cov", "pytest-flake8"]
 
 [[package]]
+name = "bdkpython"
+version = "0.32.1"
+description = "The Python language bindings for the Bitcoin Development Kit"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "bdkpython-0.32.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0e3ced1c098bb0734c769d5dfd2535c219bdc188708de412304a3786c4314541"},
+    {file = "bdkpython-0.32.1-cp310-cp310-macosx_11_0_x86_64.whl", hash = "sha256:09d53d995617751dbcf3058fe7dd2aaf2c85c33f0a6a8463581cf79b6189a5a1"},
+    {file = "bdkpython-0.32.1-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:2a55b0f2955c2fbe41a6aacc60e278647aec9cfa6f24b950460052d5a5b9ccb7"},
+    {file = "bdkpython-0.32.1-cp310-cp310-win_amd64.whl", hash = "sha256:3e63fe2c935b4ea247a1c7c27c6359951035dfd7a97be111047268e24de8f481"},
+    {file = "bdkpython-0.32.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:c846042e5ccee8047fa4b0fcaa575bbed7f697953831ebeb26175e9299fbcd8e"},
+    {file = "bdkpython-0.32.1-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:b496e7f812ffa45602f63bf1e24b3cc72a6277c1df04988b2051ab27be01941e"},
+    {file = "bdkpython-0.32.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:a4b2a2d689983df447d648192239f258924f9ad0abae6027adc4eaa3a2a1fcdb"},
+    {file = "bdkpython-0.32.1-cp311-cp311-win_amd64.whl", hash = "sha256:1aa299585e431058faad01cef85854150c678969ea81326933e8d49648ffca0a"},
+    {file = "bdkpython-0.32.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:5f448affec52b4200ca314cd6b95e625ad866c67859ce47b8d203ab7dc70ae55"},
+    {file = "bdkpython-0.32.1-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:fcaa1873e8ec560ebfd36c62d4d9c652bd434adc6d4f9d04c6525022586d5f79"},
+    {file = "bdkpython-0.32.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:6d187e75d048e7d17ed97eae5db2c50800c1915c1306c50e60dfa3eef3c97994"},
+    {file = "bdkpython-0.32.1-cp312-cp312-win_amd64.whl", hash = "sha256:4d7be9ed6d81c958eece5de44c90e382bd61907b178a4b106e38b48219ffaa26"},
+    {file = "bdkpython-0.32.1-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:3c15dac9103f4a71874131d1cca6fb62fb581a0fc5f0a179c3baefb9c89a4a0e"},
+    {file = "bdkpython-0.32.1-cp38-cp38-macosx_11_0_x86_64.whl", hash = "sha256:c620f6cea93cfc448c4c669ff13793c239f314322b12c75d23b27644af745431"},
+    {file = "bdkpython-0.32.1-cp38-cp38-manylinux_2_28_x86_64.whl", hash = "sha256:c273af75b377ce8dee611762ed45de73f700d1b03c75984af6d376ce89add195"},
+    {file = "bdkpython-0.32.1-cp38-cp38-win_amd64.whl", hash = "sha256:677a670830b496a1342057193ebb90334b2d2e1c917981a4e403dac851b20f17"},
+    {file = "bdkpython-0.32.1-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:47ebdf7d6b7eae58e0530548f5709df910e9855afe18fd1e670dbd337fbedc50"},
+    {file = "bdkpython-0.32.1-cp39-cp39-macosx_11_0_x86_64.whl", hash = "sha256:ee215618229605f7c333e61936be2c488d8aa0d0bfd7588348fadf0f92525cb2"},
+    {file = "bdkpython-0.32.1-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:fbe0b62bb1b1af170a8b085f65a087010933058f16ca34a0f08d701546dee2e2"},
+    {file = "bdkpython-0.32.1-cp39-cp39-win_amd64.whl", hash = "sha256:e4e8e0f924d056a2a90b92a338f8b7d68b4ab716d7f9bf271f5418654ef5ae73"},
+]
+
+[[package]]
 name = "bech32"
 version = "1.2.0"
 description = "Reference implementation for Bech32 and segwit addresses."
@@ -3754,4 +3784,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "2189f11bf3a463da47307e091ff3d232e832847102594461112dac3951fb8e4a"
+content-hash = "2f5c63ccf745cdcc051070ccd9800890fc64eb278ab9fae73368dcb3fe5cfa27"
