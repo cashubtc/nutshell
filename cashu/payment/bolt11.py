@@ -41,7 +41,10 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
         return request.lower()
 
     async def create_incoming_payment(
-        self, backend: Any, request: PostMintQuoteRequest
+        self,
+        backend: Any,
+        request: PostMintQuoteRequest,
+        quote_id: Optional[str] = None,
     ) -> InvoiceResponse:
         return await backend.create_invoice(
             amount=Amount(unit=Unit[request.unit], amount=request.amount),
@@ -54,7 +57,10 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
         return await backend.get_invoice_status(quote.checking_id)
 
     async def quote_outgoing_payment(
-        self, backend: Any, request: PostMeltQuoteRequest
+        self,
+        backend: Any,
+        request: PostMeltQuoteRequest,
+        quote_id: Optional[str] = None,
     ) -> PaymentQuoteResponse:
         return await backend.get_payment_quote(melt_quote=request)
 
