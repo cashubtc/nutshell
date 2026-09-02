@@ -497,7 +497,6 @@ class Ledger(
             Exception: Validation of outputs failed.
             Exception: Quote not paid.
             Exception: Quote already issued.
-            Exception: Quote expired.
             Exception: Amount to mint does not match quote amount.
 
         Returns:
@@ -516,6 +515,9 @@ class Ledger(
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
 
+        # Quote expiry limits when the payment request can be paid. Once payment is
+        # confirmed, the quote remains mintable until its value has been issued.
+
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
@@ -523,8 +525,6 @@ class Ledger(
                 raise TransactionError("quote unit does not match output unit")
             if not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
-            if quote.expiry and quote.expiry < int(time.time()):
-                raise TransactionError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
             await self._store_blinded_messages(outputs, mint_id=quote_id)
@@ -601,6 +601,8 @@ class Ledger(
             if quote.state != MintQuoteState.paid:
                 raise QuoteNotPaidError()
 
+        # Quote expiry limits payment, not issuance of already-paid value.
+
         # Check amount balance
         if payload.quote_amounts:
             if len(payload.quote_amounts) != len(quotes):
@@ -644,10 +646,6 @@ class Ledger(
         quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
-            for quote in quotes:
-                if quote.expiry and quote.expiry < int(time.time()):
-                    raise TransactionError("quote expired")
-
             # Store all blinded messages
             await self._store_blinded_messages(
                 payload.outputs, mint_id=payload.quotes[0]
