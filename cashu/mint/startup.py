@@ -19,7 +19,8 @@ from ..mint.auth import migrations as auth_migrations
 from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
-from ..payment import payment_method_registry
+from ..payment import PaymentMethodPlugin, payment_method_registry
+from ..payment.grpc_processor import GrpcPaymentProcessor
 
 # kill the program if python runs in non-__debug__ mode
 # which could lead to asserts not being executed for optimized code
@@ -74,19 +75,42 @@ if settings.mint_backend_bolt11_eur:
 for backend_config in settings.mint_payment_backends:
     method = str(backend_config.get("method", ""))
     unit_name = str(backend_config.get("unit", ""))
-    plugin = payment_method_registry.get(method)
     try:
         unit = Unit[unit_name]
     except KeyError as exc:
         raise ValueError(
             f"unsupported unit '{unit_name}' for payment method '{method}'"
         ) from exc
-    if method == Method.bolt11.name and unit in backends.get(Method.bolt11, {}):
+    backend_type = str(backend_config.get("type", backend_config.get("backend", "")))
+    existing_key: Union[Method, str] = (
+        Method.bolt11 if method == Method.bolt11.name else method
+    )
+    plugin: PaymentMethodPlugin
+    if backend_type == "GrpcPaymentProcessor":
+        backend = GrpcPaymentProcessor(method, unit, backend_config)
+        registered = payment_method_registry.maybe_get(method)
+        if registered is not None and not isinstance(registered, GrpcPaymentProcessor):
+            if method == Method.bolt11.name and existing_key not in backends:
+                payment_method_registry.register(backend, replace=True)
+                registered = backend
+            else:
+                raise ValueError(
+                    f"payment method '{method}' is already provided by a non-gRPC plugin"
+                )
+        if registered is None:
+            payment_method_registry.register(backend)
+            plugin = backend
+        else:
+            plugin = registered
+    else:
+        plugin = payment_method_registry.get(method)
+    if unit in backends.get(existing_key, {}):
         raise ValueError(
             f"duplicate backend configuration for method '{method}' and unit '{unit.name}'"
         )
-    backend = plugin.create_backend(unit, backend_config)
-    backends.setdefault(method, {})[unit] = backend
+    if backend_type != "GrpcPaymentProcessor":
+        backend = plugin.create_backend(unit, backend_config)
+    backends.setdefault(existing_key, {})[unit] = backend
 if not backends:
     raise Exception("No backends are set.")
 
