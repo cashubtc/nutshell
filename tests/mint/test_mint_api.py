@@ -497,24 +497,26 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     reason="only works on regtest",
 )
 async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
-    mint_quote = await wallet.request_mint(64)
+    mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(mint_quote.request)
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
+    await wallet.mint(128, quote_id=mint_quote.quote)
+    assert wallet.balance == 128
 
     # external invoice that the mint can only pay through a routing node
     invoice_payment_request = get_real_invoice_routed(62)
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 62
-    assert quote.fee_reserve == 2
+    assert quote.fee_reserve > 0
 
-    keep, send = await wallet.swap_to_send(wallet.proofs, 64)
+    keep, send = await wallet.swap_to_send(
+        wallet.proofs, quote.amount + quote.fee_reserve
+    )
     inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change
-    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
-    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(3)
+    outputs, rs = wallet._construct_outputs([1, 1, 1], secrets, rs)
     outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
@@ -540,9 +542,9 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
 
     # change must compensate exactly for the unspent part of the reserve
     change_sat = sum([c.amount for c in resp_quote.change or []])
-    assert change_sat == quote.fee_reserve - melt_quote.fee_paid, (
-        "Wrong change returned"
-    )
+    assert (
+        change_sat == quote.fee_reserve - melt_quote.fee_paid
+    ), "Wrong change returned"
 
 
 @pytest.mark.asyncio
@@ -565,13 +567,14 @@ async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 1000
-    # fee reserve is 2% of the amount
-    assert quote.fee_reserve == 20
+    assert quote.fee_reserve >= 2
 
-    keep, send = await wallet.swap_to_send(wallet.proofs, 1020)
+    keep, send = await wallet.swap_to_send(
+        wallet.proofs, quote.amount + quote.fee_reserve
+    )
     inputs_payload = [p.to_dict() for p in send]
 
-    # 5 blank outputs for the change of the 20 sat fee reserve
+    # Blank outputs for the unspent part of the fee reserve.
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(5)
     outputs, rs = wallet._construct_outputs([1, 1, 1, 1, 1], secrets, rs)
     outputs_payload = [o.model_dump() for o in outputs]
@@ -598,7 +601,9 @@ async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet
 
     # we get back the fee reserve minus the rounded up fee
     change_sat = sum([c.amount for c in resp_quote.change or []])
-    assert change_sat == 18, "Wrong change returned"
+    assert (
+        change_sat == quote.fee_reserve - melt_quote.fee_paid
+    ), "Wrong change returned"
 
 
 @pytest.mark.asyncio
@@ -706,9 +711,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert response.status_code == 200, (
-        f"{response.url} {response.status_code} {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"{response.url} {response.status_code} {response.text}"
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64

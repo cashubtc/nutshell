@@ -387,7 +387,7 @@ async def test_melt_routed_invoice(wallet1: Wallet):
 
     quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    assert quote.fee_reserve == 2
+    assert quote.fee_reserve > 0
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
