@@ -151,6 +151,21 @@ async def test_grpc_payment_processor_is_cdk_compatible():
         assert incoming_status.result == PaymentResult.SETTLED
         assert incoming_status.amount_paid == Amount(Unit.sat, 21)
 
+        partial_status = await processor.get_incoming_payment_status(
+            processor,
+            MintQuote(
+                quote="larger-mint-quote",
+                method="testpay",
+                request="external-request",
+                checking_id=incoming.checking_id,
+                unit="sat",
+                amount=22,
+                state=MintQuoteState.unpaid,
+            ),
+        )
+        assert partial_status.result == PaymentResult.PENDING
+        assert partial_status.amount_paid == Amount(Unit.sat, 21)
+
         outgoing = await processor.quote_outgoing_payment(
             processor,
             PostMeltQuoteRequest(unit="sat", request="merchant-request"),
