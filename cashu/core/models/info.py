@@ -37,6 +37,7 @@ class MintInfoProtectedEndpoint(BaseModel):
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None
+    signature: Optional[str] = None
     version: Optional[str] = None
     description: Optional[str] = None
     description_long: Optional[str] = None

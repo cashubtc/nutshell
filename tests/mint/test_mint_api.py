@@ -15,6 +15,7 @@ from cashu.core.models import (
     PostRestoreResponse,
 )
 from cashu.core.nuts import nut20
+from cashu.core.nuts.nut06 import verify_mint_info_signature
 from cashu.core.nuts.nuts import MINT_NUT
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
@@ -56,6 +57,11 @@ async def test_info(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
     assert response.json()["pubkey"] == ledger.pubkey.format().hex()
+    assert verify_mint_info_signature(
+        response.json(),
+        bytes.fromhex(response.json()["signature"]),
+        ledger.pubkey.format(),
+    )
     info = GetInfoResponse(**response.json())
     assert info.nuts
     assert info.nuts[MINT_NUT]["disabled"] is False

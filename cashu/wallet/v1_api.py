@@ -40,6 +40,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts.nut06 import verify_mint_info_signature
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .crud import (
@@ -346,6 +347,13 @@ class LedgerAPI(SupportsAuth):
         self.raise_on_unsupported_version(resp, "Get /v1/info")
 
         data: dict = resp.json()
+        try:
+            signature = bytes.fromhex(data["signature"])
+            pubkey = bytes.fromhex(data["pubkey"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("mint info identity fields are missing or malformed") from exc
+        if not verify_mint_info_signature(data, signature, pubkey):
+            raise ValueError("mint info signature or timestamp is invalid")
         mint_info: GetInfoResponse = GetInfoResponse.model_validate(data)
         return mint_info
 

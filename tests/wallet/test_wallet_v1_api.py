@@ -1,3 +1,4 @@
+import time
 from types import MethodType
 from typing import Any, cast
 
@@ -13,6 +14,7 @@ from cashu.core.models import (
     PostMeltQuoteResponse,
     PostMintQuoteResponse,
 )
+from cashu.core.nuts.nut06 import derive_mint_identity_key, sign_mint_info
 from cashu.core.settings import settings
 from cashu.wallet.v1_api import LedgerAPI
 
@@ -260,18 +262,21 @@ async def test_get_keysets_raises_for_empty_response(monkeypatch, api: LedgerAPI
 
 @pytest.mark.asyncio
 async def test_get_info_uses_unprefixed_path(monkeypatch, api: LedgerAPI):
+    identity_key = derive_mint_identity_key(b"test mint info identity seed")
+    response_data = {
+        "name": "MintName",
+        "pubkey": identity_key.public_key.format().hex(),
+        "version": "1.0.0",
+        "contact": [{"method": "email", "info": "mint@example.com"}],
+        "time": int(time.time()),
+    }
+    response_data["signature"] = sign_mint_info(response_data, identity_key).hex()
+
     async def fake_request(self, method, path, **kwargs):
         assert method == "GET"
         assert path == "/v1/info"
         assert kwargs["noprefix"] is True
-        return _response(
-            200,
-            {
-                "name": "MintName",
-                "version": "1.0.0",
-                "contact": [{"method": "email", "info": "mint@example.com"}],
-            },
-        )
+        return _response(200, response_data)
 
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     mint_info = await api._get_info()
