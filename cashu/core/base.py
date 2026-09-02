@@ -596,8 +596,11 @@ class MintQuote(LedgerEvent):
 
     @property
     def state(self) -> MintQuoteState:
-        if self.state_val == MintQuoteState.pending:
-            return MintQuoteState.pending
+        # UNPAID and PENDING are explicit orchestration states. In particular,
+        # an observed partial payment must not implicitly make a non-reusable
+        # quote issuable merely because amount_paid is non-zero.
+        if self.state_val in {MintQuoteState.unpaid, MintQuoteState.pending}:
+            return self.state_val
         if self.amount_paid is not None and self.amount_issued is not None:
             if self.amount_paid > self.amount_issued:
                 return MintQuoteState.paid

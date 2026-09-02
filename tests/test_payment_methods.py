@@ -119,6 +119,35 @@ def test_mint_quote_issuance_rejects_amount_above_paid_balance():
         DbWriteHelper._apply_mint_quote_issuance(quote, 3)
 
 
+@pytest.mark.asyncio
+async def test_mint_quote_rejects_underpaid_balance_before_pending(
+    fake_backend_settings, ledger: Ledger
+):
+    quote = MintQuote(
+        quote="underpaid-quote",
+        method="bolt11",
+        request="payment-request",
+        checking_id="checking-id",
+        unit="sat",
+        amount=64,
+        state=MintQuoteState.paid,
+        amount_paid=1,
+        amount_issued=0,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+
+    with pytest.raises(TransactionError, match="exceeds paid quote balance"):
+        await ledger.db_write._set_mint_quote_pending(
+            quote.quote, issued_amount=64
+        )
+
+    stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored is not None
+    assert stored.state == MintQuoteState.paid
+    assert stored.amount_paid == 1
+    assert stored.amount_issued == 0
+
+
 def test_mint_quote_rollback_preserves_cumulative_accounting():
     quote = MintQuote(
         quote="quote-id",
@@ -183,6 +212,31 @@ async def test_reusable_mint_quote_observes_payments_after_full_issuance(
     assert refreshed.state == MintQuoteState.paid
     assert refreshed.amount_paid == 20
     assert refreshed.amount_issued == 10
+
+
+@pytest.mark.asyncio
+async def test_non_reusable_mint_quote_stays_unpaid_after_partial_payment(
+    fake_backend_settings, ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+):
+    plugin = payment_method_registry.get("bolt11")
+    monkeypatch.setattr(plugin, "allows_partial_mint", False)
+    monkeypatch.setattr(
+        plugin,
+        "get_incoming_payment_status",
+        AsyncMock(
+            return_value=PaymentStatus(
+                result=PaymentResult.PENDING,
+                amount_paid=Amount(Unit.sat, 1),
+            )
+        ),
+    )
+
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=64, unit="sat"))
+    refreshed = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+
+    assert refreshed.state == MintQuoteState.unpaid
+    assert refreshed.amount_paid == 1
+    assert refreshed.amount_issued == 0
 
 
 @pytest.mark.asyncio

@@ -485,14 +485,20 @@ class Ledger(
                     if not quote:
                         raise Exception("quote not found")
                     if reported_paid > (quote.amount_paid or 0):
-                        logger.trace(f"Setting quote {quote_id} as paid")
                         quote.amount_paid = reported_paid
-                        quote.state_val = (
-                            MintQuoteState.issued
-                            if reported_paid == (quote.amount_issued or 0)
-                            else MintQuoteState.paid
+                        fully_paid = reported_paid >= quote.amount
+                        has_issuable_balance = (
+                            plugin.allows_partial_mint
+                            and reported_paid > (quote.amount_issued or 0)
                         )
-                        quote.paid_time = quote.paid_time or now
+                        if fully_paid or has_issuable_balance:
+                            logger.trace(f"Setting quote {quote_id} as paid")
+                            quote.state_val = (
+                                MintQuoteState.issued
+                                if reported_paid == (quote.amount_issued or 0)
+                                else MintQuoteState.paid
+                            )
+                            quote.paid_time = quote.paid_time or now
                         quote.last_checked = now
                         quote.updated_at = now
                         await self.crud.update_mint_quote(
@@ -563,15 +569,16 @@ class Ledger(
         plugin = payment_method_registry.get(quote.method)
 
         previous_state = quote.state
-        quote = await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+        quote = await self.db_write._set_mint_quote_pending(
+            quote_id=quote_id, issued_amount=sum_amount_outputs
+        )
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
             available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
-            if plugin.allows_partial_mint:
-                if sum_amount_outputs > available:
-                    raise TransactionError("amount to mint exceeds paid quote balance")
-            elif not quote.amount == sum_amount_outputs:
+            if sum_amount_outputs > available:
+                raise TransactionError("amount to mint exceeds paid quote balance")
+            if not plugin.allows_partial_mint and not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
                 raise QuoteExpiredError("quote expired")
@@ -705,7 +712,9 @@ class Ledger(
                 raise QuoteSignatureInvalidError()
 
         # Set all quotes to pending
-        quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
+        quotes = await self.db_write._set_mint_quotes_pending(
+            quote_ids=payload.quotes, issued_amounts=quote_amounts
+        )
 
         try:
             for i, quote in enumerate(quotes):
