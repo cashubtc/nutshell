@@ -35,13 +35,22 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
             options={"description": bool(backend.supports_description)},
         )
 
+    async def start(self, backend: LightningBackend) -> None:
+        await backend.startup()
+
+    async def stop(self, backend: LightningBackend) -> None:
+        await backend.cleanup()
+
     def canonicalize_request(self, request: str) -> str:
         # BOLT11 is bech32 and therefore case-insensitive. Mixed-case strings are
         # invalid; normalizing preserves Nutshell's historical storage behavior.
         return request.lower()
 
     async def create_incoming_payment(
-        self, backend: Any, request: PostMintQuoteRequest
+        self,
+        backend: Any,
+        request: PostMintQuoteRequest,
+        quote_id: Optional[str] = None,
     ) -> InvoiceResponse:
         return await backend.create_invoice(
             amount=Amount(unit=Unit[request.unit], amount=request.amount),
@@ -54,7 +63,10 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
         return await backend.get_invoice_status(quote.checking_id)
 
     async def quote_outgoing_payment(
-        self, backend: Any, request: PostMeltQuoteRequest
+        self,
+        backend: Any,
+        request: PostMeltQuoteRequest,
+        quote_id: Optional[str] = None,
     ) -> PaymentQuoteResponse:
         return await backend.get_payment_quote(melt_quote=request)
 

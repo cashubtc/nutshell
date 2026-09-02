@@ -165,11 +165,15 @@ class Ledger(
     # ------- STARTUP -------
 
     async def startup_ledger(self) -> None:
-        # A starting worker must respect other workers' live execution leases.
+        started: set[int] = set()
+        for method, unit_backends in self.backends.items():
+            method_name = self._method_name(method)
+            plugin = payment_method_registry.get(method_name)
+            for backend in unit_backends.values():
+                if id(backend) not in started:
+                    await plugin.start(backend)
+                    started.add(id(backend))
         await self._startup_keysets()
-        for unitbackends in self.backends.values():
-            for backend in unitbackends.values():
-                await backend.startup()
         await self._check_backends()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
@@ -253,10 +257,15 @@ class Ledger(
             await self.events.cleanup()
 
             logger.debug("Shutting down backends")
-            for unitbackends in self.backends.values():
-                for backend in unitbackends.values():
+            stopped: set[int] = set()
+            for method, unit_backends in self.backends.items():
+                plugin = payment_method_registry.get(self._method_name(method))
+                for backend in unit_backends.values():
+                    if id(backend) in stopped:
+                        continue
+                    stopped.add(id(backend))
                     try:
-                        await backend.cleanup()
+                        await plugin.stop(backend)
                     except Exception as exc:
                         logger.warning(
                             f"Error cleaning up {type(backend).__name__}: {exc}"
@@ -686,7 +695,15 @@ class Ledger(
                 raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
-        invoice_response = await plugin.create_incoming_payment(backend, quote_request)
+        quote_id = generate_uuid_v7()
+        if plugin.requires_quote_id:
+            invoice_response = await plugin.create_incoming_payment(
+                backend, quote_request, quote_id
+            )
+        else:
+            invoice_response = await plugin.create_incoming_payment(
+                backend, quote_request
+            )
         logger.trace(
             f"got invoice {invoice_response.payment_request} with checking id"
             f" {invoice_response.checking_id}"
@@ -723,10 +740,16 @@ class Ledger(
         if settings.mint_quote_ttl is not None:
             expiry = now + settings.mint_quote_ttl
         else:
-            expiry = plugin.quote_expiry(invoice_response.payment_request)
+            expiry = (
+                invoice_response.model_extra.get("expiry")
+                if invoice_response.model_extra
+                else None
+            )
+            if expiry is None:
+                expiry = plugin.quote_expiry(invoice_response.payment_request)
 
         quote = MintQuote(
-            quote=generate_uuid_v7(),
+            quote=quote_id,
             method=method_name,
             request=request,
             checking_id=invoice_response.checking_id,
@@ -1171,6 +1194,7 @@ class Ledger(
         backend = self._get_backend(method, unit)
 
         request = plugin.canonicalize_request(melt_quote.request)
+        quote_id = generate_uuid_v7()
 
         expiry = (
             backend.validate_payment_request(request)
@@ -1202,7 +1226,14 @@ class Ledger(
             ):
                 raise TransactionError("backend does not support mpp.")
             # get payment quote by backend
-            payment_quote = await plugin.quote_outgoing_payment(backend, melt_quote)
+            if plugin.requires_quote_id:
+                payment_quote = await plugin.quote_outgoing_payment(
+                    backend, melt_quote, quote_id
+                )
+            else:
+                payment_quote = await plugin.quote_outgoing_payment(
+                    backend, melt_quote
+                )
 
         self.validate_payment_quote(melt_quote, payment_quote, method_name)
 
@@ -1223,7 +1254,7 @@ class Ledger(
             expiry = min(expiry, quote_expiry) if expiry is not None else quote_expiry
 
         quote = MeltQuote(
-            quote=generate_uuid_v7(),
+            quote=quote_id,
             method=method_name,
             request=request,
             checking_id=payment_quote.checking_id,
