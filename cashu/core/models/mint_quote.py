@@ -1,4 +1,4 @@
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +9,6 @@ from cashu.core.constants import (
     MAX_QUOTE_ID_LEN,
     MAX_UNIT_LEN,
 )
-from cashu.core.settings import settings
 
 
 class PostMintQuoteRequest(BaseModel):
@@ -24,9 +23,29 @@ class PostMintQuoteRequest(BaseModel):
 
 
 class PostMintQuoteCheckRequest(BaseModel):
-    quotes: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]] = Field(
-        ..., max_length=settings.mint_max_request_length
-    )
+    # NOTE: quote IDs longer than MAX_QUOTE_ID_LEN are rejected with a 422
+    # validation error (DoS protection). Shorter unknown or malformed IDs are
+    # returned as `unknown` entries per NUT-29, and an oversized batch is
+    # rejected with error 11017 by the mint.
+    quotes: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]]
+
+
+class PostMintQuoteCheckUnknownResponse(BaseModel):
+    quote: str
+    unknown: Literal[True] = True
+
+
+class PostMintQuoteCheckResponse(BaseModel):
+    quote: str
+    request: str
+    amount: int
+    unit: str
+    method: str
+    amount_paid: int
+    amount_issued: int
+    updated_at: int
+    expiry: Optional[int] = None
+    pubkey: Optional[str] = None
 
 
 class PostMintQuoteResponse(BaseModel):
