@@ -40,6 +40,8 @@ class PaymentMethodPlugin(ABC):
     mint_quote_request_model: type[BaseModel] = PostMintQuoteRequest
     melt_quote_request_model: type[BaseModel] = PostMeltQuoteRequest
     allows_partial_mint: bool = False
+    requires_quote_id: bool = False
+    supports_balance: bool = True
 
     def create_backend(self, unit: Unit, config: dict[str, Any]) -> Any:
         """Construct a configured mint backend for this method.
@@ -74,7 +76,10 @@ class PaymentMethodPlugin(ABC):
 
     @abstractmethod
     async def create_incoming_payment(
-        self, backend: Any, request: PostMintQuoteRequest
+        self,
+        backend: Any,
+        request: PostMintQuoteRequest,
+        quote_id: Optional[str] = None,
     ) -> InvoiceResponse:
         """Create payment instructions for a mint quote."""
 
@@ -86,7 +91,10 @@ class PaymentMethodPlugin(ABC):
 
     @abstractmethod
     async def quote_outgoing_payment(
-        self, backend: Any, request: PostMeltQuoteRequest
+        self,
+        backend: Any,
+        request: PostMeltQuoteRequest,
+        quote_id: Optional[str] = None,
     ) -> PaymentQuoteResponse:
         """Price an outgoing payment for a melt quote."""
 
@@ -116,6 +124,12 @@ class PaymentMethodPlugin(ABC):
 
     async def status(self, backend: Any) -> StatusResponse:
         return await backend.status()
+
+    async def start(self, backend: Any) -> None:
+        """Initialize a payment backend before mint services start."""
+
+    async def stop(self, backend: Any) -> None:
+        """Release resources owned by a payment backend."""
 
     async def incoming_payment_stream(self, backend: Any) -> AsyncGenerator[str, None]:
         async for checking_id in backend.paid_invoices_stream():
