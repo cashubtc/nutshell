@@ -260,8 +260,15 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
             for payment in response.payments
             if payment.payment_amount.unit == quote.unit
         )
+        fully_paid = paid >= quote.amount
         return PaymentStatus(
-            result=PaymentResult.SETTLED if paid else PaymentResult.UNKNOWN,
+            result=(
+                PaymentResult.SETTLED
+                if fully_paid
+                else PaymentResult.PENDING
+                if paid
+                else PaymentResult.UNKNOWN
+            ),
             amount_paid=Amount(Unit[quote.unit], paid) if paid else None,
         )
 
