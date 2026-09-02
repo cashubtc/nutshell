@@ -6,9 +6,10 @@ from loguru import logger
 
 from cashu.core.db import Connection, Database
 
-from ..core.base import Amount, MintBalanceLogEntry, Unit
+from ..core.base import Amount, Method, MintBalanceLogEntry, Unit
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
+from ..payment import payment_method_registry
 from .protocols import SupportsBackends, SupportsDb
 
 
@@ -39,6 +40,14 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
     async def dispatch_watchdogs(self) -> List[asyncio.Task]:
         tasks = []
         for method, unitbackends in self.backends.items():
+            method_name = method.name if isinstance(method, Method) else method
+            plugin = payment_method_registry.get(method_name)
+            if not plugin.supports_balance:
+                logger.warning(
+                    f"Skipping balance watchdog for payment method '{method_name}': "
+                    "the backend protocol does not report a balance"
+                )
+                continue
             for unit, backend in unitbackends.items():
                 tasks.append(
                     asyncio.create_task(self.dispatch_backend_checker(unit, backend))
