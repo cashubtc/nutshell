@@ -1,6 +1,6 @@
 from typing import Annotated, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cashu.core.base import MintQuote
 from cashu.core.constants import (
@@ -45,6 +45,12 @@ class PostMintQuoteResponse(BaseModel):
     state: str  # state of the quote
     expiry: Optional[int] = None  # expiry of the quote
     pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
+
+    @model_validator(mode="after")
+    def validate_method_fields(self) -> "PostMintQuoteResponse":
+        if self.method == "bolt11" and self.amount is None:
+            raise ValueError("bolt11 mint quote responses require an amount")
+        return self
 
     @classmethod
     def from_mint_quote(cls, mint_quote: MintQuote) -> "PostMintQuoteResponse":
