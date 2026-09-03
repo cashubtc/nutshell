@@ -21,8 +21,8 @@ class PostMeltQuoteRequest(BaseModel):
     request: str = Field(
         ..., max_length=MAX_PAYMENT_REQUEST_LEN
     )  # output payment request
+    amount: Optional[int] = Field(default=None, gt=0)
     options: Optional[PostMeltRequestOptions] = None
-    prefer_async: bool = False
 
     @property
     def is_mpp(self) -> bool:
@@ -47,9 +47,9 @@ class PostMeltQuoteResponse(BaseModel):
     unit: str  # input unit
     method: str  # payment method
     request: str  # output payment request
-    fee_reserve: int  # input fee reserve
+    fee_reserve: Optional[int] = None  # input fee reserve
     state: str  # state of the quote
-    expiry: Optional[int]  # expiry of the quote
+    expiry: Optional[int] = None  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None  # NUT-08 change
 
@@ -69,5 +69,5 @@ class PostMeltQuoteResponse(BaseModel):
             "payment_preimage": melt_quote.payment_preimage,
             "change": melt_quote.change,
         }
-        response.update(melt_quote.method_data)
+        response = {**melt_quote.method_data, **response}
         return cls.model_validate(response)

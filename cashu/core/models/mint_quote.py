@@ -16,7 +16,7 @@ class PostMintQuoteRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     unit: str = Field(..., max_length=MAX_UNIT_LEN)  # output unit
-    amount: int = Field(..., gt=0)  # output amount
+    amount: Optional[int] = Field(default=None, gt=0)  # method-specific output amount
     description: Optional[str] = Field(
         default=None, max_length=MAX_INVOICE_DESC_LEN
     )  # invoice description
@@ -36,7 +36,7 @@ class PostMintQuoteResponse(BaseModel):
 
     quote: str  # quote id
     request: str  # input payment request
-    amount: int  # output amount
+    amount: Optional[int] = None  # method-specific output amount
     unit: str  # output unit
     method: str  # payment method
     amount_paid: Optional[int] = None
@@ -53,7 +53,7 @@ class PostMintQuoteResponse(BaseModel):
         response = {
             "quote": mint_quote.quote,
             "request": mint_quote.request,
-            "amount": mint_quote.amount,
+            "amount": mint_quote.amount or None,
             "unit": mint_quote.unit,
             "method": mint_quote.method,
             "amount_paid": mint_quote.amount_paid,
@@ -63,5 +63,8 @@ class PostMintQuoteResponse(BaseModel):
             "expiry": mint_quote.expiry,
             "pubkey": mint_quote.pubkey,
         }
-        response.update(mint_quote.method_data)
+        # Processor-defined fields must never replace the normative NUT-04
+        # envelope. Unknown, non-reserved fields remain available for custom
+        # payment methods.
+        response = {**mint_quote.method_data, **response}
         return cls.model_validate(response)

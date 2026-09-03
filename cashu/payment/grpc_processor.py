@@ -205,33 +205,40 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         processor: GrpcPaymentProcessor = backend
         if not quote_id:
             raise ValueError("CDK CreatePayment requires a quote id")
-        amount = _amount(Amount(unit=Unit[request.unit], amount=request.amount))
+        amount = (
+            _amount(Amount(unit=Unit[request.unit], amount=request.amount))
+            if request.amount is not None
+            else None
+        )
         if self.method == "bolt11":
+            if amount is None:
+                raise ValueError("bolt11 mint quotes require an amount")
             options = pb.IncomingPaymentOptions(
                 bolt11=pb.Bolt11IncomingPaymentOptions(
                     description=request.description, amount=amount
                 )
             )
         elif self.method == "bolt12":
-            options = pb.IncomingPaymentOptions(
-                bolt12=pb.Bolt12IncomingPaymentOptions(
-                    description=request.description, amount=amount
-                )
+            bolt12 = pb.Bolt12IncomingPaymentOptions(
+                description=request.description,
             )
+            if amount is not None:
+                bolt12.amount.CopyFrom(amount)
+            options = pb.IncomingPaymentOptions(bolt12=bolt12)
         elif self.method == "onchain":
             options = pb.IncomingPaymentOptions(
                 onchain=pb.OnchainIncomingPaymentOptions(quote_id=quote_id)
             )
         else:
-            options = pb.IncomingPaymentOptions(
-                custom=pb.CustomIncomingPaymentOptions(
-                    description=request.description,
-                    amount=amount,
-                    extra_json=_extra_json(request),
-                    quote_id=quote_id,
-                    pubkey=request.pubkey,
-                )
+            custom = pb.CustomIncomingPaymentOptions(
+                description=request.description,
+                extra_json=_extra_json(request),
+                quote_id=quote_id,
+                pubkey=request.pubkey,
             )
+            if amount is not None:
+                custom.amount.CopyFrom(amount)
+            options = pb.IncomingPaymentOptions(custom=custom)
         response = await processor.stub.CreatePayment(
             pb.CreatePaymentRequest(options=options), metadata=processor._metadata
         )
@@ -260,7 +267,7 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
             for payment in response.payments
             if payment.payment_amount.unit == quote.unit
         )
-        fully_paid = paid >= quote.amount
+        fully_paid = paid > 0 and (quote.amount == 0 or paid >= quote.amount)
         return PaymentStatus(
             result=(
                 PaymentResult.SETTLED
@@ -286,15 +293,17 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
             "bolt12": pb.OUTGOING_PAYMENT_REQUEST_TYPE_BOLT12_OFFER,
             "onchain": pb.OUTGOING_PAYMENT_REQUEST_TYPE_ONCHAIN,
         }.get(self.method, pb.OUTGOING_PAYMENT_REQUEST_TYPE_CUSTOM)
-        amount = None
+        amount = (
+            _amount(Amount(Unit[request.unit], request.amount))
+            if request.amount is not None
+            else None
+        )
         melt_options = None
         if request.options and request.options.mpp:
             amount = pb.AmountMessage(
                 value=request.options.mpp.amount, unit=request.unit
             )
-            melt_options = pb.MeltOptions(
-                mpp=pb.Mpp(amount=request.options.mpp.amount)
-            )
+            melt_options = pb.MeltOptions(mpp=pb.Mpp(amount=request.options.mpp.amount))
         response = await processor.stub.GetPaymentQuote(
             pb.PaymentQuoteRequest(
                 request=request.request,
