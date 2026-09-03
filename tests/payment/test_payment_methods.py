@@ -12,6 +12,7 @@ from cashu.core.base import (
 )
 from cashu.core.errors import TransactionError
 from cashu.core.models import (
+    PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
@@ -26,6 +27,29 @@ from cashu.payment.registry import PaymentMethodRegistry
 
 def test_builtin_bolt11_payment_method_is_registered():
     assert payment_method_registry.get("bolt11").method == "bolt11"
+
+
+def test_common_mint_quote_request_allows_method_specific_amount():
+    request = PostMintQuoteRequest.model_validate({"unit": "sat", "account": "alice"})
+
+    assert request.amount is None
+    assert request.model_extra == {"account": "alice"}
+
+
+def test_common_melt_quote_request_has_typed_optional_amount():
+    request = PostMeltQuoteRequest.model_validate(
+        {"unit": "sat", "request": "bc1qexample", "amount": 10}
+    )
+
+    assert request.amount == 10
+    assert "amount" not in (request.model_extra or {})
+
+
+def test_bolt11_mint_quote_still_requires_amount():
+    plugin = payment_method_registry.get("bolt11")
+
+    with pytest.raises(ValueError, match="require an amount"):
+        plugin.validate_mint_quote_request({"unit": "sat"})
 
 
 @pytest.mark.parametrize("method", ["", "BOLT11", "has space", "../bolt11"])
@@ -55,6 +79,24 @@ def test_mint_quote_response_only_exposes_method_data():
     assert "state_val" not in response
 
 
+def test_mint_quote_method_data_cannot_override_common_fields():
+    quote = MintQuote(
+        quote="authoritative-id",
+        method="testpay",
+        request="request",
+        checking_id="checking-id",
+        unit="sat",
+        amount=10,
+        state=MintQuoteState.unpaid,
+        method_data={"quote": "processor-id", "state": "PAID", "merchant": "bob"},
+    )
+
+    response = PostMintQuoteResponse.from_mint_quote(quote).model_dump()
+    assert response["quote"] == "authoritative-id"
+    assert response["state"] == "UNPAID"
+    assert response["merchant"] == "bob"
+
+
 def test_melt_quote_response_only_exposes_method_data():
     quote = MeltQuote(
         quote="quote-id",
@@ -74,6 +116,25 @@ def test_melt_quote_response_only_exposes_method_data():
     assert response["destination"] == "merchant-123"
     assert "checking_id" not in response
     assert "created_time" not in response
+
+
+def test_melt_quote_method_data_cannot_override_common_fields():
+    quote = MeltQuote(
+        quote="authoritative-id",
+        method="testpay",
+        request="request",
+        checking_id="checking-id",
+        unit="sat",
+        amount=10,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+        method_data={"quote": "processor-id", "state": "PAID", "merchant": "bob"},
+    )
+
+    response = PostMeltQuoteResponse.from_melt_quote(quote).model_dump()
+    assert response["quote"] == "authoritative-id"
+    assert response["state"] == "UNPAID"
+    assert response["merchant"] == "bob"
 
 
 def test_partial_mint_quote_issuance_transition():
@@ -137,9 +198,7 @@ async def test_mint_quote_rejects_underpaid_balance_before_pending(
     await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
 
     with pytest.raises(TransactionError, match="exceeds paid quote balance"):
-        await ledger.db_write._set_mint_quote_pending(
-            quote.quote, issued_amount=64
-        )
+        await ledger.db_write._set_mint_quote_pending(quote.quote, issued_amount=64)
 
     stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
     assert stored is not None
