@@ -1375,11 +1375,22 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
 async def m041_add_payment_method_data_to_quotes(db: Database):
     """Add opaque, server-internal storage for method-specific quote state."""
     async with db.connect() as conn:
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('mint_quotes')} "
-            "ADD COLUMN method_data TEXT"
-        )
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
-            "ADD COLUMN method_data TEXT"
-        )
+        for table in ("mint_quotes", "melt_quotes"):
+            if conn.type == "SQLITE":
+                columns = await conn.fetchall(
+                    f"SELECT name FROM pragma_table_info('{table}')"
+                )
+                exists = any(column["name"] == "method_data" for column in columns)
+            else:
+                column = await conn.fetchone(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = :table AND column_name = 'method_data'",
+                    {"table": table},
+                )
+                exists = column is not None
+
+            if not exists:
+                await conn.execute(
+                    f"ALTER TABLE {db.table_with_schema(table)} "
+                    "ADD COLUMN method_data TEXT"
+                )
