@@ -129,6 +129,11 @@ mv .env.example .env
 vim .env
 ```
 
+Mint operators can use built-in funding sources, install Python payment-method
+plugins, or connect external CDK-compatible gRPC payment processors. See the
+[payment backends guide](docs/payment_backends.md) for configuration, security,
+multi-method examples, and troubleshooting.
+
 To use the wallet with the [public test mint](#test-instance), you need to change the appropriate entries in the `.env` file.
 
 #### Test instance
