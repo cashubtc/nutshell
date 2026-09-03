@@ -68,14 +68,25 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                 db=self.db,
                 conn=conn,
             )
+            # A CDK processor can expose several methods through one endpoint.
+            # Its event stream is shared, so any of our per-method listeners may
+            # receive the event. Resolve such events by their stable processor
+            # identifier and let get_mint_quote verify payment using the quote's
+            # actual backend below.
+            if not quote:
+                quote = await self.crud.get_mint_quote(
+                    checking_id=checking_id,
+                    db=self.db,
+                    conn=conn,
+                )
             if not quote:
                 logger.error(f"Quote not found for {checking_id}")
                 return
-            if unit is not None and quote.unit != unit.name:
-                logger.error(
-                    f"Quote unit mismatch for {method}:{checking_id}: {quote.unit}"
+            if quote.method != method or (unit is not None and quote.unit != unit.name):
+                logger.debug(
+                    f"Routing processor event for {method}:{unit.name if unit else '*'} "
+                    f"to quote backend {quote.method}:{quote.unit}"
                 )
-                return
 
             logger.trace(
                 f"Invoice callback dispatcher: quote {quote} trying to set as {MintQuoteState.paid}"

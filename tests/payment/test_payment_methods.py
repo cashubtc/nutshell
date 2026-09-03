@@ -299,6 +299,31 @@ async def test_non_reusable_mint_quote_stays_unpaid_after_partial_payment(
 
 
 @pytest.mark.asyncio
+async def test_shared_processor_event_routes_to_quote_method(
+    fake_backend_settings, ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+):
+    quote = MintQuote(
+        quote="mint-quote",
+        method="bolt11",
+        request="payment-request",
+        checking_id='{"type":7,"id":"processor-quote"}',
+        unit="sat",
+        amount=10,
+        state=MintQuoteState.unpaid,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    refresh = AsyncMock(return_value=quote)
+    monkeypatch.setattr(ledger, "get_mint_quote", refresh)
+
+    # The on-chain listener consumed a BOLT11 event from their shared endpoint.
+    await ledger.invoice_callback_dispatcher(
+        quote.checking_id, method="onchain", unit=Unit.sat
+    )
+
+    refresh.assert_awaited_once_with(quote.quote, force_backend_check=True)
+
+
+@pytest.mark.asyncio
 async def test_batch_issuance_applies_each_quote_delta(
     fake_backend_settings, ledger: Ledger
 ):
