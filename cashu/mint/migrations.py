@@ -1354,13 +1354,8 @@ async def m038_remove_dleq_from_promises(db: Database):
         )
 
 
-async def m040_add_payment_method_data_to_quotes(db: Database):
-    """Add opaque, server-internal storage for method-specific quote state.
-
-    This intentionally follows the historical m039 slot. Development branches
-    have used that version for unrelated migrations, so a database may already
-    report version 39 without having these columns.
-    """
+async def m039_add_payment_method_data_to_quotes(db: Database):
+    """Add opaque, server-internal storage for method-specific quote state."""
     async with db.connect() as conn:
         for table in ("mint_quotes", "melt_quotes"):
             if conn.type == "SQLITE":
