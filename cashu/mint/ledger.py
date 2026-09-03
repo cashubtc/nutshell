@@ -342,11 +342,10 @@ class Ledger(
             MintQuote: Mint quote object.
         """
         logger.trace("called request_mint")
-        if not quote_request.amount > 0:
-            raise TransactionError("amount must be positive")
         if (
             method_str == Method.bolt11.name
             and settings.mint_max_mint_bolt11_sat
+            and quote_request.amount is not None
             and quote_request.amount > settings.mint_max_mint_bolt11_sat
         ):
             raise TransactionAmountExceedsLimitError(
@@ -365,12 +364,15 @@ class Ledger(
 
         # Check maximum balance.
         # TODO: Allow setting MINT_MAX_BALANCE per unit
-        if settings.mint_max_balance:
+        if settings.mint_max_balance and quote_request.amount is not None:
             balance, fees_paid = await self.get_unit_balance_and_fees(unit, db=self.db)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
-        logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
+        if quote_request.amount is None:
+            logger.trace(f"requesting amountless payment request in {unit.name}")
+        else:
+            logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         quote_id = generate_uuid_v7()
         if plugin.requires_quote_id:
             invoice_response = await plugin.create_incoming_payment(
@@ -409,7 +411,10 @@ class Ledger(
             request=request,
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
-            amount=quote_request.amount,
+            # The existing schema predates amountless NUT-04 methods and keeps
+            # this column non-null. Zero is an internal sentinel; public quote
+            # accounting still begins at amount_paid=amount_issued=0.
+            amount=quote_request.amount or 0,
             state=MintQuoteState.unpaid,
             created_time=now,
             expiry=expiry,
@@ -578,7 +583,10 @@ class Ledger(
             available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
             if sum_amount_outputs > available:
                 raise TransactionError("amount to mint exceeds paid quote balance")
-            if not plugin.allows_partial_mint and not quote.amount == sum_amount_outputs:
+            if (
+                not plugin.allows_partial_mint
+                and not quote.amount == sum_amount_outputs
+            ):
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
                 raise QuoteExpiredError("quote expired")
@@ -876,9 +884,7 @@ class Ledger(
                     backend, melt_quote, quote_id
                 )
             else:
-                payment_quote = await plugin.quote_outgoing_payment(
-                    backend, melt_quote
-                )
+                payment_quote = await plugin.quote_outgoing_payment(backend, melt_quote)
 
         self.validate_payment_quote(melt_quote, payment_quote, method_name)
 

@@ -20,6 +20,12 @@ from .base import PaymentMethodPlugin, PaymentMethodSettings
 class Bolt11PaymentMethod(PaymentMethodPlugin):
     method = "bolt11"
 
+    def validate_mint_quote_request(self, payload: Any) -> PostMintQuoteRequest:
+        request = super().validate_mint_quote_request(payload)
+        if request.amount is None:
+            raise ValueError("bolt11 mint quotes require an amount")
+        return request
+
     def supports_description(self, backend: LightningBackend) -> bool:
         return backend.supports_description
 
@@ -46,6 +52,8 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
         request: PostMintQuoteRequest,
         quote_id: Optional[str] = None,
     ) -> InvoiceResponse:
+        if request.amount is None:
+            raise ValueError("bolt11 mint quotes require an amount")
         return await backend.create_invoice(
             amount=Amount(unit=Unit[request.unit], amount=request.amount),
             memo=request.description,
