@@ -138,3 +138,59 @@ async def m004_remove_dleq_from_promises(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
         )
+
+
+async def m005_align_promises_with_mint_schema(db: Database):
+    """
+    Align the auth promises table with the columns the shared LedgerCrudSqlite writes.
+    """
+    async with db.connect() as conn:
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                    CREATE TABLE IF NOT EXISTS {db.table_with_schema("promises_new")} (
+                        id TEXT NOT NULL,
+                        amount {db.big_int} NOT NULL,
+                        b_ TEXT NOT NULL,
+                        c_ TEXT,
+                        created TIMESTAMP,
+                        signed_at TIMESTAMP,
+                        mint_quote TEXT,
+                        melt_quote TEXT,
+                        swap_id TEXT,
+                        order_index INTEGER DEFAULT 0,
+
+                        UNIQUE (b_)
+
+                    );
+                """
+            )
+            await conn.execute(
+                f"INSERT INTO {db.table_with_schema('promises_new')} (id, amount, b_, c_, created) "
+                f"SELECT id, amount, b_, c_, created FROM {db.table_with_schema('promises')}"
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+        else:
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN IF NOT EXISTS mint_quote TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN IF NOT EXISTS melt_quote TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN IF NOT EXISTS swap_id TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN IF NOT EXISTS signed_at TIMESTAMP"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
+            )
