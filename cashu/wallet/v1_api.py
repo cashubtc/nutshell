@@ -381,7 +381,7 @@ class LedgerAPI(SupportsAuth):
     async def mint_quote_for_method(
         self,
         method: str,
-        amount: int,
+        amount: Optional[int],
         unit: Unit,
         memo: Optional[str] = None,
         pubkey: Optional[str] = None,
