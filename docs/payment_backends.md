@@ -72,6 +72,17 @@ To serve `bolt11` through gRPC, remove the corresponding legacy
 `MINT_BACKEND_BOLT11_<UNIT>` setting. A method/unit pair cannot be supplied by
 both a legacy backend and a gRPC processor.
 
+Non-BOLT11 gRPC mint quotes use cumulative payment accounting. They accept
+amountless requests, allow issuance of part of the paid balance, and can receive
+additional payments after earlier funds have been issued. BOLT11 quotes retain
+their fixed-amount issuance behavior. Onchain melt quotes require an `amount`.
+
+When `MINT_REQUIRE_AUTH` is enabled, the default blind-auth paths protect all
+`POST /v1/mint/*` and `POST /v1/melt/*` operations, including quote creation and
+batch operations, as well as `POST /v1/swap`. Explicitly configured
+`MINT_REQUIRE_BLIND_AUTH_PATHS` replace these defaults; include the payment
+methods you intend to protect.
+
 ### Bark example
 
 The Bark processor can advertise `bolt11`, `onchain`, and `arkoor`. Configure

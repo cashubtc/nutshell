@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
+import bolt11
 import grpc
 
 from ..core.base import Amount, MeltQuote, MintQuote, Unit
@@ -79,6 +80,9 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
 
     def __init__(self, method: str, unit: Unit, config: dict[str, Any]):
         self.method = method
+        # Non-BOLT11 requests can receive multiple payments, including when no
+        # amount was specified. Issue against their cumulative paid balance.
+        self.allows_partial_mint = method != "bolt11"
         self.unit = unit
         self.config = config
         self._channel: Optional[grpc.aio.Channel] = None
@@ -300,10 +304,15 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         )
         melt_options = None
         if request.options and request.options.mpp:
-            amount = pb.AmountMessage(
-                value=request.options.mpp.amount, unit=request.unit
-            )
+            amount = _amount(Amount(Unit.msat, request.options.mpp.amount))
             melt_options = pb.MeltOptions(mpp=pb.Mpp(amount=request.options.mpp.amount))
+        onchain_options = None
+        if self.method == "onchain":
+            if amount is None:
+                raise ValueError("onchain melt quotes require an amount")
+            onchain_options = pb.OnchainOutgoingPaymentOptions(
+                address=request.request, amount=amount, quote_id=quote_id
+            )
         response = await processor.stub.GetPaymentQuote(
             pb.PaymentQuoteRequest(
                 request=request.request,
@@ -313,6 +322,7 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
                 extra_json=_extra_json(request),
                 quote_id=quote_id,
                 amount=amount,
+                onchain_options=onchain_options,
             ),
             metadata=processor._metadata,
         )
@@ -328,9 +338,22 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
     ) -> pb.OutgoingPaymentVariant:
         max_fee = _amount(fee_limit)
         if self.method == "bolt11":
+            melt_options = None
+            if quote.unit in {Unit.sat.name, Unit.msat.name}:
+                invoice = bolt11.decode(quote.request)
+                amount_msat = (
+                    Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
+                )
+                if invoice.amount_msat and amount_msat < invoice.amount_msat:
+                    # Reconstruct MPP from the persisted quote so retries and
+                    # restarts cannot turn a partial quote into a full payment.
+                    melt_options = pb.MeltOptions(mpp=pb.Mpp(amount=amount_msat))
             return pb.OutgoingPaymentVariant(
                 bolt11=pb.Bolt11OutgoingPaymentOptions(
-                    bolt11=quote.request, max_fee_amount=max_fee, quote_id=quote.quote
+                    bolt11=quote.request,
+                    max_fee_amount=max_fee,
+                    quote_id=quote.quote,
+                    melt_options=melt_options,
                 )
             )
         if self.method == "bolt12":

@@ -594,7 +594,7 @@ class Wallet(
     async def request_mint_for_method(
         self,
         method: str,
-        amount: int,
+        amount: Optional[int],
         memo: Optional[str] = None,
         method_options: Optional[dict] = None,
     ) -> MintQuote:
