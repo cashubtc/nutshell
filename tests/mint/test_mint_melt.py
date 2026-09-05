@@ -483,10 +483,10 @@ async def test_melt_lightning_pay_invoice_failed_pending(
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_exception_exception(
-    ledger: Ledger, wallet: Wallet
+    ledger: Ledger, wallet: Wallet, monkeypatch
 ):
     """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
-    settings.mint_disable_melt_on_error = True
+    monkeypatch.setattr(settings, "mint_disable_melt_on_error", True)
     mint_quote = await wallet.request_mint(128)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(128, quote_id=mint_quote.quote)
@@ -498,8 +498,8 @@ async def test_melt_lightning_pay_invoice_exception_exception(
         )
     ).quote
     # quote = await ledger.get_melt_quote(quote_id)
-    settings.fakewallet_payment_state_exception = True
-    settings.fakewallet_pay_invoice_state_exception = True
+    monkeypatch.setattr(settings, "fakewallet_payment_state_exception", True)
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state_exception", True)
 
     # we expect a pending melt quote because something has gone wrong (for example has lost connection to backend)
     resp = await ledger.melt(proofs=wallet.proofs, quote=quote_id)

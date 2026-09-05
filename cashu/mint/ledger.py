@@ -496,7 +496,9 @@ class Ledger(
                             plugin.allows_partial_mint
                             and reported_paid > (quote.amount_issued or 0)
                         )
-                        if fully_paid or has_issuable_balance:
+                        # Issuance may have claimed the quote while the backend
+                        # check was in flight. Preserve that reservation.
+                        if not quote.pending and (fully_paid or has_issuable_balance):
                             logger.trace(f"Setting quote {quote_id} as paid")
                             quote.state_val = (
                                 MintQuoteState.issued
