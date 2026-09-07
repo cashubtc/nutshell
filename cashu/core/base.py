@@ -289,6 +289,7 @@ class MeltQuote(LedgerEvent):
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
     method_data: Dict[str, Any] = Field(default_factory=dict)
+    amountless_msat: Optional[int] = Field(default=None, gt=0)
 
     @classmethod
     def from_row(cls, row: Row, change: Optional[List[BlindedSignature]] = None):
@@ -320,6 +321,9 @@ class MeltQuote(LedgerEvent):
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
+            amountless_msat=row["amountless_msat"]
+            if "amountless_msat" in row.keys()
+            else None,
             method_data=(
                 json.loads(row["method_data"])
                 if "method_data" in row.keys() and row["method_data"]
@@ -414,6 +418,7 @@ class MintQuote(LedgerEvent):
     privkey: Optional[str] = None
     pubkey: Optional[str] = None
     amount_paid: Optional[int] = 0
+    amount_paid_internal: int = Field(default=0, ge=0)
     amount_issued: Optional[int] = 0
     updated_at: Optional[int] = Field(default_factory=lambda: int(time.time()))
     method_data: Dict[str, Any] = Field(default_factory=dict)
@@ -474,6 +479,9 @@ class MintQuote(LedgerEvent):
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
             amount_paid=row["amount_paid"] if row["amount_paid"] is not None else None,
+            amount_paid_internal=row["amount_paid_internal"]
+            if "amount_paid_internal" in row.keys()
+            else 0,
             amount_issued=(
                 row["amount_issued"] if row["amount_issued"] is not None else None
             ),

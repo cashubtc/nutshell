@@ -1376,3 +1376,28 @@ async def m039_add_payment_method_data_to_quotes(db: Database):
                     f"ALTER TABLE {db.table_with_schema(table)} "
                     "ADD COLUMN method_data TEXT"
                 )
+
+
+async def m040_separate_internal_credits_and_amountless_payments(db: Database):
+    """Keep internal credits and exact outgoing msat amounts across restarts."""
+    async with db.connect() as conn:
+        mint_quotes = db.table_with_schema("mint_quotes")
+        melt_quotes = db.table_with_schema("melt_quotes")
+        await conn.execute(
+            f"ALTER TABLE {mint_quotes} ADD COLUMN amount_paid_internal {db.big_int} NOT NULL DEFAULT 0"
+        )
+        # Internal settlements copy the mint checking id and charge no fee.
+        # Preserve credits on quotes that were settled before this migration.
+        await conn.execute(
+            f"""UPDATE {mint_quotes} SET amount_paid_internal = COALESCE((
+                SELECT SUM(melt.amount) FROM {melt_quotes} AS melt
+                WHERE melt.request = {mint_quotes}.request
+                  AND melt.checking_id = {mint_quotes}.checking_id
+                  AND melt.unit = {mint_quotes}.unit
+                  AND melt.method = {mint_quotes}.method
+                  AND melt.state = 'PAID' AND melt.fee_paid = 0
+            ), 0)"""
+        )
+        await conn.execute(
+            f"ALTER TABLE {melt_quotes} ADD COLUMN amountless_msat {db.big_int}"
+        )
