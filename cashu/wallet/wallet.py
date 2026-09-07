@@ -750,6 +750,9 @@ class Wallet(
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
         quote.amount_issued = (quote.amount_issued or 0) + amount
+        # Successful issuance proves at least this much was paid, even if the
+        # wallet has not polled payment status since creating the quote.
+        quote.amount_paid = max(quote.amount_paid or 0, quote.amount_issued)
         quote.state_val = (
             MintQuoteState.issued
             if quote.amount_issued == quote.amount_paid

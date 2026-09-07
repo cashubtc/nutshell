@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cashu.core.base import BlindedSignature, MeltQuote
 from cashu.core.constants import MAX_PAYMENT_REQUEST_LEN, MAX_UNIT_LEN
@@ -10,8 +10,19 @@ class PostMeltRequestOptionMpp(BaseModel):
     amount: int = Field(gt=0)  # input amount
 
 
+class PostMeltRequestOptionAmountless(BaseModel):
+    amount_msat: int = Field(gt=0)
+
+
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
+    amountless: Optional[PostMeltRequestOptionAmountless] = None
+
+    @model_validator(mode="after")
+    def mutually_exclusive_options(self) -> "PostMeltRequestOptions":
+        if self.mpp and self.amountless:
+            raise ValueError("mpp and amountless options are mutually exclusive")
+        return self
 
 
 class PostMeltQuoteRequest(BaseModel):

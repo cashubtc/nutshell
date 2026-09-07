@@ -265,6 +265,7 @@ async def test_reusable_mint_quote_observes_payments_after_full_issuance(
 ):
     plugin = payment_method_registry.get("bolt11")
     monkeypatch.setattr(plugin, "allows_partial_mint", True)
+    monkeypatch.setattr(plugin, "allows_repeated_payments", True)
     get_status = AsyncMock(
         return_value=PaymentStatus(
             result=PaymentResult.SETTLED,
@@ -384,6 +385,7 @@ async def test_payment_refresh_preserves_inflight_issuance(
 ):
     plugin = payment_method_registry.get("bolt11")
     monkeypatch.setattr(plugin, "allows_partial_mint", True)
+    monkeypatch.setattr(plugin, "allows_repeated_payments", True)
     quote = MintQuote(
         quote="refresh-race",
         method="bolt11",
@@ -527,3 +529,113 @@ async def test_optional_wallet_quote_fields_round_trip(tmp_path, explicit_null):
         assert stored_melt.fee_reserve == 0
     finally:
         await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_internal_credits_are_added_to_backend_receipts(
+    fake_backend_settings, ledger, monkeypatch
+):
+    plugin = payment_method_registry.get("bolt11")
+    monkeypatch.setattr(plugin, "allows_repeated_payments", True)
+    quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=8))
+    melt = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=quote.request)
+    )
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=melt.quote, db=ledger.db)
+    await ledger.melt_mint_settle_internally(melt_quote, [])
+    stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert (stored.amount_paid, stored.amount_paid_internal) == (8, 8)
+    # Successive backend snapshots contain only external receipts. Repeated and
+    # out-of-order snapshots must not credit the same receipt twice.
+    for external, expected in [(8, 16), (8, 16), (0, 16), (9, 17)]:
+        monkeypatch.setattr(
+            plugin,
+            "get_incoming_payment_status",
+            AsyncMock(
+                return_value=PaymentStatus(
+                    result=PaymentResult.SETTLED, amount_paid=Amount(Unit.sat, external)
+                )
+            ),
+        )
+        refreshed = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+        assert (refreshed.amount_paid, refreshed.amount_paid_internal) == (expected, 8)
+    assert (
+        "amount_paid_internal"
+        not in PostMintQuoteResponse.from_mint_quote(refreshed).model_dump()
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+async def test_payment_event_during_issuance_preserves_credit_and_notifies(
+    ledger, monkeypatch, batch
+):
+    from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+    from cashu.mint.events.client import LedgerEventClientManager
+
+    plugin = payment_method_registry.get("bolt11")
+    monkeypatch.setattr(plugin, "allows_partial_mint", True)
+    monkeypatch.setattr(plugin, "allows_repeated_payments", True)
+    quote = MintQuote(
+        quote="event-during-mint",
+        method="bolt11",
+        request="request",
+        checking_id="incoming",
+        unit="sat",
+        amount=8,
+        amount_paid=8,
+        state=MintQuoteState.paid,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    incoming = 8
+
+    async def status(*args):
+        return PaymentStatus(
+            result=PaymentResult.SETTLED, amount_paid=Amount(Unit.sat, incoming)
+        )
+
+    monkeypatch.setattr(plugin, "get_incoming_payment_status", status)
+    client = LedgerEventClientManager(AsyncMock(), ledger.db, ledger.crud)
+    client.subscriptions = {
+        JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE: {quote.quote: ["sub"]}
+    }
+    delivered = asyncio.Event()
+    messages = []
+
+    async def receive(data, subId):
+        messages.append(data)
+        if data["amount_paid"] == 16 and data["amount_issued"] == 8:
+            delivered.set()
+
+    monkeypatch.setattr(client, "_send_obj", receive)
+    monkeypatch.setattr(ledger.events, "clients", [client])
+    signing, resume = asyncio.Event(), asyncio.Event()
+    original_sign = ledger._sign_blinded_messages
+
+    async def sign(*args, **kwargs):
+        signing.set()
+        await resume.wait()
+        return await original_sign(*args, **kwargs)
+
+    monkeypatch.setattr(ledger, "_sign_blinded_messages", sign)
+    output = BlindedMessage(
+        amount=8, id=ledger.keyset.id, B_=step1_alice("payment-event")[0].format().hex()
+    )
+    task = asyncio.create_task(
+        ledger.mint_batch(PostMintBatchRequest(quotes=[quote.quote], outputs=[output]))
+        if batch
+        else ledger.mint(outputs=[output], quote_id=quote.quote)
+    )
+    try:
+        await asyncio.wait_for(signing.wait(), 5)
+        incoming = 16
+        await ledger.invoice_callback_dispatcher(
+            quote.checking_id, method="bolt11", unit=Unit.sat
+        )
+        stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+        assert (stored.amount_paid, stored.state) == (16, MintQuoteState.pending)
+    finally:
+        resume.set()
+        await asyncio.wait_for(task, 5)
+    await asyncio.wait_for(delivered.wait(), 5)
+    assert messages[-1]["state"] == "PAID"
