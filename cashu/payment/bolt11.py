@@ -20,6 +20,9 @@ from .base import PaymentMethodPlugin, PaymentMethodSettings
 class Bolt11PaymentMethod(PaymentMethodPlugin):
     method = "bolt11"
 
+    def supports_internal_settlement(self, backend: Any) -> bool:
+        return True
+
     def validate_mint_quote_request(self, payload: Any) -> PostMintQuoteRequest:
         request = super().validate_mint_quote_request(payload)
         if request.amount is None:
