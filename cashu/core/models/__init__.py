@@ -19,6 +19,7 @@ from .melt import PostMeltRequest
 from .melt_quote import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
+    PostMeltRequestOptionAmountless,
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "PostMeltRequest",
     "PostMeltQuoteRequest",
     "PostMeltQuoteResponse",
+    "PostMeltRequestOptionAmountless",
     "PostMeltRequestOptionMpp",
     "PostMeltRequestOptions",
     "PostMintBatchRequest",
