@@ -65,8 +65,9 @@ sends the required `x-cdk-protocol-version` metadata. The processor rejects a
 protocol-version mismatch.
 
 The CDK protocol does not expose a backend balance. Nutshell therefore skips
-the balance watchdog for these backends. Monitor the processor's wallet and
-balance independently.
+the balance watchdog for every unit served by a gRPC backend, including legacy
+backends sharing that unit. Other units remain monitored. Monitor the
+processor's wallet and the affected unit's total backing independently.
 
 To serve `bolt11` through gRPC, remove the corresponding legacy
 `MINT_BACKEND_BOLT11_<UNIT>` setting. A method/unit pair cannot be supplied by
@@ -171,6 +172,11 @@ Implement the hooks defined by `cashu.payment.PaymentMethodPlugin`, including:
 
 Optional hooks cover request models, canonicalization, quote expiry, event
 streams, MPP, descriptions, lifecycle startup/shutdown, and balance support.
+The watchdog sums balances by unit and `funding_source_id`. Plugins whose
+backend instances report the same reserves must return the same funding source
+ID to avoid counting that balance twice. If any method for a unit cannot report
+its balance, the watchdog skips comparisons for the entire unit. A failed
+balance lookup also skips that check without changing its previous baseline.
 Plugins opt into amountless minting, partial issuance, and repeated payments
 independently with `allows_amountless_mint`, `allows_partial_mint`, and
 `allows_repeated_payments`. Override the corresponding `supports_*` hooks when
