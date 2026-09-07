@@ -40,8 +40,27 @@ class PaymentMethodPlugin(ABC):
     mint_quote_request_model: type[BaseModel] = PostMintQuoteRequest
     melt_quote_request_model: type[BaseModel] = PostMeltQuoteRequest
     allows_partial_mint: bool = False
+    allows_repeated_payments: bool = False
+    allows_amountless_mint: bool = False
     requires_quote_id: bool = False
     supports_balance: bool = True
+
+    def supports_partial_mint(self, backend: Any) -> bool:
+        return self.allows_partial_mint
+
+    def supports_repeated_payments(self, backend: Any) -> bool:
+        return self.allows_repeated_payments
+
+    def supports_amountless_mint(self, backend: Any) -> bool:
+        return self.allows_amountless_mint
+
+    def supports_internal_settlement(self, backend: Any) -> bool:
+        return False
+
+    def amountless_payment_amount(self, request: PostMeltQuoteRequest) -> Optional[int]:
+        if request.options and request.options.amountless:
+            raise ValueError("backend does not support amountless melt options")
+        return None
 
     def create_backend(self, unit: Unit, config: dict[str, Any]) -> Any:
         """Construct a configured mint backend for this method.

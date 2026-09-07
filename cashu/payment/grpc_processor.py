@@ -67,7 +67,7 @@ def _result(state: int) -> PaymentResult:
         return PaymentResult.SETTLED
     if state == pb.QUOTE_STATE_PENDING:
         return PaymentResult.PENDING
-    if state == pb.QUOTE_STATE_FAILED:
+    if state in (pb.QUOTE_STATE_FAILED, pb.QUOTE_STATE_UNPAID):
         return PaymentResult.FAILED
     return PaymentResult.UNKNOWN
 
@@ -80,9 +80,15 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
 
     def __init__(self, method: str, unit: Unit, config: dict[str, Any]):
         self.method = method
-        # Non-BOLT11 requests can receive multiple payments, including when no
-        # amount was specified. Issue against their cumulative paid balance.
-        self.allows_partial_mint = method != "bolt11"
+        for capability in (
+            "allows_partial_mint",
+            "allows_repeated_payments",
+            "allows_amountless_mint",
+        ):
+            value = config.get(capability, False)
+            if not isinstance(value, bool):
+                raise ValueError(f"{capability} must be a boolean")
+            setattr(self, capability, value)
         self.unit = unit
         self.config = config
         self._channel: Optional[grpc.aio.Channel] = None
@@ -91,6 +97,19 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
 
     def create_backend(self, unit: Unit, config: dict[str, Any]) -> Any:
         return self
+
+    def supports_partial_mint(self, backend: Any) -> bool:
+        return backend.allows_partial_mint
+
+    def supports_repeated_payments(self, backend: Any) -> bool:
+        return backend.allows_repeated_payments
+
+    def supports_amountless_mint(self, backend: Any) -> bool:
+        return backend.allows_amountless_mint
+
+    def supports_internal_settlement(self, backend: Any) -> bool:
+        # Other rails need their own amount and settlement rules.
+        return self.method == "bolt11"
 
     @property
     def _metadata(self) -> tuple[tuple[str, str], ...]:
@@ -306,6 +325,11 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         if request.options and request.options.mpp:
             amount = _amount(Amount(Unit.msat, request.options.mpp.amount))
             melt_options = pb.MeltOptions(mpp=pb.Mpp(amount=request.options.mpp.amount))
+        amountless_msat = self.amountless_payment_amount(request)
+        if amountless_msat is not None:
+            melt_options = pb.MeltOptions(
+                amountless=pb.Amountless(amount_msat=amountless_msat)
+            )
         onchain_options = None
         if self.method == "onchain":
             if amount is None:
@@ -333,6 +357,23 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
             **_extra(response.extra_json),
         )
 
+    def amountless_payment_amount(self, request: PostMeltQuoteRequest) -> Optional[int]:
+        if self.method != "bolt12":
+            if request.options and request.options.amountless:
+                raise ValueError("amountless melt options require bolt12")
+            return None
+        explicit = request.options.amountless if request.options else None
+        amount_msat = (
+            Amount(Unit[request.unit], request.amount).to(Unit.msat).amount
+            if request.amount is not None
+            else None
+        )
+        if explicit:
+            if amount_msat is not None and amount_msat != explicit.amount_msat:
+                raise ValueError("conflicting amountless payment amounts")
+            return explicit.amount_msat
+        return amount_msat
+
     def _outgoing_options(
         self, quote: MeltQuote, fee_limit: Amount
     ) -> pb.OutgoingPaymentVariant:
@@ -359,7 +400,14 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         if self.method == "bolt12":
             return pb.OutgoingPaymentVariant(
                 bolt12=pb.Bolt12OutgoingPaymentOptions(
-                    offer=quote.request, max_fee_amount=max_fee, quote_id=quote.quote
+                    offer=quote.request,
+                    max_fee_amount=max_fee,
+                    quote_id=quote.quote,
+                    melt_options=pb.MeltOptions(
+                        amountless=pb.Amountless(amount_msat=quote.amountless_msat)
+                    )
+                    if quote.amountless_msat is not None
+                    else None,
                 )
             )
         if self.method == "onchain":
