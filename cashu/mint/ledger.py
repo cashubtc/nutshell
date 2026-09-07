@@ -515,7 +515,9 @@ class Ledger(
                             )
                             quote.paid_time = quote.paid_time or now
                         quote.last_checked = now
-                        quote.updated_at = now
+                        self.db_write._update_mint_quote_state_timestamps(
+                            quote, quote.state
+                        )
                         await self.crud.update_mint_quote(
                             quote=quote, db=self.db, conn=conn
                         )
@@ -1141,7 +1143,9 @@ class Ledger(
             mint_quote.amount_paid = (mint_quote.amount_paid or 0) + melt_quote.amount
             mint_quote.state_val = MintQuoteState.paid
             mint_quote.paid_time = melt_quote.paid_time
-            mint_quote.updated_at = melt_quote.paid_time
+            self.db_write._update_mint_quote_state_timestamps(
+                mint_quote, mint_quote.state
+            )
 
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
             await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)

@@ -1,14 +1,19 @@
 import asyncio
 import datetime
 import signal
+from copy import copy
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Amount, MeltQuoteState, Method, MintBalanceLogEntry, Unit
+from cashu.core.base import Amount, MeltQuoteState, MintBalanceLogEntry, Unit
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
+from cashu.lightning.base import StatusResponse
 from cashu.mint.ledger import Ledger
+from cashu.payment import payment_method_registry
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
@@ -32,7 +37,6 @@ async def wallet():
 @pytest.mark.asyncio
 async def test_check_balances_and_abort(ledger: Ledger):
     ok = await ledger.check_balances_and_abort(
-        ledger.backends[Method.bolt11][Unit.sat],
         None,
         Amount(Unit.sat, 0),
         Amount(Unit.sat, 0),
@@ -54,10 +58,139 @@ async def test_dispatch_watchdogs_starts_abort_monitor(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_watchdog_skips_unit_with_unreported_reserves(ledger, monkeypatch):
+    plugin = copy(payment_method_registry.get("bolt11"))
+    plugin.method = "onchain"
+    plugin.supports_balance = False
+    monkeypatch.setitem(payment_method_registry._plugins, plugin.method, plugin)
+    monkeypatch.setitem(ledger.backends, "onchain", {Unit.sat: object()})
+    checker = AsyncMock()
+    monkeypatch.setattr(ledger, "dispatch_unit_checker", checker)
+    ledger.abort_queue = asyncio.Queue()
+
+    tasks = await ledger.dispatch_watchdogs()
+    try:
+        await asyncio.gather(*tasks[:-1])
+        # The legacy sat backend must also be skipped, while USD remains watched.
+        checker.assert_awaited_once()
+        assert checker.await_args.args[0] == Unit.usd
+        assert ledger.abort_queue.empty()
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shared_source", [False, True])
+async def test_watchdog_aggregates_reserves_once_per_funding_source(
+    ledger, monkeypatch, shared_source
+):
+    plugin = copy(payment_method_registry.get("bolt11"))
+    plugin.method = "testpay"
+    # Separate Python objects may report the same wallet balance.
+    monkeypatch.setattr(
+        plugin, "funding_source_id", lambda backend, unit: backend.source
+    )
+    monkeypatch.setitem(payment_method_registry._plugins, "testpay", plugin)
+    monkeypatch.setitem(payment_method_registry._plugins, "otherpay", plugin)
+    first = SimpleNamespace(source="wallet-1")
+    second = SimpleNamespace(source="wallet-1" if shared_source else "wallet-2")
+    monkeypatch.setattr(
+        ledger,
+        "backends",
+        {"testpay": {Unit.sat: first}, "otherpay": {Unit.sat: second}},
+    )
+    status = AsyncMock(
+        side_effect=lambda backend: StatusResponse(
+            balance=Amount(
+                Unit.sat, 164 if shared_source else 100 if backend is first else 64
+            )
+        )
+    )
+    monkeypatch.setattr(plugin, "status", status)
+    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 3600)
+    # Another method issued 64 sat since the previous check. Reserves grew by
+    # the same amount, so the aggregate reserve gap has not shrunk.
+    await ledger.crud.store_balance_log(
+        Amount(Unit.sat, 100), Amount(Unit.sat, 80), Amount(Unit.sat, 0), db=ledger.db
+    )
+    await ledger.db.execute(
+        "UPDATE balance_log SET time = :time", {"time": ledger.db.to_timestamp("1000")}
+    )
+    monkeypatch.setattr(
+        ledger,
+        "get_unit_balance_and_fees",
+        AsyncMock(return_value=(Amount(Unit.sat, 144), Amount(Unit.sat, 0))),
+    )
+    stored = asyncio.Event()
+    store_log = ledger.crud.store_balance_log
+    recorded_balances = []
+
+    async def record_balance(*args, **kwargs):
+        await store_log(*args, **kwargs)
+        recorded_balances.append(args)
+        stored.set()
+
+    monkeypatch.setattr(ledger.crud, "store_balance_log", record_balance)
+    ledger.abort_queue = asyncio.Queue()
+    # Keep aborts observable without allowing a regression to kill pytest.
+    monkeypatch.setattr(ledger, "monitor_abort_queue", asyncio.Event().wait)
+    tasks = await ledger.dispatch_watchdogs()
+    try:
+        assert len(tasks) == 2  # One unit checker and the abort monitor.
+        await asyncio.wait_for(stored.wait(), 5)
+        assert recorded_balances == [
+            (Amount(Unit.sat, 164), Amount(Unit.sat, 144), Amount(Unit.sat, 0))
+        ]
+        assert status.await_count == (1 if shared_source else 2)
+        assert ledger.abort_queue.empty()
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raises", [False, True])
+async def test_watchdog_does_not_compare_or_store_incomplete_balance(
+    ledger, monkeypatch, raises
+):
+    plugin = copy(payment_method_registry.get("bolt11"))
+    queried = asyncio.Event()
+
+    async def unavailable(backend):
+        queried.set()
+        if raises:
+            raise ConnectionError("backend unavailable")
+        return StatusResponse(
+            balance=Amount(Unit.sat, 0), error_message="backend unavailable"
+        )
+
+    monkeypatch.setattr(plugin, "status", unavailable)
+    check = AsyncMock()
+    store_log = AsyncMock()
+    monkeypatch.setattr(ledger, "check_balances_and_abort", check)
+    monkeypatch.setattr(ledger.crud, "store_balance_log", store_log)
+    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 3600)
+    task = asyncio.create_task(
+        ledger.dispatch_unit_checker(Unit.sat, {"source": (plugin, object())})
+    )
+    try:
+        await asyncio.wait_for(queried.wait(), 5)
+        await asyncio.sleep(0)
+        check.assert_not_awaited()
+        store_log.assert_not_awaited()
+        assert not task.done()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_check_balances_and_abort_insolvency(ledger: Ledger):
     ledger.abort_queue = asyncio.Queue()
     ok = await ledger.check_balances_and_abort(
-        ledger.backends[Method.bolt11][Unit.sat],
         None,
         Amount(Unit.sat, 100),
         Amount(Unit.sat, 1000),
@@ -78,7 +211,6 @@ async def test_check_balances_and_abort_delta_shrink_aborts(ledger: Ledger):
         time=datetime.datetime.now(),
     )
     ok = await ledger.check_balances_and_abort(
-        ledger.backends[Method.bolt11][Unit.sat],
         last_balance_log_entry,
         Amount(Unit.sat, 1064),
         Amount(Unit.sat, 964),

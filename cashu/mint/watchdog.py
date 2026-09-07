@@ -1,6 +1,6 @@
 import asyncio
 import signal
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from loguru import logger
 
@@ -8,8 +8,7 @@ from cashu.core.db import Connection, Database
 
 from ..core.base import Amount, Method, MintBalanceLogEntry, Unit
 from ..core.settings import settings
-from ..lightning.base import LightningBackend
-from ..payment import payment_method_registry
+from ..payment import PaymentMethodPlugin, payment_method_registry
 from .protocols import SupportsBackends, SupportsDb
 
 
@@ -39,18 +38,30 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
 
     async def dispatch_watchdogs(self) -> List[asyncio.Task]:
         tasks = []
+        sources_by_unit: dict[Unit, dict[str, tuple[PaymentMethodPlugin, Any]]] = {}
+        incomplete_units: set[Unit] = set()
         for method, unitbackends in self.backends.items():
             method_name = method.name if isinstance(method, Method) else method
             plugin = payment_method_registry.get(method_name)
-            if not plugin.supports_balance:
-                logger.warning(
-                    f"Skipping balance watchdog for payment method '{method_name}': "
-                    "the backend protocol does not report a balance"
-                )
-                continue
             for unit, backend in unitbackends.items():
+                if not plugin.supports_balance:
+                    incomplete_units.add(unit)
+                    logger.warning(
+                        f"Skipping balance watchdog for unit '{unit.name}': "
+                        f"payment method '{method_name}' does not report a balance"
+                    )
+                    continue
+                sources = sources_by_unit.setdefault(unit, {})
+                sources.setdefault(
+                    plugin.funding_source_id(backend, unit), (plugin, backend)
+                )
+
+        for unit, sources in sources_by_unit.items():
+            # Liabilities belong to the unit, not to an individual payment rail.
+            # A partial reserve balance cannot safely be compared with them.
+            if unit not in incomplete_units:
                 tasks.append(
-                    asyncio.create_task(self.dispatch_backend_checker(unit, backend))
+                    asyncio.create_task(self.dispatch_unit_checker(unit, sources))
                 )
         tasks.append(asyncio.create_task(self.monitor_abort_queue()))
         return tasks
@@ -72,15 +83,28 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         """Returns the balance of the mint for this unit."""
         return await self.get_unit_balance_and_fees(unit=unit, db=self.db)
 
-    async def dispatch_backend_checker(
-        self, unit: Unit, backend: LightningBackend
+    async def dispatch_unit_checker(
+        self, unit: Unit, sources: dict[str, tuple[PaymentMethodPlugin, Any]]
     ) -> None:
         logger.info(
-            f"Dispatching backend checker for unit: {unit.name} and backend: {backend.__class__.__name__}"
+            f"Dispatching balance checker for unit: {unit.name} and funding sources: {list(sources)}"
         )
         while True:
-            backend_status = await backend.status()
-            backend_balance = backend_status.balance
+            try:
+                statuses = await asyncio.gather(
+                    *(plugin.status(backend) for plugin, backend in sources.values())
+                )
+                backend_balance = Amount(unit, 0)
+                for status in statuses:
+                    if status.error_message:
+                        raise ValueError(status.error_message)
+                    backend_balance += status.balance.to(unit)
+            except Exception as exc:
+                logger.warning(f"Skipping balance check for {unit.name}: {exc}")
+                await asyncio.sleep(
+                    settings.mint_watchdog_balance_check_interval_seconds
+                )
+                continue
             last_balance_log_entry: MintBalanceLogEntry | None = None
             async with self.watcher_db.connect() as conn:
                 last_balance_log_entry = await self.crud.get_last_balance_log_entry(
@@ -92,14 +116,13 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
 
                 logger.debug(f"Last balance log entry: {last_balance_log_entry}")
                 logger.debug(
-                    f"Backend balance {backend.__class__.__name__}: {backend_balance}"
+                    f"Aggregate backend balance {unit.name}: {backend_balance}"
                 )
                 logger.debug(
                     f"Unit balance {unit.name}: {keyset_balance}, fees paid: {keyset_fees_paid}"
                 )
 
                 ok = await self.check_balances_and_abort(
-                    backend,
                     last_balance_log_entry,
                     backend_balance,
                     keyset_balance,
@@ -119,7 +142,6 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
 
     async def check_balances_and_abort(
         self,
-        backend: LightningBackend,
         last_balance_log_entry: MintBalanceLogEntry | None,
         backend_balance: Amount,
         keyset_balance: Amount,
@@ -132,7 +154,6 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         Returns True if the balances check succeeded, False otherwise.
 
         Args:
-            backend (LightningBackend): Backend to check the balance against
             last_balance_log_entry (MintBalanceLogEntry | None): Last balance log entry in the database
             backend_balance (Amount): Balance of the backend
             keyset_balance (Amount): Balance of the mint
@@ -142,7 +163,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         """
         if keyset_balance + keyset_fees_paid > backend_balance:
             logger.warning(
-                f"Backend balance {backend.__class__.__name__}: {backend_balance} is smaller than issued unit balance {keyset_balance.unit}: {keyset_balance}"
+                f"Backend balance {backend_balance} is smaller than issued unit balance {keyset_balance.unit}: {keyset_balance}"
             )
             await self.abort_queue.put(True)
             return False
