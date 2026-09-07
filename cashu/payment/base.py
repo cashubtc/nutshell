@@ -155,4 +155,9 @@ class PaymentMethodPlugin(ABC):
             yield checking_id
 
     def funding_source_id(self, backend: Any, unit: Unit) -> str:
+        """Identify reserves shared by methods so the watchdog counts them once.
+
+        Override when different backend instances report the same wallet balance.
+        Each source's status must report its complete balance in this unit.
+        """
         return f"{backend.__class__.__module__}.{backend.__class__.__qualname__}:{unit.name}:{id(backend)}"
