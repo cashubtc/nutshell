@@ -1,11 +1,13 @@
+from copy import copy
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, StreamingResponse
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from cashu.core.base import (
     BlindedSignature,
@@ -14,11 +16,14 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.errors import NotAllowedError
+from cashu.core.models import PostMeltQuoteRequest, PostMeltQuoteResponse
+from cashu.core.models.melt_quote import PostMeltRequestOptions
 from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
 from cashu.mint import router as router_module
 from cashu.mint.cache import RedisCache
+from cashu.payment import payment_method_registry
 
 
 def _build_router_app() -> FastAPI:
@@ -311,6 +316,92 @@ def test_router_keyset_lookup_returns_cashu_error(monkeypatch):
     response = client.get("/v1/keys/missing")
     assert response.status_code == 400
     assert "keyset" in response.json()["detail"].lower()
+
+
+@pytest.mark.parametrize(
+    "custom_options, error",
+    [
+        ({"custom_confirmation": 3, "routing": {"hints": ["fast", "cheap"]}}, None),
+        ({"custom_confirmation": 0}, "greater than or equal to 1"),
+        (
+            {"custom_confirmation": 3, "unsupported": True},
+            "Extra inputs are not permitted",
+        ),
+    ],
+)
+def test_melt_quote_custom_options_reach_plugin_validation(
+    monkeypatch, custom_options, error
+):
+    class CustomOptions(PostMeltRequestOptions):
+        model_config = ConfigDict(extra="forbid")
+        custom_confirmation: int = Field(ge=1, le=6)
+        routing: dict[str, list[str]] = Field(default_factory=dict)
+
+    class CustomRequest(PostMeltQuoteRequest):
+        options: CustomOptions
+
+    plugin = copy(payment_method_registry.get("bolt11"))
+    plugin.method = "testpay"
+    plugin.melt_quote_request_model = CustomRequest
+    monkeypatch.setitem(payment_method_registry._plugins, plugin.method, plugin)
+    quote = AsyncMock(
+        return_value=PostMeltQuoteResponse(
+            quote="custom-quote",
+            method="testpay",
+            unit="sat",
+            request="custom:destination",
+            amount=8,
+            fee_reserve=1,
+            state="UNPAID",
+        )
+    )
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace(melt_quote=quote))
+    with TestClient(_build_router_app()) as client:
+        response = client.post(
+            "/v1/melt/quote/testpay",
+            json={
+                "unit": "sat",
+                "request": "custom:destination",
+                "options": custom_options,
+            },
+        )
+
+    if error:
+        assert response.status_code == 400
+        assert error in response.json()["detail"]
+        quote.assert_not_awaited()
+    else:
+        assert response.status_code == 200
+        quote.assert_awaited_once()
+        payload, method = quote.await_args.args
+        assert method == "testpay"
+        assert isinstance(payload, CustomRequest)
+        assert payload.options.custom_confirmation == 3
+        assert payload.options.routing == {"hints": ["fast", "cheap"]}
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"mpp": {"amount": 0}},
+        {"amountless": {"amount_msat": 0}},
+        {"mpp": {"amount": 1000}, "amountless": {"amount_msat": 1000}},
+    ],
+)
+def test_custom_options_do_not_bypass_standard_option_validation(monkeypatch, options):
+    quote = AsyncMock()
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace(melt_quote=quote))
+    with TestClient(_build_router_app()) as client:
+        response = client.post(
+            "/v1/melt/quote/bolt11",
+            json={
+                "unit": "sat",
+                "request": "lnbc1",
+                "options": {**options, "custom_confirmation": 3},
+            },
+        )
+    assert response.status_code == 422
+    quote.assert_not_awaited()
 
 
 def test_router_checkstate_and_restore_routes(monkeypatch):
