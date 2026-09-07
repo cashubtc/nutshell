@@ -23,12 +23,16 @@ class InvoiceQuoteResponse(BaseModel):
 
 
 class PaymentQuoteResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
     checking_id: str
     amount: Amount
     fee: Amount
 
 
 class InvoiceResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
     ok: bool  # True: invoice created, False: failed
     checking_id: Optional[str] = None
     payment_request: Optional[str] = None
@@ -46,6 +50,8 @@ class PaymentResult(Enum):
 
 
 class PaymentResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
     result: PaymentResult
     checking_id: Optional[str] = None
     fee: Optional[Amount] = None
@@ -70,10 +76,13 @@ class PaymentResponse(BaseModel):
 
 
 class PaymentStatus(BaseModel):
+    model_config = {"extra": "allow"}
+
     result: PaymentResult
     fee: Optional[Amount] = None
     preimage: Optional[str] = None
     error_message: Optional[str] = None
+    amount_paid: Optional[Amount] = None
 
     @property
     def pending(self) -> bool:

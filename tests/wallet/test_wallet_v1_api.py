@@ -302,6 +302,20 @@ def test_mint_quote_response_requires_current_fields(missing: str):
         PostMintQuoteResponse.model_validate(response)
 
 
+def test_custom_mint_quote_response_allows_missing_amount():
+    quote = PostMintQuoteResponse.model_validate(
+        {
+            "quote": "q-1",
+            "request": "https://processor.example/checkout/q-1",
+            "unit": "sat",
+            "method": "examplepay",
+            "state": "UNPAID",
+        }
+    )
+
+    assert quote.amount is None
+
+
 @pytest.mark.parametrize("missing", ["unit", "method", "request", "state"])
 def test_melt_quote_response_requires_current_fields(missing: str):
     response = {

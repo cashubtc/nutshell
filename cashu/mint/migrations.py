@@ -1277,6 +1277,20 @@ async def m036_add_mint_quote_accounting_fields(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN updated_at TIMESTAMP DEFAULT NULL"
         )
+        await conn.execute(
+            f"""
+                UPDATE {db.table_with_schema('mint_quotes')}
+                SET amount_paid = CASE
+                        WHEN state IN ('PAID', 'ISSUED') THEN amount
+                        ELSE 0
+                    END,
+                    amount_issued = CASE
+                        WHEN state = 'ISSUED' THEN amount
+                        ELSE 0
+                    END,
+                    updated_at = COALESCE(issued_time, paid_time, created_time)
+            """
+        )
 
 
 async def m037_remove_paid_from_melt_quote(db: Database):
@@ -1337,4 +1351,53 @@ async def m038_remove_dleq_from_promises(db: Database):
         )
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
+        )
+
+
+async def m039_add_payment_method_data_to_quotes(db: Database):
+    """Add opaque, server-internal storage for method-specific quote state."""
+    async with db.connect() as conn:
+        for table in ("mint_quotes", "melt_quotes"):
+            if conn.type == "SQLITE":
+                columns = await conn.fetchall(
+                    f"SELECT name FROM pragma_table_info('{table}')"
+                )
+                exists = any(column["name"] == "method_data" for column in columns)
+            else:
+                column = await conn.fetchone(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = :table AND column_name = 'method_data'",
+                    {"table": table},
+                )
+                exists = column is not None
+
+            if not exists:
+                await conn.execute(
+                    f"ALTER TABLE {db.table_with_schema(table)} "
+                    "ADD COLUMN method_data TEXT"
+                )
+
+
+async def m040_separate_internal_credits_and_amountless_payments(db: Database):
+    """Keep internal credits and exact outgoing msat amounts across restarts."""
+    async with db.connect() as conn:
+        mint_quotes = db.table_with_schema("mint_quotes")
+        melt_quotes = db.table_with_schema("melt_quotes")
+        await conn.execute(
+            f"ALTER TABLE {mint_quotes} ADD COLUMN amount_paid_internal {db.big_int} NOT NULL DEFAULT 0"
+        )
+        # Internal settlements copy the mint checking id and charge no fee.
+        # Preserve credits on quotes that were settled before this migration.
+        await conn.execute(
+            f"""UPDATE {mint_quotes} SET amount_paid_internal = COALESCE((
+                SELECT SUM(melt.amount) FROM {melt_quotes} AS melt
+                WHERE melt.request = {mint_quotes}.request
+                  AND melt.checking_id = {mint_quotes}.checking_id
+                  AND melt.unit = {mint_quotes}.unit
+                  AND melt.method = {mint_quotes}.method
+                  AND melt.state = 'PAID' AND melt.fee_paid = 0
+            ), 0)"""
+        )
+        await conn.execute(
+            f"ALTER TABLE {melt_quotes} ADD COLUMN amountless_msat {db.big_int}"
         )

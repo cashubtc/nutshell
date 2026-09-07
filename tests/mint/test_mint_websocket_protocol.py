@@ -312,3 +312,44 @@ def test_remove_subscription_removes_all_filter_entries_for_subid(monkeypatch):
     assert kind_map["quote-1"] == []
     assert kind_map["quote-2"] == []
     assert kind_map["quote-3"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["bolt11", "bolt12"])
+@pytest.mark.parametrize("direction", ["mint", "melt"])
+async def test_subscription_initializes_current_quote(ledger, method, direction):
+    ws = FakeWebSocket()
+    client = LedgerEventClientManager(cast(Any, ws), ledger.db, ledger.crud)
+    common = dict(
+        quote="paid-quote",
+        method=method,
+        request="request",
+        checking_id="checking",
+        unit="sat",
+        amount=8,
+    )
+    if direction == "mint":
+        quote = MintQuote(
+            **common, state=MintQuoteState.paid, amount_paid=8, amount_issued=0
+        )
+        await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    else:
+        quote = MeltQuote(**common, state=MeltQuoteState.paid, fee_reserve=0)
+        await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+    kind = JSONRPCSubscriptionKinds(f"{method}_{direction}_quote")
+    await client._init_subscriptions("subscription", ["missing", quote.quote], kind)
+    assert len(ws.sent) == 1
+    notification = json.loads(ws.sent[0])
+    assert notification["params"]["subId"] == "subscription"
+    payload = notification["params"]["payload"]
+    assert payload["quote"] == quote.quote
+    assert payload["state"] == "PAID"
+    if direction == "mint":
+        assert (payload["amount_paid"], payload["amount_issued"]) == (8, 0)
+    other = "bolt12" if method == "bolt11" else "bolt11"
+    await client._init_subscriptions(
+        "wrong-method",
+        [quote.quote],
+        JSONRPCSubscriptionKinds(f"{other}_{direction}_quote"),
+    )
+    assert len(ws.sent) == 1

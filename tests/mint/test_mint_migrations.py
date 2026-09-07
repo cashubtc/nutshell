@@ -230,3 +230,57 @@ async def test_auth_m003_migration():
     # Clean up
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
+
+
+@pytest.mark.asyncio
+async def test_internal_credit_migration_backfills_only_matching_settlements(ledger):
+    from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState
+    from cashu.mint import migrations as mint_migrations
+
+    quote = MintQuote(
+        quote="receive",
+        method="testpay",
+        request="request",
+        checking_id="incoming",
+        unit="sat",
+        amount=8,
+        amount_paid=8,
+        state=MintQuoteState.paid,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    for name, changes in [
+        ("internal", {}),
+        ("pending", {"state": MeltQuoteState.pending}),
+        ("external", {"checking_id": "other"}),
+        ("unit", {"unit": "msat"}),
+        ("method", {"method": "otherpay"}),
+    ]:
+        fields = dict(
+            quote=name,
+            method="testpay",
+            request="request",
+            checking_id="incoming",
+            unit="sat",
+            amount=8,
+            fee_reserve=0,
+            fee_paid=0,
+            state=MeltQuoteState.paid,
+        )
+        await ledger.crud.store_melt_quote(
+            quote=MeltQuote(**{**fields, **changes}), db=ledger.db
+        )
+    # Restore the pre-migration schema around real stored quotes.
+    await ledger.db.execute(
+        f"ALTER TABLE {ledger.db.table_with_schema('mint_quotes')} DROP COLUMN amount_paid_internal"
+    )
+    await ledger.db.execute(
+        f"ALTER TABLE {ledger.db.table_with_schema('melt_quotes')} DROP COLUMN amountless_msat"
+    )
+    await mint_migrations.m040_separate_internal_credits_and_amountless_payments(
+        ledger.db
+    )
+    restored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert restored.amount_paid_internal == 8
+    assert restored.amount_paid == 8
+    outgoing = await ledger.crud.get_melt_quote(quote_id="internal", db=ledger.db)
+    assert outgoing.amountless_msat is None

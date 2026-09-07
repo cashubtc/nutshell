@@ -4,7 +4,7 @@
 import asyncio
 import importlib
 from copy import copy
-from typing import Dict
+from typing import Any, Dict, Union
 
 from loguru import logger
 
@@ -14,12 +14,13 @@ from ..core.base import Method, Unit
 from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
-from ..lightning.base import LightningBackend
 from ..mint import migrations as mint_migrations
 from ..mint.auth import migrations as auth_migrations
 from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
+from ..payment import PaymentMethodPlugin, payment_method_registry
+from ..payment.grpc_processor import GrpcPaymentProcessor
 
 # kill the program if python runs in non-__debug__ mode
 # which could lead to asserts not being executed for optimized code
@@ -48,27 +49,68 @@ for key, value in settings.model_dump().items():
 
 wallets_module = importlib.import_module("cashu.lightning")
 
-backends: Dict[Method, Dict[Unit, LightningBackend]] = {}
+payment_method_registry.load_entry_points(settings.mint_payment_method_plugins)
+
+backends: Dict[Union[Method, str], Dict[Unit, Any]] = {}
 if settings.mint_backend_bolt11_sat:
-    backend_bolt11_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
+    backend_bolt11_sat = vars(wallets_module)[settings.mint_backend_bolt11_sat](
         unit=Unit.sat
     )
     backends.setdefault(Method.bolt11, {})[Unit.sat] = backend_bolt11_sat
 if settings.mint_backend_bolt11_msat:
-    backend_bolt11_msat = getattr(wallets_module, settings.mint_backend_bolt11_msat)(
+    backend_bolt11_msat = vars(wallets_module)[settings.mint_backend_bolt11_msat](
         unit=Unit.msat
     )
     backends.setdefault(Method.bolt11, {})[Unit.msat] = backend_bolt11_msat
 if settings.mint_backend_bolt11_usd:
-    backend_bolt11_usd = getattr(wallets_module, settings.mint_backend_bolt11_usd)(
+    backend_bolt11_usd = vars(wallets_module)[settings.mint_backend_bolt11_usd](
         unit=Unit.usd
     )
     backends.setdefault(Method.bolt11, {})[Unit.usd] = backend_bolt11_usd
 if settings.mint_backend_bolt11_eur:
-    backend_bolt11_eur = getattr(wallets_module, settings.mint_backend_bolt11_eur)(
+    backend_bolt11_eur = vars(wallets_module)[settings.mint_backend_bolt11_eur](
         unit=Unit.eur
     )
     backends.setdefault(Method.bolt11, {})[Unit.eur] = backend_bolt11_eur
+for backend_config in settings.mint_payment_backends:
+    method = str(backend_config.get("method", ""))
+    unit_name = str(backend_config.get("unit", ""))
+    try:
+        unit = Unit[unit_name]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported unit '{unit_name}' for payment method '{method}'"
+        ) from exc
+    backend_type = str(backend_config.get("type", backend_config.get("backend", "")))
+    existing_key: Union[Method, str] = (
+        Method.bolt11 if method == Method.bolt11.name else method
+    )
+    plugin: PaymentMethodPlugin
+    if backend_type == "GrpcPaymentProcessor":
+        backend = GrpcPaymentProcessor(method, unit, backend_config)
+        registered = payment_method_registry.maybe_get(method)
+        if registered is not None and not isinstance(registered, GrpcPaymentProcessor):
+            if method == Method.bolt11.name and existing_key not in backends:
+                payment_method_registry.register(backend, replace=True)
+                registered = backend
+            else:
+                raise ValueError(
+                    f"payment method '{method}' is already provided by a non-gRPC plugin"
+                )
+        if registered is None:
+            payment_method_registry.register(backend)
+            plugin = backend
+        else:
+            plugin = registered
+    else:
+        plugin = payment_method_registry.get(method)
+    if unit in backends.get(existing_key, {}):
+        raise ValueError(
+            f"duplicate backend configuration for method '{method}' and unit '{unit.name}'"
+        )
+    if backend_type != "GrpcPaymentProcessor":
+        backend = plugin.create_backend(unit, backend_config)
+    backends.setdefault(existing_key, {})[unit] = backend
 if not backends:
     raise Exception("No backends are set.")
 

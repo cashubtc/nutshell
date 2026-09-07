@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cashu.core.base import BlindedSignature, MeltQuote
 from cashu.core.constants import MAX_PAYMENT_REQUEST_LEN, MAX_UNIT_LEN
@@ -10,17 +10,33 @@ class PostMeltRequestOptionMpp(BaseModel):
     amount: int = Field(gt=0)  # input amount
 
 
+class PostMeltRequestOptionAmountless(BaseModel):
+    amount_msat: int = Field(gt=0)
+
+
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    # Preserve method-specific options until the selected plugin validates them.
+    model_config = ConfigDict(extra="allow")
+
+    mpp: Optional[PostMeltRequestOptionMpp] = None
+    amountless: Optional[PostMeltRequestOptionAmountless] = None
+
+    @model_validator(mode="after")
+    def mutually_exclusive_options(self) -> "PostMeltRequestOptions":
+        if self.mpp and self.amountless:
+            raise ValueError("mpp and amountless options are mutually exclusive")
+        return self
 
 
 class PostMeltQuoteRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     unit: str = Field(..., max_length=MAX_UNIT_LEN)  # input unit
     request: str = Field(
         ..., max_length=MAX_PAYMENT_REQUEST_LEN
     )  # output payment request
+    amount: Optional[int] = Field(default=None, gt=0)
     options: Optional[PostMeltRequestOptions] = None
-    prefer_async: bool = False
 
     @property
     def is_mpp(self) -> bool:
@@ -38,20 +54,34 @@ class PostMeltQuoteRequest(BaseModel):
 
 
 class PostMeltQuoteResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     quote: str  # quote id
     amount: int  # input amount
     unit: str  # input unit
     method: str  # payment method
     request: str  # output payment request
-    fee_reserve: int  # input fee reserve
+    fee_reserve: Optional[int] = None  # input fee reserve
     state: str  # state of the quote
-    expiry: Optional[int]  # expiry of the quote
+    expiry: Optional[int] = None  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None  # NUT-08 change
 
     @classmethod
     def from_melt_quote(cls, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
-        to_dict = melt_quote.model_dump()
-        # turn state into string
-        to_dict["state"] = melt_quote.state.value
-        return cls.model_validate(to_dict)
+        # Keep internal settlement identifiers and timestamps off the wire while
+        # allowing a payment method to add its own protocol fields.
+        response = {
+            "quote": melt_quote.quote,
+            "amount": melt_quote.amount,
+            "unit": melt_quote.unit,
+            "method": melt_quote.method,
+            "request": melt_quote.request,
+            "fee_reserve": melt_quote.fee_reserve,
+            "state": melt_quote.state.value,
+            "expiry": melt_quote.expiry,
+            "payment_preimage": melt_quote.payment_preimage,
+            "change": melt_quote.change,
+        }
+        response = {**melt_quote.method_data, **response}
+        return cls.model_validate(response)

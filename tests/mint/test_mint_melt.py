@@ -483,10 +483,10 @@ async def test_melt_lightning_pay_invoice_failed_pending(
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_exception_exception(
-    ledger: Ledger, wallet: Wallet
+    ledger: Ledger, wallet: Wallet, monkeypatch
 ):
     """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
-    settings.mint_disable_melt_on_error = True
+    monkeypatch.setattr(settings, "mint_disable_melt_on_error", True)
     mint_quote = await wallet.request_mint(128)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(128, quote_id=mint_quote.quote)
@@ -498,8 +498,8 @@ async def test_melt_lightning_pay_invoice_exception_exception(
         )
     ).quote
     # quote = await ledger.get_melt_quote(quote_id)
-    settings.fakewallet_payment_state_exception = True
-    settings.fakewallet_pay_invoice_state_exception = True
+    monkeypatch.setattr(settings, "fakewallet_payment_state_exception", True)
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state_exception", True)
 
     # we expect a pending melt quote because something has gone wrong (for example has lost connection to backend)
     resp = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
@@ -1009,3 +1009,59 @@ async def test_prepare_melt_rejects_already_paid_quote(ledger: Ledger):
     with pytest.raises(InvoiceAlreadyPaidError) as exc_info:
         await ledger._prepare_melt(proofs=[], quote=quote.quote)
     assert exc_info.value.code == 20006
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unknown", [False, True])
+async def test_grpc_failed_payment_releases_proofs(
+    ledger, wallet, monkeypatch, unknown
+):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.base import ProofSpentState
+    from cashu.core.errors import LightningPaymentFailedError
+    from cashu.payment import payment_method_registry
+    from cashu.payment.grpc import payment_processor_pb2 as pb
+    from cashu.payment.grpc_processor import GrpcPaymentProcessor
+
+    funding = await wallet.request_mint(8)
+    proofs = await wallet.mint(8, quote_id=funding.quote)
+    processor = GrpcPaymentProcessor("testpay", Unit.sat, {})
+    processor._stub = stub = AsyncMock()
+    monkeypatch.setitem(payment_method_registry._plugins, "testpay", processor)
+    monkeypatch.setattr(
+        ledger, "backends", {**ledger.backends, "testpay": {Unit.sat: processor}}
+    )
+    identifier = pb.PaymentIdentifier(
+        type=pb.PAYMENT_IDENTIFIER_TYPE_QUOTE_ID, id="failed-send"
+    )
+    stub.GetPaymentQuote.return_value = pb.PaymentQuoteResponse(
+        request_identifier=identifier,
+        amount=pb.AmountMessage(value=8, unit="sat"),
+        fee=pb.AmountMessage(value=0, unit="sat"),
+    )
+    result = pb.MakePaymentResponse(
+        payment_identifier=identifier,
+        status=pb.QUOTE_STATE_UNSPECIFIED if unknown else pb.QUOTE_STATE_UNPAID,
+        total_spent=pb.AmountMessage(value=0, unit="sat"),
+    )
+    stub.MakePayment.return_value = result
+    stub.CheckOutgoingPayment.return_value = result
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request="merchant"), "testpay"
+    )
+    if unknown:
+        assert (await ledger.melt(proofs=proofs, quote=quote.quote)).state == "PENDING"
+    else:
+        with pytest.raises(LightningPaymentFailedError):
+            await ledger.melt(proofs=proofs, quote=quote.quote)
+    states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    assert all(
+        s.state == (ProofSpentState.pending if unknown else ProofSpentState.unspent)
+        for s in states
+    )
+    assert ledger.disable_melt == unknown
+    stored = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored.state == (
+        MeltQuoteState.pending if unknown else MeltQuoteState.unpaid
+    )

@@ -142,15 +142,11 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut04Quote(self, request, _):
         logger.debug("gRPC GetNut04Quote has been called")
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
-        mint_quote_dict = mint_quote.model_dump()
+        mint_quote_dict = mint_quote.model_dump(
+            include=set(management_pb2.Nut04Quote.DESCRIPTOR.fields_by_name),
+            exclude_none=True,
+        )
         mint_quote_dict['state'] = str(mint_quote.state)
-        mint_quote_dict.pop('state_val', None)
-        del mint_quote_dict['mint'] # unused
-        del mint_quote_dict['privkey'] # unused
-        # Remove any None values to prevent protobuf type validation errors
-        for key in list(mint_quote_dict.keys()):
-            if mint_quote_dict[key] is None:
-                del mint_quote_dict[key]
         return management_pb2.GetNut04QuoteResponse(
             quote=management_pb2.Nut04Quote(**mint_quote_dict)
         )
@@ -164,9 +160,11 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut05Quote(self, request, _):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
-        melt_quote_dict = melt_quote.model_dump()
-        melt_quote_dict['state'] = str(melt_quote_dict['state'])
-        del melt_quote_dict['mint']
+        melt_quote_dict = melt_quote.model_dump(
+            include=set(management_pb2.Nut05Quote.DESCRIPTOR.fields_by_name),
+            exclude_none=True,
+        )
+        melt_quote_dict["state"] = str(melt_quote.state)
         return management_pb2.GetNut05QuoteResponse(
             quote=management_pb2.Nut05Quote(**melt_quote_dict)
         )

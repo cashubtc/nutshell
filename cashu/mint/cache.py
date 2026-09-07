@@ -48,7 +48,9 @@ class RedisCache:
 
         def decorator(func):
             @functools.wraps(func)
-            async def wrapper(request: Request, payload: BaseModel):
+            async def wrapper(
+                request: Request, payload: BaseModel, **route_parameters: Any
+            ):
                 logger.trace(f"cache wrapper on route {func.__name__}")
                 key = request.url.path + payload.model_dump_json()
                 logger.trace(f"KEY: {key}")
@@ -60,7 +62,9 @@ class RedisCache:
                         return json.loads(resp)
                     else:
                         raise Exception(f"Found no cached response for key {key}")
-                result = await func(request, payload)
+                result = await func(
+                    request=request, payload=payload, **route_parameters
+                )
                 await self.redis.set(name=key, value=result.model_dump_json(), ex=settings.mint_redis_cache_ttl)
                 return result
 
