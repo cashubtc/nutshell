@@ -15,6 +15,9 @@ class PostMeltRequestOptionAmountless(BaseModel):
 
 
 class PostMeltRequestOptions(BaseModel):
+    # Preserve method-specific options until the selected plugin validates them.
+    model_config = ConfigDict(extra="allow")
+
     mpp: Optional[PostMeltRequestOptionMpp] = None
     amountless: Optional[PostMeltRequestOptionAmountless] = None
 
