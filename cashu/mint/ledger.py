@@ -359,6 +359,10 @@ class Ledger(
         plugin = payment_method_registry.get(method_name)
         backend = self._get_backend(method, unit)
 
+        if quote_request.amount is None and not plugin.supports_amountless_mint(
+            backend
+        ):
+            raise NotAllowedError("Backend does not support amountless mint quotes.")
         if quote_request.description and not plugin.supports_description(backend):
             raise NotAllowedError("Backend does not support descriptions.")
 
@@ -447,7 +451,11 @@ class Ledger(
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
         plugin = payment_method_registry.get(quote.method)
-        if not quote.pending and (quote.unpaid or plugin.allows_partial_mint):
+        backend = self._get_backend(method, unit)
+        if force_backend_check or (
+            not quote.pending
+            and (quote.unpaid or plugin.supports_repeated_payments(backend))
+        ):
             if not quote.checking_id:
                 raise CashuError("quote has no checking id")
 
@@ -476,7 +484,7 @@ class Ledger(
             )
             if status.settled and reported_paid is None:
                 reported_paid = quote.amount
-            if reported_paid is not None and reported_paid > (quote.amount_paid or 0):
+            if reported_paid is not None:
                 # change state to paid in one transaction, it could have been marked paid
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
@@ -489,20 +497,20 @@ class Ledger(
                     )
                     if not quote:
                         raise Exception("quote not found")
-                    if reported_paid > (quote.amount_paid or 0):
-                        quote.amount_paid = reported_paid
-                        fully_paid = reported_paid >= quote.amount
-                        has_issuable_balance = (
-                            plugin.allows_partial_mint
-                            and reported_paid > (quote.amount_issued or 0)
-                        )
+                    total_paid = reported_paid + quote.amount_paid_internal
+                    if total_paid > (quote.amount_paid or 0):
+                        quote.amount_paid = total_paid
+                        fully_paid = total_paid >= quote.amount
+                        has_issuable_balance = plugin.supports_partial_mint(
+                            backend
+                        ) and total_paid > (quote.amount_issued or 0)
                         # Issuance may have claimed the quote while the backend
                         # check was in flight. Preserve that reservation.
                         if not quote.pending and (fully_paid or has_issuable_balance):
                             logger.trace(f"Setting quote {quote_id} as paid")
                             quote.state_val = (
                                 MintQuoteState.issued
-                                if reported_paid == (quote.amount_issued or 0)
+                                if total_paid == (quote.amount_issued or 0)
                                 else MintQuoteState.paid
                             )
                             quote.paid_time = quote.paid_time or now
@@ -574,6 +582,7 @@ class Ledger(
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
         plugin = payment_method_registry.get(quote.method)
+        backend = self._get_backend(quote.method, Unit[quote.unit])
 
         previous_state = quote.state
         quote = await self.db_write._set_mint_quote_pending(
@@ -585,9 +594,10 @@ class Ledger(
             available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
             if sum_amount_outputs > available:
                 raise TransactionError("amount to mint exceeds paid quote balance")
-            if (
-                not plugin.allows_partial_mint
-                and not quote.amount == sum_amount_outputs
+            if not plugin.supports_partial_mint(backend) and sum_amount_outputs != (
+                available
+                if quote.amount == 0 or plugin.supports_repeated_payments(backend)
+                else quote.amount
             ):
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
@@ -664,6 +674,9 @@ class Ledger(
             raise TransactionError("all quotes must have the same unit")
         if units.pop() != output_unit.name:
             raise TransactionError("quote unit does not match output unit")
+        backend = self._get_backend(batch_method, output_unit)
+        partial_mint = plugin.supports_partial_mint(backend)
+        repeated_payments = plugin.supports_repeated_payments(backend)
 
         for quote in quotes:
             if quote.pending:
@@ -673,41 +686,33 @@ class Ledger(
             if quote.state != MintQuoteState.paid:
                 raise QuoteNotPaidError()
 
-        # Check amount balance
+        # Check amount balance. Amountless and reusable quotes can require the
+        # entire available balance without allowing partial issuance.
+        default_amounts = [
+            (q.amount_paid or 0) - (q.amount_issued or 0)
+            if partial_mint or repeated_payments or q.amount == 0
+            else q.amount
+            for q in quotes
+        ]
         if payload.quote_amounts:
             if len(payload.quote_amounts) != len(quotes):
                 raise TransactionError("quote_amounts length must match quotes length")
             for i, quote in enumerate(quotes):
-                if (
-                    not plugin.allows_partial_mint
-                    and payload.quote_amounts[i] != quote.amount
-                ):
+                if not partial_mint and payload.quote_amounts[i] != default_amounts[i]:
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
                     )
                 available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
-                if plugin.allows_partial_mint and payload.quote_amounts[i] > available:
+                if payload.quote_amounts[i] > available:
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} paid balance"
                     )
 
-        quote_amounts = payload.quote_amounts or (
-            [(q.amount_paid or 0) - (q.amount_issued or 0) for q in quotes]
-            if plugin.allows_partial_mint
-            else [q.amount for q in quotes]
-        )
+        quote_amounts = payload.quote_amounts or default_amounts
         if any(amount <= 0 for amount in quote_amounts):
             raise TransactionError("quote amounts must be positive")
-        if not plugin.allows_partial_mint:
-            if sum(quote_amounts) != sum_amount_outputs:
-                raise TransactionError(
-                    "amount to mint does not match quote amounts sum"
-                )
-        else:
-            if sum_amount_outputs != sum(quote_amounts):
-                raise TransactionError(
-                    "amount to mint does not match quote amounts sum"
-                )
+        if sum_amount_outputs != sum(quote_amounts):
+            raise TransactionError("amount to mint does not match quote amounts sum")
 
         # Signature validation (NUT-20)
         for i, quote in enumerate(quotes):
@@ -735,6 +740,10 @@ class Ledger(
                     raise TransactionError(
                         f"quote amount {quote_amounts[i]} exceeds quote {quote.quote} paid balance"
                     )
+                if not partial_mint and quote_amounts[i] != (
+                    available if repeated_payments or quote.amount == 0 else quote.amount
+                ):
+                    raise TransactionError("amount to mint does not match quote amount")
 
             # Store all blinded messages
             await self._store_blinded_messages(
@@ -854,6 +863,7 @@ class Ledger(
         plugin = payment_method_registry.get(method_name)
         backend = self._get_backend(method, unit)
 
+        amountless_msat = plugin.amountless_payment_amount(melt_quote)
         request = plugin.canonicalize_request(melt_quote.request)
         quote_id = generate_uuid_v7()
 
@@ -865,6 +875,7 @@ class Ledger(
             mint_quote
             and mint_quote.unit == melt_quote.unit
             and mint_quote.method == method_name
+            and plugin.supports_internal_settlement(backend)
         ):
             # check if the melt quote is partial and error if it is.
             # it's just not possible to handle this case
@@ -889,6 +900,10 @@ class Ledger(
                 payment_quote = await plugin.quote_outgoing_payment(backend, melt_quote)
 
         self.validate_payment_quote(melt_quote, payment_quote, method_name)
+        if amountless_msat is not None and unit in {Unit.sat, Unit.msat}:
+            expected = Amount(Unit.msat, amountless_msat).to(unit, round="up")
+            if payment_quote.amount != expected:
+                raise AmountMismatchError("quote amount not as requested")
 
         # verify that the amount of the proofs is not larger than the maximum allowed
         if (
@@ -919,6 +934,7 @@ class Ledger(
             created_time=now,
             expiry=expiry,
             method_data=payment_quote.model_extra or {},
+            amountless_msat=amountless_msat,
         )
         await self.db_write._store_melt_quote(quote)
         await self.events.submit(quote)
@@ -966,7 +982,13 @@ class Ledger(
             request=melt_quote.request, db=self.db
         )
 
-        is_internal = mint_quote is not None and mint_quote.unit == melt_quote.unit
+        plugin = payment_method_registry.get(melt_quote.method)
+        is_internal = (
+            mint_quote is not None
+            and mint_quote.unit == melt_quote.unit
+            and mint_quote.method == melt_quote.method
+            and plugin.supports_internal_settlement(self._get_backend(method, unit))
+        )
 
         if melt_quote.pending and not is_internal:
             logger.debug(
@@ -1070,6 +1092,12 @@ class Ledger(
         if mint_quote.unit != melt_quote.unit:
             return melt_quote
 
+        plugin = payment_method_registry.get(melt_quote.method)
+        if not plugin.supports_internal_settlement(
+            self._get_backend(melt_quote.method, Unit[melt_quote.unit])
+        ):
+            return melt_quote
+
         # we settle the transaction internally
         if melt_quote.state == MeltQuoteState.paid:
             raise InvoiceAlreadyPaidError("melt quote already paid")
@@ -1082,28 +1110,39 @@ class Ledger(
         except ValueError as exc:
             raise TransactionError(str(exc)) from exc
 
-        if mint_quote.paid:
-            raise InvoiceAlreadyPaidError("mint quote already paid")
-        if mint_quote.issued:
-            raise QuoteAlreadyIssuedError("mint quote already issued")
+        async with self.db.get_connection(
+            lock_table="mint_quotes",
+            lock_select_statement="quote = :quote",
+            lock_parameters={"quote": mint_quote.quote},
+        ) as conn:
+            mint_quote = await self.crud.get_mint_quote(
+                quote_id=mint_quote.quote, db=self.db, conn=conn
+            )
+            if not mint_quote:
+                raise TransactionError("mint quote not found")
+            if mint_quote.paid:
+                raise InvoiceAlreadyPaidError("mint quote already paid")
+            if mint_quote.issued:
+                raise QuoteAlreadyIssuedError("mint quote already issued")
 
-        if mint_quote.state != MintQuoteState.unpaid:
-            raise TransactionError("mint quote is not unpaid")
+            if mint_quote.state != MintQuoteState.unpaid:
+                raise TransactionError("mint quote is not unpaid")
 
-        logger.info(
-            f"Settling {melt_quote.method} payment internally: {melt_quote.quote} ->"
-            f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
-        )
+            logger.info(
+                f"Settling {melt_quote.method} payment internally: {melt_quote.quote} ->"
+                f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
+            )
 
-        melt_quote.fee_paid = 0  # no internal fees
-        melt_quote.state = MeltQuoteState.paid
-        melt_quote.paid_time = int(time.time())
+            melt_quote.fee_paid = 0  # no internal fees
+            melt_quote.state = MeltQuoteState.paid
+            melt_quote.paid_time = int(time.time())
 
-        mint_quote.state = MintQuoteState.paid
-        mint_quote.paid_time = melt_quote.paid_time
-        mint_quote.updated_at = melt_quote.paid_time
+            mint_quote.amount_paid_internal += melt_quote.amount
+            mint_quote.amount_paid = (mint_quote.amount_paid or 0) + melt_quote.amount
+            mint_quote.state_val = MintQuoteState.paid
+            mint_quote.paid_time = melt_quote.paid_time
+            mint_quote.updated_at = melt_quote.paid_time
 
-        async with self.db.get_connection() as conn:
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
             await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 

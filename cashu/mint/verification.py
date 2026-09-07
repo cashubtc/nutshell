@@ -404,6 +404,8 @@ class LedgerVerification(
         return method.name if isinstance(method, Method) else method
 
     def _get_backend(self, method: Union[Method, str], unit: Unit) -> Any:
+        if isinstance(method, str) and method in Method.__members__:
+            method = Method[method]
         return self.backends[method][unit]
 
     def _verify_mint_quote_witness(

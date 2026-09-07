@@ -72,10 +72,24 @@ To serve `bolt11` through gRPC, remove the corresponding legacy
 `MINT_BACKEND_BOLT11_<UNIT>` setting. A method/unit pair cannot be supplied by
 both a legacy backend and a gRPC processor.
 
-Non-BOLT11 gRPC mint quotes use cumulative payment accounting. They accept
-amountless requests, allow issuance of part of the paid balance, and can receive
-additional payments after earlier funds have been issued. BOLT11 quotes retain
-their fixed-amount issuance behavior. Onchain melt quotes require an `amount`.
+gRPC mint capabilities are explicit per-backend configuration booleans, all
+`false` by default. Enable only the capabilities supported by that method:
+
+- `allows_amountless_mint`: accept mint requests without a fixed amount.
+- `allows_partial_mint`: issue less than the available paid balance.
+- `allows_repeated_payments`: refresh and credit payments after earlier issuance.
+
+For a reusable BOLT12 offer or onchain address supporting all three, add all
+three keys with `true` values to its `MINT_PAYMENT_BACKENDS` entry. A method that disallows
+partial issuance can still accept amountless or repeated payments; each mint
+operation must consume its full available balance. These capabilities are
+independent and are never inferred from an unfamiliar method name.
+
+Only BOLT11 uses the fixed-amount internal settlement shortcut. Other methods
+are quoted and paid through their processor even when the destination belongs
+to this mint. Onchain melt quotes require an `amount`. BOLT12 amountless melts
+accept `options.amountless.amount_msat` (or top-level `amount` in the quote's
+unit); the exact millisatoshi amount is retained for payment execution.
 
 When `MINT_REQUIRE_AUTH` is enabled, the default blind-auth paths protect all
 `POST /v1/mint/*` and `POST /v1/melt/*` operations, including quote creation and
@@ -157,6 +171,11 @@ Implement the hooks defined by `cashu.payment.PaymentMethodPlugin`, including:
 
 Optional hooks cover request models, canonicalization, quote expiry, event
 streams, MPP, descriptions, lifecycle startup/shutdown, and balance support.
+Plugins opt into amountless minting, partial issuance, and repeated payments
+independently with `allows_amountless_mint`, `allows_partial_mint`, and
+`allows_repeated_payments`. Override the corresponding `supports_*` hooks when
+these capabilities vary by backend or unit. Internal settlement is also opt-in;
+only BOLT11 enables the fixed-amount shortcut by default.
 Use `cashu/payment/base.py` as the authoritative interface for the installed
 Nutshell version.
 
