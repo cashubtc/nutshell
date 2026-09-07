@@ -185,6 +185,13 @@ only BOLT11 enables the fixed-amount shortcut by default.
 Use `cashu/payment/base.py` as the authoritative interface for the installed
 Nutshell version.
 
+Melt quote requests preserve custom fields both at the top level and inside
+`options`. A Python plugin can extend `PostMeltRequestOptions` and assign a
+custom `melt_quote_request_model` to validate these fields, including rejecting
+unsupported options. The gRPC adapter forwards custom nested options under
+`extra_json.options` for the processor to validate. Standard `mpp` and
+`amountless` options retain their shared validation and dedicated protobuf fields.
+
 ### Install and enable
 
 Install the package into the same environment that runs the mint. During local

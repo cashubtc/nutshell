@@ -49,7 +49,15 @@ def _identifier_from_json(value: str) -> pb.PaymentIdentifier:
 
 
 def _extra_json(model: Any) -> Optional[str]:
-    extras = getattr(model, "model_extra", None)
+    extras = dict(getattr(model, "model_extra", None) or {})
+    if isinstance(model, PostMeltQuoteRequest) and model.options:
+        # Standard options have dedicated protobuf fields. Custom options retain
+        # their nesting for the processor to validate through extra_json.
+        custom_options = model.options.model_dump(
+            exclude={"mpp", "amountless"}, exclude_unset=True
+        )
+        if custom_options:
+            extras["options"] = custom_options
     return json.dumps(extras) if extras else None
 
 
