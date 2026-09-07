@@ -79,6 +79,13 @@ class FakeCdkProcessor(pb_grpc.CdkPaymentProcessorServicer):
         self._check_version(context)
         assert request.quote_id == "melt-quote"
         assert request.request_type == pb.OUTGOING_PAYMENT_REQUEST_TYPE_CUSTOM
+        assert json.loads(request.extra_json) == {
+            "account": "alice",
+            "options": {
+                "custom_confirmation": 3,
+                "routing": {"hints": ["fast", "cheap"]},
+            },
+        }
         return pb.PaymentQuoteResponse(
             request_identifier=pb.PaymentIdentifier(
                 type=pb.PAYMENT_IDENTIFIER_TYPE_CUSTOM_ID, id="outgoing-1"
@@ -175,7 +182,17 @@ async def test_grpc_payment_processor_is_cdk_compatible():
 
         outgoing = await processor.quote_outgoing_payment(
             processor,
-            PostMeltQuoteRequest(unit="sat", request="merchant-request"),
+            PostMeltQuoteRequest.model_validate(
+                {
+                    "unit": "sat",
+                    "request": "merchant-request",
+                    "account": "alice",
+                    "options": {
+                        "custom_confirmation": 3,
+                        "routing": {"hints": ["fast", "cheap"]},
+                    },
+                }
+            ),
             "melt-quote",
         )
         assert outgoing.amount == Amount(Unit.sat, 20)
