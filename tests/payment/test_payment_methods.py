@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -285,6 +286,89 @@ async def test_reusable_mint_quote_observes_payments_after_full_issuance(
     assert refreshed.state == MintQuoteState.paid
     assert refreshed.amount_paid == 20
     assert refreshed.amount_issued == 10
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("clock_change", [0, -10])
+async def test_reusable_quote_timestamps_keep_later_payments_visible(
+    fake_backend_settings, ledger, monkeypatch, batch, clock_change
+):
+    plugin = payment_method_registry.get("bolt11")
+    monkeypatch.setattr(plugin, "allows_repeated_payments", True)
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    now = quote.updated_at
+    clock = SimpleNamespace(time=lambda: now)
+    monkeypatch.setattr("cashu.mint.ledger.time", clock)
+    monkeypatch.setattr("cashu.mint.db.write.time", clock)
+    status = PaymentStatus(
+        result=PaymentResult.SETTLED, amount_paid=Amount(Unit.sat, 8)
+    )
+    monkeypatch.setattr(
+        plugin, "get_incoming_payment_status", AsyncMock(return_value=status)
+    )
+    paid = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+    outputs = [
+        BlindedMessage(
+            amount=8,
+            B_=step1_alice("monotonic-issuance")[0].format().hex(),
+            id=ledger.keyset.id,
+        )
+    ]
+    if batch:
+        await ledger.mint_batch(
+            PostMintBatchRequest(quotes=[quote.quote], outputs=outputs)
+        )
+    else:
+        await ledger.mint(outputs=outputs, quote_id=quote.quote)
+    issued = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+    wallet_quote = MintQuote.from_resp_wallet(
+        PostMintQuoteResponse.from_mint_quote(issued), "https://mint.test"
+    )
+    assert wallet_quote.issued_time > paid.updated_at
+
+    # Even a backwards clock must not make a later payment look stale.
+    now += clock_change
+    status.amount_paid = Amount(Unit.sat, 16)
+    refreshed = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+    assert refreshed.updated_at > issued.updated_at
+    wallet_quote = MintQuote.check_stale_and_from_resp_wallet(
+        PostMintQuoteResponse.from_mint_quote(refreshed),
+        "https://mint.test",
+        wallet_quote,
+    )
+    assert (wallet_quote.amount_paid, wallet_quote.amount_issued) == (16, 8)
+    assert wallet_quote.state == MintQuoteState.paid
+    unchanged = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+    assert unchanged.updated_at == refreshed.updated_at
+
+
+@pytest.mark.asyncio
+async def test_internal_settlement_and_state_updates_advance_quote_timestamp(
+    fake_backend_settings, ledger, monkeypatch
+):
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    melt = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=quote.request)
+    )
+    clock = SimpleNamespace(time=lambda: quote.updated_at - 10)
+    monkeypatch.setattr("cashu.mint.ledger.time", clock)
+    monkeypatch.setattr("cashu.mint.db.write.time", clock)
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=melt.quote, db=ledger.db)
+    await ledger.melt_mint_settle_internally(melt_quote, [])
+    paid = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert paid.updated_at > quote.updated_at
+    pending = await ledger.db_write._set_mint_quote_pending(
+        quote.quote, issued_amount=8
+    )
+    assert pending.updated_at > paid.updated_at
+    restored = await ledger.db_write._unset_mint_quote_pending(
+        quote.quote, MintQuoteState.paid
+    )
+    assert restored.updated_at > pending.updated_at
+    await ledger.db_write._update_mint_quote_state(quote.quote, MintQuoteState.issued)
+    updated = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert updated.updated_at > restored.updated_at
 
 
 @pytest.mark.asyncio
