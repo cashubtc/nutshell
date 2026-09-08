@@ -17,9 +17,12 @@ from tests.helpers import (
     get_real_invoice,
     get_real_invoice_cln,
     is_fake,
+    is_spark_backend,
     pay_if_regtest,
     pay_real_invoice,
     settle_invoice,
+    wait_for_hold_invoice,
+    wait_for_result,
 )
 
 
@@ -48,14 +51,18 @@ async def test_lightning_create_invoice(ledger: Ledger):
     status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
         invoice.checking_id
     )
-    assert status.pending
+    # Spark's payment history does not include unpaid receive requests.
+    assert status.unknown if is_spark_backend else status.pending
 
     # settle the invoice
     await pay_if_regtest(invoice.payment_request)
 
     # TEST 3: check the invoice status
-    status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
-        invoice.checking_id
+    status = await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
+            invoice.checking_id
+        ),
+        lambda status: status.settled,
     )
     assert status.settled
 
@@ -75,7 +82,8 @@ async def test_lightning_create_invoice_balance_change(ledger: Ledger):
     status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
         invoice.checking_id
     )
-    assert status.pending
+    # Spark's payment history does not include unpaid receive requests.
+    assert status.unknown if is_spark_backend else status.pending
 
     status = await ledger.backends[Method.bolt11][Unit.sat].status()
     balance_before = status.balance
@@ -87,12 +95,18 @@ async def test_lightning_create_invoice_balance_change(ledger: Ledger):
     await asyncio.sleep(SLEEP_TIME)
 
     # TEST 3: check the invoice status
-    status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
-        invoice.checking_id
+    status = await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
+            invoice.checking_id
+        ),
+        lambda status: status.settled,
     )
     assert status.settled
 
-    status = await ledger.backends[Method.bolt11][Unit.sat].status()
+    status = await wait_for_result(
+        ledger.backends[Method.bolt11][Unit.sat].status,
+        lambda status: status.balance == balance_before + invoice_amount,
+    )
     balance_after = status.balance
 
     assert balance_after == balance_before + invoice_amount
@@ -126,14 +140,16 @@ async def test_lightning_pay_invoice(ledger: Ledger):
         fee_reserve=0,
     )
     payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(quote, 1000)
-    assert payment.settled
-    assert payment.preimage
+    assert payment.settled or payment.pending
     assert payment.checking_id
     assert not payment.error_message
 
     # TEST 2: check the payment status
-    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
-        payment.checking_id
+    status = await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            payment.checking_id
+        ),
+        lambda status: status.settled and status.preimage,
     )
     assert status.settled
     assert status.preimage
@@ -178,7 +194,8 @@ async def test_lightning_pay_invoice_failure(ledger: Ledger):
     assert payment.failed
     assert not payment.preimage
     assert payment.error_message
-    assert not payment.checking_id
+    # Some backends retain an ID for the failed attempt (needed for recovery).
+    checking_id = payment.checking_id or checking_id
 
     # TEST 3: check the payment status
     status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
@@ -224,12 +241,16 @@ async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
     await asyncio.sleep(SLEEP_TIME)
 
     # check the payment status
-    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
-        quote.checking_id
+    status = await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            quote.checking_id
+        ),
+        lambda status: status.pending,
     )
     assert status.pending
 
     # settle the invoice
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
 
@@ -303,12 +324,16 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
     await asyncio.sleep(SLEEP_TIME)
 
     # check the payment status
-    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
-        quote.checking_id
+    status = await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            quote.checking_id
+        ),
+        lambda status: status.pending,
     )
     assert status.pending
 
     # cancel the invoice
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(payment_hash)
     await asyncio.sleep(SLEEP_TIME)
 
@@ -362,7 +387,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(ledger.melt(proofs=send_proofs, quote=quote.quote))
+    task = asyncio.create_task(ledger.melt(proofs=send_proofs, quote=quote.quote))
     # asyncio.create_task(
     #     wallet.melt(
     #         proofs=send_proofs,
@@ -384,8 +409,13 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     assert all([s.pending for s in states])
 
     # only now settle the invoice
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     settle_invoice(preimage=preimage)
-    await asyncio.sleep(SLEEP_TIME)
+    await asyncio.wait_for(task, 90)
+    await wait_for_result(
+        lambda: ledger.get_melt_quote(quote_id=quote.quote),
+        lambda quote: quote.paid,
+    )
 
     # expect that proofs are now spent
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])

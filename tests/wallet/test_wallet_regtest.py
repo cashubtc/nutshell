@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 
 import bolt11
 import pytest
@@ -16,6 +17,8 @@ from tests.helpers import (
     is_fake,
     pay_if_regtest,
     settle_invoice,
+    wait_for_hold_invoice,
+    wait_for_result,
 )
 
 
@@ -40,14 +43,14 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     assert wallet.balance == 64
 
     # create hodl invoice
-    preimage, invoice_dict = get_hold_invoice(16)
+    preimage, invoice_dict = get_hold_invoice(15)
     invoice_payment_request = str(invoice_dict["payment_request"])
 
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
+    task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -60,12 +63,18 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.pending for s in states.states])
 
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     settle_invoice(preimage=preimage)
+    await wait_for_result(
+        lambda: wallet.check_proof_state(send_proofs),
+        lambda response: all(state.spent for state in response.states),
+    )
 
     await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.spent for s in states.states])
+    await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -78,7 +87,7 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
     assert wallet.balance == 64
 
     # create hodl invoice
-    preimage, invoice_dict = get_hold_invoice(16)
+    preimage, invoice_dict = get_hold_invoice(15)
     invoice_payment_request = str(invoice_dict["payment_request"])
     invoice_obj = bolt11.decode(invoice_payment_request)
     preimage_hash = invoice_obj.payment_hash
@@ -87,7 +96,7 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
+    task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -100,12 +109,19 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.pending for s in states.states])
 
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(preimage_hash=preimage_hash)
+    await wait_for_result(
+        lambda: wallet.check_proof_state(send_proofs),
+        lambda response: all(state.unspent for state in response.states),
+    )
 
     await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.unspent for s in states.states])
+    with pytest.raises(Exception, match="could not pay invoice"):
+        await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -121,7 +137,7 @@ async def test_regtest_get_melt_quote_melt_fail_restore_pending_batch_check(
     assert wallet.balance == 64
 
     # create hodl invoice
-    preimage, invoice_dict = get_hold_invoice(16)
+    preimage, invoice_dict = get_hold_invoice(15)
     invoice_payment_request = str(invoice_dict["payment_request"])
     invoice_obj = bolt11.decode(invoice_payment_request)
     preimage_hash = invoice_obj.payment_hash
@@ -137,7 +153,7 @@ async def test_regtest_get_melt_quote_melt_fail_restore_pending_batch_check(
     proofs_db = await get_proofs(db=wallet.db, melt_id=quote.quote)
     assert all([p.reserved for p in proofs_db])
 
-    asyncio.create_task(
+    task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -151,7 +167,12 @@ async def test_regtest_get_melt_quote_melt_fail_restore_pending_batch_check(
     assert all([s.pending for s in states.states])
 
     # fail the payment, melt will unset the proofs as reserved
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(preimage_hash=preimage_hash)
+    await wait_for_result(
+        lambda: wallet.check_proof_state(send_proofs),
+        lambda response: all(state.unspent for state in response.states),
+    )
 
     await asyncio.sleep(SLEEP_TIME)
 
@@ -161,6 +182,8 @@ async def test_regtest_get_melt_quote_melt_fail_restore_pending_batch_check(
 
     proofs_db_later = await get_proofs(db=wallet.db, melt_id=quote.quote)
     assert all([p.reserved is False for p in proofs_db_later])
+    with pytest.raises(Exception, match="could not pay invoice"):
+        await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -176,7 +199,7 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
     assert wallet.balance == 64
 
     # create hodl invoice
-    preimage, invoice_dict = get_hold_invoice(16)
+    preimage, invoice_dict = get_hold_invoice(15)
     invoice_payment_request = str(invoice_dict["payment_request"])
     invoice_obj = bolt11.decode(invoice_payment_request)
     preimage_hash = invoice_obj.payment_hash
@@ -187,7 +210,7 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
     _, send_proofs = await wallet.swap_to_send(
         wallet.proofs, total_amount, set_reserved=True
     )
-    assert len(send_proofs) == 2
+    assert len(send_proofs) > 1
 
     task = asyncio.create_task(
         wallet.melt(
@@ -201,11 +224,13 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
 
     # verify that the proofs are reserved
     proofs_db = await get_proofs(db=wallet.db, melt_id=quote.quote)
-    assert len(proofs_db) == 2
+    assert len(proofs_db) == len(send_proofs)
     assert all([p.reserved for p in proofs_db])
 
     # simulate a and kill the task
     task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
 
     await asyncio.sleep(SLEEP_TIME)
 
@@ -213,7 +238,12 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
     assert all([s.pending for s in states.states])
 
     # fail the payment, melt will unset the proofs as reserved
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(preimage_hash=preimage_hash)
+    await wait_for_result(
+        lambda: wallet.check_proof_state(send_proofs),
+        lambda response: all(state.unspent for state in response.states),
+    )
 
     await asyncio.sleep(SLEEP_TIME)
 
@@ -242,7 +272,7 @@ async def test_regtest_wallet_crash_melt_succeed_restore_pending_batch_check(
     assert wallet.balance == 64
 
     # create hodl invoice
-    preimage, invoice_dict = get_hold_invoice(16)
+    preimage, invoice_dict = get_hold_invoice(15)
     invoice_payment_request = str(invoice_dict["payment_request"])
     # invoice_obj = bolt11.decode(invoice_payment_request)
     # preimage_hash = invoice_obj.payment_hash
@@ -270,6 +300,8 @@ async def test_regtest_wallet_crash_melt_succeed_restore_pending_batch_check(
 
     # simulate a and kill the task
     task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
     await asyncio.sleep(SLEEP_TIME)
     # verify that the proofs are still reserved
     proofs_db = await get_proofs(db=wallet.db, melt_id=quote.quote)
@@ -280,7 +312,12 @@ async def test_regtest_wallet_crash_melt_succeed_restore_pending_batch_check(
     assert all([s.pending for s in states.states])
 
     # succeed the payment
+    await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     settle_invoice(preimage=preimage)
+    await wait_for_result(
+        lambda: wallet.check_proof_state(send_proofs),
+        lambda response: all(state.spent for state in response.states),
+    )
 
     await asyncio.sleep(SLEEP_TIME)
 

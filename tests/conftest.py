@@ -20,6 +20,12 @@ from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 
+pytest_plugins = (
+    ["tests.spark_regtest"]
+    if os.getenv("CASHU_SPARK_REGTEST", "").lower() == "true"
+    else []
+)
+
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
@@ -132,7 +138,9 @@ async def ledger():
 
 # # This fixture is used for tests that require API access to the mint
 @pytest.fixture(autouse=True, scope="session")
-def mint():
+def mint(request):
+    if "tests.spark_regtest" in pytest_plugins:
+        request.getfixturevalue("spark_regtest_config")
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,

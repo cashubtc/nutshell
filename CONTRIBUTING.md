@@ -160,26 +160,58 @@ and Lightning data. The tests themselves use the running stack without restartin
 it. If the checkout is elsewhere, run
 `CASHU_REGTEST_DIR=/path/to/cashu-regtest make test-spark-regtest`.
 
-The four cases cover both `sat` and `msat` units against LND and CLN: invoice
-amounts and descriptions, msat rounding, incoming payment events, settlement,
-outgoing quotes and payments, matching preimages, fee and balance accounting,
-and status persistence after reconnecting. Each case generates a temporary seed
-and SDK storage directory and funds its wallet through a real Lightning payment.
-No Breez API key or configured mint mnemonic is needed.
+`make test-spark-regtest` runs three commands sequentially:
 
-Only the SDK connection configuration is overridden to use the fixture's local
-endpoints and operator certificates; backend methods and SDK payment operations
-run normally. This suite tests the Lightning backend contract without starting
-the HTTP mint server. The tests leave their regtest payment history and wallet
-balances until the next stack reset.
+| Command | Coverage |
+| --- | --- |
+| `make test-spark-backend-regtest` | Four direct backend round trips: LND and CLN, in sat and msat, including events, preimages, fee/balance accounting, and reconnecting. |
+| `make test-spark-mint` | The existing `make test-mint` suite with `SparkL2Wallet`, including held payments that settle or fail and pending Cashu proofs. |
+| `make test-spark-wallet` | The existing `make test-wallet` suite with `SparkL2Wallet`, including recovery after an interrupted melt succeeds or fails. |
 
-Normal test runs skip these cases. To invoke them directly:
+The shared suites start the real HTTP mint. An opt-in pytest fixture configures
+the installed Breez SDK to use local endpoints and generated operator
+certificates. The HTTP mint and in-process test ledger use separate temporary
+seeds and caches; backend instances within each process share one SDK. The test
+ledger receives 10,000 regtest sats before the suite starts. Startup-recovery
+tests submit a real backend payment without recording its result in the mint,
+then reconcile its pending proofs using the persisted quote and payment history.
+No Breez API key or configured mint mnemonic is used. The fixture does not mock
+backend or SDK payment operations. Funding helpers wait until the receiving
+backend or HTTP mint can see the payment before continuing. The fixture records
+which process created each invoice so these checks query the correct wallet.
+USD retains the existing `FakeWallet` backend for mixed-unit tests.
+
+For direct pytest invocation of the shared suites, set:
 
 ```sh
-CASHU_SPARK_REGTEST=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+CASHU_SPARK_REGTEST=true MINT_BACKEND_BOLT11_SAT=SparkL2Wallet \
   MINT_BACKEND_BOLT11_USD=FakeWallet TOR=FALSE \
-  poetry run pytest tests/lightning/test_spark_regtest.py -v
+  poetry run pytest tests/mint/test_mint_regtest.py tests/wallet/test_wallet_regtest.py -v
 ```
+
+The direct backend cases use their own isolated wallets and remain skipped in
+normal runs. Spark reports an unpaid receive request as `UNKNOWN` until it
+appears in payment history; the shared tests check that distinction explicitly.
+MPP cases use the existing capability checks because Spark does not support MPP.
+The three tests tied to nonzero LND/CLN routing fees are skipped for Spark.
+This version of `open-ssp` requires `SSP_SWAP_FEE_SATS=0` and rejects nonzero
+fees because fee-bearing Swap V3 fills are unsupported. Nonzero Spark fee
+conversion remains covered by the mocked backend tests; live nonzero-fee parity
+requires upstream SSP support.
+
+The tests leave payment history and wallet balances until the next stack reset.
+Repeated runs can consume the SSP's initial 500,000-sat liquidity. Replenish it
+without resetting the running stack using the regtest repository's helper:
+
+```sh
+cd ~/cashu-regtest
+source ./docker-scripts.sh
+cashu-spark-fund-ssp
+```
+
+After many runs, SSP leaf splitting can also exhaust the operators' unused
+deposit-address quota, preventing this helper from creating a funding address.
+Reset the regtest stack before rerunning in that case.
 
 An explicitly enabled run fails if the local services are unavailable.
 

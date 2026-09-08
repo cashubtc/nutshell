@@ -33,6 +33,7 @@ from tests.helpers import (
     is_fake,
     is_github_actions,
     is_regtest,
+    is_spark_backend,
     pay_if_regtest,
 )
 
@@ -53,18 +54,6 @@ async def assert_err(f, msg: Union[str, CashuError]):
             raise Exception(f"Expected error: {msg}, got: {error_message}")
         return
     raise Exception(f"Expected error: {msg}, got no error")
-
-
-async def assert_err_multiple(f, msgs: List[str]):
-    """Compute f() and expect an error message 'msg'."""
-    try:
-        await f
-    except Exception as exc:
-        for msg in msgs:
-            if msg in str(exc.args[0]):
-                return
-        raise Exception(f"Expected error: {msgs}, got: {exc.args[0]}")
-    raise Exception(f"Expected error: {msgs}, got no error")
 
 
 def assert_amt(proofs: List[Proof], expected: int):
@@ -316,12 +305,12 @@ async def test_melt(wallet1: Wallet):
     quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
 
-    if is_regtest:
-        # we expect a fee reserve of 2 sat for regtest
+    if is_regtest and not is_spark_backend:
+        # LND and CLN reserve 2 sats for routing.
         assert total_amount == 66
         assert quote.fee_reserve == 2
-    if is_fake:
-        # we expect a fee reserve of 0 sat for fake
+    if is_fake or is_spark_backend:
+        # Internal payments and the local Spark SSP have zero fees.
         assert total_amount == 64
         assert quote.fee_reserve == 0
 
@@ -338,7 +327,7 @@ async def test_melt(wallet1: Wallet):
         quote_id=quote.quote,
     )
 
-    if is_regtest:
+    if is_regtest and quote.fee_reserve:
         assert melt_response.change, "No change returned"
         assert len(melt_response.change) == 1, "More than one change returned"
         # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
@@ -376,6 +365,10 @@ async def test_melt(wallet1: Wallet):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works on regtest")
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
+)
 async def test_melt_routed_invoice(wallet1: Wallet):
     topup_mint_quote = await wallet1.request_mint(128)
     await pay_if_regtest(topup_mint_quote.request)
@@ -493,12 +486,17 @@ async def test_split_race_condition(wallet1: Wallet):
     # run two splits in parallel
     import asyncio
 
-    await assert_err_multiple(
-        asyncio.gather(
-            wallet1.split(wallet1.proofs, 20),
-            wallet1.split(wallet1.proofs, 20),
-        ),
-        ["proofs are pending", "already spent"],
+    # Await both attempts: the losing split can fail before the winning split
+    # releases its SQLite transaction, which otherwise leaks into the next test.
+    results = await asyncio.gather(
+        wallet1.split(wallet1.proofs, 20),
+        wallet1.split(wallet1.proofs, 20),
+        return_exceptions=True,
+    )
+    errors = [result for result in results if isinstance(result, Exception)]
+    assert len(errors) == 1, results
+    assert any(
+        message in str(errors[0]) for message in ("proofs are pending", "already spent")
     )
 
 
