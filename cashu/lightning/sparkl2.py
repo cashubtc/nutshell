@@ -193,7 +193,7 @@ class SparkL2Wallet(LightningBackend):
         try:
             # The Spark SDK has prepare_send_payment -> send_payment flow.
             prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
-                payment_request=quote.request,
+                payment_request=breez_sdk_spark.PaymentRequest.INPUT(quote.request),
                 amount=None,  # Already in invoice
                 fee_policy=None,  # Can pass fee limits here if supported
             )
@@ -380,7 +380,11 @@ class SparkL2Wallet(LightningBackend):
 
         try:
             prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
-                payment_request=melt_quote.request, amount=None, fee_policy=None
+                payment_request=breez_sdk_spark.PaymentRequest.INPUT(
+                    melt_quote.request
+                ),
+                amount=None,
+                fee_policy=None,
             )
 
             prepare_res = await self.sdk.prepare_send_payment(prepare_req)

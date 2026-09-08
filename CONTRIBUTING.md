@@ -138,6 +138,51 @@ MINT_CLNREST_CERT="../cashu-regtest-enviroment/data/clightning-2/regtest/ca.pem"
 
 ```
 
+### Spark backend regtest
+
+The Spark tests use the real Breez SDK installed by Poetry with the local Spark
+operators, SSP, Esplora, LND, and CLN from
+[cashu-regtest](https://github.com/callebtc/cashu-regtest). Set up the environment:
+
+```sh
+cd ~/cashu-regtest
+git switch main
+git pull --ff-only
+./start.sh --spark
+
+cd ~/nutshell
+make test-spark-regtest
+```
+
+The first Spark stack build can take 30–90 minutes and needs disk space for its
+Rust and Go builds. `start.sh` resets the regtest's existing containers, volumes,
+and Lightning data. The tests themselves use the running stack without restarting
+it. If the checkout is elsewhere, run
+`CASHU_REGTEST_DIR=/path/to/cashu-regtest make test-spark-regtest`.
+
+The four cases cover both `sat` and `msat` units against LND and CLN: invoice
+amounts and descriptions, msat rounding, incoming payment events, settlement,
+outgoing quotes and payments, matching preimages, fee and balance accounting,
+and status persistence after reconnecting. Each case generates a temporary seed
+and SDK storage directory and funds its wallet through a real Lightning payment.
+No Breez API key or configured mint mnemonic is needed.
+
+Only the SDK connection configuration is overridden to use the fixture's local
+endpoints and operator certificates; backend methods and SDK payment operations
+run normally. This suite tests the Lightning backend contract without starting
+the HTTP mint server. The tests leave their regtest payment history and wallet
+balances until the next stack reset.
+
+Normal test runs skip these cases. To invoke them directly:
+
+```sh
+CASHU_SPARK_REGTEST=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+  MINT_BACKEND_BOLT11_USD=FakeWallet TOR=FALSE \
+  poetry run pytest tests/lightning/test_spark_regtest.py -v
+```
+
+An explicitly enabled run fails if the local services are unavailable.
+
 ### Profiling
 
 If you'd like to profile your code (measure how long steps take to execute), run the mint using `DEBUG_PROFILING=TRUE`. Make sure to turn this off again, as your application will be significantly slower with profiling enabled.
