@@ -66,11 +66,12 @@ jobs:
         python-version: ["3.12"]
         poetry-version: ["2.3.2"]
         backend-wallet-class:
-          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet"]
+          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "SparkL2Wallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
+      poetry-version: ${{ matrix.poetry-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}
 
@@ -82,10 +83,11 @@ jobs:
         python-version: ["3.12"]
         poetry-version: ["2.3.2"]
         backend-wallet-class:
-          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet"]
+          ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "SparkL2Wallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
+      poetry-version: ${{ matrix.poetry-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}

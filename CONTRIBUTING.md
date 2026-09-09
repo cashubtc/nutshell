@@ -168,6 +168,12 @@ it. If the checkout is elsewhere, run
 | `make test-spark-mint` | The existing `make test-mint` suite with `SparkL2Wallet`, including held payments that settle or fail and pending Cashu proofs. |
 | `make test-spark-wallet` | The existing `make test-wallet` suite with `SparkL2Wallet`, including recovery after an interrupted melt succeeds or fails. |
 
+GitHub CI runs the shared Spark mint and wallet suites with both SQLite and
+PostgreSQL. The Spark mint jobs also run the four direct backend cases. All
+regtest jobs use the revision pinned in `.github/actions/setup-regtest/action.yml`;
+Spark jobs start it with `--spark` and allow up to 90 minutes for setup and
+45 minutes for the shared suite.
+
 The shared suites start the real HTTP mint. An opt-in pytest fixture configures
 the installed Breez SDK to use local endpoints and generated operator
 certificates. The HTTP mint and in-process test ledger use separate temporary
