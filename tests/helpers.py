@@ -264,6 +264,24 @@ def get_real_invoice_routed(sats: int) -> str:
     return run_cmd_json(cmd)["payment_request"]
 
 
+def get_real_invoice_fee_leaf(sats: int) -> str:
+    """Invoice from isolated lnd-4, reachable only through the fee hub."""
+    cmd = [
+        "docker",
+        "exec",
+        "cashu-lnd-4-1",
+        "lncli",
+        "--network=regtest",
+        "--rpcserver=lnd-4:10009",
+    ]
+    destination = run_cmd_json([*cmd, "getinfo"])["identity_pubkey"]
+    _wait_for_route(
+        [*docker_lightning_mint_cli, "queryroutes", "--dest", destination, "--amt", str(sats)],
+        "routes",
+    )
+    return run_cmd_json([*cmd, "addinvoice", str(sats)])["payment_request"]
+
+
 async def pay_if_regtest(bolt11: str) -> None:
     if is_spark_backend and os.getenv("CASHU_SPARK_REGTEST", "").lower() == "true":
         from tests.spark_regtest import pay_regtest_invoice

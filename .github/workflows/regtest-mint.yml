@@ -26,7 +26,7 @@ jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
     # Spark's cold source build can take 90 minutes before the suite starts.
-    timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 150 || 30 }}
+    timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 150 || 45 }}
     env:
       CASHU_REGTEST_DIR: ${{ github.workspace }}/regtest
     steps:
@@ -55,7 +55,7 @@ jobs:
         run: make test-spark-backend-regtest
 
       - name: Run Tests
-        timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 45 || 10 }}
+        timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 45 || 20 }}
         env:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
