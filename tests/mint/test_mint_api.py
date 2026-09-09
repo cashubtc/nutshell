@@ -52,15 +52,22 @@ async def test_landing_page():
 
 
 @pytest.mark.asyncio
-async def test_info(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/info")
+@pytest.mark.parametrize("challenge", [None, "ab" * 32])
+async def test_info(ledger: Ledger, challenge):
+    params = {"challenge": challenge} if challenge is not None else {}
+    response = httpx.get(f"{BASE_URL}/v1/info", params=params)
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
     assert response.json()["pubkey"] == ledger.pubkey.format().hex()
+    if challenge is None:
+        assert "challenge" not in response.json()
+    else:
+        assert response.json()["challenge"] == challenge
     assert verify_mint_info_signature(
         response.json(),
         bytes.fromhex(response.json()["signature"]),
         ledger.pubkey.format(),
+        expected_challenge=challenge,
     )
     info = GetInfoResponse(**response.json())
     assert info.nuts

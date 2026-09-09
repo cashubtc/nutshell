@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -14,7 +15,7 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.errors import NotAllowedError
-from cashu.core.nuts.nut06 import derive_mint_identity_key
+from cashu.core.nuts.nut06 import derive_mint_identity_key, verify_mint_info_signature
 from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
@@ -46,11 +47,12 @@ def _dummy_keyset(keyset_id: str, active: bool = True):
 
 
 def _dummy_ledger():
+    identity_key = derive_mint_identity_key(b"test mint seed")
     active = _dummy_keyset("active", active=True)
     inactive = _dummy_keyset("inactive", active=False)
     mint_info = SimpleNamespace(
         name="Mint",
-        pubkey="02" * 33,
+        pubkey=identity_key.public_key.format().hex(),
         version="Nutshell/1.0",
         description="Short",
         description_long="Long",
@@ -144,7 +146,7 @@ def _dummy_ledger():
 
     db_read = SimpleNamespace(get_proofs_states=get_proofs_states)
     return SimpleNamespace(
-        identity_key=derive_mint_identity_key(b"test mint seed"),
+        identity_key=identity_key,
         keyset=active,
         keysets={active.id: active, inactive.id: inactive},
         mint_info=mint_info,
@@ -302,6 +304,74 @@ def test_router_endpoints_work_in_process(monkeypatch):
     keyset = client.get("/v1/keys/active")
     assert keyset.status_code == 200
     assert keyset.json()["keysets"][0]["id"] == "active"
+
+
+def test_info_signs_optional_challenges_without_tracking_reuse(monkeypatch):
+    ledger = _dummy_ledger()
+    monkeypatch.setattr(router_module, "ledger", ledger)
+    client = TestClient(_build_router_app())
+    original_info = vars(ledger.mint_info).copy()
+
+    for challenge in (None, "ab" * 32, "ab" * 32, "cd" * 32, None):
+        params = {"challenge": challenge} if challenge is not None else {}
+        response = client.get("/v1/info", params=params)
+        assert response.status_code == 200
+        data = response.json()
+        if challenge is None:
+            assert "challenge" not in data
+        else:
+            assert data["challenge"] == challenge
+        assert verify_mint_info_signature(
+            data,
+            bytes.fromhex(data["signature"]),
+            ledger.identity_key.public_key.format(),
+            expected_challenge=challenge,
+        )
+    assert vars(ledger.mint_info) == original_info
+
+
+@pytest.mark.parametrize(
+    "challenge",
+    ["", "ab" * 31, "a" * 63, "a" * 65, "ab" * 33, "0" * 4096, "AB" * 32, "g" * 64],
+    ids=[
+        "empty",
+        "31-bytes",
+        "odd-short",
+        "65-chars",
+        "33-bytes",
+        "oversized",
+        "uppercase",
+        "nonhex",
+    ],
+)
+def test_info_rejects_invalid_challenge_before_constructing_or_signing(
+    monkeypatch, challenge
+):
+    signer = Mock()
+    response_model = Mock()
+    monkeypatch.setattr(router_module, "sign_mint_info", signer)
+    monkeypatch.setattr(router_module, "GetInfoResponse", response_model)
+    client = TestClient(_build_router_app())
+    response = client.get("/v1/info", params={"challenge": challenge})
+    assert response.status_code == 400
+    assert response.json() == {
+        "detail": "challenge must be exactly 64 lowercase hexadecimal characters",
+        "code": 0,
+    }
+    response_model.assert_not_called()
+    signer.assert_not_called()
+
+
+@pytest.mark.parametrize("length", [64, 65])
+def test_info_checks_url_decoded_challenge_length(monkeypatch, length):
+    monkeypatch.setattr(router_module, "ledger", _dummy_ledger())
+    client = TestClient(_build_router_app())
+    response = client.get("/v1/info?challenge=" + "%61" * length)
+    if length == 64:
+        assert response.status_code == 200
+        assert response.json()["challenge"] == "a" * 64
+    else:
+        assert response.status_code == 400
 
 
 def test_router_keyset_lookup_returns_cashu_error(monkeypatch):

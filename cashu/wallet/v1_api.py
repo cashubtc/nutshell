@@ -1,4 +1,5 @@
 import json
+import secrets
 from posixpath import join
 from typing import List, Optional, Tuple, Union
 
@@ -40,7 +41,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
-from ..core.nuts.nut06 import verify_mint_info_signature
+from ..core.nuts.nut06 import MINT_INFO_CHALLENGE_BYTES, verify_mint_info_signature
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .crud import (
@@ -343,7 +344,10 @@ class LedgerAPI(SupportsAuth):
         Raises:
             Exception: If the mint info request fails
         """
-        resp = await self._request(GET, "/v1/info", noprefix=True)
+        challenge = secrets.token_hex(MINT_INFO_CHALLENGE_BYTES)
+        resp = await self._request(
+            GET, "/v1/info", noprefix=True, params={"challenge": challenge}
+        )
         self.raise_on_unsupported_version(resp, "Get /v1/info")
 
         data: dict = resp.json()
@@ -351,9 +355,13 @@ class LedgerAPI(SupportsAuth):
             signature = bytes.fromhex(data["signature"])
             pubkey = bytes.fromhex(data["pubkey"])
         except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError("mint info identity fields are missing or malformed") from exc
-        if not verify_mint_info_signature(data, signature, pubkey):
-            raise ValueError("mint info signature or timestamp is invalid")
+            raise ValueError(
+                "mint info identity fields are missing or malformed"
+            ) from exc
+        if not verify_mint_info_signature(
+            data, signature, pubkey, expected_challenge=challenge
+        ):
+            raise ValueError("mint info signature, timestamp, or challenge is invalid")
         mint_info: GetInfoResponse = GetInfoResponse.model_validate(data)
         return mint_info
 

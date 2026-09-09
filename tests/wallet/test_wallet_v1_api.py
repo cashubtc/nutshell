@@ -270,13 +270,19 @@ async def test_get_info_uses_unprefixed_path(monkeypatch, api: LedgerAPI):
         "contact": [{"method": "email", "info": "mint@example.com"}],
         "time": int(time.time()),
     }
-    response_data["signature"] = sign_mint_info(response_data, identity_key).hex()
+    challenges = []
 
     async def fake_request(self, method, path, **kwargs):
         assert method == "GET"
         assert path == "/v1/info"
         assert kwargs["noprefix"] is True
-        return _response(200, response_data)
+        challenge = kwargs["params"]["challenge"]
+        assert len(challenge) == 64
+        assert bytes.fromhex(challenge).hex() == challenge
+        challenges.append(challenge)
+        data = {**response_data, "challenge": challenge}
+        data["signature"] = sign_mint_info(data, identity_key).hex()
+        return _response(200, data)
 
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     mint_info = await api._get_info()
@@ -284,6 +290,62 @@ async def test_get_info_uses_unprefixed_path(monkeypatch, api: LedgerAPI):
     assert mint_info.contact
     assert mint_info.contact[0].method == "email"
     assert mint_info.contact[0].info == "mint@example.com"
+    assert mint_info.challenge == challenges[0]
+    next_info = await api._get_info()
+    assert next_info.challenge == challenges[1]
+    assert challenges[0] != challenges[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("challenge", [None, "", "00" * 32, "AB" * 32, "a" * 65, 0])
+async def test_get_info_rejects_signed_reply_with_invalid_challenge(
+    monkeypatch, api: LedgerAPI, challenge
+):
+    identity_key = derive_mint_identity_key(b"test mint info identity seed")
+    expected_challenge = "ab" * 32
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.secrets.token_hex", lambda size: expected_challenge
+    )
+    data = {"pubkey": identity_key.public_key.format().hex(), "time": int(time.time())}
+    if challenge is not None:
+        data["challenge"] = challenge
+    data["signature"] = sign_mint_info(data, identity_key).hex()
+
+    async def fake_request(self, method, path, **kwargs):
+        assert kwargs["params"] == {"challenge": expected_challenge}
+        return _response(200, data)
+
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    with pytest.raises(ValueError, match="challenge is invalid"):
+        await api._get_info()
+
+
+@pytest.mark.asyncio
+async def test_get_info_rejects_replayed_response(monkeypatch, api: LedgerAPI):
+    identity_key = derive_mint_identity_key(b"test mint info identity seed")
+    response_data = None
+    challenges = []
+
+    async def fake_request(self, method, path, **kwargs):
+        nonlocal response_data
+        challenges.append(kwargs["params"]["challenge"])
+        if response_data is None:
+            response_data = {
+                "pubkey": identity_key.public_key.format().hex(),
+                "time": int(time.time()),
+                "challenge": challenges[0],
+            }
+            response_data["signature"] = sign_mint_info(
+                response_data, identity_key
+            ).hex()
+        return _response(200, response_data)
+
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    await api._get_info()
+    with pytest.raises(ValueError, match="challenge is invalid"):
+        await api._get_info()
+    assert len(challenges) == 2
+    assert challenges[0] != challenges[1]
 
 
 def test_get_info_rejects_deprecated_contact_shape():

@@ -2,13 +2,14 @@ import asyncio
 import html
 import os
 import time
+from typing import Optional
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 
-from ..core.errors import KeysetNotFoundError
+from ..core.errors import CashuError, KeysetNotFoundError
 from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
@@ -32,7 +33,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
-from ..core.nuts.nut06 import sign_mint_info
+from ..core.nuts.nut06 import is_valid_mint_info_challenge, sign_mint_info
 from ..core.nuts.nuts import (
     BATCH_MINT_NUT,
     BLIND_AUTH_NUT,
@@ -240,12 +241,17 @@ async def index(request: Request) -> HTMLResponse:
     response_model=GetInfoResponse,
     response_model_exclude_none=True,
 )
-async def info() -> GetInfoResponse:
+async def info(challenge: Optional[str] = None) -> GetInfoResponse:
     logger.trace("> GET /v1/info")
+    if challenge is not None and not is_valid_mint_info_challenge(challenge):
+        raise CashuError(
+            "challenge must be exactly 64 lowercase hexadecimal characters"
+        )
     mint_info = ledger.mint_info
     response = GetInfoResponse(
         name=mint_info.name,
         pubkey=mint_info.pubkey,
+        challenge=challenge,
         version=mint_info.version,
         description=mint_info.description,
         description_long=mint_info.description_long,

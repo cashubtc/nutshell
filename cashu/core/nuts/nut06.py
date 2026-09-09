@@ -10,6 +10,8 @@ from coincurve import PrivateKey, PublicKeyXOnly
 
 SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 MINT_IDENTITY_DOMAIN_SEPARATOR = b"Cashu_Mint_Identity_v1"
+MINT_INFO_TAG_HASH = hashlib.sha256(b"Cashu_MintInfo_v1").digest()
+MINT_INFO_CHALLENGE_BYTES = 32
 MINT_INFO_TIME_WINDOW = 3600
 
 
@@ -33,12 +35,28 @@ def canonicalize_mint_info(info: Mapping[str, Any]) -> bytes:
     return rfc8785.dumps(normalized)
 
 
+def mint_info_message_hash(info: Mapping[str, Any]) -> bytes:
+    """Hash the canonical payload with the BIP-340 Cashu_MintInfo_v1 tag."""
+    return hashlib.sha256(
+        MINT_INFO_TAG_HASH + MINT_INFO_TAG_HASH + canonicalize_mint_info(info)
+    ).digest()
+
+
+def is_valid_mint_info_challenge(challenge: object) -> bool:
+    """Check the challenge's length before inspecting its lowercase hex encoding."""
+    return (
+        isinstance(challenge, str)
+        and len(challenge) == 2 * MINT_INFO_CHALLENGE_BYTES
+        and all(char in "0123456789abcdef" for char in challenge)
+    )
+
+
 def sign_mint_info(
     info: Mapping[str, Any],
     private_key: PrivateKey,
     aux_randomness: Optional[bytes] = None,
 ) -> bytes:
-    message_hash = hashlib.sha256(canonicalize_mint_info(info)).digest()
+    message_hash = mint_info_message_hash(info)
     return private_key.sign_schnorr(
         message_hash, aux_randomness if aux_randomness is not None else os.urandom(32)
     )
@@ -49,8 +67,14 @@ def verify_mint_info_signature(
     signature: bytes,
     pubkey: bytes,
     verifier_time: Optional[int] = None,
+    expected_challenge: Optional[str] = None,
 ) -> bool:
     if len(signature) != 64 or len(pubkey) != 33 or pubkey[0] not in (2, 3):
+        return False
+    if expected_challenge is not None and (
+        not is_valid_mint_info_challenge(info.get("challenge"))
+        or info["challenge"] != expected_challenge
+    ):
         return False
     mint_time = info.get("time")
     if isinstance(mint_time, bool) or not isinstance(mint_time, int):
@@ -58,7 +82,7 @@ def verify_mint_info_signature(
     now = int(time.time()) if verifier_time is None else verifier_time
     if abs(mint_time - now) > MINT_INFO_TIME_WINDOW:
         return False
-    message_hash = hashlib.sha256(canonicalize_mint_info(info)).digest()
+    message_hash = mint_info_message_hash(info)
     try:
         return PublicKeyXOnly(pubkey[1:]).verify(signature, message_hash)
     except ValueError:
