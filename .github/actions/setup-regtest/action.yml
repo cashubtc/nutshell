@@ -1,0 +1,31 @@
+name: Setup regtest
+description: Start the pinned Lightning environment, including Spark when selected.
+
+inputs:
+  backend-wallet-class:
+    description: Lightning backend under test
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout regtest
+      uses: actions/checkout@v6
+      with:
+        repository: callebtc/cashu-regtest
+        ref: 23d5c160e0b5fade7e4a245b7385f9116bf2fc5c
+        path: regtest
+        persist-credentials: false
+
+    - name: Start regtest
+      shell: bash
+      working-directory: regtest
+      env:
+        BACKEND: ${{ inputs.backend-wallet-class }}
+      run: |
+        chmod -R 777 .
+        if [ "$BACKEND" = "SparkL2Wallet" ]; then
+          bash ./start.sh --spark
+        else
+          bash ./start.sh
+        fi

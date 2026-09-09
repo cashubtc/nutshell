@@ -2,6 +2,7 @@ import base64
 import json
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -669,6 +670,185 @@ async def test_lndrest_get_payment_quote_uses_mpp_amount(monkeypatch):
     quote = await wallet.get_payment_quote(request)
     assert quote.amount == Amount(Unit.sat, 2)
     assert quote.fee == Amount(Unit.sat, fee_reserve(1500) // 1000)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["pay", "status"])
+@pytest.mark.parametrize("unit", [Unit.sat, Unit.msat])
+async def test_spark_returns_payment_fees_in_wallet_unit(operation, unit):
+    import breez_sdk_spark as breez
+
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    wallet = SparkL2Wallet(unit=unit)
+    sdk = AsyncMock()
+    wallet.sdk = sdk
+    # UniFFI decodes u128 values to Python integers despite the str annotation.
+    payment = breez.Payment(
+        id="payment-id",
+        payment_type=breez.PaymentType.SEND,
+        status=breez.PaymentStatus.COMPLETED,
+        amount=1,
+        fees=7,
+        timestamp=0,
+        method=breez.PaymentMethod.LIGHTNING,
+        details=None,
+        conversion_details=None,
+    )
+    sdk.get_payment.return_value = SimpleNamespace(payment=payment)
+    sdk.send_payment.return_value = SimpleNamespace(payment=payment)
+    sdk.prepare_send_payment.return_value = SimpleNamespace(
+        payment_method=SimpleNamespace(
+            is_bolt11_invoice=lambda: True,
+            lightning_fee_sats=7,
+            spark_transfer_fee_sats=0,
+        )
+    )
+
+    if operation == "pay":
+        result = await wallet.pay_invoice(_quote("lnbcrt1test"), fee_limit_msat=7000)
+    else:
+        result = await wallet.get_payment_status(payment.id)
+
+    assert result.settled
+    assert result.fee == Amount(Unit.sat, 7).to(unit)
+    assert isinstance(result.fee.amount, int)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["quote", "pay"])
+async def test_spark_wraps_invoice_in_sdk_payment_request(operation):
+    from breez_sdk_spark import PaymentRequest
+
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    wallet = SparkL2Wallet(unit=Unit.sat)
+    sdk = AsyncMock()
+    sdk.prepare_send_payment.side_effect = RuntimeError("stop after preparation")
+    wallet.sdk = sdk
+    invoice = "lnbcrt1test"
+
+    if operation == "pay":
+        result = await wallet.pay_invoice(_quote(invoice), fee_limit_msat=1000)
+        assert result.failed
+    else:
+        with pytest.raises(Exception, match="stop after preparation"):
+            await wallet.get_payment_quote(
+                PostMeltQuoteRequest(unit="sat", request=invoice)
+            )
+
+    sdk.prepare_send_payment.assert_awaited_once()
+    request = sdk.prepare_send_payment.call_args.args[0]
+    assert isinstance(request.payment_request, PaymentRequest.INPUT)
+    assert request.payment_request.input == invoice
+    sdk.send_payment.assert_not_awaited()
+
+
+def _spark_lightning_payment(status, preimage=None, payment_hash="a" * 64):
+    import breez_sdk_spark as breez
+
+    return breez.Payment(
+        id="sdk-payment-uuid",
+        payment_type=breez.PaymentType.SEND,
+        status=status,
+        amount=64,
+        fees=7,
+        timestamp=1,
+        method=breez.PaymentMethod.LIGHTNING,
+        conversion_details=None,
+        details=breez.PaymentDetails.LIGHTNING(
+            description=None,
+            invoice="lnbcrt1test",
+            destination_pubkey="",
+            htlc_details=breez.SparkHtlcDetails(
+                payment_hash=payment_hash,
+                preimage=preimage,
+                expiry_time=0,
+                status=(
+                    breez.SparkHtlcStatus.PREIMAGE_SHARED
+                    if preimage
+                    else breez.SparkHtlcStatus.WAITING_FOR_PREIMAGE
+                ),
+            ),
+            lnurl_pay_info=None,
+            lnurl_withdraw_info=None,
+            lnurl_receive_metadata=None,
+            conversion_info=None,
+        ),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["pay", "status"])
+async def test_spark_completed_transfer_waits_for_lightning_preimage(operation):
+    import breez_sdk_spark as breez
+
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    wallet = SparkL2Wallet(Unit.sat)
+    sdk = AsyncMock()
+    wallet.sdk = sdk
+    payment = _spark_lightning_payment(breez.PaymentStatus.COMPLETED)
+    sdk.send_payment.return_value = SimpleNamespace(payment=payment)
+    sdk.get_payment.return_value = SimpleNamespace(payment=payment)
+    sdk.prepare_send_payment.return_value = SimpleNamespace(
+        payment_method=SimpleNamespace(
+            is_bolt11_invoice=lambda: True,
+            lightning_fee_sats=7,
+            spark_transfer_fee_sats=0,
+        )
+    )
+
+    if operation == "pay":
+        result = await wallet.pay_invoice(_quote("lnbcrt1test"), 7000)
+        assert result.checking_id == payment.id
+    else:
+        result = await wallet.get_payment_status(payment.id)
+    assert result.pending
+    assert result.preimage is None
+
+    payment.details.htlc_details.preimage = "b" * 64
+    settled = await wallet.get_payment_status(payment.id)
+    assert settled.settled
+    assert settled.preimage == "b" * 64
+    assert settled.fee == Amount(Unit.sat, 7)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["PENDING", "FAILED", "COMPLETED"])
+async def test_spark_checks_payment_by_quote_hash_after_reconnecting(state):
+    import breez_sdk_spark as breez
+
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    # A new backend instance has no in-memory mapping from BOLT11 hash to UUID.
+    wallet = SparkL2Wallet(Unit.sat)
+    sdk = AsyncMock()
+    wallet.sdk = sdk
+    preimage = "b" * 64 if state == "COMPLETED" else None
+    payment = _spark_lightning_payment(
+        getattr(breez.PaymentStatus, state), preimage=preimage
+    )
+    unrelated = _spark_lightning_payment(
+        breez.PaymentStatus.COMPLETED, preimage="c" * 64, payment_hash="d" * 64
+    )
+    sdk.list_payments.return_value = SimpleNamespace(payments=[unrelated, payment])
+
+    status = await wallet.get_payment_status("a" * 64)
+
+    assert (
+        status.result
+        == {
+            "PENDING": PaymentResult.PENDING,
+            "FAILED": PaymentResult.FAILED,
+            "COMPLETED": PaymentResult.SETTLED,
+        }[state]
+    )
+    assert status.preimage == preimage
+    request = sdk.list_payments.call_args.args[0]
+    assert request.type_filter == [breez.PaymentType.SEND]
+    assert request.sort_ascending is False
+    sdk.get_payment.assert_not_awaited()
 
 
 @pytest.mark.asyncio

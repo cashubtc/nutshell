@@ -25,7 +25,10 @@ permissions:
 jobs:
   regtest-wallet:
     runs-on: ${{ inputs.os-version }}
-    timeout-minutes: 10
+    # Spark's cold source build can take 90 minutes before the suite starts.
+    timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 150 || 30 }}
+    env:
+      CASHU_REGTEST_DIR: ${{ github.workspace }}/regtest
     steps:
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')
@@ -41,13 +44,13 @@ jobs:
           poetry-version: ${{ inputs.poetry-version }}
 
       - name: Setup Regtest
-        run: |
-          git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
-          cd regtest
-          chmod -R 777 .
-          bash ./start.sh
+        timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 90 || 20 }}
+        uses: ./.github/actions/setup-regtest
+        with:
+          backend-wallet-class: ${{ inputs.backend-wallet-class }}
 
       - name: Run Tests
+        timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 45 || 10 }}
         env:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
@@ -69,7 +72,20 @@ jobs:
           MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
         run: |
           sudo chmod -R 777 .
-          make test-wallet
+          if [ "$MINT_BACKEND_BOLT11_SAT" = "SparkL2Wallet" ]; then
+            make test-spark-wallet
+          else
+            make test-wallet
+          fi
+
+      - name: Regtest failure diagnostics
+        if: failure()
+        working-directory: regtest
+        env:
+          COMPOSE_PROJECT_NAME: cashu
+        run: |
+          docker compose --profile "*" ps -a
+          docker compose --profile "*" logs --tail=100
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

@@ -3,7 +3,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.base import MeltQuoteState, Method, MintQuoteState, Unit
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -21,10 +21,12 @@ from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import (
     get_real_invoice,
+    get_real_invoice_fee_leaf,
     get_real_invoice_routed,
     is_cln_backend,
     is_fake,
     is_regtest,
+    is_spark_backend,
     pay_if_regtest,
 )
 
@@ -88,7 +90,11 @@ async def test_api_keys(ledger: Ledger):
             for keyset in ledger.keysets.values()
         ]
     }
-    assert response.json() == expected
+    result = response.json()
+    # PostgreSQL can return the same keysets in a different order.
+    result["keysets"].sort(key=lambda keyset: keyset["id"])
+    expected["keysets"].sort(key=lambda keyset: keyset["id"])
+    assert result == expected
 
 
 @pytest.mark.asyncio
@@ -380,8 +386,8 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
     result = response.json()
     assert result["quote"]
     assert result["amount"] == 64
-    # external invoice, fee should be 2
-    assert result["fee_reserve"] == 2
+    # Spark uses the local SSP's exact (zero) swap fee.
+    assert result["fee_reserve"] == (0 if is_spark_backend else 2)
 
 
 @pytest.mark.asyncio
@@ -451,7 +457,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 62
-    assert quote.fee_reserve == 2
+    assert quote.fee_reserve == (0 if is_spark_backend else 2)
 
     keep, send = await wallet.swap_to_send(wallet.proofs, 64)
     inputs_payload = [p.to_dict() for p in send]
@@ -495,6 +501,10 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 @pytest.mark.skipif(
     is_fake,
     reason="only works on regtest",
+)
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
 )
 async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
@@ -554,14 +564,18 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     is_cln_backend,
     reason="CLN pathfinding is randomized, the exact fee is not deterministic",
 )
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
+)
 async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(1024)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(1024, quote_id=mint_quote.quote)
     assert wallet.balance == 1024
 
-    # external invoice that the mint can only pay through a routing node
-    invoice_payment_request = get_real_invoice_routed(1000)
+    # The isolated fee leaf prevents LDK from offering a cheaper, whole-sat route.
+    invoice_payment_request = get_real_invoice_fee_leaf(1000)
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 1000
@@ -590,15 +604,23 @@ async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet
     resp_quote = PostMeltQuoteResponse(**response.json())
     assert resp_quote.state == MeltQuoteState.paid.value
 
-    # the routing fee for 1000 sat is 1001 msat (1000 msat base fee + 1 ppm)
-    # which the mint must round up to 2 sat when it accounts the fee
     melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
     assert melt_quote, "No melt quote in db"
-    assert melt_quote.fee_paid == 2, "Fee not rounded up to the next sat"
+
+    # Verify rounding against LND's settled fee, independently of path selection.
+    payment = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        melt_quote.checking_id
+    )
+    assert payment.settled
+    assert payment.fee is not None and payment.fee.unit == Unit.msat
+    whole_sats, remainder_msat = divmod(payment.fee.amount, 1000)
+    assert remainder_msat > 0, "Route must charge a fractional sat to test rounding"
+    rounded_fee = whole_sats + 1
+    assert melt_quote.fee_paid == rounded_fee, "Fee not rounded up to the next sat"
 
     # we get back the fee reserve minus the rounded up fee
     change_sat = sum([c.amount for c in resp_quote.change or []])
-    assert change_sat == 18, "Wrong change returned"
+    assert change_sat == quote.fee_reserve - rounded_fee, "Wrong change returned"
 
 
 @pytest.mark.asyncio

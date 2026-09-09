@@ -43,6 +43,33 @@ test-mint:
 	DEBUG=true \
 	poetry run pytest tests/mint --cov-report xml --cov cashu
 
+.PHONY: test-spark-regtest test-spark-backend-regtest test-spark-mint test-spark-wallet
+test-spark-regtest:
+	$(MAKE) test-spark-backend-regtest
+	$(MAKE) test-spark-mint
+	$(MAKE) test-spark-wallet
+
+test-spark-backend-regtest:
+	CASHU_SPARK_REGTEST=true \
+	MINT_BACKEND_BOLT11_SAT=FakeWallet \
+	MINT_BACKEND_BOLT11_USD=FakeWallet \
+	TOR=FALSE \
+	poetry run pytest tests/lightning/test_spark_regtest.py -v
+
+test-spark-mint:
+	CASHU_SPARK_REGTEST=true \
+	MINT_BACKEND_BOLT11_SAT=SparkL2Wallet \
+	MINT_BACKEND_BOLT11_USD=FakeWallet \
+	TOR=FALSE \
+	$(MAKE) test-mint
+
+test-spark-wallet:
+	CASHU_SPARK_REGTEST=true \
+	MINT_BACKEND_BOLT11_SAT=SparkL2Wallet \
+	MINT_BACKEND_BOLT11_USD=FakeWallet \
+	TOR=FALSE \
+	$(MAKE) test-wallet
+
 install:
 	make clean
 	python setup.py sdist bdist_wheel
