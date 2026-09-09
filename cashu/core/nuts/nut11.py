@@ -1,9 +1,16 @@
+from hashlib import sha256
 from typing import List, Optional
 
 from ..base import BlindedMessage, Proof
 from .nut20 import int_to_minimal_bytes
 
-SIGALL_SIG_DOMAIN_TAG = b"Cashu_SigAllSig_v1"
+SIGALL_SIG_TAG_V1 = "Cashu_SigAllSig_v1"
+
+
+def tagged_hash(tag: str, message: bytes) -> bytes:
+    """BIP-340 tagged hash: SHA256(SHA256(tag) || SHA256(tag) || message)."""
+    tag_hash = sha256(tag.encode("utf-8")).digest()
+    return sha256(tag_hash + tag_hash + message).digest()
 
 
 def _len_prefixed(data: bytes) -> bytes:
@@ -16,13 +23,13 @@ def sigall_message_to_sign_v1(
     quote_id: Optional[str] = None,
 ) -> bytes:
     """
-    Creates the NUT-11 v1 SIG_ALL message: domain-separated, length-framed bytes.
+    Creates the NUT-11 v1 SIG_ALL message: length-framed bytes.
 
     Commits to the quote id (empty for swaps), then each proof's secret and C,
-    then each output's amount (minimal big-endian bytes) and B_.
+    then each output's amount (minimal big-endian bytes) and B_. The value
+    signed is `sigall_message_hash_v1`, not the SHA-256 of this message.
     """
-    msg = bytearray(SIGALL_SIG_DOMAIN_TAG)
-    msg += _len_prefixed((quote_id or "").encode("utf-8"))
+    msg = bytearray(_len_prefixed((quote_id or "").encode("utf-8")))
     for p in proofs:
         msg += _len_prefixed(p.secret.encode("utf-8"))
         msg += _len_prefixed(bytes.fromhex(p.C))
@@ -30,6 +37,17 @@ def sigall_message_to_sign_v1(
         msg += _len_prefixed(int_to_minimal_bytes(o.amount))
         msg += _len_prefixed(bytes.fromhex(o.B_))
     return bytes(msg)
+
+
+def sigall_message_hash_v1(
+    proofs: List[Proof],
+    outputs: List[BlindedMessage],
+    quote_id: Optional[str] = None,
+) -> bytes:
+    """32-byte NUT-11 v1 SIG_ALL digest, signed directly with Schnorr."""
+    return tagged_hash(
+        SIGALL_SIG_TAG_V1, sigall_message_to_sign_v1(proofs, outputs, quote_id)
+    )
 
 
 def sigall_message_to_sign(proofs: List[Proof], outputs: List[BlindedMessage]) -> str:

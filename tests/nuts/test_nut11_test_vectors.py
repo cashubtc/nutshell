@@ -403,7 +403,7 @@ def test_sig_all_swap_multisig_valid():
     assert cond._verify_input_output_spending_conditions(proofs, outputs) is True
 
 
-# --- SIG_ALL v1 (length-framed) message vectors ---
+# --- SIG_ALL v1 (length-framed, tagged hash) message vectors ---
 # Canonical vectors from nuts tests/11-test.md ("SIG_ALL v1 Message Vectors"),
 # pinned byte-for-byte in cashu-ts and cdk too. Signing key is the well-known
 # test key (privkey 0x...01).
@@ -444,34 +444,41 @@ def test_sig_all_v1_message_canonical_vector():
     from hashlib import sha256
 
     from cashu.core.crypto.secp import PublicKey
-    from cashu.core.p2pk import verify_schnorr_signature
+    from cashu.core.p2pk import verify_schnorr_signature_digest
+
+    assert (
+        sha256(nut11.SIGALL_SIG_TAG_V1.encode()).hexdigest()
+        == "c83c413c874b6f3da4c6310558d0d174c56f1a0a034023ae225ab3648e9626b3"
+    )
 
     swap_msg = nut11.sigall_message_to_sign_v1(proofs, outs)
-    assert len(swap_msg) == 572
-    assert swap_msg.startswith(b"Cashu_SigAllSig_v1" + b"\x00" * 4)
+    assert len(swap_msg) == 554
+    assert swap_msg.startswith(b"\x00" * 4)
+    swap_hash = nut11.sigall_message_hash_v1(proofs, outs)
     assert (
-        sha256(swap_msg).hexdigest()
-        == "3fd05c896ff0d5a058f9180e577dced83539ea885f9bf6adf71f7ed084590dc2"
+        swap_hash.hex()
+        == "b2a0a8ee2d8911585d97adce15c8d7e664c712baa31c0f3d8a6e32b909fdda2b"
     )
-    # Pinned signature by the test key over the swap message
-    assert verify_schnorr_signature(
-        message=swap_msg,
+    # Pinned signature by the test key over the swap message hash
+    assert verify_schnorr_signature_digest(
+        digest=swap_hash,
         pubkey=PublicKey(bytes.fromhex(pub)),
         signature=bytes.fromhex(
-            "b2b821f819f12ab61d261971187d19772aaad11422f9d5f3ffda6f97de03349e0e44976b5d44e3c850a99b621045167915caf3ef5b102abe69439e36b68f89d5"
+            "55c4e0d72598a64af2a04d1d348af7beb97b35fe1af91711e205414a24c869ba047b5bd298b87c7b58b439833e244b5498136fd4cccdf9d41b0fe72db8279722"
         ),
     )
 
     melt_msg = nut11.sigall_message_to_sign_v1(proofs, outs, quote_id)
-    assert len(melt_msg) == 608
+    assert len(melt_msg) == 590
+    melt_hash = nut11.sigall_message_hash_v1(proofs, outs, quote_id)
     assert (
-        sha256(melt_msg).hexdigest()
-        == "0ebae3a8dbe1107a7b6392a53b6fb3dfc18b38c4ab02b4b9a460ad8829e20ce1"
+        melt_hash.hex()
+        == "2cdffe8a0eed5d22da07adc0f149d49e0ddca5cdafa6d872630d0c52e167e548"
     )
-    assert verify_schnorr_signature(
-        message=melt_msg,
+    assert verify_schnorr_signature_digest(
+        digest=melt_hash,
         pubkey=PublicKey(bytes.fromhex(pub)),
         signature=bytes.fromhex(
-            "1493200b3f52cd67bdda888f67d80cf8862b4e7bd48a800828f5482218305c367f17dc3409cf89e6c795741605ccce2501f5e2b0f0e3ec54edcc7001a5863e3d"
+            "b22645e507c51a37070402ccc36b5b41cc33fe5bdc2ff3f3ee12d0b7340f9742dfaf64c49e9b1243e7a71b31329a63d9c174fd82f133491b16723f8dcd3f7693"
         ),
     )

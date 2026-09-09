@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from loguru import logger
 
@@ -18,6 +18,7 @@ from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
     schnorr_sign,
+    schnorr_sign_digest,
 )
 from ..core.secret import Secret, SecretKind, Tags
 from .p2bk import WalletP2BK
@@ -117,16 +118,23 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
         return signatures
 
     def schnorr_sign_message(
-        self, message: Union[str, bytes], signing_key: Optional[PrivateKey] = None
+        self, message: str, signing_key: Optional[PrivateKey] = None
     ) -> str:
         """Sign a message with the given key or the wallet's private key."""
         key = signing_key or self.private_key
         assert key.public_key
-        message_bytes = message.encode("utf-8") if isinstance(message, str) else message
         return schnorr_sign(
-            message=message_bytes,
+            message=message.encode("utf-8"),
             private_key=key,
         ).hex()
+
+    def schnorr_sign_digest(
+        self, digest: bytes, signing_key: Optional[PrivateKey] = None
+    ) -> str:
+        """Sign a 32-byte digest directly with the given key or the wallet's key."""
+        key = signing_key or self.private_key
+        assert key.public_key
+        return schnorr_sign_digest(digest=digest, private_key=key).hex()
 
     def _inputs_require_sigall(self, proofs: List[Proof]) -> bool:
         """
@@ -173,20 +181,21 @@ class WalletP2PK(WalletP2BK, SupportsPrivateKey, SupportsDb):
             # verifies on mints that have not (or have already) upgraded. Mints
             # ignore signatures that do not verify and count unique pubkeys.
             quote_suffix = quote_id or ""
-            messages_to_sign: List[Union[str, bytes]] = [
-                nut11.sigall_message_to_sign_v1(proofs, outputs, quote_id),
-                nut11.sigall_message_to_sign(proofs, outputs) + quote_suffix,
-            ]
+            v1_digest = nut11.sigall_message_hash_v1(proofs, outputs, quote_id)
+            v0_message = nut11.sigall_message_to_sign(proofs, outputs) + quote_suffix
             # For P2BK proofs, use the derived blinded signing keys; None falls
-            # back to the wallet's private key in schnorr_sign_message
+            # back to the wallet's private key
             p2bk_keys = self._derive_p2bk_signing_keys(proofs[0])
             signing_keys: List[Optional[PrivateKey]] = (
                 [*p2bk_keys] if p2bk_keys else [None]
             )
             # add witness to only the first proof
             for key in signing_keys:
-                for message_to_sign in messages_to_sign:
-                    signature = self.schnorr_sign_message(message_to_sign, key)
+                signatures = [
+                    self.schnorr_sign_digest(v1_digest, key),
+                    self.schnorr_sign_message(v0_message, key),
+                ]
+                for signature in signatures:
                     signed_proofs = self.add_signatures_to_proofs(
                         [proofs[0]], [signature]
                     )

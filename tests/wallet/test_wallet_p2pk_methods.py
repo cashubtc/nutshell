@@ -225,7 +225,7 @@ async def test_add_witness_swap_sig_all(wallet1: Wallet):
 
     # Verify the signatures cover all formats over both inputs and outputs
     expected = [
-        wallet1.schnorr_sign_message(nut11.sigall_message_to_sign_v1(proofs, outputs)),
+        wallet1.schnorr_sign_digest(nut11.sigall_message_hash_v1(proofs, outputs)),
         wallet1.schnorr_sign_message(nut11.sigall_message_to_sign(proofs, outputs)),
     ]
     assert witness.signatures == expected

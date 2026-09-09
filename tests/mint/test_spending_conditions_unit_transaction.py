@@ -84,7 +84,7 @@ def test_p2pk_requirements_ignore_stray_preimage_in_normalized_witness():
     assert cond._verify_p2pk_or_htlc_spending_requirements(
         requirements,
         witness,
-        [secret.encode("utf-8")],
+        [sha256(secret.encode("utf-8")).digest()],
     )
 
 
