@@ -60,7 +60,10 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
 
     async def AddUrl(self, request, context):
         logger.debug("gRPC AddUrl has been called")
-        if settings.mint_info_urls and request.url not in settings.mint_info_urls:
+        if (
+            settings.mint_info_urls is not None
+            and request.url not in settings.mint_info_urls
+        ):
             settings.mint_info_urls.append(request.url)
         elif settings.mint_info_urls is None:
             settings.mint_info_urls = [request.url]
