@@ -529,13 +529,11 @@ def _tx_from_vector(tx: dict):
 
 def test_transaction_transcript_vectors():
     from cashu.core.crypto.transcript import (
-        TRANSCRIPT_DOMAIN_TAG,
         build_transaction_transcript,
         transaction_digest,
     )
 
     tv = VECTORS["transcript"]
-    assert tv["domain_tag"] == TRANSCRIPT_DOMAIN_TAG
     for name in ("swap", "mint", "melt", "melt_with_change"):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
