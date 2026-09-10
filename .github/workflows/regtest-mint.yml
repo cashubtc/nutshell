@@ -23,10 +23,8 @@ permissions:
   contents: read
 
 env:
-  # Prebuilt cashu-regtest stack (bitcoind, 3x LND, 3x CLN, LNbits). Pinned to
-  # a tag whose docker-compose exposes the node ports on the host (3010, 3001,
-  # 8081, 10009, 5001) with RPC ports consistent with its own scripts.
-  REGTEST_IMAGE: ghcr.io/callebtc/cashu-regtest-environment:sha-bde3931fe27e32b8f83b2adbb65a8460c2f32ef5
+  # This revision uses CLN 26.06.7 (with xpay) and pulls prebuilt service images.
+  REGTEST_REF: 7eb3515b9fb41f477f831cedd28e1ad9ae6c521d
 
 jobs:
   regtest-mint:
@@ -46,36 +44,20 @@ jobs:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
 
+      - name: Checkout Regtest
+        uses: actions/checkout@v6
+        with:
+          repository: callebtc/cashu-regtest
+          ref: ${{ env.REGTEST_REF }}
+          path: regtest
+          persist-credentials: false
+
       - name: Setup Regtest
+        working-directory: regtest
         run: |
-          mkdir -p regtest/data
-          # The container runs `docker compose` against the host daemon from
-          # /regtest, so the stack's ./data bind mounts resolve to /regtest/data
-          # on the runner. Point that at the workspace copy the tests read.
-          sudo ln -sfn "$PWD/regtest" /regtest
-          docker run -d --name regtest-environment \
-            --network host \
-            --volume /var/run/docker.sock:/var/run/docker.sock \
-            --volume "$PWD/regtest/data:/regtest/data" \
-            "$REGTEST_IMAGE"
-          # The container entrypoint bootstraps the stack and runs its
-          # acceptance checks; wait for them before running the tests.
-          ready=false
-          for i in $(seq 1 120); do
-            if [ "$(docker inspect -f '{{.State.Status}}' regtest-environment)" != "running" ]; then
-              break
-            fi
-            if docker logs regtest-environment 2>&1 | grep -q "all tests passed"; then
-              ready=true
-              break
-            fi
-            sleep 5
-          done
-          if [ "$ready" != "true" ]; then
-            docker logs --tail 200 regtest-environment
-            exit 1
-          fi
-          sudo chmod -R 777 regtest
+          chmod -R 777 .
+          # start.sh pulls the published images, starts Compose, and checks payments.
+          bash ./start.sh
 
       - name: Run Tests
         env:
@@ -112,6 +94,6 @@ jobs:
       - name: Stop Regtest
         if: always()
         run: |
-          docker exec regtest-environment docker compose down --volumes || true
-          docker rm -f regtest-environment || true
-          sudo rm -f /regtest
+          if [ -f regtest/docker-compose.yml ]; then
+            docker compose --project-directory regtest -p cashu down --volumes
+          fi
