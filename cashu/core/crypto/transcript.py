@@ -191,9 +191,15 @@ def build_request_transcript(method: str, target: str, body: bytes) -> bytes:
     )
 
 
+TRANSCRIPT_REQUEST_TAG = "Cashu_AuthorizedRequest"
+
+
 def request_digest(method: str, target: str, body: bytes) -> bytes:
-    """The 32-byte digest a version 02 BAT witness signs (NUT-22)."""
-    return hashlib.sha256(
-        TRANSCRIPT_DOMAIN_TAG.encode("utf-8")
-        + build_request_transcript(method, target, body)
-    ).digest()
+    """The 32-byte message a version 02 BAT witness signs (NUT-22).
+
+    tagged_hash("Cashu_AuthorizedRequest", SHA256(request transcript)).
+    """
+    return tagged_hash(
+        TRANSCRIPT_REQUEST_TAG,
+        hashlib.sha256(build_request_transcript(method, target, body)).digest(),
+    )
