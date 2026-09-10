@@ -1671,16 +1671,21 @@ class AuthProof(BaseModel):
     secret: str  # secret
     C: str  # signature
     amount: int = 1  # default amount
+    # Required on version 02 auth keysets: the key-path witness over the
+    # request transcript digest (NUT-22). Absent pre-v3.
+    witness: Optional[str] = None
 
     prefix: ClassVar[str] = "authA"
 
     @classmethod
     def from_proof(cls, proof: Proof):
-        return cls(id=proof.id, secret=proof.secret, C=proof.C)
+        return cls(id=proof.id, secret=proof.secret, C=proof.C, witness=proof.witness)
 
     def to_base64(self):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
+        if serialize_dict.get("witness") is None:
+            serialize_dict.pop("witness", None)
         return self.prefix + base64.urlsafe_b64encode(
             json.dumps(serialize_dict).encode()
         ).decode().rstrip("=")

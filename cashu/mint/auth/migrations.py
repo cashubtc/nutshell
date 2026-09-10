@@ -138,3 +138,49 @@ async def m004_remove_dleq_from_promises(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
         )
+
+
+async def m005_promises_ledger_schema(db: Database):
+    """Rebuild promises to the ledger schema the shared blinded-message path
+    writes: nullable c_, signed_at, quote and swap references, order_index."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises_new')} (
+                    amount {db.big_int} NOT NULL,
+                    id TEXT,
+                    b_ TEXT NOT NULL,
+                    c_ TEXT,
+                    dleq_e TEXT,
+                    dleq_s TEXT,
+                    created TIMESTAMP,
+                    signed_at TIMESTAMP,
+                    mint_quote TEXT,
+                    melt_quote TEXT,
+                    swap_id TEXT,
+                    order_index INTEGER DEFAULT 0,
+
+                    UNIQUE (b_)
+                );
+            """
+        )
+        await conn.execute(
+            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, created) "
+            f"SELECT amount, id, b_, c_, created FROM {db.table_with_schema('promises')}"
+        )
+        await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
+        )
+
+
+async def m006_proofs_digest_column(db: Database):
+    """The spend path stores the transaction digest with used and pending
+    proofs (NUT-07); the auth tables predate the column."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('proofs_used')} ADD COLUMN digest TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('proofs_pending')} ADD COLUMN digest TEXT"
+        )

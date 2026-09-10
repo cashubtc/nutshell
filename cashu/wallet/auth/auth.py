@@ -8,9 +8,10 @@ from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
 from ...core.base import Proof
-from ...core.crypto.keys import PrivateKey
+from ...core.crypto.keys import PrivateKey, is_bls_keyset
 from ...core.crypto.secp import PrivateKey as SecpPrivateKey
 from ...core.db import Database
+from ...core.nuts.nut22 import BATKEY_PREFIX
 from ..crud import get_mint_by_url, update_mint
 from ..wallet import Wallet
 from .openid_connect.openid_client import AuthorizationFlow, OpenIDClient
@@ -227,9 +228,17 @@ class WalletAuth(Wallet):
             raise Exception("No clear auth token available.")
 
         amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
-        secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
+        if is_bls_keyset(self.keyset_id):
+            # NUT-22: a version 02 BAT is a point secret; the wallet keeps each
+            # fresh private key with its proof (BATKEY derivation record) to
+            # sign the request transcript at presentation.
+            bat_keys = [SecpPrivateKey() for _ in amounts]
+            secrets = [k.public_key.format().hex() for k in bat_keys]
+            derivation_paths = [f"{BATKEY_PREFIX}{k.to_hex()}" for k in bat_keys]
+        else:
+            secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
+            derivation_paths = ["" for _ in amounts]
         rs: List[PrivateKey] = [SecpPrivateKey(os.urandom(32)) for _ in amounts] # type: ignore[misc]
-        derivation_paths = ["" for _ in amounts]
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
         new_proofs = await self._construct_proofs(

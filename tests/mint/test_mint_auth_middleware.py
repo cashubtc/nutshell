@@ -162,8 +162,12 @@ async def test_blind_auth_middleware_wraps_protected_paths(monkeypatch):
         )
 
         @asynccontextmanager
-        async def verify_blind_auth(self, blind_auth_token: str):
+        async def verify_blind_auth(
+            self, blind_auth_token: str, *, method: str, target: str, body: bytes
+        ):
             assert blind_auth_token == "bat"
+            assert method == "GET"
+            assert target.startswith("/")
             entered["value"] = True
             yield
 
