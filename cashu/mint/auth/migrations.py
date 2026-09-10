@@ -146,7 +146,6 @@ async def m005_align_promises_with_mint_schema(db: Database):
     """
     async with db.connect() as conn:
         if conn.type == "SQLITE":
-            await conn.execute("PRAGMA foreign_keys=OFF;")
             await conn.execute(
                 f"""
                     CREATE TABLE IF NOT EXISTS {db.table_with_schema("promises_new")} (
@@ -174,7 +173,6 @@ async def m005_align_promises_with_mint_schema(db: Database):
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
             )
-            await conn.execute("PRAGMA foreign_keys=ON;")
         else:
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN IF NOT EXISTS mint_quote TEXT"
