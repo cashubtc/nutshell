@@ -1,7 +1,7 @@
 """Transaction transcript (NUT-10).
 
 One shared digest, one derived message per input:
-transaction_digest = SHA256(domain tag || TLV stream); each input carries
+transaction_digest = SHA256(TLV stream); each input carries
 one BIP-340 signature over its input digest,
 tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
 container record)). Containers: 0x01 proof input, 0x02 mint quote input,
@@ -18,7 +18,6 @@ from typing import Dict, List, Optional, Tuple
 
 from .nutroot import minimal_be, tagged_hash, tlv_record
 
-TRANSCRIPT_DOMAIN_TAG = "Cashu_Transaction_v1"
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
 
@@ -96,7 +95,7 @@ def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
 
 
 def build_transaction_transcript(tx: TransactionShape) -> bytes:
-    """Serialize a transaction to its TLV transcript (without the domain tag)."""
+    """Serialize a transaction to its TLV transcript."""
     proofs = tx.proof_inputs or []
     mint_quotes = tx.mint_quote_inputs or []
     blinded = tx.blinded_outputs or []
@@ -119,10 +118,8 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
 
 
 def transaction_digest(tx: TransactionShape) -> bytes:
-    """The shared 32-byte digest: SHA256(domain tag || transcript)."""
-    return hashlib.sha256(
-        TRANSCRIPT_DOMAIN_TAG.encode("utf-8") + build_transaction_transcript(tx)
-    ).digest()
+    """The shared 32-byte digest: SHA256(transcript)."""
+    return hashlib.sha256(build_transaction_transcript(tx)).digest()
 
 
 def input_digest(transaction_digest_: bytes, container: bytes) -> bytes:
