@@ -7,6 +7,7 @@ import pytest
 from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState, Unit
 from cashu.core.mint_info import MintInfo
 from cashu.core.settings import settings
+from cashu.mint import startup
 from cashu.mint.management_rpc import management_rpc as rpc_module
 
 
@@ -88,8 +89,6 @@ async def test_add_url_after_removing_last_url(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_shutdown_management_rpc_releases_server(monkeypatch):
-    from cashu.mint import startup
-
     server = object()
     shutdown = AsyncMock()
     monkeypatch.setattr(startup, "rpc_server", server)
