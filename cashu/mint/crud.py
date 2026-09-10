@@ -402,6 +402,41 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return [BlindedSignature.from_row(r) for r in rows] if rows else []  # type: ignore
 
+    async def get_blind_signatures_mint_id(
+        self,
+        *,
+        db: Database,
+        mint_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedSignature]:
+        rows = await (conn or db).fetchall(
+            f"""
+                SELECT * from {db.table_with_schema("promises")}
+                WHERE mint_quote = :mint_id AND c_ IS NOT NULL
+                ORDER BY order_index ASC
+                """,
+            {"mint_id": mint_id},
+        )
+        return [BlindedSignature.from_row(r) for r in rows] if rows else []  # type: ignore
+
+    async def get_blinded_Bs_mint_id(
+        self,
+        *,
+        db: Database,
+        mint_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[str]:
+        """Return the stored B_ values for a given mint quote, in order."""
+        rows = await (conn or db).fetchall(
+            f"""
+                SELECT b_ from {db.table_with_schema("promises")}
+                WHERE mint_quote = :mint_id AND c_ IS NOT NULL
+                ORDER BY order_index ASC
+                """,
+            {"mint_id": mint_id},
+        )
+        return [r["b_"] for r in rows] if rows else []
+
     async def delete_blinded_messages_melt_id(
         self,
         *,
