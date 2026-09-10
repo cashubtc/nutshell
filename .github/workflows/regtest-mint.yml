@@ -22,10 +22,16 @@ on:
 permissions:
   contents: read
 
+env:
+  # Prebuilt cashu-regtest stack (bitcoind, 3x LND, 3x CLN, LNbits). Pinned to
+  # a tag whose docker-compose exposes the node ports on the host (3010, 3001,
+  # 8081, 10009, 5001) with RPC ports consistent with its own scripts.
+  REGTEST_IMAGE: ghcr.io/callebtc/cashu-regtest-environment:sha-bde3931fe27e32b8f83b2adbb65a8460c2f32ef5
+
 jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')
@@ -42,10 +48,34 @@ jobs:
 
       - name: Setup Regtest
         run: |
-          git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
-          cd regtest
-          chmod -R 777 .
-          bash ./start.sh
+          mkdir -p regtest/data
+          # The container runs `docker compose` against the host daemon from
+          # /regtest, so the stack's ./data bind mounts resolve to /regtest/data
+          # on the runner. Point that at the workspace copy the tests read.
+          sudo ln -sfn "$PWD/regtest" /regtest
+          docker run -d --name regtest-environment \
+            --network host \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume "$PWD/regtest/data:/regtest/data" \
+            "$REGTEST_IMAGE"
+          # The container entrypoint bootstraps the stack and runs its
+          # acceptance checks; wait for them before running the tests.
+          ready=false
+          for i in $(seq 1 120); do
+            if [ "$(docker inspect -f '{{.State.Status}}' regtest-environment)" != "running" ]; then
+              break
+            fi
+            if docker logs regtest-environment 2>&1 | grep -q "all tests passed"; then
+              ready=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ready" != "true" ]; then
+            docker logs --tail 200 regtest-environment
+            exit 1
+          fi
+          sudo chmod -R 777 regtest
 
       - name: Run Tests
         env:
@@ -78,3 +108,10 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Stop Regtest
+        if: always()
+        run: |
+          docker exec regtest-environment docker compose down --volumes || true
+          docker rm -f regtest-environment || true
+          sudo rm -f /regtest
