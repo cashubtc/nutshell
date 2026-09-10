@@ -78,16 +78,21 @@ class ProofSpentState(Enum):
 class ProofState(LedgerEvent):
     Y: str
     state: ProofSpentState
+    # Pre-v3: the witness that spent the proof, when the spend needed one.
+    # v3: only for a spend through a leaf carrying disclosure mode 0x01;
+    # private spends return the commitment alone (NUT-07).
     witness: Optional[str] = None
-    # NUT-07: v3 transaction digest the witness's signatures cover.
-    digest: Optional[str] = None
+    # NUT-07: input digest a published v3 witness signs (NUT-10).
+    input_digest: Optional[str] = None
+    # NUT-07: v3 spend commitment over (Y, input digest, exact witness string).
+    commitment: Optional[str] = None
 
     @model_validator(mode="after")
     def check_witness(self):
-        if self.witness is not None and self.state != ProofSpentState.spent:
-            raise ValueError('Witness can only be set if the spent state is "SPENT"')
-        if self.digest is not None and self.state != ProofSpentState.spent:
-            raise ValueError('Digest can only be set if the spent state is "SPENT"')
+        if self.state != ProofSpentState.spent and any(
+            v is not None for v in (self.witness, self.input_digest, self.commitment)
+        ):
+            raise ValueError('Spend fields can only be set if the state is "SPENT"')
         return self
 
     @property
@@ -167,8 +172,9 @@ class Proof(BaseModel):
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
     spend_info: Optional[SpendInfo] = None  # nutroot spend info (local-only)
-    # Mint-side: v3 transaction digest the witness signed, stored with the
-    # spent proof and served by NUT-07 (a v3 witness verifies only against it).
+    # Mint-side: v3 input digest the witness signed (NUT-10), stored with the
+    # spent proof; NUT-07 serves it only for disclosed spends, and it opens
+    # the spend commitment.
     digest: Union[None, str] = None
 
     # whether this proof is reserved for sending, used for coin management in the wallet
@@ -1392,7 +1398,7 @@ class TokenV4Proof(BaseModel):
                 if proof.dleq
                 else None
             ),
-            # A v3 witness signs one transaction's digest, so it means nothing
+            # A v3 witness signs one input's digest in one transaction, so it means nothing
             # outside that transaction and a token carries no transaction.
             # Emitting one would hand the next owner a witness that can never
             # verify, in place of the signature they have to produce.
@@ -1482,7 +1488,7 @@ class TokenV4(Token):
                     if p.d
                     else None
                 ),
-                # A v3 witness signs one transaction's digest, so a token
+                # A v3 witness signs one input's digest in one transaction, so a token
                 # cannot carry a usable one. Keeping it would leave a stranger's
                 # witness in place of the signature the new owner must produce,
                 # and their sweep would be refused for it.

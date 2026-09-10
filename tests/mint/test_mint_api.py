@@ -614,8 +614,8 @@ async def test_api_check_state(ledger: Ledger):
 async def test_api_check_state_v3_serves_witness_digest(
     ledger: Ledger, wallet: Wallet
 ):
-    """A spent v3 proof's state carries the transaction digest its witness
-    signed (NUT-07): the witness verifies only against it."""
+    """A spent v3 proof's state carries the spend commitment (NUT-07); the
+    witness and input digest stay private for an undisclosed key-path spend."""
     from cashu.core.base import ProofSpentState
     from cashu.core.crypto.nutroot import (
         keyset_id_transcript_bytes,
@@ -625,7 +625,8 @@ async def test_api_check_state_v3_serves_witness_digest(
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        transaction_digest,
+        spend_commitment,
+        transaction_inputs,
     )
 
     mint_quote = await wallet.request_mint(64)
@@ -642,7 +643,7 @@ async def test_api_check_state_v3_serves_witness_digest(
     response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
     assert response.status_code == 200, f"{response.url} {response.status_code}"
 
-    expected_digest = transaction_digest(
+    _, proof_contexts, _ = transaction_inputs(
         TransactionShape(
             proof_inputs=[
                 TranscriptProofInput(
@@ -662,7 +663,7 @@ async def test_api_check_state_v3_serves_witness_digest(
                 for o in outputs
             ],
         )
-    ).hex()
+    )
 
     state_payload = PostCheckStateRequest(Ys=[p.Y for p in inputs])
     response = httpx.post(
@@ -671,10 +672,21 @@ async def test_api_check_state_v3_serves_witness_digest(
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     states = PostCheckStateResponse.model_validate(response.json()).states
     assert states
+    by_y = {p.Y: p for p in inputs}
     for state in states:
         assert state.state == ProofSpentState.spent
-        assert state.witness
-        assert state.digest == expected_digest
+        # No disclosure leaf was exercised: the witness and input digest stay
+        # with the mint, and the commitment binds them for a later opening.
+        assert state.witness is None
+        assert state.input_digest is None
+        proof = by_y[state.Y]
+        input_digest = proof_contexts[
+            secret_transcript_bytes(proof.secret, proof.id)
+        ].digest
+        assert proof.witness
+        assert state.commitment == spend_commitment(
+            bytes.fromhex(state.Y), input_digest, proof.witness
+        ).hex()
 
 
 @pytest.mark.asyncio
@@ -751,10 +763,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    # Signatures over the one batch transaction digest (all quote inputs + outputs)
+    # Each quote signs its own input digest over the shared batch transcript
     batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
-    sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey)
+    sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey, mint_quote1.quote)
+    sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey, mint_quote2.quote)
 
     outputs_payload = [o.model_dump() for o in outputs]
 
