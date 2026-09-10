@@ -29,7 +29,8 @@ env:
 jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
-    timeout-minutes: 20
+    # Allow startup plus the full mint suite on slower runners.
+    timeout-minutes: 30
     steps:
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')
