@@ -23,7 +23,6 @@ permissions:
   contents: read
 
 env:
-  # This revision uses CLN 26.06.7 (with xpay) and pulls prebuilt service images.
   REGTEST_REF: 7eb3515b9fb41f477f831cedd28e1ad9ae6c521d
 
 jobs:
