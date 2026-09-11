@@ -64,9 +64,26 @@ jobs:
           MINT_AUTH_OICD_DISCOVERY_URL: http://localhost:8080/realms/nutshell/.well-known/openid-configuration
           MINT_AUTH_OICD_CLIENT_ID: cashu-client
         run: |
-          poetry run pytest tests/wallet/test_wallet_auth.py -v --cov=mint --cov-report=xml
+          poetry run pytest tests/wallet/test_wallet_auth.py -v -rs --cov=cashu.mint --cov-report=xml
+
+      - name: Verify auth tests executed
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          test_cases = ET.parse("junit.xml").findall(".//testcase")
+          assert test_cases, "No auth tests were collected"
+          skipped = [
+              case.attrib["name"]
+              for case in test_cases
+              if case.find("skipped") is not None
+          ]
+          assert not skipped, f"Auth tests were skipped: {skipped}"
+          print(f"Verified {len(test_cases)} auth tests executed without skips")
+          PY
 
       - name: Stop and clean up Docker Compose
+        if: always()
         run: |
           docker compose -f tests/keycloak_data/docker-compose-restore.yml down
 
