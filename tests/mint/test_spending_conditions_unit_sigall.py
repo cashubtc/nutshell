@@ -2,6 +2,7 @@ import pytest
 
 from cashu.core.base import BlindedMessage, P2PKWitness
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.errors import TransactionError
 from cashu.core.nuts import nut11
 from cashu.core.p2pk import SigFlags, schnorr_sign
 from cashu.core.secret import SecretKind
@@ -89,3 +90,19 @@ def test_verify_input_output_spending_conditions_requires_equal_secrets_with_sig
     outputs = [BlindedMessage(id="ks", amount=1, B_="b1")]
     with pytest.raises(Exception, match="not all secrets are equal"):
         cond._verify_input_output_spending_conditions([p1, p2], outputs)
+
+
+def test_verify_sigall_spending_conditions_absent_witness_reports_no_signatures():
+    # Pins the wire contract for an absent SIG_ALL witness
+    # (cashubtc/nutshell#1126): code 11000 with "no signatures in proof.".
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-sigall-absent-witness")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub, sigflag=SigFlags.SIG_ALL)
+    proofs = [proof(raw_secret), proof(raw_secret)]
+    outputs = [BlindedMessage(id="ks", amount=1, B_="c1")]
+    assert all(p.witness is None for p in proofs)
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_sigall_spending_conditions(proofs, outputs)
+    assert exc_info.value.code == 11000
+    assert "no signatures in proof" in str(exc_info.value)

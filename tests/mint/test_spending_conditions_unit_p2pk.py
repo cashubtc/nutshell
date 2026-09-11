@@ -207,3 +207,97 @@ def test_verify_p2pk_sig_inputs_allows_anyone_after_locktime_without_refund_pubk
         extra_tags=[["locktime", past]],
     )
     assert cond._verify_input_spending_conditions(proof(raw_secret))
+
+
+def test_verify_p2pk_sig_inputs_absent_witness_reports_no_signatures():
+    # Pins the wire contract for an absent witness (cashubtc/nutshell#1126):
+    # code 11000 with "no signatures in proof.". Clients assert on both.
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-absent-witness")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub)
+    p = proof(raw_secret)
+    assert p.witness is None
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "no signatures in proof" in str(exc_info.value)
+
+
+def test_verify_p2pk_sig_inputs_empty_signature_list_reports_no_signatures():
+    # A witness that parses cleanly to zero signatures is the absent case too,
+    # and reaches it by a different route than witness=None: it goes through
+    # the parser rather than returning ahead of it.
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-empty-signature-list")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub)
+    p = proof(raw_secret, signatures=[])
+    assert p.witness == '{"signatures":[]}'
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "no signatures in proof" in str(exc_info.value)
+
+
+def test_verify_p2pk_sig_inputs_unparsable_witness_reports_parse_failure():
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-unparsable-witness")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub)
+    p = proof(raw_secret)
+    p.witness = "{not json"
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "witness could not be parsed" in str(exc_info.value)
+
+
+def test_verify_p2pk_sig_inputs_wrong_shape_witness_reports_parse_failure():
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-wrong-shape-witness")
+    raw_secret = secret_str(kind=SecretKind.P2PK, data=pub)
+    p = proof(raw_secret)
+    p.witness = '{"foo":"bar"}'
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "witness could not be parsed" in str(exc_info.value)
+
+
+def test_verify_p2pk_sig_inputs_unparsable_witness_still_spends_via_zero_sig_refund():
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-unparsable-zero-sig-refund")
+    past = str(int(time.time()) - 60)
+    raw_secret = secret_str(
+        kind=SecretKind.P2PK,
+        data=pub,
+        extra_tags=[["locktime", past]],
+    )
+    p = proof(raw_secret)
+    p.witness = "{not json"
+
+    assert cond._verify_input_spending_conditions(p)
+
+
+def test_verify_p2pk_sig_inputs_unparsable_witness_outranks_refund_path_complaint():
+    # An expired lock with refund pubkeys gives the refund attempt its own
+    # failure, which would otherwise be the last one recorded and report
+    # "no signatures in proof." -- the message this change exists to stop.
+    cond = LedgerSpendingConditions()
+    pub, _ = pubkey_and_sig("msg-unparsable-refund-needs-sigs")
+    refund_pub, _ = pubkey_and_sig("msg-unparsable-refund-pubkey")
+    past = str(int(time.time()) - 60)
+    raw_secret = secret_str(
+        kind=SecretKind.P2PK,
+        data=pub,
+        extra_tags=[["locktime", past], ["refund", refund_pub]],
+    )
+    p = proof(raw_secret)
+    p.witness = "{not json"
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "witness could not be parsed" in str(exc_info.value)

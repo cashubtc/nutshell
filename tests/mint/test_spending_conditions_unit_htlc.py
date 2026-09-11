@@ -3,6 +3,7 @@ from hashlib import sha256
 
 import pytest
 
+from cashu.core.errors import TransactionError
 from cashu.core.htlc import HTLCSecret
 from cashu.core.secret import Secret, SecretKind
 from cashu.mint.conditions import LedgerSpendingConditions
@@ -99,3 +100,33 @@ def test_verify_htlc_preimage_rejects_wrong_preimage():
     )
     with pytest.raises(Exception, match="HTLC preimage does not match"):
         cond._verify_htlc_preimage(secret.data, wrong)
+
+
+def test_verify_input_spending_conditions_unparsable_htlc_witness_reports_parse_failure():
+    cond = LedgerSpendingConditions()
+    preimage = "55" * 32
+    digest = sha256(bytes.fromhex(preimage)).hexdigest()
+    raw_secret = secret_str(kind=SecretKind.HTLC, data=digest)
+    p = proof(raw_secret)
+    p.witness = "{not json"
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "witness could not be parsed" in str(exc_info.value)
+
+
+def test_verify_input_spending_conditions_htlc_witness_without_preimage_is_not_a_parse_failure():
+    # HTLCWitness declares every field optional, so a witness carrying none of
+    # them still parses. Only genuinely unreadable input is a parse failure here
+    cond = LedgerSpendingConditions()
+    preimage = "66" * 32
+    digest = sha256(bytes.fromhex(preimage)).hexdigest()
+    raw_secret = secret_str(kind=SecretKind.HTLC, data=digest)
+    p = proof(raw_secret)
+    p.witness = '{"foo":"bar"}'
+
+    with pytest.raises(TransactionError) as exc_info:
+        cond._verify_input_spending_conditions(p)
+    assert exc_info.value.code == 11000
+    assert "no HTLC preimage provided" in str(exc_info.value)
