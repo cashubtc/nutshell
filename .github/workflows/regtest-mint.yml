@@ -22,10 +22,14 @@ on:
 permissions:
   contents: read
 
+env:
+  REGTEST_REF: 7eb3515b9fb41f477f831cedd28e1ad9ae6c521d
+
 jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
-    timeout-minutes: 10
+    # Allow startup plus the full mint suite on slower runners.
+    timeout-minutes: 30
     steps:
       - name: Start PostgreSQL service
         if: contains(inputs.mint-database, 'postgres')
@@ -40,11 +44,19 @@ jobs:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
 
+      - name: Checkout Regtest
+        uses: actions/checkout@v6
+        with:
+          repository: callebtc/cashu-regtest
+          ref: ${{ env.REGTEST_REF }}
+          path: regtest
+          persist-credentials: false
+
       - name: Setup Regtest
+        working-directory: regtest
         run: |
-          git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
-          cd regtest
           chmod -R 777 .
+          # start.sh pulls the published images, starts Compose, and checks payments.
           bash ./start.sh
 
       - name: Run Tests
@@ -78,3 +90,10 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Stop Regtest
+        if: always()
+        run: |
+          if [ -f regtest/docker-compose.yml ]; then
+            docker compose --project-directory regtest -p cashu down --volumes
+          fi
