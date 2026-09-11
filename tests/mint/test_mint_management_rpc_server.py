@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 
 from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState, Unit
 from cashu.core.mint_info import MintInfo
 from cashu.core.settings import settings
+from cashu.mint import startup
 from cashu.mint.management_rpc import management_rpc as rpc_module
 
 
@@ -51,6 +53,54 @@ def test_get_info_serializes_mint_info():
     assert response.name == "Mint"
     assert response.long_description == "long"
     assert not hasattr(response, "nuts")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initial_urls", [None, [], ["https://existing.example"]])
+async def test_add_url(initial_urls, monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "mint_info_urls",
+        None if initial_urls is None else initial_urls.copy(),
+    )
+    expected_urls = [*(initial_urls or []), "https://new.example"]
+    request = SimpleNamespace(url="https://new.example")
+    rpc = _rpc_with_ledger()
+
+    await rpc.AddUrl(request, None)
+
+    assert settings.mint_info_urls == expected_urls
+    with pytest.raises(Exception, match="URL already in mint_info_urls"):
+        await rpc.AddUrl(request, None)
+    assert settings.mint_info_urls == expected_urls
+
+
+@pytest.mark.asyncio
+async def test_add_url_after_removing_last_url(monkeypatch):
+    monkeypatch.setattr(settings, "mint_info_urls", ["https://old.example"])
+    rpc = _rpc_with_ledger()
+
+    await rpc.RemoveUrl(SimpleNamespace(url="https://old.example"), None)
+    assert settings.mint_info_urls == []
+
+    await rpc.AddUrl(SimpleNamespace(url="https://new.example"), None)
+    assert settings.mint_info_urls == ["https://new.example"]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_management_rpc_releases_server(monkeypatch):
+    server = object()
+    shutdown = AsyncMock()
+    monkeypatch.setattr(startup, "rpc_server", server)
+    monkeypatch.setattr(startup.management_rpc, "shutdown", shutdown)
+
+    await startup.shutdown_management_rpc()
+
+    shutdown.assert_awaited_once_with(server)
+    assert startup.rpc_server is None
+
+    await startup.shutdown_management_rpc()
+    shutdown.assert_awaited_once_with(server)
 
 
 @pytest.mark.asyncio

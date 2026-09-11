@@ -141,5 +141,8 @@ async def start_management_rpc():
 
 
 async def shutdown_management_rpc():
+    global rpc_server
     if rpc_server:
         await management_rpc.shutdown(rpc_server)
+        # Release the stopped server and its native gRPC resources.
+        rpc_server = None
