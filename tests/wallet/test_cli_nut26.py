@@ -4,6 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest
+from cashu.core.nuts.nut26 import deserialize as nut26_deserialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
@@ -118,3 +119,25 @@ def test_pay_nut26_unsupported_lock(mint, cli_prefix):
 
     assert "Unsupported lock kind 'HTLC'" in result.output
     assert "cashuB" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_request_bech32_creates_nut26_request(mint, cli_prefix):
+    """The request command emits a NUT-26 creqB1 string with --bech32."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "request", "100", "-m", "https://mint.example.com", "--bech32"],
+    )
+    assert result.exception is None, f"Exception: {result.exception}"
+
+    creqb = next(
+        line.strip()
+        for line in result.output.splitlines()
+        if line.strip().upper().startswith("CREQB1")
+    )
+    pr = nut26_deserialize(creqb)
+    assert pr.a == 100
+    assert pr.u == "sat"
+    assert pr.m == ["https://mint.example.com"]
