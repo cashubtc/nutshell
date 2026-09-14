@@ -174,6 +174,10 @@ class LedgerVerification(
         logger.trace(f"Verifying {len(proofs)} proofs.")
         if not proofs:
             raise TransactionError("no proofs provided.")
+        # The digest is mint-side state: whatever the request carried is
+        # dropped here and re-derived for v3 point secrets during verification.
+        for p in proofs:
+            p.digest = None
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
             raise TransactionError("invalid amount.")

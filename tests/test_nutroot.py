@@ -1364,9 +1364,10 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
     from cashu.core.base import Proof
     from cashu.mint.db.read import _spent_proof_state
 
+    v3 = dict(id="02" + "ab" * 32, secret="02" + "79be667e" * 8)
     kp = VECTORS["nut07_commitments"]["keypath_private"]
     private = _spent_proof_state(
-        kp["Y"], Proof(witness=kp["witness"], digest=kp["input_digest"])
+        kp["Y"], Proof(**v3, witness=kp["witness"], digest=kp["input_digest"])
     )
     assert private.witness is None
     assert private.input_digest is None
@@ -1374,15 +1375,19 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
 
     aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
     disclosed = _spent_proof_state(
-        aud["Y"], Proof(witness=aud["witness"], digest=aud["input_digest"])
+        aud["Y"], Proof(**v3, witness=aud["witness"], digest=aud["input_digest"])
     )
     assert disclosed.witness == aud["witness"]
     assert disclosed.input_digest == aud["input_digest"]
     assert disclosed.commitment == aud["commitment"]
 
-    # Pre-v3 (no stored input digest): the witness serves as always.
-    legacy = _spent_proof_state("02" + "ab" * 32, Proof(witness='{"signatures":["00"]}'))
+    # Pre-v3: the witness serves as always, whatever digest the row carries.
+    legacy = _spent_proof_state(
+        "02" + "ab" * 32,
+        Proof(id="01" + "ab" * 7, witness='{"signatures":["00"]}', digest="00" * 32),
+    )
     assert legacy.witness == '{"signatures":["00"]}'
+    assert legacy.input_digest is None
     assert legacy.commitment is None
 
 
