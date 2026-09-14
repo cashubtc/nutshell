@@ -712,6 +712,44 @@ async def test_api_check_state_v3_serves_witness_digest(
 
 
 @pytest.mark.asyncio
+async def test_api_check_state_pre_v3_ignores_request_digest(
+    ledger: Ledger, wallet: Wallet
+):
+    """A pre-v3 P2PK spend publishes its witness (NUT-07) even when the swap
+    inputs carry a digest field: the keyset version decides, not the request."""
+    from cashu.core.base import ProofSpentState
+
+    await use_v2_keyset(wallet)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    secret_lock = await wallet.create_p2pk_lock(await wallet.create_p2pk_pubkey())
+    _, inputs = await wallet.swap_to_send(wallet.proofs, 8, secret_lock=secret_lock)
+    secrets, rs, _ = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([8], secrets, rs)
+    inputs = wallet.sign_proofs_inplace_swap(inputs, outputs)
+    payload = {
+        "inputs": [{**p.to_dict(), "digest": "00" * 32} for p in inputs],
+        "outputs": [o.model_dump() for o in outputs],
+    }
+    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+
+    state_payload = PostCheckStateRequest(Ys=[p.Y for p in inputs])
+    response = httpx.post(
+        f"{BASE_URL}/v1/checkstate", json=state_payload.model_dump()
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    states = PostCheckStateResponse.model_validate(response.json()).states
+    assert states
+    for state in states:
+        assert state.state == ProofSpentState.spent
+        assert state.witness is not None
+        assert state.input_digest is None
+        assert state.commitment is None
+
+
+@pytest.mark.asyncio
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
