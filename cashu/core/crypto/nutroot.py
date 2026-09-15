@@ -9,7 +9,7 @@ shared vectors in tests/nutroot_v3_vectors.json.
 
 import hashlib
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from coincurve import PublicKeyXOnly
@@ -29,6 +29,7 @@ NUTROOT_LEAF_TYPE: Dict[str, int] = {
     "threshold": 0x01,
     "after": 0x02,
     "hashlock": 0x03,
+    "commit": 0x04,
 }
 _LEAF_TYPE_NAME = {v: k for k, v in NUTROOT_LEAF_TYPE.items()}
 
@@ -58,11 +59,13 @@ class NutrootLeaf:
     """A parsed declarative leaf (version 0x00).
 
     Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes.
+    A `commit` leaf carries only `hash`: it names no signer and is never a
+    spend path (NUT-10).
     """
 
     type: str
-    n: int
-    keys: List[PublicKey]
+    n: int = 0
+    keys: List[PublicKey] = field(default_factory=list)
     time: Optional[int] = None
     hash: Optional[bytes] = None
     # Disclosure mode (NUT-10): 1 publishes the exercised witness via
@@ -171,6 +174,15 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
     """
     if leaf.type not in NUTROOT_LEAF_TYPE:
         raise ValueError(f"Unknown leaf type: {leaf.type}")
+    if leaf.type == "commit":
+        # Digest only: a commit leaf names no signer and is never a spend path.
+        if leaf.n or leaf.keys or leaf.time is not None or leaf.disclosure is not None:
+            raise ValueError("commit leaf carries only a hash")
+        if leaf.hash is None or len(leaf.hash) != 32:
+            raise ValueError("commit leaf requires a 32-byte hash")
+        return bytes([NUTROOT_LEAF_VERSION, NUTROOT_LEAF_TYPE[leaf.type]]) + tlv_record(
+            _FIELD_HASH, leaf.hash
+        )
     if not 1 <= leaf.n <= 0xFF:
         raise ValueError(f"Invalid threshold n: {leaf.n}")
     if not leaf.keys:
@@ -223,6 +235,12 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
     type_name = _LEAF_TYPE_NAME.get(data[1])
     if type_name is None:
         raise ValueError(f"Unknown leaf type: {data[1]}")
+    if type_name == "commit":
+        # Digest only: keys or disclosure on a commit leaf are malformed (NUT-10).
+        records = list(read_tlv_records(data[2:], unique_ascending=True))
+        if len(records) != 1 or records[0][0] != _FIELD_HASH or len(records[0][1]) != 32:
+            raise ValueError("commit leaf must carry exactly a 32-byte hash field")
+        return NutrootLeaf(type="commit", hash=records[0][1])
     n: Optional[int] = None
     keys: Optional[List[PublicKey]] = None
     time: Optional[int] = None
@@ -495,6 +513,8 @@ def verify_script_path_spend(
     if not verify_nutroot_commitment(secret, internal_key, leaf_bytes, path):
         raise ValueError("script path commitment does not reach the secret")
     leaf = parse_nutroot_leaf(leaf_bytes)  # raises on unknown version/type/fields
+    if leaf.type == "commit":
+        raise ValueError("commit leaf is not a spend path")
 
     if leaf.type == "after":
         if leaf.time is None:
