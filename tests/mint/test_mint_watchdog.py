@@ -116,7 +116,8 @@ async def test_watchdog_aggregates_reserves_once_per_funding_source(
         Amount(Unit.sat, 100), Amount(Unit.sat, 80), Amount(Unit.sat, 0), db=ledger.db
     )
     await ledger.db.execute(
-        "UPDATE balance_log SET time = :time", {"time": ledger.db.to_timestamp("1000")}
+        "UPDATE balance_log SET time = :time",
+        {"time": ledger.db.to_timestamp(ledger.db.timestamp_from_seconds(1000) or "")},
     )
     monkeypatch.setattr(
         ledger,
