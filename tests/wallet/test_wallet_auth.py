@@ -17,8 +17,15 @@ from cashu.core.errors import (
 from cashu.core.settings import settings
 from cashu.wallet.auth.auth import WalletAuth
 from cashu.wallet.wallet import Wallet
-from tests.conftest import SERVER_ENDPOINT
+from tests.conftest import SERVER_ENDPOINT, start_mint_server
 from tests.helpers import assert_err
+
+
+@pytest.fixture(autouse=True)
+def mint():
+    # Each test needs a fresh per-user rate limit in the mint process.
+    with start_mint_server() as server:
+        yield server
 
 
 @pytest_asyncio.fixture(scope="function")
