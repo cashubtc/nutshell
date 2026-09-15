@@ -371,6 +371,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     # expect that proofs are spent
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.spent for s in states])
+    await asyncio.wait_for(melt_task, timeout=30)
 
 
 @pytest.mark.asyncio
@@ -425,6 +426,8 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     # expect that proofs are unspent
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.unspent for s in states])
+    with pytest.raises(Exception, match="Lightning payment failed"):
+        await asyncio.wait_for(melt_task, timeout=30)
 
 
 @pytest.mark.asyncio
