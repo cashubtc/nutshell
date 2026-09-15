@@ -988,7 +988,7 @@ def test_script_path_spend_after_leaf_vectors():
 
 
 def test_script_path_unknown_leaf_type_fails_closed():
-    """6.2: the example melt_to leaf (0x04) is unknown and unsatisfiable."""
+    """6.2: the example melt_to leaf (0x05) is unknown and unsatisfiable."""
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v62 = VECTORS["two_leaf_covenant"]
@@ -1339,6 +1339,69 @@ def test_auditable_lock_vector_reconstructs():
     assert witness_discloses(aud["witness"])
     # A key-path witness discloses nothing, whatever the tree held.
     assert not witness_discloses(json.dumps({"signatures": ["00" * 64]}))
+
+
+def test_commit_leaf_vectors():
+    """NUT-10 commit leaf (0x04): one hash, never a spend path, one sibling hash to the mint."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend
+
+    v = VECTORS["commit_leaf"]
+    h = bytes.fromhex(v["hash"])
+    commit = serialize_nutroot_leaf(NutrootLeaf(type="commit", hash=h))
+    assert commit.hex() == v["leaf_commit"]
+    parsed = parse_nutroot_leaf(commit)
+    assert (parsed.type, parsed.n, parsed.keys, parsed.hash, parsed.disclosure) == (
+        "commit",
+        0,
+        [],
+        h,
+        None,
+    )
+    threshold = bytes.fromhex(v["leaf_threshold"])
+    hashes = [nutroot_leaf_hash(threshold), nutroot_leaf_hash(commit)]
+    assert hashes[1].hex() == v["leaf_hash_commit"]
+    root = nutroot_merkle_root(hashes)
+    assert root.hex() == v["merkle_root"]
+    K = PublicKey(bytes.fromhex(v["K"]))
+    assert nutroot_tweak_pubkey(K, root).format().hex() == v["secret"]
+    # The threshold leaf's path is the commit hash: the mint sees the
+    # commitment as one sibling and nothing more.
+    assert [p.hex() for p in nutroot_merkle_path(hashes, 0)] == [v["leaf_hash_commit"]]
+    # Revealing the commit leaf reconstructs the secret and is still refused.
+    witness = nutroot_witness({
+        "leaf": v["leaf_commit"],
+        "control": {"K": v["K"], "path": [v["leaf_hash_threshold"]]},
+        "signatures": ["00" * 64],
+    })
+    with pytest.raises(ValueError, match="not a spend path"):
+        verify_script_path_spend(
+            PublicKey(bytes.fromhex(v["secret"])), b"\x00" * 32, witness
+        )
+
+
+def test_commit_leaf_carries_exactly_the_hash():
+    v = VECTORS["commit_leaf"]
+    commit = bytes.fromhex(v["leaf_commit"])
+    malformed = [
+        b"\x00\x04",
+        b"\x00\x04" + tlv_record(0x08, b"\xaa" * 31),
+        commit + tlv_record(0x0A, b"\x01"),
+        b"\x00\x04" + tlv_record(0x02, b"\x01") + commit[2:],
+    ]
+    for bad in malformed:
+        with pytest.raises(ValueError, match="exactly"):
+            parse_nutroot_leaf(bad)
+    with pytest.raises(ValueError, match="32-byte hash"):
+        serialize_nutroot_leaf(NutrootLeaf(type="commit", hash=b"\xab"))
+    with pytest.raises(ValueError, match="only a hash"):
+        serialize_nutroot_leaf(
+            NutrootLeaf(
+                type="commit",
+                n=1,
+                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
+                hash=b"\xab" * 32,
+            )
+        )
 
 
 def test_spend_commitment_vectors():
