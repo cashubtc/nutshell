@@ -1446,6 +1446,7 @@ async def test_grpc_failed_payment_releases_proofs(
     from cashu.payment.grpc_processor import GrpcPaymentProcessor
 
     funding = await wallet.request_mint(8)
+    await pay_if_regtest(funding.request)
     proofs = await wallet.mint(8, quote_id=funding.quote)
     processor = GrpcPaymentProcessor("testpay", Unit.sat, {})
     processor._stub = stub = AsyncMock()
