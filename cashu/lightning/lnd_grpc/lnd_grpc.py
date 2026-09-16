@@ -119,7 +119,7 @@ class LndRPCWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         data = lnrpc.Invoice(
-            value=amount.to(Unit.sat).amount,
+            value_msat=amount.to(Unit.msat).amount,
             private=True,
             memo=memo or "",
         )

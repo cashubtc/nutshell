@@ -371,6 +371,9 @@ class Ledger(
 
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
+        self._verify_mint_quote_invoice_amount(
+            invoice_obj, Amount(unit, quote_request.amount)
+        )
 
         # NOTE: we normalize the request to lowercase to avoid case sensitivity
         # This works with Lightning but might not work with other methods
@@ -522,6 +525,11 @@ class Ledger(
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
 
+        # Also validate quotes created before invoice amount checks were added.
+        self._verify_mint_quote_invoice_amount(
+            bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
+        )
+
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
@@ -606,6 +614,9 @@ class Ledger(
                 raise QuoteAlreadyIssuedError()
             if quote.state != MintQuoteState.paid:
                 raise QuoteNotPaidError()
+            self._verify_mint_quote_invoice_amount(
+                bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
+            )
 
         # Check amount balance
         if payload.quote_amounts:
