@@ -70,7 +70,7 @@ async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **k
             proofs,
             outputs or [],
             melt_quote_id=quote,
-            melt_quote_amount=quote_obj.amount,
+            melt_quote_amount=quote_obj.amount + quote_obj.fee_reserve,
         )
     return await ledger.melt(proofs=proofs, quote=quote, outputs=outputs, **kwargs)
 
