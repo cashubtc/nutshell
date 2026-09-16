@@ -40,15 +40,35 @@ Different Cashu clients and mints use the same protocol to achieve interoperabil
 
 ## Easy Install: Nutshell wallet
 
-The easiest way to use Cashu is to install the package via pip:
+Use Python 3.12 for installation. With Python 3.12 and
+[pipx](https://pipx.pypa.io/) installed, run:
 
 ```bash
-pip install cashu
+pipx install cashu --python python3.12
+cashu --help
 ```
 
-To update Cashu, use `pip install cashu -U`.
+To update Cashu, use `pipx upgrade cashu`.
 
-If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config` and `pip install wheel`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
+Alternatively, install with pip in a virtual environment:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install cashu
+cashu --help
+```
+
+On Windows, use `py -3.12 -m venv .venv` and activate with
+`.venv\Scripts\Activate.ps1` in PowerShell. For pipx, select the installed
+Python 3.12 executable with `--python`.
+
+To update a pip installation, use `python -m pip install --upgrade cashu`.
+
+Python 3.13/3.14 installations currently encounter Coincurve source-build failures:
+the version required by `bip32` has no wheels for these interpreters. Selecting
+Python 3.12 avoids that build. Pipx uses its default interpreter unless you pass
+`--python`; it does not automatically switch to Python 3.12.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 

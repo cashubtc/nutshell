@@ -25,8 +25,7 @@ clean:
 
 package:
 	poetry export -f requirements.txt --without-hashes --output requirements.txt
-	make clean
-	python setup.py sdist bdist_wheel
+	poetry build --clean
 
 test:
 	PYTHONUNBUFFERED=1 \
@@ -70,15 +69,11 @@ test-spark-wallet:
 	TOR=FALSE \
 	$(MAKE) test-wallet
 
-install:
-	make clean
-	python setup.py sdist bdist_wheel
-	pip install --upgrade dist/*
+install: package
+	python -m pip install --upgrade dist/*.whl
 
-upload:
-	make clean
-	python setup.py sdist bdist_wheel
-	twine upload --repository pypi dist/*
+upload: package
+	poetry publish
 
 install-pre-commit-hook:
 	@echo "Installing pre-commit hook to git"

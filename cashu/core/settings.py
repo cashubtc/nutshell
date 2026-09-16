@@ -3,11 +3,9 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from environs import Env  # type: ignore
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-env = Env()
 
 VERSION = "0.21.0"
 
@@ -18,7 +16,7 @@ def find_env_file():
     if not os.path.isfile(env_file):
         env_file = os.path.join(str(Path.home()), ".cashu", ".env")
     if os.path.isfile(env_file):
-        env.read_env(env_file, recurse=False, override=True)
+        load_dotenv(env_file, override=True)
     else:
         env_file = ""
     return env_file
