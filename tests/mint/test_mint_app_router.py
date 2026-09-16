@@ -108,6 +108,7 @@ def _dummy_ledger():
     async def get_melt_quote(quote):
         return SimpleNamespace(
             quote=quote,
+            attempt="internal-attempt-nonce",
             amount=1,
             unit="sat",
             method="bolt11",
@@ -366,6 +367,7 @@ def test_router_quote_routes_and_swap(monkeypatch):
     assert melt_get.status_code == 200
     assert melt_get.json()["quote"] == "melt-1"
     assert melt_get.json()["method"] == "bolt11"
+    assert "attempt" not in melt_get.json()
 
     swap = client.post(
         "/v1/swap",

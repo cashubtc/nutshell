@@ -4,6 +4,7 @@ import os
 import shutil
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
@@ -19,6 +20,12 @@ from cashu.core.settings import settings
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
+
+pytest_plugins = (
+    ["tests.spark_regtest"]
+    if os.getenv("CASHU_SPARK_REGTEST", "").lower() == "true"
+    else []
+)
 
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
@@ -54,7 +61,7 @@ settings.mint_lnd_enable_mpp = True
 settings.mint_clnrest_enable_mpp = True
 settings.mint_input_fee_ppk = 0
 settings.db_connection_pool = True
-settings.mint_require_auth = False
+# Preserve mint_require_auth from the environment for the Keycloak integration job.
 settings.mint_watchdog_enabled = False
 
 settings.mint_rpc_server_enable = True
@@ -130,9 +137,8 @@ async def ledger():
     await ledger.shutdown_ledger()
 
 
-# # This fixture is used for tests that require API access to the mint
-@pytest.fixture(autouse=True, scope="session")
-def mint():
+@contextmanager
+def start_mint_server():
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
@@ -176,3 +182,16 @@ def mint():
 
     yield server
     server.stop()
+    server.join(timeout=10)
+    if server.is_alive():
+        server.kill()
+        server.join()
+
+
+# This fixture is used for tests that require API access to the mint.
+@pytest.fixture(autouse=True, scope="session")
+def mint(request):
+    if "tests.spark_regtest" in pytest_plugins:
+        request.getfixturevalue("spark_regtest_config")
+    with start_mint_server() as server:
+        yield server

@@ -16,6 +16,7 @@ from cashu.lightning.base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    PaymentStatusResult,
     StatusResponse,
 )
 
@@ -193,7 +194,7 @@ class SparkL2Wallet(LightningBackend):
         try:
             # The Spark SDK has prepare_send_payment -> send_payment flow.
             prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
-                payment_request=quote.request,
+                payment_request=breez_sdk_spark.PaymentRequest.INPUT(quote.request),
                 amount=None,  # Already in invoice
                 fee_policy=None,  # Can pass fee limits here if supported
             )
@@ -244,7 +245,7 @@ class SparkL2Wallet(LightningBackend):
             send_res = await self.sdk.send_payment(send_req)
         except Exception as e:
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.ERROR,
                 checking_id=quote.checking_id,
                 error_message=f"Payment failed or unknown: {str(e)}",
             )
@@ -254,12 +255,25 @@ class SparkL2Wallet(LightningBackend):
             payment = send_res.payment
             if not payment:
                 return PaymentResponse(
-                    result=PaymentResult.UNKNOWN,
+                    result=PaymentResult.ERROR,
                     checking_id=checking_id,
                     error_message="No payment returned from Spark SDK",
                 )
 
             checking_id = payment.id or checking_id
+            if (
+                payment.status == breez_sdk_spark.PaymentStatus.COMPLETED
+                and payment.details
+                and payment.details.is_lightning()
+                and not payment.details.htlc_details.preimage
+            ):
+                # The send response can precede the cached Lightning preimage.
+                # Refresh once before returning a still-pending melt to callers.
+                await self.sdk.sync_wallet(breez_sdk_spark.SyncWalletRequest())
+                refreshed = await self.sdk.get_payment(
+                    breez_sdk_spark.GetPaymentRequest(payment_id=checking_id)
+                )
+                payment = refreshed.payment
             fee_amount = None
             if payment.fees is not None:
                 if self.unit == Unit.msat:
@@ -274,7 +288,16 @@ class SparkL2Wallet(LightningBackend):
                     preimage = htlc.preimage
 
             if payment.status == breez_sdk_spark.PaymentStatus.COMPLETED:
-                result = PaymentResult.SETTLED
+                # The transfer can complete before the SDK caches the Lightning
+                # preimage. Keep the melt pending until its proof is available.
+                awaiting_preimage = (
+                    payment.details and payment.details.is_lightning() and not preimage
+                )
+                result = (
+                    PaymentResult.PENDING
+                    if awaiting_preimage
+                    else PaymentResult.SETTLED
+                )
             elif payment.status == breez_sdk_spark.PaymentStatus.FAILED:
                 result = PaymentResult.FAILED
             else:
@@ -285,10 +308,13 @@ class SparkL2Wallet(LightningBackend):
                 checking_id=checking_id,
                 fee=fee_amount,
                 preimage=preimage,
+                error_message=(
+                    "Spark payment failed" if result == PaymentResult.FAILED else None
+                ),
             )
         except Exception as e:
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.ERROR,
                 checking_id=checking_id,
                 error_message=f"Payment status unknown: {str(e)}",
             )
@@ -319,17 +345,18 @@ class SparkL2Wallet(LightningBackend):
                         htlc = p.details.htlc_details
                         if htlc and htlc.payment_hash == checking_id:
                             if p.status == breez_sdk_spark.PaymentStatus.COMPLETED:
-                                return PaymentStatus(result=PaymentResult.SETTLED)
+                                return PaymentStatus(result=PaymentStatusResult.SETTLED)
                             elif p.status == breez_sdk_spark.PaymentStatus.FAILED:
-                                return PaymentStatus(result=PaymentResult.FAILED)
+                                return PaymentStatus(result=PaymentStatusResult.FAILED)
+                            return PaymentStatus(result=PaymentStatusResult.PENDING)
 
             return PaymentStatus(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentStatusResult.NOT_FOUND,
                 error_message="Invoice not found",
             )
 
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+            return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         await self._ensure_sdk()
@@ -337,15 +364,43 @@ class SparkL2Wallet(LightningBackend):
             raise Exception("SDK not initialized")
 
         try:
-            req = breez_sdk_spark.GetPaymentRequest(payment_id=checking_id)
-            res = await self.sdk.get_payment(req)
+            if len(checking_id) == 64:
+                # Quotes use the BOLT11 hash, while the SDK assigns a UUID to
+                # the send. Resolve the hash even before send_payment returns,
+                # including after reconnecting to the persisted SDK storage.
+                res = await self.sdk.list_payments(
+                    breez_sdk_spark.ListPaymentsRequest(
+                        type_filter=[breez_sdk_spark.PaymentType.SEND],
+                        asset_filter=breez_sdk_spark.AssetFilter.BITCOIN(),
+                        payment_details_filter=[
+                            breez_sdk_spark.PaymentDetailsFilter.LIGHTNING(None)
+                        ],
+                        sort_ascending=False,
+                    )
+                )
+                payment = next(
+                    (
+                        p
+                        for p in res.payments
+                        if p.details
+                        and p.details.is_lightning()
+                        and p.details.htlc_details
+                        and p.details.htlc_details.payment_hash == checking_id
+                    ),
+                    None,
+                )
+            else:
+                res = await self.sdk.get_payment(
+                    breez_sdk_spark.GetPaymentRequest(payment_id=checking_id)
+                )
+                payment = res.payment if res else None
 
-            if not res or not res.payment:
+            if not payment:
                 return PaymentStatus(
-                    result=PaymentResult.UNKNOWN, error_message="Payment not found"
+                    result=PaymentStatusResult.NOT_FOUND,
+                    error_message="Payment not found",
                 )
 
-            payment = res.payment
             fee_sats = payment.fees
             fee_amount = None
             if fee_sats is not None:
@@ -360,16 +415,32 @@ class SparkL2Wallet(LightningBackend):
                     preimage = htlc.preimage
 
             if payment.status == breez_sdk_spark.PaymentStatus.COMPLETED:
+                awaiting_preimage = (
+                    payment.details and payment.details.is_lightning() and not preimage
+                )
                 return PaymentStatus(
-                    result=PaymentResult.SETTLED, preimage=preimage, fee=fee_amount
+                    result=(
+                        PaymentStatusResult.PENDING
+                        if awaiting_preimage
+                        else PaymentStatusResult.SETTLED
+                    ),
+                    preimage=preimage,
+                    fee=fee_amount,
                 )
             elif payment.status == breez_sdk_spark.PaymentStatus.FAILED:
-                return PaymentStatus(result=PaymentResult.FAILED)
+                return PaymentStatus(result=PaymentStatusResult.FAILED)
             else:
-                return PaymentStatus(result=PaymentResult.PENDING)
+                return PaymentStatus(result=PaymentStatusResult.PENDING)
 
         except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+            # The SDK raises a storage error for payment IDs it has never seen
+            # instead of returning an empty result.
+            if "Query returned no rows" in str(e):
+                return PaymentStatus(
+                    result=PaymentStatusResult.NOT_FOUND,
+                    error_message="Payment not found",
+                )
+            return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
@@ -380,7 +451,11 @@ class SparkL2Wallet(LightningBackend):
 
         try:
             prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
-                payment_request=melt_quote.request, amount=None, fee_policy=None
+                payment_request=breez_sdk_spark.PaymentRequest.INPUT(
+                    melt_quote.request
+                ),
+                amount=None,
+                fee_policy=None,
             )
 
             prepare_res = await self.sdk.prepare_send_payment(prepare_req)

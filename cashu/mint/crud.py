@@ -291,6 +291,15 @@ class LedgerCrud(ABC):
     ) -> List[MeltQuote]: ...
 
     @abstractmethod
+    async def get_melt_quotes_by_request(
+        self,
+        *,
+        request: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]: ...
+
+    @abstractmethod
     async def get_melt_quote_by_request(
         self,
         *,
@@ -378,7 +387,7 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""
             SELECT * from {db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id
-                AND c_ IS {'NOT NULL' if signed else 'NULL'}
+                AND c_ IS {"NOT NULL" if signed else "NULL"}
             ORDER BY order_index ASC
             """,
             {"melt_id": melt_id},
@@ -861,7 +870,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id WHERE quote = :quote
+            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id, attempt = :attempt WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -874,6 +883,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "proof": quote.payment_preimage,
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
+                "attempt": quote.attempt,
             },
         )
 
@@ -1120,5 +1130,21 @@ class LedgerCrudSqlite(LedgerCrud):
             WHERE checking_id = :checking_id
             """,
             {"checking_id": checking_id},
+        )
+        return [MeltQuote.from_row(row) for row in results]  # type: ignore
+
+    async def get_melt_quotes_by_request(
+        self,
+        *,
+        request: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]:
+        results = await (conn or db).fetchall(
+            f"""
+            SELECT * FROM {db.table_with_schema("melt_quotes")}
+            WHERE request = :request
+            """,
+            {"request": request},
         )
         return [MeltQuote.from_row(row) for row in results]  # type: ignore

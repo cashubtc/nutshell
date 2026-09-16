@@ -162,6 +162,7 @@ async def test_get_and_update_quote_rpcs():
         amount=1,
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
+        attempt="internal-attempt-nonce",
     )
     updates = []
 
@@ -205,6 +206,7 @@ async def test_get_and_update_quote_rpcs():
     assert get_mint.quote.state == MintQuoteState.unpaid.name
     assert get_melt.quote.quote == "melt-1"
     assert get_melt.quote.state == MeltQuoteState.unpaid.name
+    assert "attempt" not in {field.name for field, _ in get_melt.quote.ListFields()}
 
     await rpc.UpdateNut04Quote(SimpleNamespace(quote_id="quote-1", state="PAID"), None)
     await rpc.UpdateNut05Quote(SimpleNamespace(quote_id="melt-1", state="PAID"), None)

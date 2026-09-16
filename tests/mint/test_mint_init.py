@@ -12,7 +12,11 @@ from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Proof, Un
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult, PaymentStatus, StatusResponse
+from cashu.lightning.base import (
+    PaymentStatus,
+    PaymentStatusResult,
+    StatusResponse,
+)
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -26,6 +30,8 @@ from tests.helpers import (
     is_regtest,
     pay_if_regtest,
     settle_invoice,
+    wait_for_hold_invoice,
+    wait_for_result,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -178,7 +184,7 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -204,7 +210,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.FAILED.name
+    settings.fakewallet_payment_state = PaymentStatusResult.FAILED.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -225,7 +231,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    settings.fakewallet_payment_state = PaymentStatusResult.PENDING.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -242,12 +248,12 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only for fake wallet")
-async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
+async def test_startup_fakewallet_pending_quote_error(ledger: Ledger):
     # unknown state simulates a failure th check the lightning backend
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
+    settings.fakewallet_payment_state = PaymentStatusResult.ERROR.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -261,6 +267,21 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
     # expect that proofs are still pending
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
+
+
+async def start_unrecorded_melt(ledger, quote, proofs):
+    """Send through the real backend without recording its result in the mint.
+
+    This simulates a mint stopping after submitting a payment: startup must
+    recover using the quote's persisted checking ID and the backend's history.
+    """
+    pending_quote = await ledger._prepare_melt(proofs=proofs, quote=quote.quote)
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    return asyncio.create_task(
+        backend.pay_invoice(
+            pending_quote, Amount(Unit.sat, quote.fee_reserve).to(Unit.msat).amount
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -280,14 +301,8 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routine
@@ -305,6 +320,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
+    await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -324,23 +340,26 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
     # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.pending for s in states])
 
     settle_invoice(preimage=preimage)
+    await asyncio.wait_for(task, 90)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routine
+    await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            bolt11.decode(invoice_payment_request).payment_hash
+        ),
+        lambda status: status.settled,
+    )
+    # The payment has finished, but its result has not been recorded by the mint.
+    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert pending and pending.pending
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
@@ -374,14 +393,8 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are pending
@@ -389,9 +402,18 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     assert all([s.pending for s in states])
 
     cancel_invoice(preimage_hash=preimage_hash)
+    await asyncio.wait_for(task, 90)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routine
+    await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            bolt11.decode(invoice_payment_request).payment_hash
+        ),
+        lambda status: status.failed,
+    )
+    # The payment has finished, but its result has not been recorded by the mint.
+    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert pending and pending.pending
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
@@ -428,14 +450,8 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are pending
@@ -472,6 +488,7 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)
+    await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -508,10 +525,9 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
         Unit.sat
     ].get_payment_status(quote.checking_id)
 
-    assert status.unknown
+    assert status.not_found
 
-    # this should NOT remove the pending melt quote
-    await ledger.get_melt_quote(quote.quote, rollback_unknown=False)
+    await ledger.get_melt_quote(quote.quote)
 
     # assert melt quote unpaid
     melt_quotes = await ledger.crud.get_melt_quote(
@@ -519,16 +535,6 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
     )
     assert melt_quotes
     assert melt_quotes.state == MeltQuoteState.pending
-
-    # this should remove the pending melt quote
-    await ledger.get_melt_quote(quote.quote, rollback_unknown=True)
-
-    # assert melt quote unpaid
-    melt_quotes = await ledger.crud.get_melt_quote(
-        db=ledger.db, checking_id=quote.checking_id
-    )
-    assert melt_quotes
-    assert melt_quotes.state == MeltQuoteState.unpaid
 
 
 class RaisingBackend:

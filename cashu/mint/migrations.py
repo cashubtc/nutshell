@@ -1338,3 +1338,12 @@ async def m038_remove_dleq_from_promises(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} DROP COLUMN dleq_s"
         )
+
+
+async def m039_add_attempt_to_melt_quotes(db: Database):
+    """Add an internal execution-attempt identifier to melt quotes."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
+        )

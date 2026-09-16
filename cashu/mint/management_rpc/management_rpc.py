@@ -167,7 +167,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut05Quote(self, request, _):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
-        melt_quote_dict = melt_quote.model_dump()
+        melt_quote_dict = melt_quote.model_dump(exclude={"attempt"})
         melt_quote_dict['state'] = str(melt_quote_dict['state'])
         del melt_quote_dict['mint']
         return management_pb2.GetNut05QuoteResponse(
