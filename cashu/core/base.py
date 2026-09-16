@@ -1404,7 +1404,7 @@ class TokenV4(Token):
         return list({p.i.hex() for p in self.t})
 
     @classmethod
-    def from_tokenv3(cls, tokenv3: TokenV3):
+    def from_tokenv3(cls, tokenv3: TokenV3) -> "TokenV4":
         if not len(tokenv3.mints) == 1:
             raise Exception("TokenV3 must contain proofs from only one mint.")
 
@@ -1413,9 +1413,9 @@ class TokenV4(Token):
         for proof in proofs:
             proofs_by_id.setdefault(proof.id, []).append(proof)
 
-        cls.t = []
+        tokens: List[TokenV4Token] = []
         for keyset_id, proofs in proofs_by_id.items():
-            cls.t.append(
+            tokens.append(
                 TokenV4Token(
                     i=bytes.fromhex(keyset_id),
                     p=[
@@ -1440,13 +1440,12 @@ class TokenV4(Token):
                 )
             )
 
-        # set memo
-        cls.d = tokenv3.memo
-        # set mint
-        cls.m = tokenv3.mint
-        # set unit
-        cls.u = tokenv3.unit or "sat"
-        return cls(t=cls.t, d=cls.d, m=cls.m, u=cls.u)
+        return cls(
+            t=tokens,
+            d=tokenv3.memo,
+            m=tokenv3.mint,
+            u=tokenv3.unit or "sat",
+        )
 
     def serialize_to_dict(self, include_dleq=False):
         return_dict: Dict[str, Any] = dict(t=[t.model_dump() for t in self.t])

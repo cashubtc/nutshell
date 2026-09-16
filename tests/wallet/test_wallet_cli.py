@@ -772,9 +772,7 @@ def mint_tokens(runner, cli_prefix, amount: str):
 
 def test_proofs_basic(cli_prefix):
     """Test basic proofs command functionality"""
-    runner = CliRunner(
-        mix_stderr=False
-    )  # Separate stdout/stderr, as we want to verify only stdout
+    runner = CliRunner()
 
     # First create some tokens like other tests do
     mint_tokens(runner, cli_prefix, "64")
@@ -806,7 +804,7 @@ def test_proofs_basic(cli_prefix):
 
 def test_proofs_json_structure(cli_prefix):
     """Test that proofs have correct JSON structure"""
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
 
     # First create some tokens
     mint_tokens(runner, cli_prefix, "64")
@@ -837,7 +835,7 @@ def test_proofs_json_structure(cli_prefix):
 
 def test_proofs_with_no_dleq_flag(cli_prefix):
     """Test --no-dleq flag excludes DLEQ proofs"""
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
 
     # First create some tokens
     mint_tokens(runner, cli_prefix, "64")
@@ -879,7 +877,7 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
 
 def test_proofs_with_keyset_filter(cli_prefix):
     """Test --keyset flag filters proofs by keyset ID"""
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
 
     # First create some tokens
     mint_tokens(runner, cli_prefix, "64")
@@ -930,7 +928,7 @@ def test_proofs_with_keyset_filter(cli_prefix):
 
 def test_proofs_invalid_keyset(cli_prefix):
     """Test --keyset with non-existent keyset ID"""
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", "nonexistent"])
 
     assert result.exception is None
@@ -940,7 +938,7 @@ def test_proofs_invalid_keyset(cli_prefix):
 
 def test_proofs_with_all_flag(cli_prefix):
     """Test --all flag includes reserved proofs"""
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
 
     # Create some tokens first so we have proofs to list
     mint_tokens(runner, cli_prefix, "64")

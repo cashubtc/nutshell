@@ -7,7 +7,10 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.10"
-SQLAlchemy = {version = "^2.0.35", extras = ["asyncio"]}
+# SQLAlchemy 2.0.38+ leaves the test SQLite database unavailable after the
+# FastAPI test client shuts down. Keep the last verified compatible release
+# until the upstream regression is resolved.
+SQLAlchemy = {version = ">=2.0.35,<2.0.38", extras = ["asyncio"]}
 greenlet = ">=3.0.0"
 click = "^8.1.7"
 pydantic = "^2.5.3"
