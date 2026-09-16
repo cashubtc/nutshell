@@ -60,7 +60,10 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
 
     async def AddUrl(self, request, context):
         logger.debug("gRPC AddUrl has been called")
-        if settings.mint_info_urls and request.url not in settings.mint_info_urls:
+        if (
+            settings.mint_info_urls is not None
+            and request.url not in settings.mint_info_urls
+        ):
             settings.mint_info_urls.append(request.url)
         elif settings.mint_info_urls is None:
             settings.mint_info_urls = [request.url]
@@ -164,7 +167,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut05Quote(self, request, _):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
-        melt_quote_dict = melt_quote.model_dump()
+        melt_quote_dict = melt_quote.model_dump(exclude={"attempt"})
         melt_quote_dict['state'] = str(melt_quote_dict['state'])
         del melt_quote_dict['mint']
         return management_pb2.GetNut05QuoteResponse(

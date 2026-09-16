@@ -4,11 +4,12 @@ import asyncio
 import copy
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
 
-_clients = []
+_clients: list[Any] = []
 _receive_requests = set()
 
 

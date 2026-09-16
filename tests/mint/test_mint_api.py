@@ -92,8 +92,8 @@ async def test_api_keys(ledger: Ledger):
     }
     result = response.json()
     # PostgreSQL can return the same keysets in a different order.
-    result["keysets"].sort(key=lambda keyset: keyset["id"])
-    expected["keysets"].sort(key=lambda keyset: keyset["id"])
+    result["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    expected["keysets"].sort(key=lambda keyset: str(keyset["id"]))
     assert result == expected
 
 
@@ -562,7 +562,7 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
 )
 @pytest.mark.skipif(
     is_cln_backend,
-    reason="CLN pathfinding is randomized, the exact fee is not deterministic",
+    reason="requires an LND mint for the fee-leaf route query",
 )
 @pytest.mark.skipif(
     is_spark_backend,

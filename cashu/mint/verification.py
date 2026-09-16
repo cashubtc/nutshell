@@ -1,8 +1,10 @@
 from typing import List, Literal, Optional, Tuple, Union
 
+import bolt11
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     Method,
@@ -16,6 +18,7 @@ from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
     KeysetInactiveError,
+    LightningError,
     NoSecretInProofsError,
     NotAllowedError,
     OutputsAlreadySignedError,
@@ -39,6 +42,19 @@ class LedgerVerification(
     LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
 ):
     """Verification functions for the ledger."""
+
+    def _verify_mint_quote_invoice_amount(
+        self, invoice: bolt11.Bolt11, amount: Amount
+    ) -> None:
+        """Require BTC mint quotes to collect their exact issuance amount."""
+        if amount.unit not in (Unit.sat, Unit.msat):
+            return
+        if (
+            amount.amount <= 0
+            or invoice.amount_msat is None
+            or invoice.amount_msat != amount.to(Unit.msat).amount
+        ):
+            raise LightningError("backend invoice amount does not match mint quote")
 
     async def verify_inputs_and_outputs(
         self,

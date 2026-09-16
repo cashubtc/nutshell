@@ -22,11 +22,15 @@ on:
 permissions:
   contents: read
 
+env:
+  REGTEST_REF: 7eb3515b9fb41f477f831cedd28e1ad9ae6c521d
+
 jobs:
   regtest-mint:
     runs-on: ${{ inputs.os-version }}
     # Spark's cold source build can take 90 minutes before the suite starts.
-    timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 150 || 45 }}
+    # Other backends allow startup plus the full mint suite on slower runners.
+    timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 150 || 30 }}
     env:
       CASHU_REGTEST_DIR: ${{ github.workspace }}/regtest
     steps:
@@ -42,6 +46,14 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Checkout Regtest
+        uses: actions/checkout@v6
+        with:
+          repository: callebtc/cashu-regtest
+          ref: ${{ env.REGTEST_REF }}
+          path: regtest
+          persist-credentials: false
 
       - name: Setup Regtest
         timeout-minutes: ${{ inputs.backend-wallet-class == 'SparkL2Wallet' && 90 || 20 }}
@@ -99,3 +111,10 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Stop Regtest
+        if: always()
+        run: |
+          if [ -f regtest/docker-compose.yml ]; then
+            docker compose --project-directory regtest -p cashu down --volumes
+          fi

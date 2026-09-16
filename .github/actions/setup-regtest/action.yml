@@ -9,14 +9,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout regtest
-      uses: actions/checkout@v6
-      with:
-        repository: callebtc/cashu-regtest
-        ref: 23d5c160e0b5fade7e4a245b7385f9116bf2fc5c
-        path: regtest
-        persist-credentials: false
-
     - name: Start regtest
       shell: bash
       working-directory: regtest

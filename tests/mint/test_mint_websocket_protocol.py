@@ -169,11 +169,12 @@ async def test_init_subscription_sends_initial_snapshots():
         amount=1,
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
+        attempt="internal-attempt-nonce",
     )
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
 
     from contextlib import asynccontextmanager
-    
+
     @asynccontextmanager
     async def mock_connect():
         yield object()
@@ -223,6 +224,7 @@ async def test_init_subscription_sends_initial_snapshots():
     payloads = [json.loads(msg) for msg in websocket.sent]
     assert payloads[0]["payload"]["quote"] == "quote-1"
     assert payloads[1]["payload"]["quote"] == "melt-1"
+    assert "attempt" not in payloads[1]["payload"]
     assert payloads[2]["payload"]["Y"] == "Y1"
 
 
