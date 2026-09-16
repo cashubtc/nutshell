@@ -20,7 +20,7 @@ from mnemonic import Mnemonic
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResult, PaymentStatusResult
 from cashu.lightning.sparkl2 import SparkL2Wallet
 from tests.spark import (
     TIMEOUT,
@@ -85,7 +85,7 @@ async def test_spark_lightning_round_trip(spark_wallet_factory, unit, peer):
     wallet = await spark_wallet_factory(unit)
     await wait_balance(wallet, 0)
     missing = await wallet.get_payment_status(str(uuid4()))
-    assert missing.result == PaymentResult.UNKNOWN
+    assert missing.result == PaymentStatusResult.NOT_FOUND
 
     # Receive through Nutshell, including msat -> sat rounding and the listener.
     # This also funds the isolated wallet for the outgoing half of the test.
@@ -102,7 +102,7 @@ async def test_spark_lightning_round_trip(spark_wallet_factory, unit, peer):
     assert decoded.description == memo
     assert decoded.payment_hash == invoice.checking_id
     unpaid = await wallet.get_invoice_status(invoice.checking_id)
-    assert unpaid.result in (PaymentResult.UNKNOWN, PaymentResult.PENDING)
+    assert unpaid.result in (PaymentStatusResult.NOT_FOUND, PaymentStatusResult.PENDING)
 
     stream = wallet.paid_invoices_stream()
     event = asyncio.create_task(stream.__anext__())
