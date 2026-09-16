@@ -1,4 +1,6 @@
+import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -7,6 +9,7 @@ from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.mint import migrations as mint_migrations
 from cashu.mint.crud import LedgerCrudSqlite
+from cashu.mint.db.write import DbWriteHelper
 
 
 @pytest.mark.asyncio
@@ -117,6 +120,88 @@ async def test_m038_remove_dleq_from_promises(tmp_path):
     column_names = {column["name"] for column in columns}
     assert "dleq_e" not in column_names
     assert "dleq_s" not in column_names
+
+
+@pytest.mark.asyncio
+async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
+    db = Database("mint", str(tmp_path / "attempt_migration"))
+    crud = LedgerCrudSqlite()
+    try:
+        async with db.connect() as conn:
+            await conn.execute(
+                f"""
+                CREATE TABLE {db.table_with_schema("melt_quotes")} (
+                    quote TEXT PRIMARY KEY,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount INT NOT NULL,
+                    fee_reserve INT NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
+                    fee_paid INT,
+                    proof TEXT,
+                    state TEXT NOT NULL,
+                    expiry TIMESTAMP
+                )
+                """
+            )
+            await conn.execute(
+                f"""
+                CREATE TABLE {db.table_with_schema("promises")} (
+                    amount INT,
+                    b_ TEXT,
+                    c_ TEXT,
+                    id TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
+                    order_index INT
+                )
+                """
+            )
+
+        quote = MeltQuote(
+            quote="pre-m039-quote",
+            method="bolt11",
+            request="pre-m039-request",
+            checking_id="pre-m039-checking-id",
+            unit="sat",
+            amount=100,
+            fee_reserve=1,
+            state=MeltQuoteState.unpaid,
+        )
+        await crud.store_melt_quote(quote=quote, db=db)
+
+        await mint_migrations.m039_add_attempt_to_melt_quotes(db)
+
+        loaded = await crud.get_melt_quote(quote_id=quote.quote, db=db)
+        assert loaded is not None
+        assert loaded.attempt == ""
+
+        class Events:
+            async def submit(self, event):
+                pass
+
+        db_write = DbWriteHelper(
+            db=db,
+            crud=crud,
+            events=Events(),  # type: ignore[arg-type]
+            db_read=SimpleNamespace(),  # type: ignore[arg-type]
+        )
+        first_attempt = await db_write._set_melt_quote_pending(loaded)
+        parsed_attempt = uuid.UUID(first_attempt.attempt)
+        assert parsed_attempt.version == 7
+        assert parsed_attempt.variant == uuid.RFC_4122
+
+        unpaid = await db_write._unset_melt_quote_pending(
+            first_attempt, MeltQuoteState.unpaid
+        )
+        second_attempt = await db_write._set_melt_quote_pending(unpaid)
+        assert second_attempt.attempt != first_attempt.attempt
+        assert uuid.UUID(second_attempt.attempt).version == 7
+    finally:
+        await db.engine.dispose()
 
 
 @pytest.mark.asyncio
