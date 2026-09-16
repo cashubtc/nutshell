@@ -302,7 +302,7 @@ def test_mint_quote_response_requires_current_fields(missing: str):
         PostMintQuoteResponse.model_validate(response)
 
 
-@pytest.mark.parametrize("missing", ["unit", "method", "request", "state"])
+@pytest.mark.parametrize("missing", ["unit", "request", "state"])
 def test_melt_quote_response_requires_current_fields(missing: str):
     response = {
         "quote": "q-1",
@@ -318,6 +318,20 @@ def test_melt_quote_response_requires_current_fields(missing: str):
 
     with pytest.raises(ValidationError):
         PostMeltQuoteResponse.model_validate(response)
+
+
+def test_melt_quote_response_allows_legacy_missing_method():
+    response = {
+        "quote": "q-1",
+        "amount": 1,
+        "unit": "sat",
+        "request": "lnbc1",
+        "fee_reserve": 1,
+        "state": "UNPAID",
+        "expiry": None,
+    }
+
+    assert PostMeltQuoteResponse.model_validate(response).method is None
 
 
 @pytest.mark.asyncio
