@@ -433,6 +433,13 @@ class SparkL2Wallet(LightningBackend):
                 return PaymentStatus(result=PaymentStatusResult.PENDING)
 
         except Exception as e:
+            # The SDK raises a storage error for payment IDs it has never seen
+            # instead of returning an empty result.
+            if "Query returned no rows" in str(e):
+                return PaymentStatus(
+                    result=PaymentStatusResult.NOT_FOUND,
+                    error_message="Payment not found",
+                )
             return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=str(e))
 
     async def get_payment_quote(

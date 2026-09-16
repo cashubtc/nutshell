@@ -1048,6 +1048,36 @@ async def test_spark_get_payment_status_not_found(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_spark_get_payment_status_maps_sdk_query_error_to_not_found(monkeypatch):
+    from cashu.lightning import sparkl2
+
+    wallet = object.__new__(sparkl2.SparkL2Wallet)
+    wallet.unit = Unit.sat
+
+    async def mock_ensure_sdk():
+        pass
+
+    cast(Any, wallet)._ensure_sdk = mock_ensure_sdk
+    monkeypatch.setattr(
+        sparkl2.breez_sdk_spark,
+        "GetPaymentRequest",
+        lambda **kwargs: SimpleNamespace(**kwargs),
+    )
+
+    class MockSDK:
+        async def get_payment(self, req):
+            raise RuntimeError(
+                "Underlying implementation error: Query returned no rows"
+            )
+
+    cast(Any, wallet).sdk = MockSDK()
+
+    status = await wallet.get_payment_status("missing-id")
+    assert status.result == PaymentStatusResult.NOT_FOUND
+    assert status.error_message == "Payment not found"
+
+
+@pytest.mark.asyncio
 async def test_spark_get_payment_quote_rejects_non_bolt11():
     from cashu.lightning.sparkl2 import SparkL2Wallet
 
