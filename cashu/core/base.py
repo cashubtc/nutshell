@@ -281,6 +281,7 @@ class MeltQuote(LedgerEvent):
     amount: int
     fee_reserve: int
     state: MeltQuoteState
+    attempt: str = ""
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
@@ -303,6 +304,7 @@ class MeltQuote(LedgerEvent):
             expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
+        attempt = row.get("attempt")  # type: ignore
 
         return cls(
             quote=row["quote"],
@@ -313,6 +315,7 @@ class MeltQuote(LedgerEvent):
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
             state=MeltQuoteState(row["state"]),
+            attempt=str(attempt) if attempt is not None else "",
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
