@@ -277,7 +277,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
+    melt_task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -302,6 +302,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
+    await asyncio.wait_for(melt_task, timeout=30)
 
 
 @pytest.mark.asyncio
@@ -321,7 +322,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
+    melt_task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -349,6 +350,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     # expect that proofs are spent
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.spent for s in states])
+    await asyncio.wait_for(melt_task, timeout=30)
 
 
 @pytest.mark.asyncio
@@ -371,7 +373,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
+    melt_task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -400,6 +402,8 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     # expect that proofs are unspent
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.unspent for s in states])
+    with pytest.raises(Exception, match="Lightning payment failed"):
+        await asyncio.wait_for(melt_task, timeout=30)
 
 
 @pytest.mark.asyncio
@@ -425,7 +429,7 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
+    melt_task = asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
@@ -469,6 +473,9 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)
+    # Finish the payment's database writes before the next fixture drops the schema.
+    with pytest.raises(Exception, match="Lightning payment failed"):
+        await asyncio.wait_for(melt_task, timeout=30)
 
 
 @pytest.mark.asyncio

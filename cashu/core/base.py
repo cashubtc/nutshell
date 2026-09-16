@@ -288,6 +288,8 @@ class MeltQuote(LedgerEvent):
     expiry: Optional[int] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
+    method_data: Dict[str, Any] = Field(default_factory=dict)
+    amountless_msat: Optional[int] = Field(default=None, gt=0)
 
     @classmethod
     def from_row(cls, row: Row, change: Optional[List[BlindedSignature]] = None):
@@ -319,21 +321,30 @@ class MeltQuote(LedgerEvent):
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
+            amountless_msat=row["amountless_msat"]
+            if "amountless_msat" in row.keys()
+            else None,
+            method_data=(
+                json.loads(row["method_data"])
+                if "method_data" in row.keys() and row["method_data"]
+                else {}
+            ),
         )
 
     @classmethod
     def from_resp_wallet(cls, melt_quote_resp, mint: str):
         return cls(
             quote=melt_quote_resp.quote,
-            method=Method.bolt11.name,
+            method=melt_quote_resp.method,
             request=melt_quote_resp.request,
             checking_id="",
             unit=melt_quote_resp.unit,
             amount=melt_quote_resp.amount,
-            fee_reserve=melt_quote_resp.fee_reserve,
+            fee_reserve=melt_quote_resp.fee_reserve or 0,
             state=MeltQuoteState(melt_quote_resp.state),
             mint=mint,
             change=melt_quote_resp.change,
+            method_data=melt_quote_resp.model_extra or {},
         )
 
     @property
@@ -342,8 +353,12 @@ class MeltQuote(LedgerEvent):
         return self.quote
 
     @property
-    def kind(self) -> JSONRPCSubscriptionKinds:
-        return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+    def kind(self) -> Union[JSONRPCSubscriptionKinds, str]:
+        kind = f"{self.method}_melt_quote"
+        try:
+            return JSONRPCSubscriptionKinds(kind)
+        except ValueError:
+            return kind
 
     @property
     def unpaid(self) -> bool:
@@ -403,8 +418,10 @@ class MintQuote(LedgerEvent):
     privkey: Optional[str] = None
     pubkey: Optional[str] = None
     amount_paid: Optional[int] = 0
+    amount_paid_internal: int = Field(default=0, ge=0)
     amount_issued: Optional[int] = 0
     updated_at: Optional[int] = Field(default_factory=lambda: int(time.time()))
+    method_data: Dict[str, Any] = Field(default_factory=dict)
 
     def __init__(self, **data: Any):
         if "state" in data and "state_val" not in data:
@@ -462,12 +479,20 @@ class MintQuote(LedgerEvent):
             pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
             amount_paid=row["amount_paid"] if row["amount_paid"] is not None else None,
+            amount_paid_internal=row["amount_paid_internal"]
+            if "amount_paid_internal" in row.keys()
+            else 0,
             amount_issued=(
                 row["amount_issued"] if row["amount_issued"] is not None else None
             ),
             updated_at=updated_at
             if updated_at is not None
             else (issued_time or paid_time or created_time or int(time.time())),
+            method_data=(
+                json.loads(row["method_data"])
+                if "method_data" in row.keys() and row["method_data"]
+                else {}
+            ),
         )
 
     @classmethod
@@ -510,11 +535,11 @@ class MintQuote(LedgerEvent):
 
         return cls(
             quote=mint_quote_resp.quote,
-            method=Method.bolt11.name,
+            method=mint_quote_resp.method,
             request=mint_quote_resp.request,
             checking_id="",
             unit=mint_quote_resp.unit,
-            amount=mint_quote_resp.amount,
+            amount=mint_quote_resp.amount or 0,
             state=state,
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -525,6 +550,7 @@ class MintQuote(LedgerEvent):
             amount_paid=mint_quote_resp.amount_paid,
             amount_issued=mint_quote_resp.amount_issued,
             updated_at=mint_quote_resp.updated_at,
+            method_data=mint_quote_resp.model_extra or {},
         )
 
     @classmethod
@@ -578,8 +604,11 @@ class MintQuote(LedgerEvent):
 
     @property
     def state(self) -> MintQuoteState:
-        if self.state_val == MintQuoteState.pending:
-            return MintQuoteState.pending
+        # UNPAID and PENDING are explicit orchestration states. In particular,
+        # an observed partial payment must not implicitly make a non-reusable
+        # quote issuable merely because amount_paid is non-zero.
+        if self.state_val in {MintQuoteState.unpaid, MintQuoteState.pending}:
+            return self.state_val
         if self.amount_paid is not None and self.amount_issued is not None:
             if self.amount_paid > self.amount_issued:
                 return MintQuoteState.paid
@@ -610,8 +639,12 @@ class MintQuote(LedgerEvent):
         return self.quote
 
     @property
-    def kind(self) -> JSONRPCSubscriptionKinds:
-        return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+    def kind(self) -> Union[JSONRPCSubscriptionKinds, str]:
+        kind = f"{self.method}_mint_quote"
+        try:
+            return JSONRPCSubscriptionKinds(kind)
+        except ValueError:
+            return kind
 
     @property
     def unpaid(self) -> bool:
