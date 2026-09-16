@@ -204,13 +204,12 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        # if the amount of the melt quote is different from the request
-        # call pay_partial_invoice instead
+        # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
             quote_amount = Amount(Unit[quote.unit], quote.amount)
-            if amount_msat != quote_amount.to(Unit.msat).amount and self.supports_mpp:
+            if amount_msat > quote_amount.to(Unit.msat).amount and self.supports_mpp:
                 return await self.pay_partial_invoice(
                     quote, quote_amount, fee_limit_msat
                 )
