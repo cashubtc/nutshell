@@ -1026,7 +1026,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
     assert response1.state == "PAID"
 
-    assert_err(
+    await assert_err(
         wallet.melt(
             proofs=proofs2,
             invoice=invoice,
