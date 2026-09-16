@@ -1046,15 +1046,15 @@ class Wallet(
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
 
-        # Attach nutroot transaction witnesses (v3 keysets); the quote amount
-        # comes from the locally stored melt quote.
+        # Attach nutroot transaction witnesses (v3 keysets); the melt output's amount,
+        # what the quote may take (NUT-10), comes from the locally stored melt quote.
         melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote_id)
         if melt_quote_local is not None:
             proofs = self._attach_nutroot_witnesses(
                 proofs,
                 change_outputs,
                 melt_quote_id=quote_id,
-                melt_quote_amount=melt_quote_local.amount,
+                melt_quote_amount=melt_quote_local.amount + melt_quote_local.fee_reserve,
             )
         try:
             melt_quote_resp = await super().melt(
