@@ -11,6 +11,7 @@ import httpx
 import pytest
 import pytest_asyncio
 import uvicorn
+from sqlalchemy.exc import DBAPIError
 from uvicorn import Config, Server
 
 from cashu.core.base import Method, Unit
@@ -81,6 +82,19 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
+async def reset_postgres_database(db: Database):
+    for attempt in range(3):
+        try:
+            async with db.connect() as conn:
+                await conn.execute("DROP SCHEMA public CASCADE;")
+                await conn.execute("CREATE SCHEMA public;")
+            return
+        except DBAPIError as exc:
+            # A deadlock aborts the transaction; retry it with a fresh session.
+            if getattr(exc.orig, "sqlstate", None) != "40P01" or attempt == 2:
+                raise
+
+
 # This fixture is used for all other tests
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
@@ -98,18 +112,10 @@ async def ledger():
     else:
         # clear postgres database
         db = Database("mint", settings.mint_database)
-        async with db.connect() as conn:
-            # terminate all other connections so that lingering transactions from
-            # previous tests (e.g. orphaned background tasks) cannot block or
-            # deadlock the schema drop below
-            await conn.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                "WHERE datname = current_database() AND pid <> pg_backend_pid();"
-            )
-            # drop all tables
-            await conn.execute("DROP SCHEMA public CASCADE;")
-            await conn.execute("CREATE SCHEMA public;")
-        await db.engine.dispose()
+        try:
+            await reset_postgres_database(db)
+        finally:
+            await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
