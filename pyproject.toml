@@ -14,7 +14,7 @@ pydantic = "^2.5.3"
 pydantic-settings = "^2.1.0"
 bech32 = "^1.2.0"
 fastapi = "^0.115.0"
-environs = "^9.5.0"
+python-dotenv = "^1.0.1"
 uvicorn = "^0.31.0"
 loguru = "^0.7.0"
 ecdsa = "^0.19.0"
@@ -28,10 +28,13 @@ wheel = "^0.41.1"
 importlib-metadata = "^6.8.0"
 httpx = {extras = ["socks"], version = "^0.25.1"}
 bip32 = "^4.0"
+coincurve = ">=20,<21"
 mnemonic = "^0.20"
 bolt11 = "^2.0.5"
 websockets = "^12.0"
 slowapi = "^0.1.9"
+# The mint uses fixed-window-elastic-expiry, removed in limits 5.
+limits = ">=4,<5"
 cbor2 = "^5.6.2"
 asyncpg = "^0.30.0"
 aiosqlite = "^0.20.0"
@@ -85,7 +88,6 @@ do_not_mutate_patterns = ['not resp\.get']
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
 mint-cli = "cashu.mint.management_rpc.cli.cli:cli"
-wallet-test = "tests.test_wallet:test"
 
 [tool.ruff]
 line-length = 88
