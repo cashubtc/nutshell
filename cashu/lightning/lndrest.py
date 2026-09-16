@@ -142,7 +142,7 @@ class LndRestWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         data: Dict = {
-            "value": amount.to(Unit.sat).amount,
+            "value_msat": str(amount.to(Unit.msat).amount),
             "private": True,
             "memo": memo or "",
         }
@@ -229,9 +229,7 @@ class LndRestWallet(LightningBackend):
                 # ledger re-check the real state with TrackPaymentV2.
                 if line.get("error"):
                     error = line["error"]
-                    message = (
-                        error["message"] if "message" in error else str(error)
-                    )
+                    message = error["message"] if "message" in error else str(error)
                     return PaymentResponse(
                         result=PaymentResult.UNKNOWN, error_message=message
                     )
