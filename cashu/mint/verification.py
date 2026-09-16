@@ -302,8 +302,15 @@ class LedgerVerification(
                     )
                     for o in outputs
                 ],
+                # The melt output binds what the quote may take: amount plus its
+                # fee reserve (NUT-10).
                 melt_quote_outputs=(
-                    [TranscriptQuote(amount=melt_quote.amount, quote_id=melt_quote.quote)]
+                    [
+                        TranscriptQuote(
+                            amount=melt_quote.amount + melt_quote.fee_reserve,
+                            quote_id=melt_quote.quote,
+                        )
+                    ]
                     if melt_quote is not None
                     else None
                 ),
