@@ -9,6 +9,7 @@ import time
 from subprocess import PIPE, Popen, TimeoutExpired
 from typing import List, Tuple, Union
 
+import bolt11
 from loguru import logger
 
 from cashu.core.base import Unit
@@ -66,6 +67,7 @@ wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class(unit=Unit.sat)
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake
+is_spark_backend: bool = WALLET.__class__.__name__ == "SparkL2Wallet"
 is_cln_backend: bool = WALLET.__class__.__name__ in [
     "CLNRestWallet",
     "CoreLightningRestWallet",
@@ -73,6 +75,19 @@ is_cln_backend: bool = WALLET.__class__.__name__ in [
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 is_postgres = settings.mint_database.startswith("postgres")
 SLEEP_TIME = 1 if not is_github_actions else 2
+
+
+async def wait_for_result(check, predicate, timeout=30):
+    """Wait for a real backend's asynchronous state change, with a deadline."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    result = None
+    while (remaining := deadline - asyncio.get_running_loop().time()) > 0:
+        result = await asyncio.wait_for(check(), remaining)
+        if predicate(result):
+            return result
+        await asyncio.sleep(min(0.1, remaining))
+    raise AssertionError(f"Timed out waiting for backend state: {result}")
+
 
 docker_lightning_cli = [
     "docker",
@@ -156,6 +171,16 @@ def get_hold_invoice(sats: int) -> Tuple[str, dict]:
     cmd.extend(["addholdinvoice", preimage_hash, str(sats)])
     json = run_cmd_json(cmd)
     return preimage.hex(), json
+
+
+async def wait_for_hold_invoice(invoice: str) -> None:
+    """Do not settle/cancel until LND has accepted the outgoing HTLC."""
+    payment_hash = bolt11.decode(invoice).payment_hash
+    cmd = [*docker_lightning_cli, "lookupinvoice", payment_hash]
+    await wait_for_result(
+        lambda: asyncio.to_thread(run_cmd_json, cmd),
+        lambda invoice: invoice["state"] == "ACCEPTED",
+    )
 
 
 def settle_invoice(preimage: str) -> str:
@@ -258,6 +283,11 @@ def get_real_invoice_fee_leaf(sats: int) -> str:
 
 
 async def pay_if_regtest(bolt11: str) -> None:
+    if is_spark_backend and os.getenv("CASHU_SPARK_REGTEST", "").lower() == "true":
+        from tests.spark_regtest import pay_regtest_invoice
+
+        await pay_regtest_invoice(bolt11)
+        return
     if is_regtest:
         pay_real_invoice(bolt11)
     if is_fake:

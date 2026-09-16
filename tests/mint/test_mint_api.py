@@ -26,6 +26,7 @@ from tests.helpers import (
     is_cln_backend,
     is_fake,
     is_regtest,
+    is_spark_backend,
     pay_if_regtest,
 )
 
@@ -89,7 +90,11 @@ async def test_api_keys(ledger: Ledger):
             for keyset in ledger.keysets.values()
         ]
     }
-    assert response.json() == expected
+    result = response.json()
+    # PostgreSQL can return the same keysets in a different order.
+    result["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    expected["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    assert result == expected
 
 
 @pytest.mark.asyncio
@@ -381,8 +386,8 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
     result = response.json()
     assert result["quote"]
     assert result["amount"] == 64
-    # external invoice, fee should be 2
-    assert result["fee_reserve"] == 2
+    # Spark uses the local SSP's exact (zero) swap fee.
+    assert result["fee_reserve"] == (0 if is_spark_backend else 2)
 
 
 @pytest.mark.asyncio
@@ -452,7 +457,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 62
-    assert quote.fee_reserve == 2
+    assert quote.fee_reserve == (0 if is_spark_backend else 2)
 
     keep, send = await wallet.swap_to_send(wallet.proofs, 64)
     inputs_payload = [p.to_dict() for p in send]
@@ -496,6 +501,10 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 @pytest.mark.skipif(
     is_fake,
     reason="only works on regtest",
+)
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
 )
 async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
@@ -554,6 +563,10 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
 @pytest.mark.skipif(
     is_cln_backend,
     reason="requires an LND mint for the fee-leaf route query",
+)
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
 )
 async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(1024)
