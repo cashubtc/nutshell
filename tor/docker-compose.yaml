@@ -1,6 +1,6 @@
 services:
   mint:
-    image: cashubtc/nutshell:0.20.3
+    image: cashubtc/nutshell:0.21.0
   #  build:
   #   context: ..
   #   dockerfile: Dockerfile
