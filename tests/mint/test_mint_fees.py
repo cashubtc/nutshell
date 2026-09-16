@@ -121,6 +121,34 @@ async def test_wallet_selection_with_fee(wallet1: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_payment_request_dust_proofs_net_of_input_fees(
+    wallet1: Wallet, ledger: Ledger
+):
+    """the requested amount `a` (plus any method fee) is net of
+    input fees. A payer selecting from many small (dust) proofs on a
+    fee-charging keyset must top up the selection so the receiver's net
+    value still meets the requested amount, rather than underpay.
+    """
+    set_ledger_keyset_fees(250, ledger, wallet1)
+
+    mint_quote = await wallet1.request_mint(20)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(20, split=[1] * 20, quote_id=mint_quote.quote)
+
+    amount_to_pay = 10
+    send_proofs, fees = await wallet1.select_to_send(
+        wallet1.proofs, amount_to_pay, include_fees=True
+    )
+    # every selected proof is 1-sat dust
+    assert all(p.amount == 1 for p in send_proofs)
+    # the invariant this payment-request flow relies on:
+    # sum(proofs) - input_fee(proofs) >= amount_to_pay
+    assert sum_proofs(send_proofs) - fees >= amount_to_pay
+    assert sum_proofs(send_proofs) == amount_to_pay + fees
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_wallet_swap_to_send_with_fee(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger, wallet1)
