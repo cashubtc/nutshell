@@ -190,13 +190,7 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        # If this quote only covers part of the invoice, pay that part with
-        # pay_partial_invoice (MPP). The quote amount is rounded up to the
-        # backend unit, so an invoice with sub-satoshi precision leaves the
-        # quote slightly *above* the invoice amount. Comparing for inequality
-        # would read that rounding as a partial payment and route an ordinary
-        # melt through QueryRoutes, which cannot reach a destination that is
-        # only known from the invoice's route hints.
+        # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
