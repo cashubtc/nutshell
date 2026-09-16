@@ -860,9 +860,9 @@ async def test_spark_checks_payment_by_quote_hash_after_reconnecting(state):
     assert (
         status.result
         == {
-            "PENDING": PaymentResult.PENDING,
-            "FAILED": PaymentResult.FAILED,
-            "COMPLETED": PaymentResult.SETTLED,
+            "PENDING": PaymentStatusResult.PENDING,
+            "FAILED": PaymentStatusResult.FAILED,
+            "COMPLETED": PaymentStatusResult.SETTLED,
         }[state]
     )
     assert status.preimage == preimage

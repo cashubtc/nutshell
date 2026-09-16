@@ -52,7 +52,7 @@ async def test_lightning_create_invoice(ledger: Ledger):
         invoice.checking_id
     )
     # Spark's payment history does not include unpaid receive requests.
-    assert status.unknown if is_spark_backend else status.pending
+    assert status.not_found if is_spark_backend else status.pending
 
     # settle the invoice
     await pay_if_regtest(invoice.payment_request)
@@ -83,7 +83,7 @@ async def test_lightning_create_invoice_balance_change(ledger: Ledger):
         invoice.checking_id
     )
     # Spark's payment history does not include unpaid receive requests.
-    assert status.unknown if is_spark_backend else status.pending
+    assert status.not_found if is_spark_backend else status.pending
 
     backend_status = await ledger.backends[Method.bolt11][Unit.sat].status()
     balance_before = backend_status.balance
