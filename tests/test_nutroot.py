@@ -481,16 +481,22 @@ def test_point_secret_hashes_as_raw_bytes():
         with pytest.raises(TransactionError):
             secret_to_hash_input(rejected)
 
-    from cashu.core.crypto.nutroot import secret_transcript_bytes
+    from cashu.core.crypto.b_dhke import hash_to_curve
+    from cashu.core.crypto.nutroot import proof_transcript_y
 
     point = output["secret"]
-    assert secret_transcript_bytes(
-        point, VECTORS["nut13_v3"]["keyset_id"]
-    ) == bytes.fromhex(point)
-    assert secret_transcript_bytes(point, "01" + "11" * 32) == point.encode()
+    # Y follows the keyset's curve: the v3 vector's G1 point, or secp256k1 over
+    # the same text under a pre-v3 keyset. The secret itself never appears.
+    v3_id = VECTORS["nut13_v3"]["keyset_id"]
+    assert proof_transcript_y(point, v3_id) == bytes.fromhex(output["Y"])
+    assert (
+        proof_transcript_y(point, "01" + "11" * 32)
+        == hash_to_curve(point.encode()).format()
+    )
 
 
 def _tx_from_vector(tx: dict):
+    from cashu.core.crypto.nutroot import proof_transcript_y
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -503,7 +509,7 @@ def _tx_from_vector(tx: dict):
             TranscriptProofInput(
                 amount=p["amount"],
                 keyset_id=bytes.fromhex(p["keyset_id"]),
-                secret=bytes.fromhex(p["secret"]),
+                Y=proof_transcript_y(p["secret"], p["keyset_id"]),
                 C=bytes.fromhex(p["C"]),
             )
             for p in tx.get("proof_inputs", [])
@@ -547,7 +553,8 @@ def test_transcript_swap_signature_is_keypath_witness():
     tv = VECTORS["transcript"]["swap"]
     _, proof_contexts, _ = transaction_inputs(_tx_from_vector(tv["tx"]))
     secret = bytes.fromhex(tv["tx"]["proof_inputs"][0]["secret"])
-    context = proof_contexts[secret]
+    y = bytes.fromhex(VECTORS["nut13_v3"]["outputs"][0]["Y"])
+    context = proof_contexts[y]
     # The vector pins the container hash and the derived per-input digest.
     assert hashlib.sha256(context.container).hexdigest() == tv["input_id"]
     assert context.digest.hex() == tv["input_digest"]
@@ -565,9 +572,12 @@ def test_transcript_multi_input_vector_uses_per_input_digests():
     tx = _tx_from_vector(vector["tx"])
     digest, proof_contexts, _ = transaction_inputs(tx)
     assert digest == bytes.fromhex(vector["digest"])
+    from cashu.core.crypto.nutroot import proof_transcript_y
+
     for proof, expected in zip(vector["tx"]["proof_inputs"], vector["inputs"]):
         secret = bytes.fromhex(proof["secret"])
-        context = proof_contexts[secret]
+        y = proof_transcript_y(proof["secret"], proof["keyset_id"])
+        context = proof_contexts[y]
         assert hashlib.sha256(context.container).hexdigest() == expected["input_id"]
         assert context.digest.hex() == expected["input_digest"]
         assert verify_schnorr_digest(
@@ -575,6 +585,51 @@ def test_transcript_multi_input_vector_uses_per_input_digests():
         )
     assert vector["inputs"][0]["input_digest"] != vector["inputs"][1]["input_digest"]
     assert transaction_digest(tx) == digest
+
+
+def test_transcript_mixed_keyset_vector_names_inputs_by_y():
+    """NUT-10 tests, "Mixed keysets": a pre-v3 input beside a v3 one, each
+    named by the Y its own keyset's curve gives; neither secret appears."""
+    from cashu.core.crypto.nutroot import proof_transcript_y
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        build_transaction_transcript,
+        transaction_inputs,
+    )
+
+    inputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b", "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"}, {"amount": 2, "id": "00456a94ab4e1c46", "secret": "d341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6", "C": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"}]
+    outputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}, {"amount": 2, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}]
+    tx = TransactionShape(
+        proof_inputs=[
+            TranscriptProofInput(
+                amount=p["amount"],
+                keyset_id=bytes.fromhex(p["id"]),
+                Y=proof_transcript_y(p["secret"], p["id"]),
+                C=bytes.fromhex(p["C"]),
+            )
+            for p in inputs
+        ],
+        blinded_outputs=[
+            TranscriptBlindedOutput(
+                amount=o["amount"],
+                keyset_id=bytes.fromhex(o["id"]),
+                B_=bytes.fromhex(o["B_"]),
+            )
+            for o in outputs
+        ],
+    )
+    transcript = build_transaction_transcript(tx)
+    assert transcript.hex() == "01008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba203005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+    assert inputs[0]["secret"] not in transcript.hex()
+    assert inputs[1]["secret"].encode().hex() not in transcript.hex()
+    digest, proof_contexts, _ = transaction_inputs(tx)
+    assert digest.hex() == "e8eb75f3f209bbf592e7cc7ed727dcd33fe118add5ab7a992a3a2d7a9392d893"
+    v3 = proof_contexts[bytes.fromhex("a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73")]
+    assert v3.digest.hex() == "3f48aab72fb7ec0e29d1fa49e4e194f09110068fe94a95e8553f53755af55837"
+    legacy = proof_contexts[bytes.fromhex("029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae")]
+    assert hashlib.sha256(legacy.container).hexdigest() == "22df4d688b7337f49aa47dd5d0dc6578506229c36908d79608c50d7814d1bd04"
 
 
 def test_transcript_rejects_empty_sections():
@@ -723,7 +778,10 @@ async def test_wallet_attaches_nutroot_witnesses():
     assert mixed[0].witness is not None
     assert mixed[1].witness is None
 
-    from cashu.core.crypto.nutroot import keyset_id_transcript_bytes
+    from cashu.core.crypto.nutroot import (
+        keyset_id_transcript_bytes,
+        proof_transcript_y,
+    )
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -737,11 +795,7 @@ async def test_wallet_attaches_nutroot_witnesses():
                 TranscriptProofInput(
                     amount=proof.amount,
                     keyset_id=keyset_id_transcript_bytes(proof.id),
-                    secret=(
-                        bytes.fromhex(proof.secret)
-                        if proof is proofs[0]
-                        else proof.secret.encode()
-                    ),
+                    Y=proof_transcript_y(proof.secret, proof.id),
                     C=bytes.fromhex(proof.C),
                 )
                 for proof in mixed
@@ -759,7 +813,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     mixed_signature = json.loads(mixed[0].witness)["signatures"][0]
     assert verify_schnorr_digest(
         bytes.fromhex(mixed_signature),
-        mixed_contexts[bytes.fromhex(mixed[0].secret)].digest,
+        mixed_contexts[proof_transcript_y(mixed[0].secret, mixed[0].id)].digest,
         bytes.fromhex(mixed[0].secret),
     )
 
@@ -1133,6 +1187,7 @@ def test_mint_accepts_script_path_witness_on_swap():
     # Replace the input with the 6.1 tweaked secret, spent via the after leaf,
     # signed by the refund key (4) over this swap's real transcript digest.
     proofs[0].secret = v61["secret"]
+    from cashu.core.crypto.nutroot import proof_transcript_y
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -1146,7 +1201,7 @@ def test_mint_accepts_script_path_witness_on_swap():
                 TranscriptProofInput(
                     amount=p.amount,
                     keyset_id=bytes.fromhex(p.id),
-                    secret=bytes.fromhex(p.secret),
+                    Y=proof_transcript_y(p.secret, p.id),
                     C=bytes.fromhex(p.C),
                 )
                 for p in proofs
@@ -1161,7 +1216,8 @@ def test_mint_accepts_script_path_witness_on_swap():
             ],
         )
     )
-    digest = proof_contexts[bytes.fromhex(proofs[0].secret)].digest
+    y = proof_transcript_y(proofs[0].secret, proofs[0].id)
+    digest = proof_contexts[y].digest
     proofs[0].witness = json.dumps(
         {
             "leaf": v61["scriptpath_witness"]["leaf"],
@@ -1324,7 +1380,7 @@ def test_auditable_lock_vector_reconstructs():
     assert nutroot_tweak_pubkey(K, root).format().hex() == aud["secret"]
     tx = _tx_from_vector(aud["tx"])
     digest, contexts, _ = transaction_inputs(tx)
-    context = contexts[bytes.fromhex(aud["secret"])]
+    context = contexts[bytes.fromhex(aud["Y"])]
     assert build_transaction_transcript(tx).hex() == aud["transcript"]
     assert transaction_digest(tx).hex() == aud["digest"]
     assert hashlib.sha256(context.container).hexdigest() == aud["input_id"]
