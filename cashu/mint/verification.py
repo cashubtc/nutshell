@@ -23,7 +23,7 @@ from ..core.crypto.nutroot import (
     NutrootWitness,
     is_nutroot_point_secret,
     keyset_id_transcript_bytes,
-    secret_transcript_bytes,
+    proof_transcript_y,
     verify_script_path_spend,
 )
 from ..core.crypto.secp import PublicKey as SecpPublicKey
@@ -32,7 +32,7 @@ from ..core.crypto.transcript import (
     TranscriptBlindedOutput,
     TranscriptProofInput,
     TranscriptQuote,
-    transaction_digest,
+    transaction_inputs,
 )
 from ..core.db import Connection
 from ..core.errors import (
@@ -174,6 +174,10 @@ class LedgerVerification(
         logger.trace(f"Verifying {len(proofs)} proofs.")
         if not proofs:
             raise TransactionError("no proofs provided.")
+        # The digest is mint-side state: whatever the request carried is
+        # dropped here and re-derived for v3 point secrets during verification.
+        for p in proofs:
+            p.digest = None
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
             raise TransactionError("invalid amount.")
@@ -267,24 +271,27 @@ class LedgerVerification(
     ) -> None:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
-        One transcript per transaction, checked per input (NUT-10): every v3
-        input must carry a witness, a key path signature being a BIP-340
-        signature over the digest by the secret's key and a script path witness
-        resolving leaf to root to tweak before evaluating. Anything missing or
-        invalid rejects the transaction. v0-v2 inputs keep their own rules and
-        are skipped here, so mixed transactions verify per input as specified.
+        One shared transcript per transaction, one input digest per input
+        (NUT-10): every v3 input must carry a witness, a key path signature
+        being a BIP-340 signature over its input digest by the secret's key
+        and a script path witness resolving leaf to root to tweak before
+        evaluating. Anything missing or invalid rejects the transaction.
+        v0-v2 inputs keep their own rules and are skipped here, so mixed
+        transactions verify per input as specified.
         """
         if not proofs or (not outputs and melt_quote is None):
             return
         if not any(is_nutroot_point_secret(p.secret, p.id) for p in proofs):
             return
-        digest = transaction_digest(
+        # The transcript names each input by Y (NUT-10); hashed once per proof.
+        ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
+        _, proof_contexts, _ = transaction_inputs(
             TransactionShape(
                 proof_inputs=[
                     TranscriptProofInput(
                         amount=p.amount,
                         keyset_id=keyset_id_transcript_bytes(p.id),
-                        secret=secret_transcript_bytes(p.secret, p.id),
+                        Y=ys[p.secret],
                         C=bytes.fromhex(p.C),
                     )
                     for p in proofs
@@ -297,8 +304,15 @@ class LedgerVerification(
                     )
                     for o in outputs
                 ],
+                # The melt output binds what the quote may take: amount plus its
+                # fee reserve (NUT-10).
                 melt_quote_outputs=(
-                    [TranscriptQuote(amount=melt_quote.amount, quote_id=melt_quote.quote)]
+                    [
+                        TranscriptQuote(
+                            amount=melt_quote.amount + melt_quote.fee_reserve,
+                            quote_id=melt_quote.quote,
+                        )
+                    ]
                     if melt_quote is not None
                     else None
                 ),
@@ -307,9 +321,10 @@ class LedgerVerification(
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
-            # Stored with the spent proof and served by NUT-07: the witness
-            # verifies only against this digest. A failure below aborts the
-            # transaction, so nothing unverified is ever persisted.
+            digest = proof_contexts[ys[proof.secret]].digest
+            # Stored with the spent proof, opening the NUT-07 commitment: the
+            # witness verifies only against this input digest. A failure below
+            # aborts the transaction, so nothing unverified is ever persisted.
             proof.digest = digest.hex()
             if proof.witness is None:
                 # Inputs sign (NUT-10): with spend_info live in both wallets,
@@ -568,7 +583,7 @@ class LedgerVerification(
             return False
         if outputs and is_bls_keyset(outputs[0].id):
             # V3: the quote is a transaction input; its lock key signs the
-            # transaction digest (key or script path). For batch mints the
+            # quote input digest (key or script path). For batch mints the
             # digest covers every quote input.
             return nut20.verify_mint_quote_v3(
                 quote.quote,
