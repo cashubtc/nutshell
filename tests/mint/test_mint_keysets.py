@@ -296,8 +296,9 @@ async def test_keyset_versions_produce_correct_id_format():
     """
     Test that different versions produce the correct keyset ID format:
     - Very old keysets (< 0.15) had base64 IDs
-    - Version 0.15-0.17 use v1 IDs (00...)
-    - Version 0.18+ use v2 IDs (01...)
+    - Versions 0.15-0.19 use v1 IDs (00...)
+    - Versions 0.20-0.21 use v2 IDs (01...)
+    - Versions 0.22+ use v3 IDs (02...)
     """
     # Test version < 0.12: base64 ID
     keyset_0_11 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.11.0")
@@ -323,11 +324,47 @@ async def test_keyset_versions_produce_correct_id_format():
     assert keyset_0_18.id.startswith("00"), "Version 0.18 should produce v1 ID starting with '00'"
     assert len(keyset_0_18.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
     
-    # Test version 0.20+: v2 ID (01...)
+    # Test version 0.20: v2 ID (01...)
     keyset_0_20 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.20.0")
     assert keyset_0_20.id.startswith("01"), "Version 0.20 should produce v2 ID starting with '01'"
     assert len(keyset_0_20.id) == 66, "V2 ID should be 66 characters (33 bytes hex)"
     assert is_keyset_id_v2(keyset_0_20.id), "Should be detected as v2"
+
+
+@pytest.mark.parametrize("version", ["0.20.0", "0.21.0", "0.21.99"])
+@pytest.mark.parametrize("stored_id", ["", V2_KEYSET_ID], ids=["new", "stored"])
+def test_pre_0_22_keysets_preserve_v2_keys(version: str, stored_id: str):
+    keyset = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version=version,
+        id=stored_id,
+    )
+
+    assert keyset.id == V2_KEYSET_ID
+    assert keyset.public_keys_hex[1] == (
+        "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+    )
+    assert all(len(key) == 66 for key in keyset.public_keys_hex.values())
+
+
+@pytest.mark.parametrize("version", [None, "0.22.0", "0.22.1", "0.23.0"])
+def test_keysets_from_0_22_use_v3_keys(version: str | None):
+    keyset = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version=version,
+    )
+
+    assert keyset.id == (
+        "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
+    )
+    assert keyset.public_keys_hex[1] == (
+        "b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8"
+        "abe24c66581adc4a849ab8c4b2fe512334c6beeca1d05548d1663e7e04f6ed6c845"
+        "eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
+    )
+    assert all(len(key) == 192 for key in keyset.public_keys_hex.values())
 
 
 # ==================== KEYSET IDs NUT-02 TEST VECTORS ====================
