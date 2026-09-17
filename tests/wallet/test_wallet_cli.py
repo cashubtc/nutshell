@@ -1,6 +1,5 @@
 import asyncio
 import json
-import time
 from pathlib import Path
 from typing import Tuple
 
@@ -9,10 +8,9 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest, TokenV4
+from cashu.core.errors import NotAllowedError
 from cashu.core.nuts.nut18 import serialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
-from cashu.core.p2pk import P2PKSecret
-from cashu.core.errors import NotAllowedError
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -21,6 +19,7 @@ from tests.helpers import (
     is_fake,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 
@@ -984,6 +983,18 @@ def test_named_wallet_receive_list_and_spend(
     mint, monkeypatch, tmp_path: Path, wallet_name: str, legacy: bool
 ):
     """Regression for #1154: CLI commands must use the selected wallet database."""
+    if legacy:
+        # Legacy tokens cannot carry the spend information required by v3 keysets.
+        load_mint = Wallet.load_mint
+
+        async def load_legacy_mint(
+            wallet: Wallet, keyset_id: str = "", force_old_keysets=False
+        ):
+            await load_mint(wallet, keyset_id, force_old_keysets)
+            await use_v2_keyset(wallet)
+
+        monkeypatch.setattr(Wallet, "load_mint", load_legacy_mint)
+
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     monkeypatch.setattr(settings, "wallet_name", "wallet")
     monkeypatch.setattr(settings, "wallet_verbose_requests", False)

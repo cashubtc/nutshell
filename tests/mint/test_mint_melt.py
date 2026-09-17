@@ -13,6 +13,7 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     LightningPaymentFailedError,
@@ -134,6 +135,13 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
 ):
     from cashu.core.crypto.b_dhke import step1_alice
 
+    # This test hand-builds legacy proofs and secp256k1 change outputs.
+    keyset = next(
+        ks
+        for ks in ledger.keysets.values()
+        if ks.active and ks.unit == Unit.sat and not is_bls_keyset(ks.id)
+    )
+
     quote = MeltQuote(
         quote="concurrent-finalize-quote",
         method=Method.bolt11.name,
@@ -150,7 +158,7 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
         amount=16,
         C="concurrent-finalize-proof",
         secret="concurrent-finalize-secret",
-        id=ledger.keyset.id,
+        id=keyset.id,
     )
     await ledger.crud.set_proof_pending(
         proof=proof,
@@ -161,12 +169,12 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
     # non-negative while the input proof is pending.
     await ledger.crud.bump_keyset_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
         amount=100,
     )
     await ledger.crud.bump_keyset_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
         amount=-proof.amount,
     )
 
@@ -176,14 +184,14 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
             db=ledger.db,
             amount=1,
             b_=B_.format().hex(),
-            id=ledger.keyset.id,
+            id=keyset.id,
             melt_id=quote.quote,
             order_index=index,
         )
 
     balance_before, _ = await ledger.crud.get_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
     )
 
     payment_started = asyncio.Event()
@@ -264,7 +272,7 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
 
     balance_after, _ = await ledger.crud.get_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
     )
     assert balance_after.amount - balance_before.amount == 5
 
@@ -1227,7 +1235,7 @@ async def test_internal_melt_concurrently_issued_quote(ledger: Ledger, monkeypat
     proof = Proof(
         amount=64,
         C="concurrent-internal-settlement-proof",
-        secret="concurrent-internal-settlement-secret",
+        secret="02" + "ab" * 32,
         id=ledger.keyset.id,
     )
     await ledger.crud.bump_keyset_balance(
@@ -1443,7 +1451,7 @@ async def test_melt_status_resolution_across_attempts(
     """Check quote-status resolution across execution attempts."""
     proof_a, quote = await create_pending_melts(ledger)
     proof_b = Proof(
-        amount=123, C="remelt_c2", secret="remelt_secret2", id=ledger.keyset.id
+        amount=123, C="remelt_c2", secret="03" + "ab" * 32, id=ledger.keyset.id
     )
     backend = ledger.backends[Method.bolt11][Unit.sat]
 
