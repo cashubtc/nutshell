@@ -23,7 +23,7 @@ from ..core.crypto.nutroot import (
     NutrootWitness,
     is_nutroot_point_secret,
     keyset_id_transcript_bytes,
-    secret_transcript_bytes,
+    proof_transcript_y,
     verify_script_path_spend,
 )
 from ..core.crypto.secp import PublicKey as SecpPublicKey
@@ -283,13 +283,15 @@ class LedgerVerification(
             return
         if not any(is_nutroot_point_secret(p.secret, p.id) for p in proofs):
             return
+        # The transcript names each input by Y (NUT-10); hashed once per proof.
+        ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
         _, proof_contexts, _ = transaction_inputs(
             TransactionShape(
                 proof_inputs=[
                     TranscriptProofInput(
                         amount=p.amount,
                         keyset_id=keyset_id_transcript_bytes(p.id),
-                        secret=secret_transcript_bytes(p.secret, p.id),
+                        Y=ys[p.secret],
                         C=bytes.fromhex(p.C),
                     )
                     for p in proofs
@@ -319,7 +321,7 @@ class LedgerVerification(
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
-            digest = proof_contexts[secret_transcript_bytes(proof.secret, proof.id)].digest
+            digest = proof_contexts[ys[proof.secret]].digest
             # Stored with the spent proof, opening the NUT-07 commitment: the
             # witness verifies only against this input digest. A failure below
             # aborts the transaction, so nothing unverified is ever persisted.
