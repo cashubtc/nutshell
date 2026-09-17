@@ -212,8 +212,9 @@ class Proof(BaseModel):
         return_dict = dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
         # optional fields
-        if include_dleq:
-            assert self.dleq, "DLEQ proof is missing"
+        # DLEQ rides only where it exists: v3 proofs carry none (NUT-12 is
+        # version-scoped; they verify by pairing).
+        if include_dleq and self.dleq:
             return_dict["dleq"] = self.dleq.model_dump()  # type: ignore
 
         if self.witness:
