@@ -154,8 +154,10 @@ async def test_balance_update_on_mint(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
-async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledger):
-    settings.fakewallet_brr = False
+async def test_balance_update_on_test_melt_internal(
+    wallet: Wallet, ledger: Ledger, monkeypatch
+):
+    monkeypatch.setattr(settings, "fakewallet_brr", False)
     # mint twice so we have enough to pay the second invoice back
     mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(mint_quote.request)
@@ -177,7 +179,7 @@ async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledg
 
     melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
     assert (
-        not melt_quote_response_pre_payment.state == MeltQuoteState.paid.value
+        melt_quote_response_pre_payment.state == MeltQuoteState.unpaid
     ), "melt quote should not be paid"
     assert melt_quote_response_pre_payment.amount == payment_amount
 
@@ -243,7 +245,7 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
 
     melt_quote_response_pre_payment = await wallet.get_melt_quote(melt_quote.quote)
     assert (
-        melt_quote_response_pre_payment.state == MeltQuoteState.unpaid.value
+        melt_quote_response_pre_payment.state == MeltQuoteState.unpaid
     ), "melt quote should not be paid"
     assert melt_quote_response_pre_payment.amount == melt_quote.amount
 
