@@ -644,7 +644,7 @@ async def test_api_check_state_v3_serves_witness_digest(
     from cashu.core.base import ProofSpentState
     from cashu.core.crypto.nutroot import (
         keyset_id_transcript_bytes,
-        secret_transcript_bytes,
+        proof_transcript_y,
     )
     from cashu.core.crypto.transcript import (
         TransactionShape,
@@ -674,7 +674,7 @@ async def test_api_check_state_v3_serves_witness_digest(
                 TranscriptProofInput(
                     amount=p.amount,
                     keyset_id=keyset_id_transcript_bytes(p.id),
-                    secret=secret_transcript_bytes(p.secret, p.id),
+                    Y=proof_transcript_y(p.secret, p.id),
                     C=bytes.fromhex(p.C),
                 )
                 for p in inputs
@@ -705,9 +705,8 @@ async def test_api_check_state_v3_serves_witness_digest(
         assert state.witness is None
         assert state.input_digest is None
         proof = by_y[state.Y]
-        input_digest = proof_contexts[
-            secret_transcript_bytes(proof.secret, proof.id)
-        ].digest
+        y = proof_transcript_y(proof.secret, proof.id)
+        input_digest = proof_contexts[y].digest
         assert proof.witness
         assert state.commitment == spend_commitment(
             bytes.fromhex(state.Y), input_digest, proof.witness
