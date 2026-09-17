@@ -13,6 +13,7 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     LightningPaymentFailedError,
@@ -23,6 +24,7 @@ from cashu.core.errors import (
     TransactionError,
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.lightning.base import (
     PaymentResponse,
@@ -38,6 +40,7 @@ from tests.helpers import (
     is_fake,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -59,6 +62,20 @@ async def assert_err(f, msg):
 def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
     assert [p.amount for p in proofs] == expected
+
+
+
+async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **kwargs):
+    """ledger.melt with client-side nutroot witnesses attached (NUT-10)."""
+    quote_obj = await ledger.crud.get_melt_quote(quote_id=quote, db=ledger.db)
+    if quote_obj is not None:
+        signer_wallet._attach_nutroot_witnesses(
+            proofs,
+            outputs or [],
+            melt_quote_id=quote,
+            melt_quote_amount=quote_obj.amount,
+        )
+    return await ledger.melt(proofs=proofs, quote=quote, outputs=outputs, **kwargs)
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -92,7 +109,13 @@ async def create_pending_melts(
         quote=quote,
         db=ledger.db,
     )
-    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=ledger.keyset.id)
+    # v3 keysets take point secrets, so the placeholder is a compressed point.
+    pending_proof = Proof(
+        amount=123,
+        C="asdasd",
+        secret="02" + "ab" * 32,
+        id=ledger.keyset.id,
+    )
     await ledger.crud.set_proof_pending(
         db=ledger.db,
         proof=pending_proof,
@@ -112,6 +135,13 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
 ):
     from cashu.core.crypto.b_dhke import step1_alice
 
+    # This test hand-builds legacy proofs and secp256k1 change outputs.
+    keyset = next(
+        ks
+        for ks in ledger.keysets.values()
+        if ks.active and ks.unit == Unit.sat and not is_bls_keyset(ks.id)
+    )
+
     quote = MeltQuote(
         quote="concurrent-finalize-quote",
         method=Method.bolt11.name,
@@ -128,7 +158,7 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
         amount=16,
         C="concurrent-finalize-proof",
         secret="concurrent-finalize-secret",
-        id=ledger.keyset.id,
+        id=keyset.id,
     )
     await ledger.crud.set_proof_pending(
         proof=proof,
@@ -139,12 +169,12 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
     # non-negative while the input proof is pending.
     await ledger.crud.bump_keyset_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
         amount=100,
     )
     await ledger.crud.bump_keyset_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
         amount=-proof.amount,
     )
 
@@ -154,14 +184,14 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
             db=ledger.db,
             amount=1,
             b_=B_.format().hex(),
-            id=ledger.keyset.id,
+            id=keyset.id,
             melt_id=quote.quote,
             order_index=index,
         )
 
     balance_before, _ = await ledger.crud.get_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
     )
 
     payment_started = asyncio.Event()
@@ -242,7 +272,7 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
 
     balance_after, _ = await ledger.crud.get_balance(
         db=ledger.db,
-        keyset=ledger.keyset,
+        keyset=keyset,
     )
     assert balance_after.amount - balance_before.amount == 5
 
@@ -286,13 +316,15 @@ async def test_pending_melt_quote_outputs_registration_regression(
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    response1 = await ledger.melt(
-        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    response1 = await melt_signed(
+        ledger, wallet, proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
     )
     assert response1.state == "PENDING"
 
     await assert_err(
-        ledger.melt(
+        melt_signed(
+            ledger,
+            wallet,
             proofs=proofs2,
             quote=melt_quote2.quote,
             outputs=change_outputs,
@@ -347,14 +379,16 @@ async def test_settled_melt_quote_outputs_registration_regression(
         n_change_outputs * [0], change_secrets, change_rs
     )
     await assert_err(
-        ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
+        melt_signed(ledger, wallet, proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
         "Lightning payment failed.",
     )
 
     settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
 
-    response2 = await ledger.melt(
+    response2 = await melt_signed(
+        ledger,
+        wallet,
         proofs=proofs2,
         quote=melt_quote2.quote,
         outputs=change_outputs,
@@ -404,10 +438,14 @@ async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    await ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs)
+    await melt_signed(
+        ledger, wallet, proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    )
 
     await assert_err(
-        ledger.melt(
+        melt_signed(
+            ledger,
+            wallet,
             proofs=proofs2,
             quote=melt_quote2.quote,
             outputs=change_outputs,
@@ -608,13 +646,15 @@ async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet
     # quote = await ledger.get_melt_quote(quote_id)
     settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
-    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    melt_response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert melt_response.state == MeltQuoteState.paid.value
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: Wallet):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
@@ -634,7 +674,6 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     except LightningPaymentFailedError:
         pass
 
-
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_error_status_keeps_proofs_pending(
@@ -650,7 +689,7 @@ async def test_melt_lightning_error_status_keeps_proofs_pending(
 
     settings.fakewallet_payment_state = PaymentStatusResult.ERROR.name
     settings.fakewallet_pay_invoice_state = PaymentResult.ERROR.name
-    response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
 
     assert response.state == MeltQuoteState.pending.value
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
@@ -675,7 +714,7 @@ async def test_melt_lightning_pay_invoice_failed_settled(
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
 
-    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    melt_response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert melt_response.state == MeltQuoteState.paid.value
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
     assert all([s.spent for s in states])
@@ -698,7 +737,7 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     settings.fakewallet_payment_state = PaymentStatusResult.PENDING.name
 
-    melt_response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    melt_response = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert melt_response.state == MeltQuoteState.pending.value
     # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
@@ -722,7 +761,7 @@ async def test_melt_lightning_payment_exceptions_keep_pending(
     monkeypatch.setattr(settings, "fakewallet_payment_state_exception", True)
     monkeypatch.setattr(settings, "fakewallet_pay_invoice_state_exception", True)
 
-    resp = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    resp = await melt_signed(ledger, wallet, proofs=wallet.proofs, quote=quote_id)
     assert resp.state == MeltQuoteState.pending.value
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
     assert all(state.pending for state in states)
@@ -749,9 +788,12 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
 
     amount = 32
 
-    # mint quote in sat
+    # mint quote in sat, locked: a v3 mint quote is a transaction input and inputs sign
+    quote_privkey, quote_pubkey = nut20.generate_keypair()
     sat_mint_quote = await ledger.mint_quote(
-        quote_request=PostMintQuoteRequest(amount=amount, unit="sat")
+        quote_request=PostMintQuoteRequest(
+            amount=amount, unit="sat", pubkey=quote_pubkey
+        )
     )
     sat_invoice = sat_mint_quote.request
     assert sat_mint_quote.state != MintQuoteState.paid
@@ -763,7 +805,7 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     assert usd_melt_quote.state != MeltQuoteState.paid
 
     # pay melt quote with usd
-    await ledger.melt(proofs=wallet_usd.proofs, quote=usd_melt_quote.quote)
+    await melt_signed(ledger, wallet_usd, proofs=wallet_usd.proofs, quote=usd_melt_quote.quote)
 
     output_amounts = [32]
 
@@ -771,7 +813,13 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs(output_amounts, secrets, rs)
 
     # mint in sat
-    mint_resp = await ledger.mint(outputs=outputs, quote_id=sat_mint_quote.quote)
+    mint_resp = await ledger.mint(
+        outputs=outputs,
+        quote_id=sat_mint_quote.quote,
+        signature=nut20.sign_mint_quote_v3(
+            sat_mint_quote.quote, sat_mint_quote.amount, outputs, quote_privkey
+        ),
+    )
 
     assert len(mint_resp) == len(outputs)
 
@@ -1026,14 +1074,15 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     )
     assert response1.state == "PAID"
 
-    assert_err(
+    await assert_err(
         wallet.melt(
             proofs=proofs2,
             invoice=invoice,
             fee_reserve_sat=melt_quote2.fee_reserve,
             quote_id=melt_quote2.quote,
         ),
-        "Melt quote already paid or pending.",
+        # wallet.melt wraps the mint's 11000 detail
+        "could not pay invoice: Mint Error: Melt quote already paid or pending. (Code: 11000)",
     )
 
 
@@ -1064,8 +1113,8 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     assert melt_quote1.quote != melt_quote2.quote
 
     responses = await asyncio.gather(
-        ledger.melt(proofs=proofs1, quote=melt_quote1.quote),
-        ledger.melt(proofs=proofs2, quote=melt_quote2.quote),
+        melt_signed(ledger, wallet, proofs=proofs1, quote=melt_quote1.quote),
+        melt_signed(ledger, wallet, proofs=proofs2, quote=melt_quote2.quote),
         return_exceptions=True,
     )
 
@@ -1117,7 +1166,7 @@ async def test_melt_with_wrong_unit_proofs(ledger: Ledger, wallet: Wallet):
     assert sat_melt_quote.unit == "sat"
 
     await assert_err(
-        ledger.melt(proofs=usd_proofs, quote=sat_melt_quote.quote, outputs=[]),
+        melt_signed(ledger, wallet_usd, proofs=usd_proofs, quote=sat_melt_quote.quote, outputs=[]),
         "proof unit usd does not match quote unit sat",
     )
 
@@ -1149,7 +1198,7 @@ async def test_internal_melt_failure_unsets_pending(ledger: Ledger, wallet: Wall
 
     # Try to melt - it should fail because mint quote is already paid
     await assert_err(
-        ledger.melt(proofs=proofs, quote=sat_melt_quote.quote, outputs=[]),
+        melt_signed(ledger, wallet, proofs=proofs, quote=sat_melt_quote.quote, outputs=[]),
         "mint quote already paid",
     )
 
@@ -1186,7 +1235,7 @@ async def test_internal_melt_concurrently_issued_quote(ledger: Ledger, monkeypat
     proof = Proof(
         amount=64,
         C="concurrent-internal-settlement-proof",
-        secret="concurrent-internal-settlement-secret",
+        secret="02" + "ab" * 32,
         id=ledger.keyset.id,
     )
     await ledger.crud.bump_keyset_balance(
@@ -1277,6 +1326,8 @@ async def test_internal_melt_concurrently_issued_quote(ledger: Ledger, monkeypat
 async def test_melt_early_return_leaves_no_orphan_blank_outputs(
     wallet, ledger: Ledger, monkeypatch, fee_paid_sat_offset: int
 ):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     """When `_generate_change_promises` takes its early-return branch
     (overpaid_fee <= 0), the wallet's blank NUT-08 outputs — already
     inserted into `promises` with c_ IS NULL before the LN payment —
@@ -1400,7 +1451,7 @@ async def test_melt_status_resolution_across_attempts(
     """Check quote-status resolution across execution attempts."""
     proof_a, quote = await create_pending_melts(ledger)
     proof_b = Proof(
-        amount=123, C="remelt_c2", secret="remelt_secret2", id=ledger.keyset.id
+        amount=123, C="remelt_c2", secret="03" + "ab" * 32, id=ledger.keyset.id
     )
     backend = ledger.backends[Method.bolt11][Unit.sat]
 

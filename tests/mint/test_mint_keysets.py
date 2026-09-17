@@ -1,9 +1,11 @@
 import pytest
 
 from cashu.core.base import MintKeyset, Unit
+from cashu.core.crypto.bls import PublicKey as BlsPublicKey
 from cashu.core.crypto.keys import (
     derive_keyset_id,
     derive_keyset_id_v2,
+    derive_keyset_id_v3,
     derive_keyset_short_id,
     get_keyset_id_version,
     is_keyset_id_v2,
@@ -92,8 +94,11 @@ async def test_keyset_0_15_0_encrypted():
 
 @pytest.mark.asyncio
 async def test_keyset_rotation(ledger: Ledger):
-    keyset_sat = next(
-        filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values())
+    # Rotation derives from the highest counter for the unit, so compare against
+    # that keyset rather than whichever active one comes first.
+    keyset_sat = max(
+        (k for k in ledger.keysets.values() if k.unit == Unit["sat"] and k.active),
+        key=lambda k: int(k.derivation_path.split("/")[-1].replace("'", "")),
     )
     new_keyset_sat = await ledger.rotate_next_keyset(
         unit=Unit["sat"], max_order=20, input_fee_ppk=1
@@ -256,7 +261,7 @@ async def test_keyset_id_v2_error_cases():
         get_keyset_id_version("x")  # Too short
     
     with pytest.raises(ValueError):
-        derive_keyset_short_id("02invalid")  # Invalid version
+        derive_keyset_short_id("xxinvalid")  # Invalid version
     
     # Test with None keys should work (just empty dict)
     empty_id = derive_keyset_id_v2({}, Unit.sat)
@@ -291,8 +296,9 @@ async def test_keyset_versions_produce_correct_id_format():
     """
     Test that different versions produce the correct keyset ID format:
     - Very old keysets (< 0.15) had base64 IDs
-    - Version 0.15-0.17 use v1 IDs (00...)
-    - Version 0.18+ use v2 IDs (01...)
+    - Versions 0.15-0.19 use v1 IDs (00...)
+    - Versions 0.20-0.21 use v2 IDs (01...)
+    - Versions 0.22+ use v3 IDs (02...)
     """
     # Test version < 0.12: base64 ID
     keyset_0_11 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.11.0")
@@ -318,11 +324,47 @@ async def test_keyset_versions_produce_correct_id_format():
     assert keyset_0_18.id.startswith("00"), "Version 0.18 should produce v1 ID starting with '00'"
     assert len(keyset_0_18.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
     
-    # Test version 0.20+: v2 ID (01...)
+    # Test version 0.20: v2 ID (01...)
     keyset_0_20 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.20.0")
     assert keyset_0_20.id.startswith("01"), "Version 0.20 should produce v2 ID starting with '01'"
     assert len(keyset_0_20.id) == 66, "V2 ID should be 66 characters (33 bytes hex)"
     assert is_keyset_id_v2(keyset_0_20.id), "Should be detected as v2"
+
+
+@pytest.mark.parametrize("version", ["0.20.0", "0.21.0", "0.21.99"])
+@pytest.mark.parametrize("stored_id", ["", V2_KEYSET_ID], ids=["new", "stored"])
+def test_pre_0_22_keysets_preserve_v2_keys(version: str, stored_id: str):
+    keyset = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version=version,
+        id=stored_id,
+    )
+
+    assert keyset.id == V2_KEYSET_ID
+    assert keyset.public_keys_hex[1] == (
+        "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+    )
+    assert all(len(key) == 66 for key in keyset.public_keys_hex.values())
+
+
+@pytest.mark.parametrize("version", [None, "0.22.0", "0.22.1", "0.23.0"])
+def test_keysets_from_0_22_use_v3_keys(version: str | None):
+    keyset = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version=version,
+    )
+
+    assert keyset.id == (
+        "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
+    )
+    assert keyset.public_keys_hex[1] == (
+        "b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8"
+        "abe24c66581adc4a849ab8c4b2fe512334c6beeca1d05548d1663e7e04f6ed6c845"
+        "eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
+    )
+    assert all(len(key) == 192 for key in keyset.public_keys_hex.values())
 
 
 # ==================== KEYSET IDs NUT-02 TEST VECTORS ====================
@@ -520,3 +562,29 @@ async def test_keyset_id_v2_test_vectors():
     assert get_keyset_id_version(keyset_id_v2_vec1) == "01", "Vector 1 should be version 01"
     assert get_keyset_id_version(keyset_id_v2_vec2) == "01", "Vector 2 should be version 01"
     assert get_keyset_id_version(keyset_id_v2_vec3) == "01", "Vector 3 should be version 01"
+
+@pytest.mark.asyncio
+async def test_keyset_id_v3_test_vectors():
+    """
+    Test vectors for v3 keyset ID derivation from NUT-02.
+    Source: https://github.com/cashubtc/nuts/blob/master/tests/02-tests.md
+    """
+    # V3 Vector 1: Small keyset
+    keys_v3_vec1 = {
+        1: BlsPublicKey(bytes.fromhex("8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c"), group="G2"),
+        2: BlsPublicKey(bytes.fromhex("8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"), group="G2"),
+    }
+    keyset_id_v3_vec1 = derive_keyset_id_v3(keys_v3_vec1, Unit.sat)
+    assert keyset_id_v3_vec1 == "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", \
+        "V3 vector 1 keyset ID mismatch"
+
+    # V3 Vector 2
+    keys_v3_vec2 = {
+        1: BlsPublicKey(bytes.fromhex("8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c"), group="G2"),
+        2: BlsPublicKey(bytes.fromhex("8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c"), group="G2"),
+        4: BlsPublicKey(bytes.fromhex("8c60dae92451206390e30b5daa7151d63624dee496753c87dd54eadc92dc9602081fae02a1a53bac97e984a571923a5d0a29e38da2d42fd4712052800c7c8dd6e94fd9f506e946068aaac799d60b94c2d7515769ffdd32ea95d3910330ec47de"), group="G2"),
+        8: BlsPublicKey(bytes.fromhex("a55dafcdf339360f74e3fd32296d062d5e36db3c2570e13a889b38502c0ff71864b19e324bc9c661c29b07c9cc378b5919c1656979648d7c3ef4bd6501fcc96490a34e47fe25afc8b14d60f1c3772138acaf8a0a5e4f940f57206eba74fdc973"), group="G2"),
+    }
+    keyset_id_v3_vec2 = derive_keyset_id_v3(keys_v3_vec2, Unit.sat, input_fee_ppk=100)
+    assert keyset_id_v3_vec2 == "027f0dcd008156363a8418b88f38ddd5155a38c46a3f27c15c7eb40ec5f04cb4b3", \
+        "V3 vector 2 keyset ID mismatch"
