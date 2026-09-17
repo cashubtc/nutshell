@@ -449,15 +449,21 @@ def witness_discloses(witness_json: str) -> bool:
         return False
 
 
-def secret_transcript_bytes(secret: str, keyset_id: str) -> bytes:
-    """Bytes a proof secret contributes to the transaction transcript (NUT-10).
+def proof_transcript_y(secret: str, keyset_id: str) -> bytes:
+    """The Y a proof input contributes to the transaction transcript (NUT-10).
 
-    A v3 point secret contributes its raw 33 bytes; a v0-v2 secret contributes
-    its utf8 bytes, which is what mixed transactions need.
+    The keyset's hash_to_curve of the secret, exactly as the mint keys its
+    spent set: a 48-byte G1 point on a v3 keyset, 33 bytes of secp256k1
+    otherwise. A secret never enters a transcript.
     """
     if is_bls_keyset(keyset_id):
-        return bytes.fromhex(secret)
-    return secret.encode("utf-8")
+        from .bls_dhke import hash_to_curve as bls_hash_to_curve
+        from .bls_dhke import secret_to_hash_input
+
+        return bls_hash_to_curve(secret_to_hash_input(secret)).format()
+    from .b_dhke import hash_to_curve
+
+    return hash_to_curve(secret.encode("utf-8")).format()
 
 
 def keyset_id_transcript_bytes(keyset_id: str) -> bytes:

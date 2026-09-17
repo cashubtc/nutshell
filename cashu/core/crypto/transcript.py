@@ -31,7 +31,7 @@ _CONTAINER_MELT_QUOTE_OUTPUT = 0x04
 class TranscriptProofInput:
     amount: int
     keyset_id: bytes
-    secret: bytes  # v3: the 33-byte compressed point P; v0-v2: the secret's raw bytes
+    Y: bytes  # the keyset's hash_to_curve of the secret; the secret itself never appears
     C: bytes
 
 
@@ -63,15 +63,15 @@ def _amount_record(amount: int) -> bytes:
 
 
 def _proof_input_container(p: TranscriptProofInput) -> bytes:
-    # Mixed transactions are normative (NUT-10), so a v0-v2 input appears here
-    # with its secret's raw bytes next to a v3 input's 33-byte point.
-    if not p.secret:
-        raise ValueError("Transcript proof secret must be non-empty")
+    # Field 03 is Y on the keyset's curve (NUT-10): 48 bytes under a v3 keyset,
+    # 33 under a v0-v2 one, which mixed transactions carry beside v3 inputs.
+    if len(p.Y) not in (33, 48):
+        raise ValueError("Transcript proof Y must be a compressed curve point")
     return tlv_record(
         _CONTAINER_PROOF_INPUT,
         _amount_record(p.amount)
         + tlv_record(0x02, p.keyset_id)
-        + tlv_record(0x03, p.secret)
+        + tlv_record(0x03, p.Y)
         + tlv_record(0x04, p.C),
     )
 
@@ -105,7 +105,7 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
     if not blinded and not melt_quotes:
         raise ValueError("Transaction requires at least one output")
     # NUT-10: the same proof or quote twice would sign one input digest for two inputs.
-    if len({p.secret for p in proofs}) != len(proofs):
+    if len({p.Y for p in proofs}) != len(proofs):
         raise ValueError("Transaction repeats a proof input")
     if len({q.quote_id for q in mint_quotes}) != len(mint_quotes):
         raise ValueError("Transaction repeats a mint quote input")
@@ -142,13 +142,13 @@ class InputContext:
 def transaction_inputs(
     tx: TransactionShape,
 ) -> Tuple[bytes, Dict[bytes, InputContext], Dict[str, InputContext]]:
-    """(transaction_digest, proof contexts by secret bytes, quote contexts by quote id).
+    """(transaction_digest, proof contexts by Y bytes, quote contexts by quote id).
 
     The transcript builder has already refused duplicates, so the keys are unique.
     """
     digest = transaction_digest(tx)
     proofs = {
-        p.secret: InputContext(container=c, digest=input_digest(digest, c))
+        p.Y: InputContext(container=c, digest=input_digest(digest, c))
         for p in (tx.proof_inputs or [])
         for c in [_proof_input_container(p)]
     }

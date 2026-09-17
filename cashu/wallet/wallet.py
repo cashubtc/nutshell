@@ -33,7 +33,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.nutroot import (
     is_nutroot_point_secret,
     keyset_id_transcript_bytes,
-    secret_transcript_bytes,
+    proof_transcript_y,
 )
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.secp import PublicKey as SecpPublicKey
@@ -766,6 +766,8 @@ class Wallet(
             is_nutroot_point_secret(p.secret, p.id) for p in proofs
         ):
             return proofs
+        # The transcript names each input by Y (NUT-10); hashed once per proof.
+        ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
         try:
             _, proof_contexts, _ = transaction_inputs(
                 TransactionShape(
@@ -773,7 +775,7 @@ class Wallet(
                         TranscriptProofInput(
                             amount=p.amount,
                             keyset_id=keyset_id_transcript_bytes(p.id),
-                            secret=secret_transcript_bytes(p.secret, p.id),
+                            Y=ys[p.secret],
                             C=bytes.fromhex(p.C),
                         )
                         for p in proofs
@@ -808,9 +810,7 @@ class Wallet(
             secret_key = self._resolve_v3_secret_key(proof)
             if secret_key is None:
                 continue
-            digest = proof_contexts[
-                secret_transcript_bytes(proof.secret, proof.id)
-            ].digest
+            digest = proof_contexts[ys[proof.secret]].digest
             signature = secret_key.sign_schnorr(
                 digest,
                 None,  # type: ignore
