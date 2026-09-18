@@ -85,6 +85,8 @@ async def test_api_keys(ledger: Ledger):
                     str(k): v.format().hex()
                     for k, v in keyset.public_keys.items()  # type: ignore
                 },
+                "active_from": keyset.active_from,
+                "active_until": keyset.active_until,
                 "final_expiry": keyset.final_expiry,
             }
             for keyset in ledger.keysets.values()
@@ -104,6 +106,8 @@ async def test_api_keysets(ledger: Ledger):
     expected = {
         "keysets": [
             {
+                "active_from": None,
+                "active_until": None,
                 "final_expiry": None,
                 "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
                 "unit": "sat",
@@ -111,6 +115,8 @@ async def test_api_keysets(ledger: Ledger):
                 "input_fee_ppk": 0,
             },
             {
+                "active_from": None,
+                "active_until": None,
                 "final_expiry": None,
                 "id": "01dadff4bbb5719ea6119c6b134d79cadfdd49b7483ca4b422a5e9fbdadbb32006",
                 "unit": "usd",
@@ -132,6 +138,8 @@ async def test_api_keyset_keys(ledger: Ledger):
     expected = {
         "keysets": [
             {
+                "active_from": None,
+                "active_until": None,
                 "final_expiry": None,
                 "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
                 "unit": "sat",
@@ -159,6 +167,8 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
     expected = {
         "keysets": [
             {
+                "active_from": None,
+                "active_until": None,
                 "final_expiry": None,
                 "id": "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
                 "unit": "sat",

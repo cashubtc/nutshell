@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from cashu.core.base import MintKeyset, Unit
@@ -10,6 +12,7 @@ from cashu.core.crypto.keys import (
 )
 from cashu.core.crypto.secp import PublicKey
 from cashu.core.settings import settings
+from cashu.mint.keysets import ACTIVE_UNTIL_NOTICE_SECONDS
 from cashu.mint.ledger import Ledger
 from tests.mint.test_mint_init import (
     DECRYPTON_KEY,
@@ -114,8 +117,10 @@ async def test_keyset_rotation(ledger: Ledger):
     assert new_keyset_sat.input_fee_ppk == 1
     assert len(new_keyset_sat.private_keys.values()) == 20
 
+    # NUT-02: the outgoing keyset may not be inactivated before a published active_until
     old_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=keyset_sat.id))[0]
-    assert not old_keyset.active, "old keyset is still active"
+    assert old_keyset.active, "old keyset should stay active until its active_until"
+    assert old_keyset.active_until is not None, "old keyset should announce active_until"
 
 
 # ==================== KEYSETS V2 TESTS ====================
@@ -227,6 +232,98 @@ async def test_keyset_final_expiry_field():
     )
     
     assert keyset_no_expiry.final_expiry is None, "Final expiry should be None by default"
+
+
+@pytest.mark.asyncio
+async def test_keyset_active_window_fields():
+    """Test MintKeyset with active_from and active_until fields."""
+    active_from = 1896187313
+    active_until = 1896187413
+
+    keyset_with_window = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version="0.15.0",
+        active_from=active_from,
+        active_until=active_until,
+    )
+
+    assert keyset_with_window.active_from == active_from, "active_from should be set"
+    assert keyset_with_window.active_until == active_until, "active_until should be set"
+
+    keyset_no_window = MintKeyset(
+        seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0"
+    )
+
+    assert keyset_no_window.active_from is None, "active_from should default to None"
+    assert keyset_no_window.active_until is None, "active_until should default to None"
+
+
+@pytest.mark.asyncio
+async def test_keyset_future_active_from_reports_inactive():
+    """A keyset announced ahead of time is reported inactive until active_from."""
+    now = int(time.time())
+
+    future = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version="0.15.0",
+        active=True,
+        active_from=now + 3600,
+    )
+    assert not future.is_active, "a future active_from should report active False"
+
+    past = MintKeyset(
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        version="0.15.0",
+        active=True,
+        active_from=now - 3600,
+    )
+    assert past.is_active, "a past active_from should report active True"
+
+
+@pytest.mark.asyncio
+async def test_keyset_rotation_announces_active_until(ledger: Ledger):
+    """Rotating a keyset with no active_until announces one 30 days out instead of
+    inactivating it right away.
+    """
+    keyset_sat = next(
+        filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values())
+    )
+    assert keyset_sat.active_until is None
+
+    now = int(time.time())
+    await ledger.rotate_next_keyset(unit=Unit["sat"])
+
+    old_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=keyset_sat.id))[0]
+    assert old_keyset.active, "old keyset should stay active"
+    assert old_keyset.active_until is not None
+    assert (
+        abs(old_keyset.active_until - (now + ACTIVE_UNTIL_NOTICE_SECONDS)) < 60
+    ), "active_until should be roughly 30 days out"
+
+    # retiring it again must not move the published value earlier
+    announced = old_keyset.active_until
+    await ledger.retire_keyset(old_keyset)
+    stored = (await ledger.crud.get_keyset(db=ledger.db, id=keyset_sat.id))[0]
+    assert stored.active_until == announced, "a published active_until must not move"
+    assert stored.active, "the keyset must stay active until its active_until"
+
+
+@pytest.mark.asyncio
+async def test_inactivate_elapsed_keysets(ledger: Ledger):
+    """A keyset whose published active_until has passed may be inactivated."""
+    keyset_sat = next(
+        filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values())
+    )
+    keyset_sat.active_until = int(time.time()) - 1
+    await ledger.crud.update_keyset(keyset=keyset_sat, db=ledger.db)
+
+    await ledger.inactivate_elapsed_keysets()
+
+    stored = (await ledger.crud.get_keyset(db=ledger.db, id=keyset_sat.id))[0]
+    assert not stored.active, "an elapsed keyset should be inactivated"
 
 
 @pytest.mark.asyncio

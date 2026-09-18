@@ -275,6 +275,46 @@ async def test_m029_witness_cleanup():
 
 
 @pytest.mark.asyncio
+async def test_keysets_active_window_columns_round_trip(tmp_path):
+    """m040 adds the NUT-02 active window columns, which the keyset CRUD round-trips."""
+    from cashu.core.base import MintKeyset
+
+    db = Database("mint", str(tmp_path / "keysets_active_window"))
+    await migrate_databases(db, mint_migrations)
+    crud = LedgerCrudSqlite()
+
+    async with db.connect() as conn:
+        columns = {
+            row["name"]
+            for row in await conn.fetchall(
+                f"PRAGMA table_info({db.table_with_schema('keysets')})"
+            )
+        }
+        assert {"active_from", "active_until", "final_expiry"} <= columns
+
+    keyset = MintKeyset(
+        seed="test_seed",
+        derivation_path="m/0'/0'/0'",
+        version="0.15.0",
+        active_from=123456789,
+        active_until=223456789,
+        final_expiry=323456789,
+    )
+    await crud.store_keyset(db=db, keyset=keyset)
+
+    retrieved = await crud.get_keyset(db=db, id=keyset.id)
+    assert len(retrieved) == 1
+    assert retrieved[0].active_from == 123456789
+    assert retrieved[0].active_until == 223456789
+    assert retrieved[0].final_expiry == 323456789
+
+    # an update writes the columns back
+    retrieved[0].active_until = 233456789
+    await crud.update_keyset(db=db, keyset=retrieved[0])
+    assert (await crud.get_keyset(db=db, id=keyset.id))[0].active_until == 233456789
+
+
+@pytest.mark.asyncio
 async def test_auth_m003_migration():
     import os
     import shutil

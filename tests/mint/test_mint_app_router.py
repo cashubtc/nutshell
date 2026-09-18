@@ -38,8 +38,11 @@ def _dummy_keyset(keyset_id: str, active: bool = True):
         id=keyset_id,
         unit=Unit.sat,
         active=active,
+        is_active=active,
         input_fee_ppk=1,
         public_keys_hex={1: "aa"},
+        active_from=None,
+        active_until=None,
         final_expiry=123,
     )
 
