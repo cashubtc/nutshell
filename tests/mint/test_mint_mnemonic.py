@@ -92,10 +92,15 @@ async def test_rotation_switches_unit_to_mnemonic(ledger: Ledger, monkeypatch):
     with pytest.raises(Exception, match="Couldn't find suitable keyset"):
         await mnemonic_ledger.rotate_next_keyset(Unit.eur)
 
-    # after a restart, sat only signs with the new keyset and usd is untouched
+    # after a restart, the legacy sat keyset is retiring and usd is untouched
     restarted = await start_ledger(
         ledger.db, settings.mint_private_key, ledger.backends
     )
     active = [k for k in restarted.keysets.values() if k.active]
-    assert [k.id for k in active if k.unit == Unit.sat] == [keyset.id]
+    sat = {k.id: k for k in active if k.unit == Unit.sat}
+    assert set(sat) == {
+        keyset.id,
+        *(k.id for k in ledger.keysets.values() if k.unit == Unit.sat and k.active),
+    }
+    assert all(k.active_until is not None for k in sat.values() if not k.from_mnemonic)
     assert [k.from_mnemonic for k in active if k.unit == Unit.usd] == [False]

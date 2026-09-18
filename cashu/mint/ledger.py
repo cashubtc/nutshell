@@ -194,6 +194,7 @@ class Ledger(
         while True:
             try:
                 await self._check_pending_proofs_and_melt_quotes()
+                await self.inactivate_elapsed_keysets()
                 await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
             except Exception as e:
                 logger.error(f"Ledger regular task failed: {e}")

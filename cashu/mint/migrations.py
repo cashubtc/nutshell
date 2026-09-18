@@ -1356,3 +1356,16 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
             f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
             "WHERE encrypted_seed IS NOT NULL AND seed != ''"
         )
+
+
+async def m041_add_active_window_to_keysets(db: Database):
+    """Add the NUT-02 active window columns (active_from, active_until) to keysets."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} "
+            "ADD COLUMN active_from INTEGER NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} "
+            "ADD COLUMN active_until INTEGER NULL"
+        )
