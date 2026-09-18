@@ -9,6 +9,8 @@ class KeysResponseKeyset(BaseModel):
     active: bool
     input_fee_ppk: Optional[int] = None
     keys: Dict[int, str]
+    active_from: Optional[int] = None
+    active_until: Optional[int] = None
     final_expiry: Optional[int] = None
 
 
@@ -21,6 +23,8 @@ class KeysetsResponseKeyset(BaseModel):
     unit: str
     active: bool
     input_fee_ppk: Optional[int] = None
+    active_from: Optional[int] = None
+    active_until: Optional[int] = None
     final_expiry: Optional[int] = None
 
 

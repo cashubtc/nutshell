@@ -1384,3 +1384,16 @@ async def m042_add_melt_execution_leases(db: Database):
         await conn.execute(
             f"UPDATE {table} SET payment_uncertain = 1 WHERE state = 'PENDING'"
         )
+
+
+async def m043_add_active_window_to_keysets(db: Database):
+    """Add the NUT-02 active window columns (active_from, active_until) to keysets."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} "
+            "ADD COLUMN active_from INTEGER NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} "
+            "ADD COLUMN active_until INTEGER NULL"
+        )
