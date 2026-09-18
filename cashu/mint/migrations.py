@@ -1347,3 +1347,16 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_add_active_window_to_keysets(db: Database):
+    """Add the NUT-02 active window columns (active_from, active_until) to keysets."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} "
+            "ADD COLUMN active_from INTEGER NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} "
+            "ADD COLUMN active_until INTEGER NULL"
+        )

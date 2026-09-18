@@ -939,6 +939,8 @@ class MintKeyset:
     version: Optional[str] = None
     amounts: List[int]
     balance: int
+    active_from: Optional[int] = None
+    active_until: Optional[int] = None
     final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
 
     def __init__(
@@ -959,6 +961,8 @@ class MintKeyset:
         id: str = "",
         balance: int = 0,
         fees_paid: int = 0,
+        active_from: Optional[int] = None,
+        active_until: Optional[int] = None,
         final_expiry: Optional[int] = None,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
@@ -995,6 +999,8 @@ class MintKeyset:
         self.balance = balance
         self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
+        self.active_from = active_from
+        self.active_until = active_until
         self.final_expiry = final_expiry
 
         if self.input_fee_ppk < 0:
@@ -1050,8 +1056,19 @@ class MintKeyset:
             amounts=json.loads(row["amounts"]),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
+            active_from=row["active_from"],
+            active_until=row["active_until"],
             final_expiry=row["final_expiry"],
         )
+
+    @property
+    def is_active(self) -> bool:
+        """Activity as reported to wallets: a keyset announced with a future
+        `active_from` is not yet usable for outputs (NUT-02).
+        """
+        if self.active_from is not None and self.active_from > int(time.time()):
+            return False
+        return self.active
 
     @property
     def public_keys_hex(self) -> Dict[int, str]:

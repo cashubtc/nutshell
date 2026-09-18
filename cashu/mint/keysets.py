@@ -1,4 +1,5 @@
 import base64
+import time
 from typing import Dict, List, Optional
 
 from loguru import logger
@@ -8,6 +9,9 @@ from ..core.crypto.keys import derive_keyset_id
 from ..core.errors import KeysetError, KeysetNotFoundError
 from ..core.settings import settings
 from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
+
+# NUT-02: an `active_until` published after the keyset itself must be at least 30 days out.
+ACTIVE_UNTIL_NOTICE_SECONDS = 30 * 24 * 60 * 60
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
@@ -39,6 +43,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         unit: Unit,
         max_order: Optional[int] = None,
         input_fee_ppk: Optional[int] = None,
+        active_until: Optional[int] = None,
         final_expiry: Optional[int] = None,
     ) -> MintKeyset:
         """
@@ -46,13 +51,14 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             1. finds the highest counter keyset for `unit`
             2. creates a new derivation path from the old one, increasing the counter by one
             3. creates a new active keyset for the new derivation path
-            4. de-activates the old keyset
+            4. announces or applies the old keyset's inactivation
             5. stores the new keyset to DB
 
         Args:
             unit (Unit): Unit of the keyset.
             max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
             input_fee_ppk (Optional[int], optional):  The new keyset's fee
+            active_until (Optional[int], optional): The time until which the new keyset stays active.
             final_expiry (Optional[int], optional): The keyset's expiration date, after which it might be dropped from the database.
         Returns:
             MintKeyset: Resulting keyset of the rotation
@@ -99,6 +105,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             amounts=amounts,
             input_fee_ppk=input_fee_ppk,
             active=True,
+            active_until=active_until,
             final_expiry=final_expiry
         )
 
@@ -106,13 +113,42 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         await self.crud.store_keyset(keyset=new_keyset, db=self.db)
         self.keysets[new_keyset.id] = new_keyset
 
-        logger.debug(f"De-activating keyset {selected_keyset.id}...")
-        selected_keyset.active = False
-        await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
-        self.keysets[selected_keyset.id] = selected_keyset
-
-        logger.debug(f"Keyset {keyset.id} was de-activated")
+        await self.retire_keyset(selected_keyset)
         return new_keyset
+
+    async def retire_keyset(self, keyset: MintKeyset) -> None:
+        """Inactivate a keyset, or announce its inactivation if it cannot be inactivated yet.
+
+        NUT-02 forbids inactivating a keyset that has no published `active_until`, and
+        forbids inactivating one early, so an unannounced keyset gets an `active_until`
+        30 days out and stays active until then. A published value is never moved earlier.
+        """
+        now = int(time.time())
+        if keyset.active_until is None:
+            keyset.active_until = now + ACTIVE_UNTIL_NOTICE_SECONDS
+            logger.debug(
+                f"Keyset {keyset.id} will be de-activated at {keyset.active_until}"
+            )
+        elif keyset.active_until > now:
+            logger.debug(f"Keyset {keyset.id} stays active until {keyset.active_until}")
+            return
+        else:
+            keyset.active = False
+            logger.debug(f"Keyset {keyset.id} was de-activated")
+
+        self.keysets[keyset.id] = keyset
+        await self.crud.update_keyset(keyset=keyset, db=self.db)
+
+    async def inactivate_elapsed_keysets(self) -> None:
+        """Inactivate every keyset whose published `active_until` has passed."""
+        now = int(time.time())
+        for keyset in list(self.keysets.values()):
+            if (
+                keyset.active
+                and keyset.active_until is not None
+                and keyset.active_until <= now
+            ):
+                await self.retire_keyset(keyset)
 
     async def activate_keyset(
         self,
@@ -192,6 +228,9 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
 
         logger.info(f"Loaded {len(self.keysets)} keysets from database.")
 
+        # reconcile the loaded keysets with the clock before anything selects on `active`
+        await self.inactivate_elapsed_keysets()
+
         # Check if any of the loaded keysets marked as active
         # do supersede the one specified in the derivation settings.
         # If this is the case update to latest count derivation.
@@ -241,6 +280,8 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 logger.warning(
                     f"Keyset {keyset.id} is base64 and has a hex counterpart, setting inactive."
                 )
+                # Superseded base64 keysets are retired at boot and never reactivated, so the
+                # NUT-02 active window does not gate them.
                 keyset.active = False
                 self.keysets[keyset.id] = keyset
                 await self.crud.update_keyset(keyset=keyset, db=self.db)
