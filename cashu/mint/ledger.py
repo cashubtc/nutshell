@@ -22,6 +22,7 @@ from ..core.base import (
     ProofState,
     Unit,
 )
+from ..core.constants import MAX_QUOTE_ID_LEN
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
@@ -34,6 +35,7 @@ from ..core.errors import (
     AmountlessInvoiceNotSupportedError,
     AmountMismatchError,
     BatchDuplicateQuotesError,
+    BatchSizeExceededError,
     CashuError,
     InvoiceAlreadyPaidError,
     KeysetInactiveError,
@@ -749,20 +751,32 @@ class Ledger(
 
     async def mint_quote_check(
         self, payload: PostMintQuoteCheckRequest
-    ) -> List[MintQuote]:
+    ) -> List[Optional[MintQuote]]:
         """Batch check mint quotes.
 
         Args:
             payload (PostMintQuoteCheckRequest): Request payload containing quote IDs.
 
         Returns:
-            List[MintQuote]: List of mint quotes matching the request.
+            List[Optional[MintQuote]]: Mint quotes or ``None`` for unknown IDs,
+                in request order.
         """
-        quotes: List[MintQuote] = []
+        if len(payload.quotes) > settings.mint_max_request_length:
+            raise BatchSizeExceededError()
+        if len(set(payload.quotes)) != len(payload.quotes):
+            raise BatchDuplicateQuotesError()
+
+        quotes: List[Optional[MintQuote]] = []
         for quote_id in payload.quotes:
+            # overlong IDs are definitionally unknown; never hit the db with them
+            if len(quote_id) > MAX_QUOTE_ID_LEN:
+                quotes.append(None)
+                continue
+            stored_quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
+            if not stored_quote:
+                quotes.append(None)
+                continue
             quote = await self.get_mint_quote(quote_id)
-            if not quote:
-                raise TransactionError(f"quote {quote_id} not found")
             quotes.append(quote)
         return quotes
 
@@ -802,6 +816,11 @@ class Ledger(
             raise QuoteAlreadyIssuedError()
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
+        if quote.amount_issued:
+            # quotes with a partial amount_issued (via NUT-29 batch mint) must be
+            # drained via batch mint; minting the full quote amount again here
+            # would issue more than was paid
+            raise TransactionError("quote already partially issued")
 
         # Also validate quotes created before invoice amount checks were added.
         self._verify_mint_quote_invoice_amount(
@@ -821,16 +840,31 @@ class Ledger(
                 raise QuoteSignatureInvalidError()
             await self._store_blinded_messages(outputs, mint_id=quote_id)
             promises = await self._sign_blinded_messages(outputs)
+            # Issue the quote: atomically increase amount_issued under the row
+            # lock instead of overwriting the accounting fields
+            await self.db_write._issue_mint_quotes(
+                quote_ids=[quote_id], amounts=[quote.amount]
+            )
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(
                 quote_id=quote_id, state=previous_state
             )
             raise e
-        await self.db_write._unset_mint_quote_pending(
-            quote_id=quote_id, state=MintQuoteState.issued
-        )
 
         return promises
+
+    @staticmethod
+    def _mintable_quote_amount(quote: MintQuote) -> int:
+        """Currently mintable amount of a mint quote (amount_paid - amount_issued).
+
+        Legacy quotes without accounting data (amount_paid and amount_issued
+        unset) are treated as fully mintable if they are in PAID state.
+        """
+        amount_paid = quote.amount_paid or 0
+        amount_issued = quote.amount_issued or 0
+        if not amount_paid and not amount_issued:
+            amount_paid = quote.amount if quote.state == MintQuoteState.paid else 0
+        return amount_paid - amount_issued
 
     async def mint_batch(
         self,
@@ -888,32 +922,32 @@ class Ledger(
         for quote in quotes:
             if quote.pending:
                 raise QuotePendingError("mint quote already pending")
-            if quote.issued:
-                raise QuoteAlreadyIssuedError()
-            if quote.state != MintQuoteState.paid:
+            if self._mintable_quote_amount(quote) <= 0:
+                if quote.issued:
+                    raise QuoteAlreadyIssuedError()
                 raise QuoteNotPaidError()
             self._verify_mint_quote_invoice_amount(
                 bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
             )
 
-        # Check amount balance
+        # Check per-quote amounts: each amount must be positive and within
+        # the quote's currently mintable amount (amount_paid - amount_issued)
         if payload.quote_amounts:
             if len(payload.quote_amounts) != len(quotes):
                 raise TransactionError("quote_amounts length must match quotes length")
             for i, quote in enumerate(quotes):
-                if (
-                    quote.method == Method.bolt11.name
-                    and payload.quote_amounts[i] != quote.amount
-                ):
+                mintable_amount = self._mintable_quote_amount(quote)
+                if payload.quote_amounts[i] <= 0:
+                    raise TransactionError("quote amounts must be positive")
+                if payload.quote_amounts[i] > mintable_amount:
                     raise TransactionError(
-                        f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
-                    )
-                if payload.quote_amounts[i] > quote.amount:
-                    raise TransactionError(
-                        f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}"
+                        f"quote amount {payload.quote_amounts[i]} exceeds mintable amount of quote {quote.quote}"
                     )
 
-        quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
+        # If quote_amounts is omitted, issue each quote's full mintable amount
+        quote_amounts = payload.quote_amounts or [
+            self._mintable_quote_amount(q) for q in quotes
+        ]
         if Method.bolt11.name in methods:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
@@ -936,30 +970,26 @@ class Ledger(
                 raise QuoteSignatureInvalidError()
 
         # Set all quotes to pending
-        quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
+        await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
-            for quote in quotes:
-                if quote.expiry and quote.expiry < int(time.time()):
-                    raise QuoteExpiredError("quote expired")
-
             # Store all blinded messages
             await self._store_blinded_messages(
                 payload.outputs, mint_id=payload.quotes[0]
             )
             promises = await self._sign_blinded_messages(payload.outputs)
 
+            # Issue the quotes: atomically increase each quote's amount_issued
+            # (re-validated under the row lock against concurrent batches)
+            await self.db_write._issue_mint_quotes(
+                quote_ids=payload.quotes, amounts=quote_amounts
+            )
         except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
                 quote_ids=payload.quotes, state=MintQuoteState.paid
             )
             raise e
-
-        # Set all quotes to issued
-        await self.db_write._unset_mint_quotes_pending(
-            quote_ids=payload.quotes, state=MintQuoteState.issued
-        )
 
         return promises
 
