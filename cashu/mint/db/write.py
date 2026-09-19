@@ -199,6 +199,12 @@ class DbWriteHelper:
                 raise QuoteAlreadyIssuedError(f"Mint quote {quote_id} is already issued.")
             if not quote.paid:
                 raise QuoteNotPaidError("Mint quote is not paid yet.")
+            if quote.amount_issued:
+                # quotes partially issued via NUT-29 batch mint must be drained
+                # via batch mint; minting the full quote amount here would
+                # issue more than was paid. Checked under the row lock so a
+                # concurrent batch mint cannot race the guard in mint().
+                raise TransactionError("quote already partially issued")
             # set the quote as pending
             self._set_mint_quote_state(quote, MintQuoteState.pending)
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
@@ -286,8 +292,10 @@ class DbWriteHelper:
                 raise TransactionError(
                     f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
                 )
-            # set the quote to previous state
-            self._set_mint_quote_state(quote, state)
+            # set the quote to the previous state without touching its
+            # accounting fields (amount_paid / amount_issued)
+            quote.state_val = state
+            quote.updated_at = int(time.time())
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -399,6 +407,13 @@ class DbWriteHelper:
                     # normalize legacy quotes without accounting data
                     amount_paid = quote.amount
                     quote.amount_paid = amount_paid
+                # re-validate under the row lock: the mintable amount checked
+                # in mint_batch was computed from an unlocked read and may be
+                # stale if a concurrent batch mint committed in the meantime
+                if amount > amount_paid - amount_issued:
+                    raise TransactionError(
+                        f"amount {amount} exceeds mintable amount of quote {quote_id}"
+                    )
                 quote.amount_issued = amount_issued + amount
                 if quote.amount_issued >= amount_paid:
                     quote.state_val = MintQuoteState.issued

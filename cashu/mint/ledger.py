@@ -840,14 +840,16 @@ class Ledger(
                 raise QuoteSignatureInvalidError()
             await self._store_blinded_messages(outputs, mint_id=quote_id)
             promises = await self._sign_blinded_messages(outputs)
+            # Issue the quote: atomically increase amount_issued under the row
+            # lock instead of overwriting the accounting fields
+            await self.db_write._issue_mint_quotes(
+                quote_ids=[quote_id], amounts=[quote.amount]
+            )
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(
                 quote_id=quote_id, state=previous_state
             )
             raise e
-        await self.db_write._unset_mint_quote_pending(
-            quote_id=quote_id, state=MintQuoteState.issued
-        )
 
         return promises
 
@@ -977,17 +979,17 @@ class Ledger(
             )
             promises = await self._sign_blinded_messages(payload.outputs)
 
+            # Issue the quotes: atomically increase each quote's amount_issued
+            # (re-validated under the row lock against concurrent batches)
+            await self.db_write._issue_mint_quotes(
+                quote_ids=payload.quotes, amounts=quote_amounts
+            )
         except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
                 quote_ids=payload.quotes, state=MintQuoteState.paid
             )
             raise e
-
-        # Issue the quotes: atomically increase each quote's amount_issued
-        await self.db_write._issue_mint_quotes(
-            quote_ids=payload.quotes, amounts=quote_amounts
-        )
 
         return promises
 
