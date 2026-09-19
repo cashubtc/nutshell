@@ -1,7 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 import bolt11
 from loguru import logger
@@ -119,6 +119,14 @@ class Ledger(
         self.invoice_listener_tasks: List[asyncio.Task] = []
         self.watchdog_tasks: List[asyncio.Task] = []
         self.regular_tasks: List[asyncio.Task] = []
+        # Melt quote IDs whose Lightning payment is currently being executed in
+        # this process. While a quote is in this set, an executor is the sole
+        # authority over its outcome, so status pollers (get_melt_quote and the
+        # startup reconciliation) must not independently finalize a FAILED for
+        # it: the backend can report a stale FAILED (e.g. from an earlier
+        # attempt on the same payment hash) while the real payment is still in
+        # flight, which would release the proofs and let them be double-spent.
+        self.melt_quotes_in_flight: Set[str] = set()
 
         if not seed:
             raise Exception("seed not set")
@@ -1215,6 +1223,17 @@ class Ledger(
 
         is_internal = mint_quote is not None and mint_quote.unit == melt_quote.unit
 
+        # Do not resolve the status while an executor in this process is still
+        # driving the payment: a stale FAILED from the backend would release the
+        # proofs mid-payment and allow a double spend (the executor finalizes
+        # the real outcome itself once the backend returns).
+        if melt_quote.quote in self.melt_quotes_in_flight:
+            logger.trace(
+                f"Melt quote {melt_quote.quote} payment is in flight, skipping"
+                " backend status check."
+            )
+            return melt_quote
+
         if melt_quote.pending and not is_internal:
             logger.debug(
                 "Lightning: checking outgoing Lightning payment"
@@ -1370,6 +1389,10 @@ class Ledger(
                 await self._execute_melt_payment(melt_quote, proofs, outputs)
             except Exception as e:
                 logger.error(f"Error in background melt task: {e}")
+            finally:
+                # release the in-flight guard set in _prepare_melt so status
+                # pollers may take over resolving this quote
+                self.melt_quotes_in_flight.discard(melt_quote.quote)
 
         asyncio.create_task(melt_task())
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
@@ -1397,7 +1420,12 @@ class Ledger(
         melt_quote = await self._prepare_melt(
             proofs=proofs, quote=quote, outputs=outputs
         )
-        return await self._execute_melt_payment(melt_quote, proofs, outputs)
+        try:
+            return await self._execute_melt_payment(melt_quote, proofs, outputs)
+        finally:
+            # release the in-flight guard set in _prepare_melt so status pollers
+            # may take over resolving this quote
+            self.melt_quotes_in_flight.discard(melt_quote.quote)
 
     async def _prepare_melt(
         self,
@@ -1454,12 +1482,18 @@ class Ledger(
             quote=melt_quote, proofs=proofs, keysets=self.keysets
         )
 
+        # Mark this quote as being executed in this process before releasing the
+        # event loop, so no status poller can finalize a FAILED for it while the
+        # payment is in flight. `_execute_melt_payment` clears it when done.
+        self.melt_quotes_in_flight.add(melt_quote.quote)
+
         try:
             # store the change outputs
             if outputs:
                 await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
         except Exception as e:
             logger.debug(f"Melt failed before backend payment: {e}")
+            self.melt_quotes_in_flight.discard(melt_quote.quote)
             await self._finalize_melt_failed(
                 melt_quote.quote, expected_attempt=melt_quote.attempt
             )
