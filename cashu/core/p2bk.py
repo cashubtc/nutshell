@@ -24,7 +24,7 @@ def _compressed_pubkey(pubkey_hex: str) -> str:
 
 def ecdh_shared_secret(point: PublicKey, scalar: PrivateKey) -> bytes:
     """Compute x-only ECDH shared secret Zx = x(scalar * point)"""
-    shared_point = point.multiply(bytes.fromhex(scalar.to_hex()))
+    shared_point = point * scalar  # type: ignore[operator]
     # compressed format is prefix (1 byte) + x-coordinate (32 bytes)
     compressed = shared_point.format(compressed=True)
     return compressed[1:]  # strip the 02/03 prefix to get Zx
