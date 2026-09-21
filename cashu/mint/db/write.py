@@ -196,7 +196,9 @@ class DbWriteHelper:
             if quote.pending:
                 raise QuotePendingError("Mint quote already pending.")
             if quote.issued:
-                raise QuoteAlreadyIssuedError(f"Mint quote {quote_id} is already issued.")
+                raise QuoteAlreadyIssuedError(
+                    f"Mint quote {quote_id} is already issued."
+                )
             if not quote.paid:
                 raise QuoteNotPaidError("Mint quote is not paid yet.")
             # set the quote as pending
@@ -390,9 +392,7 @@ class DbWriteHelper:
                 raise InvoiceAlreadyPaidError("Melt quote already paid or pending.")
             if any([quote.state == MeltQuoteState.pending for quote in quotes_db]):
                 raise QuotePendingError("Melt quote already paid or pending.")
-            current_quote = next(
-                (q for q in quotes_db if q.quote == quote.quote), None
-            )
+            current_quote = next((q for q in quotes_db if q.quote == quote.quote), None)
             if current_quote is None:
                 raise TransactionError("Melt quote not found.")
             quote_copy.attempt = _uuid7()
@@ -538,6 +538,7 @@ class DbWriteHelper:
         quote: MeltQuote,
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
+        conn: Optional[Connection] = None,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -545,6 +546,8 @@ class DbWriteHelper:
             quote (MeltQuote): Melt quote to set as pending.
             proofs (List[Proof]): Proofs to set as pending.
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
+            conn (Optional[Connection]): Connection to use. If provided, the
+                caller's transaction (and its locks) is reused.
 
         Returns:
             MeltQuote: Updated melt quote object.
@@ -552,6 +555,7 @@ class DbWriteHelper:
         # Locks are ordered by table name (melt_quotes before proofs_pending),
         # so declare both upfront to keep the global lock order.
         async with self.db.get_connection(
+            conn,
             locks=[
                 LockOptions(
                     table="melt_quotes",

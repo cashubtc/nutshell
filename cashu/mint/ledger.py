@@ -1455,19 +1455,34 @@ class Ledger(
                 f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
 
-        # Refuse to pay out if the mint is insolvent. The lock serializes the
-        # solvency check and the pending transition against other concurrent
-        # melts for this unit, so the balances read in the check are
-        # consistent across concurrent melt requests.
+        # Refuse to pay out if the mint is insolvent. When the watchdog is
+        # enabled, we take a database lock on the keyset accounting rows for
+        # this unit and hold it across the solvency check and the pending
+        # transition, so the balances read in the check are consistent across
+        # concurrent melt requests.
         method = Method[melt_quote.method]
-        async with self.get_melt_lock(method, unit):
-            if not await self.check_melt_solvency(method, unit):
-                # signal the watchdog to shut down the mint
-                await self.abort_queue.put(True)
-                raise TransactionError(
-                    "Mint balance mismatch: refusing melt. Please contact the operator."
-                )
+        if settings.mint_watchdog_enabled:
+            async with self.db.get_connection(
+                locks=[
+                    LockOptions(
+                        table="keysets",
+                        select_statement="unit = :unit",
+                        parameters={"unit": unit.name},
+                    )
+                ],
+            ) as conn:
+                if not await self.check_melt_solvency(method, unit, conn=conn):
+                    # signal the watchdog to shut down the mint
+                    await self.abort_queue.put(True)
+                    raise TransactionError(
+                        "Mint balance mismatch: refusing melt. Please contact the operator."
+                    )
 
+                # set quote and proofs to pending to avoid race conditions
+                melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
+                    quote=melt_quote, proofs=proofs, keysets=self.keysets, conn=conn
+                )
+        else:
             # set quote and proofs to pending to avoid race conditions
             melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
                 quote=melt_quote, proofs=proofs, keysets=self.keysets

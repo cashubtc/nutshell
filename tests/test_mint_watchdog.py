@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import signal
+import time
 
 import pytest
 import pytest_asyncio
@@ -403,43 +404,55 @@ async def test_check_melt_solvency_includes_pending_proofs(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
-async def test_melt_solvency_gate_holds_melt_lock(
+async def test_melt_solvency_gate_serializes_concurrent_melts(
     wallet: Wallet, ledger: Ledger, monkeypatch
 ):
-    """The solvency check and pending transition must hold the per-unit melt lock."""
+    """Concurrent melts must not interleave their solvency checks: the gate
+    holds a database lock on the keyset accounting rows for the unit across
+    the check and the pending transition."""
     monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
 
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
+    # fund the wallet with two separate proofs so the melts don't share inputs
+    proofs1 = await wallet.mint(64, quote_id=(await wallet.request_mint(64)).quote)
+    proofs2 = await wallet.mint(64, quote_id=(await wallet.request_mint(64)).quote)
 
     backend = ledger.backends[Method.bolt11][Unit.sat]
-    status_calls = 0
 
     async def rich_status():
-        nonlocal status_calls
-        status_calls += 1
         return StatusResponse(error_message=None, balance=Amount(Unit.sat, 2**40))
 
     monkeypatch.setattr(backend, "status", rich_status)
 
-    mint_quote_to_pay = await wallet.request_mint(32)
-    melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
-    )
-    _, send_proofs = await wallet.swap_to_send(wallet.proofs, 32)
+    intervals = []
 
-    lock = ledger.get_melt_lock(Method.bolt11, Unit.sat)
-    await lock.acquire()
-    task = asyncio.create_task(ledger.melt(proofs=send_proofs, quote=melt_quote.quote))
-    try:
-        await asyncio.sleep(0.3)
-        assert not task.done()
-        assert status_calls == 0, "solvency check ran while the melt lock was held"
-    finally:
-        lock.release()
-    await task
-    assert status_calls >= 1, "solvency check did not run after the lock was released"
-    melt_quote_post = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post.state == MeltQuoteState.paid
+    async def slow_check(*args, **kwargs):
+        start = time.monotonic()
+        await asyncio.sleep(0.2)
+        intervals.append((start, time.monotonic()))
+        return True
+
+    monkeypatch.setattr(ledger, "check_melt_solvency", slow_check)
+
+    # prepare two independent internal melts upfront
+    melt_quotes = []
+    for _ in range(2):
+        mint_quote_to_pay = await wallet.request_mint(64)
+        melt_quotes.append(
+            await ledger.melt_quote(
+                PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
+            )
+        )
+
+    await asyncio.gather(
+        ledger.melt(proofs=proofs1, quote=melt_quotes[0].quote),
+        ledger.melt(proofs=proofs2, quote=melt_quotes[1].quote),
+    )
+
+    assert len(intervals) == 2
+    intervals.sort()
+    assert (
+        intervals[0][1] <= intervals[1][0]
+    ), "solvency checks of concurrent melts overlapped"
+    for melt_quote in melt_quotes:
+        melt_quote_post = await ledger.get_melt_quote(melt_quote.quote)
+        assert melt_quote_post.state == MeltQuoteState.paid

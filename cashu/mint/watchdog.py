@@ -1,6 +1,6 @@
 import asyncio
 import signal
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from loguru import logger
 
@@ -15,11 +15,9 @@ from .protocols import SupportsBackends, SupportsDb
 class LedgerWatchdog(SupportsDb, SupportsBackends):
     watcher_db: Database
     abort_queue: asyncio.Queue = asyncio.Queue(0)
-    melt_locks: Dict[Tuple[Method, Unit], asyncio.Lock]
 
     def __init__(self) -> None:
         self.watcher_db = Database(self.db.name, self.db.db_location)
-        self.melt_locks = {}
         return
 
     async def get_unit_balance_and_fees(
@@ -73,15 +71,9 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         """Returns the balance of the mint for this unit."""
         return await self.get_unit_balance_and_fees(unit=unit, db=self.db)
 
-    def get_melt_lock(self, method: Method, unit: Unit) -> asyncio.Lock:
-        """Returns the lock that serializes the melt solvency check and the
-        pending transition against other concurrent melts for this method and
-        unit, so that the balances read in the check are consistent."""
-        if (method, unit) not in self.melt_locks:
-            self.melt_locks[(method, unit)] = asyncio.Lock()
-        return self.melt_locks[(method, unit)]
-
-    async def check_melt_solvency(self, method: Method, unit: Unit) -> bool:
+    async def check_melt_solvency(
+        self, method: Method, unit: Unit, conn: Optional[Connection] = None
+    ) -> bool:
         """Pre-payment solvency check for melts.
 
         Returns True if the outstanding ecash liabilities are covered by the
@@ -89,9 +81,11 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         issued keyset balance plus the proofs currently pending: melts set
         their proofs pending before paying out, which decrements the keyset
         balance, so pending proofs are added back to keep the liabilities
-        consistent across concurrent melt requests. If the check itself fails,
-        the error is logged and True is returned so that a failing check does
-        not block melts (fail-open).
+        consistent across concurrent melt requests. The caller is expected to
+        hold a database lock on the keyset accounting rows for this unit and
+        pass its connection, so the balances read here are consistent. If the
+        check itself fails, the error is logged and True is returned so that
+        a failing check does not block melts (fail-open).
         """
         if not settings.mint_watchdog_enabled:
             return True
@@ -99,10 +93,10 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             backend = self.backends[method][unit]
             backend_status = await backend.status()
             keyset_balance, keyset_fees_paid = await self.get_unit_balance_and_fees(
-                unit, db=self.db
+                unit, db=self.db, conn=conn
             )
             pending_balance = await self.crud.get_pending_proofs_balance(
-                unit=unit, db=self.db
+                unit=unit, db=self.db, conn=conn
             )
         except Exception as e:
             logger.exception(
