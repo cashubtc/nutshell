@@ -34,7 +34,7 @@ class PostMintQuoteResponse(BaseModel):
     request: str  # input payment request
     amount: int  # output amount
     unit: str  # output unit
-    method: str  # payment method
+    method: Optional[str] = None  # payment method
     amount_paid: Optional[int] = None
     amount_issued: Optional[int] = None
     updated_at: Optional[int] = None

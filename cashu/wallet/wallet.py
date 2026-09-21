@@ -26,7 +26,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.keys import is_supported_keyset_version
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
-from ..core.errors import KeysetNotFoundError
+from ..core.errors import CashuError, KeysetNotFoundError, QuoteSignatureInvalidError
 from ..core.helpers import (
     amount_summary,
     calculate_number_of_blank_outputs,
@@ -686,7 +686,16 @@ class Wallet(
             signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
 
         # will raise exception if mint is unsuccessful
-        promises = await super().mint(outputs, quote_id, signature)
+        try:
+            promises = await super().mint(outputs, quote_id, signature)
+        except CashuError as exc:
+            if exc.code != QuoteSignatureInvalidError.code or not quote.privkey:
+                raise
+            logger.warning(
+                "Mint rejected NUT-20 signature; retrying once with legacy signing."
+            )
+            signature = nut20.sign_mint_quote_legacy(quote_id, outputs, quote.privkey)
+            promises = await super().mint(outputs, quote_id, signature)
 
         promises_keyset_id = promises[0].id
         await bump_secret_derivation(

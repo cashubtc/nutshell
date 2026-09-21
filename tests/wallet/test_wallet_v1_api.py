@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
+from cashu.core.errors import CashuError
 from cashu.core.models import (
     GetInfoResponse,
     PostMeltQuoteResponse,
@@ -56,10 +57,18 @@ def api(tmp_path):
     return ledger_api
 
 
-def test_raise_on_error_request_uses_detail_and_code(api: LedgerAPI):
-    response = _response(400, {"detail": "boom", "code": 1234})
-    with pytest.raises(Exception, match=r"Mint Error: boom \(Code: 1234\)"):
+@pytest.mark.parametrize("code", [None, 1234, 20008])
+def test_raise_on_error_request_uses_detail_and_code(api: LedgerAPI, code):
+    body = {"detail": "boom"}
+    expected_message = "Mint Error: boom"
+    if code is not None:
+        body["code"] = code
+        expected_message += f" (Code: {code})"
+    response = _response(400, body)
+    with pytest.raises(CashuError) as exc:
         api.raise_on_error_request(response)
+    assert str(exc.value) == expected_message
+    assert exc.value.code == (code if code is not None else 0)
 
 
 def test_raise_on_error_request_raises_http_status_for_non_json(api: LedgerAPI):
@@ -286,7 +295,7 @@ def test_get_info_rejects_deprecated_contact_shape():
         GetInfoResponse.model_validate({"contact": [["email", "mint@example.com"]]})
 
 
-@pytest.mark.parametrize("missing", ["amount", "unit", "method", "state"])
+@pytest.mark.parametrize("missing", ["amount", "unit", "state"])
 def test_mint_quote_response_requires_current_fields(missing: str):
     response = {
         "quote": "q-1",
@@ -300,6 +309,19 @@ def test_mint_quote_response_requires_current_fields(missing: str):
 
     with pytest.raises(ValidationError):
         PostMintQuoteResponse.model_validate(response)
+
+
+@pytest.mark.parametrize("method", [{}, {"method": None}, {"method": "bolt11"}])
+def test_mint_quote_response_allows_optional_method(method):
+    response = {
+        "quote": "q-1",
+        "request": "lnbc1",
+        "amount": 1,
+        "unit": "sat",
+        "state": "UNPAID",
+        **method,
+    }
+    assert PostMintQuoteResponse.model_validate(response).method == method.get("method")
 
 
 @pytest.mark.parametrize("missing", ["unit", "request", "state"])
@@ -409,7 +431,10 @@ async def test_request_verbose_logging_prints_payload_and_response(
 
 
 @pytest.mark.asyncio
-async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: LedgerAPI):
+@pytest.mark.parametrize("include_method", [True, False])
+async def test_mint_quote_loads_mint_and_parses_response(
+    monkeypatch, api: LedgerAPI, include_method
+):
     load_calls = 0
     called_path = ""
 
@@ -424,18 +449,17 @@ async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: Ledge
         assert method == "POST"
         assert kwargs["json"]["unit"] == "sat"
         assert kwargs["json"]["amount"] == 21
-        return _response(
-            200,
-            {
-                "quote": "q-1",
-                "request": "lnbc1",
-                "amount": 21,
-                "unit": "sat",
-                "method": "bolt11",
-                "state": "UNPAID",
-                "expiry": 123,
-            },
-        )
+        response = {
+            "quote": "q-1",
+            "request": "lnbc1",
+            "amount": 21,
+            "unit": "sat",
+            "state": "UNPAID",
+            "expiry": 123,
+        }
+        if include_method:
+            response["method"] = "bolt11"
+        return _response(200, response)
 
     monkeypatch.setattr(
         "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
@@ -448,6 +472,38 @@ async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: Ledge
     assert load_calls == 1
     assert called_path == "mint/quote/bolt11"
     assert quote.quote == "q-1"
+    assert quote.method == ("bolt11" if include_method else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_method", [True, False])
+async def test_get_mint_quote_parses_response(
+    monkeypatch, api: LedgerAPI, include_method
+):
+    cast(Any, api).keysets = {"loaded": object()}
+
+    async def fake_request(self, method, path, **kwargs):
+        assert method == "GET"
+        assert path == "mint/quote/bolt11/q-1"
+        response = {
+            "quote": "q-1",
+            "request": "lnbc1",
+            "amount": 21,
+            "unit": "sat",
+            "state": "PAID",
+        }
+        if include_method:
+            response["method"] = "bolt11"
+        return _response(200, response)
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    quote = await api.get_mint_quote("q-1")
+    assert quote.quote == "q-1"
+    assert quote.method == ("bolt11" if include_method else None)
+    assert quote.state == "PAID"
 
 
 @pytest.mark.asyncio
