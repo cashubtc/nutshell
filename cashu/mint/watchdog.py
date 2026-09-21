@@ -94,6 +94,38 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         )
         event.set()
 
+    async def check_melt_solvency(self, method: Method, unit: Unit) -> bool:
+        """Pre-payment solvency check for melts.
+
+        Returns True if the outstanding ecash liabilities are covered by the
+        backend balance, False if the mint is insolvent. Called before a melt's
+        proofs are set pending, so the liabilities still include the melt
+        itself. If the check itself fails, the error is logged and True is
+        returned so that a failing check does not block melts (fail-open).
+        """
+        if not settings.mint_watchdog_enabled:
+            return True
+        try:
+            backend = self.backends[method][unit]
+            backend_status = await backend.status()
+            keyset_balance, keyset_fees_paid = await self.get_unit_balance_and_fees(
+                unit, db=self.db
+            )
+        except Exception as e:
+            logger.exception(
+                f"Pre-melt solvency check failed for unit '{unit.name}': {e}."
+                " Allowing the melt to proceed."
+            )
+            return True
+        if keyset_balance + keyset_fees_paid > backend_status.balance:
+            logger.error(
+                f"Mint is insolvent: backend balance {backend_status.balance} is"
+                " smaller than issued unit balance"
+                f" {keyset_balance + keyset_fees_paid}. Refusing melt."
+            )
+            return False
+        return True
+
     async def dispatch_backend_checker(
         self, method: Method, unit: Unit, backend: LightningBackend
     ) -> None:

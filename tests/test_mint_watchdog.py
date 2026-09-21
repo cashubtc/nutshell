@@ -8,6 +8,7 @@ import pytest_asyncio
 from cashu.core.base import Amount, MeltQuoteState, Method, MintBalanceLogEntry, Unit
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
+from cashu.lightning.base import StatusResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -367,6 +368,14 @@ async def test_melt_triggers_watchdog_check(
     # don't SIGTERM the test process if the fake backend balance is too low
     monkeypatch.setattr(settings, "mint_watchdog_ignore_mismatch", True)
 
+    # give the fake backend a huge balance so the pre-melt solvency gate passes
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def rich_status():
+        return StatusResponse(error_message=None, balance=Amount(Unit.sat, 2**40))
+
+    monkeypatch.setattr(backend, "status", rich_status)
+
     checks = 0
 
     async def counting_check(*args, **kwargs):
@@ -412,3 +421,43 @@ async def test_melt_triggers_watchdog_check(
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_melt_refused_when_insolvent(wallet: Wallet, ledger: Ledger, monkeypatch):
+    """The pre-melt solvency gate must refuse melts when the mint is insolvent."""
+    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
+
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
+
+    # the fake backend is broke: the issued balance exceeds the backend balance
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def broke_status():
+        return StatusResponse(error_message=None, balance=Amount(Unit.sat, 1))
+
+    monkeypatch.setattr(backend, "status", broke_status)
+    event = asyncio.Event()
+    ledger.check_events[(Method.bolt11, Unit.sat)] = event
+
+    mint_quote_to_pay = await wallet.request_mint(32)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
+    )
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, 32)
+
+    with pytest.raises(Exception, match="balance mismatch"):
+        await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+
+    # the refusal must wake up the watchdog to confirm and shut down the mint
+    assert event.is_set()
+
+    # the quote is still unpaid and the proofs were never set pending
+    melt_quote_post = await ledger.get_melt_quote(melt_quote.quote)
+    assert melt_quote_post.state == MeltQuoteState.unpaid
+    states = await wallet.check_proof_state(send_proofs)
+    assert all([s.unspent for s in states.states])

@@ -1459,6 +1459,16 @@ class Ledger(
                 f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
 
+        # refuse to pay out if the mint is already insolvent. This check runs
+        # before the proofs are set pending, so the outstanding balance still
+        # includes this melt itself. On insolvency we also wake up the watchdog
+        # so it can confirm the mismatch and shut down the mint.
+        if not await self.check_melt_solvency(Method[melt_quote.method], unit):
+            self.trigger_balance_check(Method[melt_quote.method], unit)
+            raise TransactionError(
+                "Mint balance mismatch: refusing melt. Please contact the operator."
+            )
+
         # set quote and proofs to pending to avoid race conditions
         melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
             quote=melt_quote, proofs=proofs, keysets=self.keysets
