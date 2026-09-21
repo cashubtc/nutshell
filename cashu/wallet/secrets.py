@@ -214,27 +214,27 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
     def _derive_v3_scalar(
         self,
         counter: int,
-        keyset_id: Optional[str],
+        scope: str,
         derivation_type: int,
         order: int = SECP256K1_N,
         suffix: bytes = b"",
     ) -> bytes:
         """Derive one V3 scalar by rejection sampling the framed V3 message.
 
-        message_v3 = DST || u32_BE(len(keyset_id)) || keyset_id || u64_BE(counter)
+        message_v3 = DST || u32_BE(len(scope)) || scope || u64_BE(counter)
                      || derivation_type || u32_BE(attempt) || type_suffix
-        The keyset id is the one variable-length field, so it is framed; a type may
-        then append its own suffix. An absent keyset id frames an empty field, which
-        is what type 0x04 uses. V2 keeps its unframed message: reframing it would
-        re-derive every deployed secret.
+        The scope (a keyset id, or the mint identity pubkey for type 0x04) is the one
+        variable-length field, so it is framed; a type may then append its own
+        suffix. V2 keeps its unframed message: reframing it would re-derive every
+        deployed secret.
         """
         if self.seed is None:
             raise RuntimeError("Seed not initialized yet.")
-        keyset_id_bytes = b"" if keyset_id is None else bytes.fromhex(keyset_id)
+        scope_bytes = bytes.fromhex(scope)
         base = (
             b"Cashu_KDF_HMAC_SHA256"
-            + len(keyset_id_bytes).to_bytes(4, byteorder="big", signed=False)
-            + keyset_id_bytes
+            + len(scope_bytes).to_bytes(4, byteorder="big", signed=False)
+            + scope_bytes
             + counter.to_bytes(8, byteorder="big", signed=False)
             + bytes([derivation_type])
         )
@@ -281,17 +281,19 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             )
         )
 
-    def derive_v3_quote_lock_key(self, counter: int) -> SecpPrivateKey:
-        """Derive a mint quote lock key (NUT-13 message type 0x04, defined in NUT-20).
+    def derive_v3_quote_lock_key(
+        self, counter: int, mint_pubkey: str
+    ) -> SecpPrivateKey:
+        """Derive a mint quote lock key (NUT-13 message type 0x04).
 
-        No keyset: a quote is requested before one is chosen, so binding the key to
-        the keyset current at request time would strand it after a rotation. The
-        message frames an empty keyset id and the counter is the wallet's single
-        quote counter, never the proof counter, because a quote may mint nothing and
-        a lock key may be handed over for delegated minting.
+        Scoped to the mint's NUT-06 identity pubkey, not a keyset: a quote is
+        requested before one is chosen, and one seed and counter must never yield
+        the same key at two mints. The counter is per mint and never the proof
+        counter, because a quote may mint nothing and a lock key may be handed over
+        for delegated minting.
         """
         return SecpPrivateKey(
-            self._derive_v3_scalar(counter, None, DERIVATION_TYPE_QUOTE_LOCK)
+            self._derive_v3_scalar(counter, mint_pubkey, DERIVATION_TYPE_QUOTE_LOCK)
         )
 
     async def _derive_secret_hmac_sha256_v3(

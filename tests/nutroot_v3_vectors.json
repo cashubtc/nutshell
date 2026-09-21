@@ -71,7 +71,7 @@
     "illustrative_input_digest": "c3530da6be5c8425076a9235228d3ffd24998b9595a5b548b6ee6a4342361765"
   },
   "nut13_v3": {
-    "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(keyset_id_bytes)) || keyset_id_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key on its own quote counter, derived with an EMPTY keyset id field (a quote precedes any keyset), so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
+    "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(scope_bytes)) || scope_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key on its own per-mint quote counter, whose scope_bytes is the mint identity pubkey (mint_identity, the NUT-06 example identity) rather than a keyset id, so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
     "seed_utf8": "nut13 v3 test seed",
     "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
     "outputs": [
@@ -128,15 +128,16 @@
     "quote_locks": [
       {
         "counter": 0,
-        "privkey": "1e84b00ac9a8f6831dcd0f4b8750efbfb2af22b19c07cf4cccbb8cdc33289b25",
-        "pubkey": "039b390a9a298305cc43dbec906ceb1caae1187a8d16a3f45b945442ae7339d746"
+        "privkey": "8140af6b627ddf38f9148c7266dca12d396de9266859648df699727c5b205a99",
+        "pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812"
       },
       {
         "counter": 1,
-        "privkey": "7fe5104204360ed5e2710dfcd351f2091f1e2acf2f5eb9b0ac2ed34b0e120bb8",
-        "pubkey": "0332ef3eb87a93da987406ed1fe96a44541ea0daa175e53e7ffc1155bb09b47b38"
+        "privkey": "5980da641d9391abed79f528dbea0b85a61cff419bc93bce744d105779413b7a",
+        "pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d"
       }
-    ]
+    ],
+    "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
     "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
@@ -315,17 +316,17 @@
       "inputs": [
         {
           "quote_id": "quote-mint-0002",
-          "lock_pubkey": "039b390a9a298305cc43dbec906ceb1caae1187a8d16a3f45b945442ae7339d746",
+          "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
           "input_id": "aaf0905f583d015ad1640e530c768797eab855034051e74fb7f725b5bdb96131",
           "input_digest": "04b6a1306d1a12640a91421b0117bbdf2880e6f186a0cbd2211db077e82019f0",
-          "signature": "44aeb178e90acca8cb5dd0753f2410a1f7b2f2d8470836507724ab3930d61e0c630cd2190a282d0010c8f712b931d07a4342d5946ac6f61742e88f432c8674e2"
+          "signature": "ee4e7131dad86f2d5c3f25f021e437cdeefe68ceff2bbe95e4a36974f4d78358b633ed7eb2cab2cac0d36f05669b1568c4b8b86cd4274cba0a596e5d87d63f6b"
         },
         {
           "quote_id": "quote-mint-0003",
-          "lock_pubkey": "0332ef3eb87a93da987406ed1fe96a44541ea0daa175e53e7ffc1155bb09b47b38",
+          "lock_pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
           "input_id": "9976dbe45223a102e176fa2ede6973244157c5b82257d6e3e0f4977b32f0c706",
           "input_digest": "27aa267c0541b638c93b3d8c6324005654e9ac2663795c100c1d7dc8370dc2c5",
-          "signature": "19f1ffad48c4c54208ab79f1d113c53fc8069addf4af7b9e9240d28aa8419c1fcb6540a3fcded0172bd63c08d80d2985c5352cce8bd9fa3d95fb37a7bbe8e7ac"
+          "signature": "83a816f0bb9137e3523711e6136ce565229d0bd45ef2d0090a89b1c653046fc5fa067210310990ab3aed1ffabcb24a67f2db7d7700cc1243c5de20017b717728"
         }
       ]
     }
