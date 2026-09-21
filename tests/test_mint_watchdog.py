@@ -413,8 +413,8 @@ async def test_melt_solvency_gate_serializes_concurrent_melts(
     monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
 
     # fund the wallet with two separate proofs so the melts don't share inputs
-    proofs1 = await wallet.mint(64, quote_id=(await wallet.request_mint(64)).quote)
-    proofs2 = await wallet.mint(64, quote_id=(await wallet.request_mint(64)).quote)
+    proofs1 = await wallet.mint(128, quote_id=(await wallet.request_mint(128)).quote)
+    proofs2 = await wallet.mint(128, quote_id=(await wallet.request_mint(128)).quote)
 
     backend = ledger.backends[Method.bolt11][Unit.sat]
 
@@ -433,13 +433,15 @@ async def test_melt_solvency_gate_serializes_concurrent_melts(
 
     monkeypatch.setattr(ledger, "check_melt_solvency", slow_check)
 
-    # prepare two independent internal melts upfront
+    # prepare two independent external melts upfront (external so the invoice
+    # listener cannot auto-pay a corresponding mint quote while the slowed
+    # checks are in flight)
     melt_quotes = []
     for _ in range(2):
-        mint_quote_to_pay = await wallet.request_mint(64)
+        invoice = await backend.create_invoice(Amount(Unit.sat, 64))
         melt_quotes.append(
             await ledger.melt_quote(
-                PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
+                PostMeltQuoteRequest(request=invoice.payment_request, unit="sat")
             )
         )
 
