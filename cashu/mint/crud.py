@@ -134,6 +134,16 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def try_debit_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> bool: ...
+
+    @abstractmethod
     async def bump_keyset_fees_paid(
         self,
         *,
@@ -939,6 +949,26 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"amount": amount, "id": keyset.id},
         )
+
+    async def try_debit_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> bool:
+        if amount <= 0:
+            raise ValueError("Keyset balance debit amount must be positive")
+        result = await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema("keysets")}
+            SET balance = balance - :amount
+            WHERE id = :id AND balance >= :amount
+            """,
+            {"amount": amount, "id": keyset.id},
+        )
+        return result.rowcount > 0
 
     async def bump_keyset_fees_paid(
         self,

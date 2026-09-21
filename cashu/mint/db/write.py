@@ -98,16 +98,29 @@ class DbWriteHelper:
                 await self.db_read._verify_proofs_spendable(proofs, conn)
                 logger.trace("checking whether proofs are already pending")
                 await self._validate_proofs_pending(proofs, conn)
+
+                amounts_by_keyset: Dict[str, int] = {}
+                for proof in proofs:
+                    amounts_by_keyset[proof.id] = (
+                        amounts_by_keyset.get(proof.id, 0) + proof.amount
+                    )
+
+                for keyset_id, amount in sorted(amounts_by_keyset.items()):
+                    debited = await self.crud.try_debit_keyset_balance(
+                        db=self.db,
+                        keyset=keysets[keyset_id],
+                        amount=amount,
+                        conn=conn,
+                    )
+                    if not debited:
+                        raise TransactionError(
+                            "keyset balance is insufficient for redemption"
+                        )
+
                 for p in proofs:
                     logger.trace(f"crud: setting proof {p.Y} as PENDING")
                     await self.crud.set_proof_pending(
                         proof=p, db=self.db, quote_id=quote_id, conn=conn
-                    )
-                    await self.crud.bump_keyset_balance(
-                        db=self.db,
-                        keyset=keysets[p.id],
-                        amount=-p.amount,
-                        conn=conn,
                     )
                     logger.trace(f"crud: set proof {p.Y} as PENDING")
             logger.trace("_verify_spent_proofs_and_set_pending released lock")
@@ -153,6 +166,32 @@ class DbWriteHelper:
                     ProofState(Y=p.Y, state=ProofSpentState.unspent)
                 )
 
+    async def finalize_pending_proofs(
+        self,
+        proofs: List[Proof],
+        keysets: Dict[str, MintKeyset],
+        quote_id: Optional[str] = None,
+        keyset_fees: Optional[Dict[str, int]] = None,
+        conn: Optional[Connection] = None,
+        emit_events: bool = True,
+    ) -> None:
+        """Atomically convert pending proofs into spent proofs.
+
+        Pending proofs have already reserved their keyset balance. Releasing that
+        reservation before invalidating them lets the final checked debit represent
+        the single durable spend.
+        """
+        async with self.db.get_connection(conn) as conn:
+            await self._unset_proofs_pending(proofs, keysets, spent=True, conn=conn)
+            await self.invalidate_proofs(
+                proofs=proofs,
+                keysets=keysets,
+                quote_id=quote_id,
+                keyset_fees=keyset_fees,
+                conn=conn,
+                emit_events=emit_events,
+            )
+
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
     ) -> None:
@@ -196,7 +235,9 @@ class DbWriteHelper:
             if quote.pending:
                 raise QuotePendingError("Mint quote already pending.")
             if quote.issued:
-                raise QuoteAlreadyIssuedError(f"Mint quote {quote_id} is already issued.")
+                raise QuoteAlreadyIssuedError(
+                    f"Mint quote {quote_id} is already issued."
+                )
             if not quote.paid:
                 raise QuoteNotPaidError("Mint quote is not paid yet.")
             # set the quote as pending
@@ -390,9 +431,7 @@ class DbWriteHelper:
                 raise InvoiceAlreadyPaidError("Melt quote already paid or pending.")
             if any([quote.state == MeltQuoteState.pending for quote in quotes_db]):
                 raise QuotePendingError("Melt quote already paid or pending.")
-            current_quote = next(
-                (q for q in quotes_db if q.quote == quote.quote), None
-            )
+            current_quote = next((q for q in quotes_db if q.quote == quote.quote), None)
             if current_quote is None:
                 raise TransactionError("Melt quote not found.")
             quote_copy.attempt = _uuid7()
@@ -623,18 +662,29 @@ class DbWriteHelper:
             conn (Optional[Connection]): Database connection.
         """
         async with self.db.get_connection(conn) as conn:
-            # Invalidate proofs (spend them)
-            # This bumps balance down.
+            amounts_by_keyset: Dict[str, int] = {}
+            for proof in proofs:
+                amounts_by_keyset[proof.id] = (
+                    amounts_by_keyset.get(proof.id, 0) + proof.amount
+                )
+
+            for keyset_id, amount in sorted(amounts_by_keyset.items()):
+                debited = await self.crud.try_debit_keyset_balance(
+                    db=self.db,
+                    keyset=keysets[keyset_id],
+                    amount=amount,
+                    conn=conn,
+                )
+                if not debited:
+                    raise TransactionError(
+                        "keyset balance is insufficient for redemption"
+                    )
+
+            # Invalidate proofs (spend them) after their final debit succeeds.
             for p in proofs:
                 logger.trace(f"Invalidating proof {p.Y}")
                 await self.crud.invalidate_proof(
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
-                )
-                await self.crud.bump_keyset_balance(
-                    db=self.db,
-                    keyset=keysets[p.id],
-                    amount=-p.amount,
-                    conn=conn,
                 )
                 if emit_events:
                     await self.events.submit(
@@ -690,12 +740,8 @@ class DbWriteHelper:
             if not quote_db:
                 raise TransactionError("Melt quote not found.")
 
-            # 1. Unset proofs PENDING
-            # This bumps balance back up.
-            await self._unset_proofs_pending(proofs, keysets, spent=True, conn=conn)
-
-            # 2. Invalidate proofs (spend them) and update fees
-            await self.invalidate_proofs(
+            # 1. Release the pending reservation and debit the final spend.
+            await self.finalize_pending_proofs(
                 proofs=proofs,
                 keysets=keysets,
                 quote_id=quote.quote,
@@ -703,7 +749,7 @@ class DbWriteHelper:
                 conn=conn,
             )
 
-            # 3. Update melt quote to PAID
+            # 2. Update melt quote to PAID
             if quote_db.state != MeltQuoteState.paid:
                 quote_db.state = MeltQuoteState.paid
                 quote_db.paid_time = int(time.time())

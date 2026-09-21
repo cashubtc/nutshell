@@ -441,13 +441,7 @@ class Ledger(
                 for keyset_id, keyset_proofs in proofs_by_keyset.items()
             }
 
-            await self.db_write._unset_proofs_pending(
-                settled_proofs,
-                self.keysets,
-                spent=True,
-                conn=conn,
-            )
-            await self.db_write.invalidate_proofs(
+            await self.db_write.finalize_pending_proofs(
                 proofs=settled_proofs,
                 keysets=self.keysets,
                 quote_id=quote_id,
@@ -1600,6 +1594,7 @@ class Ledger(
         await self.db_write._verify_spent_proofs_and_set_pending(
             proofs, keysets=self.keysets
         )
+        finalized = False
         try:
             Ys = [p.Y for p in proofs]
             lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
@@ -1623,19 +1618,22 @@ class Ledger(
                 for keyset_id, keyset_proofs in proofs_by_keyset.items():
                     keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
 
-                await self.db_write.invalidate_proofs(
+                await self.db_write.finalize_pending_proofs(
                     proofs=proofs,
                     keysets=self.keysets,
                     keyset_fees=keyset_fees,
                     conn=conn,
                 )
                 promises = await self._sign_blinded_messages(outputs, conn)
+            finalized = True
         except Exception as e:
             logger.trace(f"swap failed: {e}")
             raise e
         finally:
-            # delete proofs from pending list
-            await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
+            if not finalized:
+                await self.db_write._unset_proofs_pending(
+                    proofs, keysets=self.keysets, spent=False
+                )
 
         logger.trace("swap successful")
         return promises

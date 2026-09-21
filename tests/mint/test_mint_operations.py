@@ -1,7 +1,8 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.base import BlindedMessage, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     MintingDisabledError,
@@ -9,6 +10,7 @@ from cashu.core.errors import (
     ProofsAlreadySpentError,
     QuoteExpiredError,
     QuotePendingError,
+    TransactionError,
 )
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
@@ -30,6 +32,21 @@ async def assert_err(f, msg):
             raise Exception(f"Expected error: {msg}, got: {exc.args[0]}")
         return
     raise Exception(f"Expected error: {msg}, got no error")
+
+
+def _unissued_proof(ledger: Ledger, amount: int, secret: str) -> Proof:
+    """Create a valid proof without recording a corresponding issuance."""
+    C = (
+        (hash_to_curve(secret.encode()) * ledger.keyset.private_keys[amount])
+        .format()
+        .hex()
+    )
+    return Proof(id=ledger.keyset.id, amount=amount, secret=secret, C=C)
+
+
+def _output(ledger: Ledger, amount: int, secret: str) -> BlindedMessage:
+    B_, _ = step1_alice(secret)
+    return BlindedMessage(id=ledger.keyset.id, amount=amount, B_=B_.format().hex())
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -219,6 +236,96 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
     promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
+
+
+@pytest.mark.asyncio
+async def test_swap_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
+    proof = _unissued_proof(ledger, 8, "unissued-swap-proof")
+    output = _output(ledger, 8, "unissued-swap-output")
+
+    with pytest.raises(
+        TransactionError, match="keyset balance is insufficient for redemption"
+    ):
+        await ledger.swap(proofs=[proof], outputs=[output])
+
+    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    assert balance.amount == 0
+    assert not await ledger.crud.get_proofs_pending(Ys=[proof.Y], db=ledger.db)
+    assert not await ledger.crud.get_proofs_used(Ys=[proof.Y], db=ledger.db)
+    assert await ledger.crud.get_blind_signature(b_=output.B_, db=ledger.db) is None
+
+
+@pytest.mark.asyncio
+async def test_melt_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
+    amount = 8
+    proof = _unissued_proof(ledger, amount, "unissued-melt-proof")
+    mint_quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=amount, unit="sat")
+    )
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+
+    with pytest.raises(
+        TransactionError, match="keyset balance is insufficient for redemption"
+    ):
+        await ledger.melt(proofs=[proof], quote=melt_quote.quote)
+
+    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    stored_quote = await ledger.get_melt_quote(melt_quote.quote)
+    assert balance.amount == 0
+    assert stored_quote.unpaid
+    assert not await ledger.crud.get_proofs_pending(Ys=[proof.Y], db=ledger.db)
+    assert not await ledger.crud.get_proofs_used(Ys=[proof.Y], db=ledger.db)
+
+
+@pytest.mark.asyncio
+async def test_keyset_redemption_reserves_exact_balance_and_rolls_back_groups(
+    ledger: Ledger,
+):
+    amount = 8
+    exact_proof = _unissued_proof(ledger, amount, "exact-keyset-balance-proof")
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db, keyset=ledger.keyset, amount=amount
+    )
+
+    await ledger.db_write._verify_spent_proofs_and_set_pending(
+        [exact_proof], keysets=ledger.keysets
+    )
+    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    assert balance.amount == 0
+    assert await ledger.crud.get_proofs_pending(Ys=[exact_proof.Y], db=ledger.db)
+
+    await ledger.db_write.finalize_pending_proofs([exact_proof], keysets=ledger.keysets)
+    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    assert balance.amount == 0
+    assert not await ledger.crud.get_proofs_pending(Ys=[exact_proof.Y], db=ledger.db)
+    assert await ledger.crud.get_proofs_used(Ys=[exact_proof.Y], db=ledger.db)
+
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db, keyset=ledger.keyset, amount=amount
+    )
+
+    proofs = [
+        _unissued_proof(ledger, amount, "grouped-keyset-balance-proof-1"),
+        _unissued_proof(ledger, amount, "grouped-keyset-balance-proof-2"),
+    ]
+    with pytest.raises(
+        TransactionError, match="keyset balance is insufficient for redemption"
+    ):
+        await ledger.db_write._verify_spent_proofs_and_set_pending(
+            proofs, keysets=ledger.keysets
+        )
+
+    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    assert balance.amount == amount
+    assert not await ledger.crud.get_proofs_pending(
+        Ys=[proof.Y for proof in proofs], db=ledger.db
+    )
+    with pytest.raises(ValueError, match="debit amount must be positive"):
+        await ledger.crud.try_debit_keyset_balance(
+            db=ledger.db, keyset=ledger.keyset, amount=0
+        )
 
 
 @pytest.mark.asyncio
@@ -579,9 +686,7 @@ async def test_mint_quote_disabled_raises_minting_disabled(ledger: Ledger, monke
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
-async def test_mint_pending_quote_raises_quote_pending(
-    wallet1: Wallet, ledger: Ledger
-):
+async def test_mint_pending_quote_raises_quote_pending(wallet1: Wallet, ledger: Ledger):
     wallet_mint_quote = await wallet1.request_mint(128)
     mint_quote = await ledger.get_mint_quote(wallet_mint_quote.quote)
     assert mint_quote.state == MintQuoteState.paid
