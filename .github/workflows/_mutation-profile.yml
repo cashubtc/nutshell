@@ -45,7 +45,8 @@ jobs:
           PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
             MUTATION_TESTING=true TOR=false \
             timeout --signal=INT --kill-after=2m 340m \
-            poetry run mutmut run '${{ inputs.target }}' 2>&1 \
+            poetry run python scripts/run_mutation.py '${{ inputs.target }}' \
+              --report 'mutation-${{ inputs.profile }}-baseline.json' 2>&1 \
             | tee 'mutation-${{ inputs.profile }}.log'
 
       - name: Create mutation report
@@ -67,6 +68,19 @@ jobs:
                 '$NF == status { count++ } END { print count + 0 }' "$results_file")
               echo "| $status | $count |"
             done
+            baseline_file='mutation-${{ inputs.profile }}-baseline.json'
+            if [[ -f "$baseline_file" ]]; then
+              echo
+              echo "Baseline status: $(jq -r '.status' "$baseline_file")"
+              excluded=$(jq '.excluded_tests | length' "$baseline_file")
+              if (( excluded > 0 )); then
+                echo
+                echo '> [!WARNING]'
+                echo "> Partial mutation coverage: ${excluded} failing baseline test(s) excluded for this run."
+                echo
+                jq -r '.excluded_tests[] | "- `\(.nodeid)`"' "$baseline_file"
+              fi
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload mutation results
@@ -77,5 +91,6 @@ jobs:
           path: |
             mutation-${{ inputs.profile }}.log
             mutation-${{ inputs.profile }}-results.txt
+            mutation-${{ inputs.profile }}-baseline.json
           retention-days: 14
           if-no-files-found: warn

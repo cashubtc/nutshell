@@ -27,10 +27,10 @@ append_unavailable_profile() {
     local run_url=${2:-}
 
     if [[ -n "$run_url" ]]; then
-        echo "| [${profile}](${run_url}) | unavailable | - | - | - | - | - | - |" \
+        echo "| [${profile}](${run_url}) | unavailable | - | - | - | - | - | - | - |" \
             >> "$BODY_FILE"
     else
-        echo "| ${profile} | unavailable | - | - | - | - | - | - |" >> "$BODY_FILE"
+        echo "| ${profile} | unavailable | - | - | - | - | - | - | - |" >> "$BODY_FILE"
     fi
     incomplete_profiles=$((incomplete_profiles + 1))
 }
@@ -68,7 +68,7 @@ collect_profile() {
     fi
 
     if (( $(date -u -d "$run_date" +%s) < $(date -u -d '8 days ago' +%s) )); then
-        echo "| [${profile}](${run_url}) | stale | - | - | - | - | - | - |" >> "$BODY_FILE"
+        echo "| [${profile}](${run_url}) | stale | - | - | - | - | - | - | - |" >> "$BODY_FILE"
         incomplete_profiles=$((incomplete_profiles + 1))
         return
     fi
@@ -91,7 +91,7 @@ collect_profile() {
         return
     fi
 
-    local killed survived no_tests timeout suspicious skipped not_checked
+    local killed survived no_tests timeout suspicious skipped not_checked excluded=0
     killed=$(count_status "$results_file" killed)
     survived=$(count_status "$results_file" survived)
     no_tests=$(count_status "$results_file" "no tests")
@@ -99,10 +99,34 @@ collect_profile() {
     suspicious=$(count_status "$results_file" suspicious)
     skipped=$(count_status "$results_file" skipped)
     not_checked=$(count_status "$results_file" "not checked")
+    local baseline_file="${report_dir}/mutation-${profile}-baseline.json"
+    if [[ -f "$baseline_file" ]]; then
+        excluded=$(jq '.excluded_tests | length' "$baseline_file")
+    fi
+    if (( excluded > 0 )); then
+        incomplete_profiles=$((incomplete_profiles + 1))
+    fi
     total_actionable=$((total_actionable + survived + no_tests + timeout + suspicious + not_checked))
 
-    echo "| [${profile}](${run_url}) | ${killed} | ${survived} | ${no_tests} | ${timeout} | ${suspicious} | ${skipped} | ${not_checked} |" \
+    echo "| [${profile}](${run_url}) | ${killed} | ${survived} | ${no_tests} | ${timeout} | ${suspicious} | ${skipped} | ${not_checked} | ${excluded} |" \
         >> "$BODY_FILE"
+}
+
+append_excluded_tests() {
+    for profile in "${PROFILES[@]}"; do
+        local baseline_file="${REPORT_ROOT}/${profile}/mutation-${profile}-baseline.json"
+        [[ -f "$baseline_file" ]] || continue
+        if (( $(jq '.excluded_tests | length' "$baseline_file") > 0 )); then
+            {
+                echo
+                echo "### Excluded baseline tests: ${profile}"
+                echo
+                echo "Partial coverage: these tests failed without mutations and were excluded for this run."
+                echo
+                jq -r '.excluded_tests[] | "- `\(.nodeid)`"' "$baseline_file"
+            } >> "$BODY_FILE"
+        fi
+    done
 }
 
 append_surviving_mutants() {
@@ -147,7 +171,7 @@ append_action_items() {
         {
             echo
             echo "> [!WARNING]"
-            echo "> ${incomplete_profiles} profile report(s) were missing or stale and need investigation."
+            echo "> ${incomplete_profiles} profile report(s) were missing, stale, or had excluded baseline tests and need investigation."
         } >> "$BODY_FILE"
     fi
 
@@ -180,8 +204,8 @@ fi
     echo
     echo "Report date: ${REPORT_DATE}"
     echo
-    echo "| Profile | Killed | Survived | No tests | Timeout | Suspicious | Skipped | Not checked |"
-    echo "|---|---:|---:|---:|---:|---:|---:|---:|"
+    echo "| Profile | Killed | Survived | No tests | Timeout | Suspicious | Skipped | Not checked | Excluded tests |"
+    echo "|---|---:|---:|---:|---:|---:|---:|---:|---:|"
 } > "$BODY_FILE"
 
 for profile in "${PROFILES[@]}"; do
@@ -189,6 +213,7 @@ for profile in "${PROFILES[@]}"; do
 done
 
 append_surviving_mutants
+append_excluded_tests
 append_action_items
 
 if (( total_actionable == 0 && incomplete_profiles == 0 )); then
