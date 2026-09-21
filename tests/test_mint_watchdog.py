@@ -14,6 +14,7 @@ from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
     is_fake,
+    is_regtest,
     pay_if_regtest,
 )
 
@@ -262,3 +263,152 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
     )
     assert balance_after == balance_before - 64 - fees_paid
     assert fees_paid_after == fees_paid_before
+
+
+@pytest.mark.asyncio
+async def test_dispatch_backend_checker_survives_errors(ledger: Ledger, monkeypatch):
+    """A failing balance check must not kill the checker task."""
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    ledger.check_events[(Method.bolt11, Unit.sat)] = asyncio.Event()
+    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 0.05)
+
+    status_calls = 0
+    original_status = backend.status
+
+    async def failing_status():
+        nonlocal status_calls
+        status_calls += 1
+        if status_calls == 1:
+            raise Exception("transient backend error")
+        return await original_status()
+
+    monkeypatch.setattr(backend, "status", failing_status)
+
+    checks = 0
+
+    async def counting_check(*args, **kwargs):
+        nonlocal checks
+        checks += 1
+        return True
+
+    monkeypatch.setattr(ledger, "check_balances_and_abort", counting_check)
+
+    task = asyncio.create_task(
+        ledger.dispatch_backend_checker(Method.bolt11, Unit.sat, backend)
+    )
+    await asyncio.sleep(0.3)
+    assert not task.done(), "checker task died after a failed balance check"
+    assert checks >= 2, "checker task did not keep checking after a failure"
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_trigger_balance_check_wakes_checker(ledger: Ledger, monkeypatch):
+    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
+    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 600)
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    ledger.check_events[(Method.bolt11, Unit.sat)] = asyncio.Event()
+
+    checks = 0
+
+    async def counting_check(*args, **kwargs):
+        nonlocal checks
+        checks += 1
+        return True
+
+    monkeypatch.setattr(ledger, "check_balances_and_abort", counting_check)
+
+    task = asyncio.create_task(
+        ledger.dispatch_backend_checker(Method.bolt11, Unit.sat, backend)
+    )
+    try:
+        # wait for the initial check
+        for _ in range(200):
+            if checks >= 1:
+                break
+            await asyncio.sleep(0.01)
+        assert checks == 1
+
+        ledger.trigger_balance_check(Method.bolt11, Unit.sat)
+        for _ in range(200):
+            if checks >= 2:
+                break
+            await asyncio.sleep(0.01)
+        assert checks >= 2, "triggered balance check did not wake up the checker"
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_trigger_balance_check_noop_when_disabled(ledger: Ledger, monkeypatch):
+    monkeypatch.setattr(settings, "mint_watchdog_enabled", False)
+    event = asyncio.Event()
+    ledger.check_events[(Method.bolt11, Unit.sat)] = event
+    ledger.trigger_balance_check(Method.bolt11, Unit.sat)
+    assert not event.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_melt_triggers_watchdog_check(
+    wallet: Wallet, ledger: Ledger, monkeypatch
+):
+    """Finalizing a melt must summon the watchdog for an immediate balance check."""
+    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
+    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 600)
+    # don't SIGTERM the test process if the fake backend balance is too low
+    monkeypatch.setattr(settings, "mint_watchdog_ignore_mismatch", True)
+
+    checks = 0
+
+    async def counting_check(*args, **kwargs):
+        nonlocal checks
+        checks += 1
+        return True
+
+    monkeypatch.setattr(ledger, "check_balances_and_abort", counting_check)
+
+    tasks = await ledger.dispatch_watchdogs()
+    try:
+        # wait for the initial checks on startup to settle
+        for _ in range(200):
+            if checks >= 1:
+                break
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.2)
+        checks_before = checks
+
+        mint_quote = await wallet.request_mint(64)
+        await pay_if_regtest(mint_quote.request)
+        await wallet.mint(64, quote_id=mint_quote.quote)
+        assert wallet.balance == 64
+        assert checks == checks_before, "minting should not trigger a balance check"
+
+        # melt internally
+        mint_quote_to_pay = await wallet.request_mint(32)
+        melt_quote = await ledger.melt_quote(
+            PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
+        )
+        _, send_proofs = await wallet.swap_to_send(wallet.proofs, 32)
+        await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+
+        melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
+        assert melt_quote_post_payment.state == MeltQuoteState.paid
+
+        for _ in range(300):
+            if checks > checks_before:
+                break
+            await asyncio.sleep(0.01)
+        assert checks > checks_before, "melt did not trigger an immediate balance check"
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)

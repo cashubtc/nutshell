@@ -162,6 +162,12 @@ class Ledger(
         self.invoice_listener_tasks = await self.dispatch_listeners()
         if settings.mint_watchdog_enabled:
             self.watchdog_tasks = await self.dispatch_watchdogs()
+        else:
+            logger.warning(
+                "MINT_WATCHDOG_ENABLED is not set: the mint is running WITHOUT"
+                " watchdog protection against inflation. The watchdog shuts down"
+                " the mint if it detects a balance mismatch."
+            )
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
@@ -463,6 +469,10 @@ class Ledger(
                 db=self.db,
                 conn=conn,
             )
+
+        # Wake up the watchdog so it immediately re-checks the balances,
+        # including the effects of this melt.
+        self.trigger_balance_check(Method[melt_quote.method], Unit[melt_quote.unit])
 
         for proof in settled_proofs:
             await self.events.submit(
