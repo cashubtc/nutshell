@@ -1,0 +1,44 @@
+name: Wallet compatibility
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.12"
+        type: string
+      poetry-version:
+        default: "2.3.2"
+        type: string
+      os-version:
+        default: "ubuntu-latest"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  wallet-compatibility:
+    runs-on: ${{ inputs.os-version }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+      - uses: docker/setup-buildx-action@v4
+      - name: Test current wallet against released mints
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make test-wallet-compatibility
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wallet-compatibility-results
+          path: junit.xml

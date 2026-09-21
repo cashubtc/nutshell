@@ -12,6 +12,9 @@ jobs:
   checks:
     uses: ./.github/workflows/checks.yml
 
+  wallet-compatibility:
+    uses: ./.github/workflows/wallet-compatibility.yml
+
   tests:
     strategy:
       fail-fast: false
