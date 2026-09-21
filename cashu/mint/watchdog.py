@@ -15,11 +15,11 @@ from .protocols import SupportsBackends, SupportsDb
 class LedgerWatchdog(SupportsDb, SupportsBackends):
     watcher_db: Database
     abort_queue: asyncio.Queue = asyncio.Queue(0)
-    check_events: Dict[Tuple[Method, Unit], asyncio.Event]
+    melt_locks: Dict[Tuple[Method, Unit], asyncio.Lock]
 
     def __init__(self) -> None:
         self.watcher_db = Database(self.db.name, self.db.db_location)
-        self.check_events = {}
+        self.melt_locks = {}
         return
 
     async def get_unit_balance_and_fees(
@@ -42,7 +42,6 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         tasks = []
         for method, unitbackends in self.backends.items():
             for unit, backend in unitbackends.items():
-                self.check_events[(method, unit)] = asyncio.Event()
                 tasks.append(
                     asyncio.create_task(
                         self.dispatch_backend_checker(method, unit, backend)
@@ -74,34 +73,25 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         """Returns the balance of the mint for this unit."""
         return await self.get_unit_balance_and_fees(unit=unit, db=self.db)
 
-    def trigger_balance_check(self, method: Method, unit: Unit) -> None:
-        """Wakes up the backend checker for this method and unit so that it runs
-        an immediate balance check instead of waiting for the next check interval.
-
-        Called after balance-changing operations (e.g. after a melt is finalized)
-        so that inflation is detected immediately.
-        """
-        if not settings.mint_watchdog_enabled:
-            return
-        event = self.check_events.get((method, unit))
-        if event is None:
-            logger.trace(
-                f"No watchdog checker dispatched for method '{method.name}' and unit '{unit.name}'."
-            )
-            return
-        logger.debug(
-            f"Triggering immediate watchdog balance check for method '{method.name}' and unit '{unit.name}'."
-        )
-        event.set()
+    def get_melt_lock(self, method: Method, unit: Unit) -> asyncio.Lock:
+        """Returns the lock that serializes the melt solvency check and the
+        pending transition against other concurrent melts for this method and
+        unit, so that the balances read in the check are consistent."""
+        if (method, unit) not in self.melt_locks:
+            self.melt_locks[(method, unit)] = asyncio.Lock()
+        return self.melt_locks[(method, unit)]
 
     async def check_melt_solvency(self, method: Method, unit: Unit) -> bool:
         """Pre-payment solvency check for melts.
 
         Returns True if the outstanding ecash liabilities are covered by the
-        backend balance, False if the mint is insolvent. Called before a melt's
-        proofs are set pending, so the liabilities still include the melt
-        itself. If the check itself fails, the error is logged and True is
-        returned so that a failing check does not block melts (fail-open).
+        backend balance, False if the mint is insolvent. Liabilities are the
+        issued keyset balance plus the proofs currently pending: melts set
+        their proofs pending before paying out, which decrements the keyset
+        balance, so pending proofs are added back to keep the liabilities
+        consistent across concurrent melt requests. If the check itself fails,
+        the error is logged and True is returned so that a failing check does
+        not block melts (fail-open).
         """
         if not settings.mint_watchdog_enabled:
             return True
@@ -111,17 +101,20 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             keyset_balance, keyset_fees_paid = await self.get_unit_balance_and_fees(
                 unit, db=self.db
             )
+            pending_balance = await self.crud.get_pending_proofs_balance(
+                unit=unit, db=self.db
+            )
         except Exception as e:
             logger.exception(
                 f"Pre-melt solvency check failed for unit '{unit.name}': {e}."
                 " Allowing the melt to proceed."
             )
             return True
-        if keyset_balance + keyset_fees_paid > backend_status.balance:
+        liabilities = keyset_balance + keyset_fees_paid + pending_balance
+        if liabilities > backend_status.balance:
             logger.error(
                 f"Mint is insolvent: backend balance {backend_status.balance} is"
-                " smaller than issued unit balance"
-                f" {keyset_balance + keyset_fees_paid}. Refusing melt."
+                f" smaller than outstanding liabilities {liabilities}. Refusing melt."
             )
             return False
         return True
@@ -132,9 +125,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         logger.info(
             f"Dispatching backend checker for unit: {unit.name} and backend: {backend.__class__.__name__}"
         )
-        event = self.check_events[(method, unit)]
         while True:
-            event.clear()
             try:
                 await self._check_backend_balances(unit, backend)
             except Exception as e:
@@ -144,13 +135,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
                     f"Watchdog balance check failed for unit '{unit.name}' with"
                     f" backend {backend.__class__.__name__}: {e}"
                 )
-            try:
-                await asyncio.wait_for(
-                    event.wait(),
-                    timeout=settings.mint_watchdog_balance_check_interval_seconds,
-                )
-            except asyncio.TimeoutError:
-                pass
+            await asyncio.sleep(settings.mint_watchdog_balance_check_interval_seconds)
 
     async def _check_backend_balances(
         self, unit: Unit, backend: LightningBackend

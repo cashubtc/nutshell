@@ -270,7 +270,6 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
 async def test_dispatch_backend_checker_survives_errors(ledger: Ledger, monkeypatch):
     """A failing balance check must not kill the checker task."""
     backend = ledger.backends[Method.bolt11][Unit.sat]
-    ledger.check_events[(Method.bolt11, Unit.sat)] = asyncio.Event()
     monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 0.05)
 
     status_calls = 0
@@ -308,126 +307,11 @@ async def test_dispatch_backend_checker_survives_errors(ledger: Ledger, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_trigger_balance_check_wakes_checker(ledger: Ledger, monkeypatch):
-    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
-    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 600)
-    backend = ledger.backends[Method.bolt11][Unit.sat]
-    ledger.check_events[(Method.bolt11, Unit.sat)] = asyncio.Event()
-
-    checks = 0
-
-    async def counting_check(*args, **kwargs):
-        nonlocal checks
-        checks += 1
-        return True
-
-    monkeypatch.setattr(ledger, "check_balances_and_abort", counting_check)
-
-    task = asyncio.create_task(
-        ledger.dispatch_backend_checker(Method.bolt11, Unit.sat, backend)
-    )
-    try:
-        # wait for the initial check
-        for _ in range(200):
-            if checks >= 1:
-                break
-            await asyncio.sleep(0.01)
-        assert checks == 1
-
-        ledger.trigger_balance_check(Method.bolt11, Unit.sat)
-        for _ in range(200):
-            if checks >= 2:
-                break
-            await asyncio.sleep(0.01)
-        assert checks >= 2, "triggered balance check did not wake up the checker"
-    finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-
-
-@pytest.mark.asyncio
-async def test_trigger_balance_check_noop_when_disabled(ledger: Ledger, monkeypatch):
-    monkeypatch.setattr(settings, "mint_watchdog_enabled", False)
-    event = asyncio.Event()
-    ledger.check_events[(Method.bolt11, Unit.sat)] = event
-    ledger.trigger_balance_check(Method.bolt11, Unit.sat)
-    assert not event.is_set()
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
-async def test_melt_triggers_watchdog_check(
-    wallet: Wallet, ledger: Ledger, monkeypatch
-):
-    """Finalizing a melt must summon the watchdog for an immediate balance check."""
-    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
-    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 600)
-    # don't SIGTERM the test process if the fake backend balance is too low
-    monkeypatch.setattr(settings, "mint_watchdog_ignore_mismatch", True)
-
-    # give the fake backend a huge balance so the pre-melt solvency gate passes
-    backend = ledger.backends[Method.bolt11][Unit.sat]
-
-    async def rich_status():
-        return StatusResponse(error_message=None, balance=Amount(Unit.sat, 2**40))
-
-    monkeypatch.setattr(backend, "status", rich_status)
-
-    checks = 0
-
-    async def counting_check(*args, **kwargs):
-        nonlocal checks
-        checks += 1
-        return True
-
-    monkeypatch.setattr(ledger, "check_balances_and_abort", counting_check)
-
-    tasks = await ledger.dispatch_watchdogs()
-    try:
-        # wait for the initial checks on startup to settle
-        for _ in range(200):
-            if checks >= 1:
-                break
-            await asyncio.sleep(0.01)
-        await asyncio.sleep(0.2)
-        checks_before = checks
-
-        mint_quote = await wallet.request_mint(64)
-        await pay_if_regtest(mint_quote.request)
-        await wallet.mint(64, quote_id=mint_quote.quote)
-        assert wallet.balance == 64
-        assert checks == checks_before, "minting should not trigger a balance check"
-
-        # melt internally
-        mint_quote_to_pay = await wallet.request_mint(32)
-        melt_quote = await ledger.melt_quote(
-            PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
-        )
-        _, send_proofs = await wallet.swap_to_send(wallet.proofs, 32)
-        await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
-
-        melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-        assert melt_quote_post_payment.state == MeltQuoteState.paid
-
-        for _ in range(300):
-            if checks > checks_before:
-                break
-            await asyncio.sleep(0.01)
-        assert checks > checks_before, "melt did not trigger an immediate balance check"
-    finally:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-
-@pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_melt_refused_when_insolvent(wallet: Wallet, ledger: Ledger, monkeypatch):
     """The pre-melt solvency gate must refuse melts when the mint is insolvent."""
     monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
+    ledger.abort_queue = asyncio.Queue()
 
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -441,8 +325,6 @@ async def test_melt_refused_when_insolvent(wallet: Wallet, ledger: Ledger, monke
         return StatusResponse(error_message=None, balance=Amount(Unit.sat, 1))
 
     monkeypatch.setattr(backend, "status", broke_status)
-    event = asyncio.Event()
-    ledger.check_events[(Method.bolt11, Unit.sat)] = event
 
     mint_quote_to_pay = await wallet.request_mint(32)
     melt_quote = await ledger.melt_quote(
@@ -453,11 +335,111 @@ async def test_melt_refused_when_insolvent(wallet: Wallet, ledger: Ledger, monke
     with pytest.raises(Exception, match="balance mismatch"):
         await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
-    # the refusal must wake up the watchdog to confirm and shut down the mint
-    assert event.is_set()
+    # the refusal must signal the watchdog to shut down the mint
+    assert not ledger.abort_queue.empty()
 
     # the quote is still unpaid and the proofs were never set pending
     melt_quote_post = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post.state == MeltQuoteState.unpaid
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.unspent for s in states.states])
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_check_melt_solvency_includes_pending_proofs(
+    wallet: Wallet, ledger: Ledger, monkeypatch
+):
+    """Pending proofs (in-flight melts) must count towards the liabilities."""
+    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
+
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+
+    keyset_balance, fees_paid = await ledger.get_unit_balance_and_fees(
+        Unit.sat, ledger.db
+    )
+    pending_balance = await ledger.crud.get_pending_proofs_balance(
+        unit=Unit.sat, db=ledger.db
+    )
+    liabilities = keyset_balance + fees_paid + pending_balance
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    backend_balance = Amount(Unit.sat, 0)
+
+    async def status():
+        return StatusResponse(error_message=None, balance=backend_balance)
+
+    monkeypatch.setattr(backend, "status", status)
+
+    # backend exactly covers the liabilities: solvent
+    backend_balance = liabilities
+    assert await ledger.check_melt_solvency(Method.bolt11, Unit.sat)
+
+    # simulate an in-flight melt: 32 sats of proofs go pending, which
+    # decrements the keyset balance but must not reduce the liabilities
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, 32)
+    await ledger.db_write._verify_spent_proofs_and_set_pending(
+        send_proofs, ledger.keysets
+    )
+    try:
+        keyset_balance_after, _ = await ledger.get_unit_balance_and_fees(
+            Unit.sat, ledger.db
+        )
+        assert keyset_balance_after == keyset_balance - 32
+
+        # liabilities are unchanged: still solvent against the same balance
+        assert await ledger.check_melt_solvency(Method.bolt11, Unit.sat)
+
+        # 16 sats below the liabilities: insolvent. If pending proofs were not
+        # counted, the liabilities would appear to be (liabilities - 32) and
+        # this check would wrongly pass.
+        backend_balance = liabilities - 16
+        assert not await ledger.check_melt_solvency(Method.bolt11, Unit.sat)
+    finally:
+        await ledger.db_write._unset_proofs_pending(send_proofs, ledger.keysets)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_melt_solvency_gate_holds_melt_lock(
+    wallet: Wallet, ledger: Ledger, monkeypatch
+):
+    """The solvency check and pending transition must hold the per-unit melt lock."""
+    monkeypatch.setattr(settings, "mint_watchdog_enabled", True)
+
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    status_calls = 0
+
+    async def rich_status():
+        nonlocal status_calls
+        status_calls += 1
+        return StatusResponse(error_message=None, balance=Amount(Unit.sat, 2**40))
+
+    monkeypatch.setattr(backend, "status", rich_status)
+
+    mint_quote_to_pay = await wallet.request_mint(32)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
+    )
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, 32)
+
+    lock = ledger.get_melt_lock(Method.bolt11, Unit.sat)
+    await lock.acquire()
+    task = asyncio.create_task(ledger.melt(proofs=send_proofs, quote=melt_quote.quote))
+    try:
+        await asyncio.sleep(0.3)
+        assert not task.done()
+        assert status_calls == 0, "solvency check ran while the melt lock was held"
+    finally:
+        lock.release()
+    await task
+    assert status_calls >= 1, "solvency check did not run after the lock was released"
+    melt_quote_post = await ledger.get_melt_quote(melt_quote.quote)
+    assert melt_quote_post.state == MeltQuoteState.paid

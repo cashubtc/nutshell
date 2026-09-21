@@ -87,6 +87,15 @@ class LedgerCrud(ABC):
     ) -> List[Proof]: ...
 
     @abstractmethod
+    async def get_pending_proofs_balance(
+        self,
+        *,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Amount: ...
+
+    @abstractmethod
     async def set_proof_pending(
         self,
         *,
@@ -564,6 +573,26 @@ class LedgerCrudSqlite(LedgerCrud):
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows]
+
+    async def get_pending_proofs_balance(
+        self,
+        *,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Amount:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT COALESCE(SUM(p.amount), 0) AS balance
+            FROM {db.table_with_schema("proofs_pending")} p
+            JOIN {db.table_with_schema("keysets")} k ON p.id = k.id
+            WHERE k.unit = :unit
+            """,
+            {"unit": unit.name},
+        )
+        if row is None:
+            return Amount(unit, 0)
+        return Amount(unit, int(row["balance"]))
 
     async def set_proof_pending(
         self,
