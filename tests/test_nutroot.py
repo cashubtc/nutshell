@@ -420,8 +420,9 @@ async def test_nut13_v3_derivation_type_vectors():
         assert key.secret.hex() == leaf["privkey"]
         pub = key.public_key
         assert pub and pub.format().hex() == leaf["pubkey"]
+    mint_identity = nut13["mint_identity"]
     for lock in nut13["quote_locks"]:
-        key = secrets.derive_v3_quote_lock_key(lock["counter"])
+        key = secrets.derive_v3_quote_lock_key(lock["counter"], mint_identity)
         assert key.secret.hex() == lock["privkey"]
         pub = key.public_key
         assert pub and pub.format().hex() == lock["pubkey"]
@@ -431,7 +432,7 @@ async def test_nut13_v3_derivation_type_vectors():
         secrets.derive_v3_secret_key(counter, keyset_id).secret,
         secrets.derive_v3_nums_offset(counter, keyset_id).secret,
         secrets.derive_v3_leaf_key(counter, keyset_id, 0).secret,
-        secrets.derive_v3_quote_lock_key(counter).secret,
+        secrets.derive_v3_quote_lock_key(counter, mint_identity).secret,
     }
     assert len(derived) == 4
 
