@@ -116,16 +116,78 @@ class AuthLedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def store_promise(
+    async def update_keyset(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def bump_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def bump_keyset_fees_paid(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_blinded_message(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        b_: str,
+        id: str,
+        mint_id: Optional[str] = None,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        order_index: int = 0,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def delete_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def update_blinded_message_signature(
         self,
         *,
         db: Database,
         amount: int,
         b_: str,
         c_: str,
-        id: str,
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    @abstractmethod
+    async def get_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        signed: bool = False,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedMessage]: ...
 
     @abstractmethod
     async def get_blind_signature(
@@ -144,6 +206,26 @@ class AuthLedgerCrud(ABC):
         b_s: List[str],
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]: ...
+
+    @abstractmethod
+    async def get_melt_quotes_by_checking_id(
+        self,
+        *,
+        checking_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]: ...
+
+    @abstractmethod
+    async def try_update_mint_quote_last_checked(
+        self,
+        *,
+        quote_id: str,
+        last_checked: int,
+        rate_limit: int,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> bool: ...
 
 
 class AuthLedgerCrudSqlite(AuthLedgerCrud):
@@ -204,28 +286,101 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             },
         )
 
-    async def store_promise(
+    async def store_blinded_message(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        b_: str,
+        id: str,
+        mint_id: Optional[str] = None,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        order_index: int = 0,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {db.table_with_schema('promises')}
+            (amount, b_, id, created, mint_quote, melt_quote, swap_id, order_index)
+            VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id, :order_index)
+            """,
+            {
+                "amount": amount,
+                "b_": b_,
+                "id": id,
+                "created": db.to_timestamp(db.timestamp_now_str()),
+                "mint_quote": mint_id,
+                "melt_quote": melt_id,
+                "swap_id": swap_id,
+                "order_index": order_index,
+            },
+        )
+
+    async def get_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        signed: bool = False,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedMessage]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * from {db.table_with_schema('promises')}
+            WHERE melt_quote = :melt_id
+                AND c_ IS {"NOT NULL" if signed else "NULL"}
+            ORDER BY order_index ASC
+            """,
+            {"melt_id": melt_id},
+        )
+        return [BlindedMessage.from_row(r) for r in rows] if rows else []
+
+    async def delete_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            DELETE FROM {db.table_with_schema('promises')}
+            WHERE melt_quote = :melt_id AND c_ IS NULL
+            """,
+            {"melt_id": melt_id},
+        )
+
+    async def update_blinded_message_signature(
         self,
         *,
         db: Database,
         amount: int,
         b_: str,
         c_: str,
-        id: str,
         conn: Optional[Connection] = None,
     ) -> None:
+        existing = await (conn or db).fetchone(
+            f"""
+                SELECT * from {db.table_with_schema('promises')}
+                WHERE b_ = :b_
+                """,
+            {"b_": str(b_)},
+        )
+        if existing is None:
+            raise ValueError("blinded message does not exist")
+
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')}
-            (amount, b_, c_, id, created)
-            VALUES (:amount, :b_, :c_, :id, :created)
+            UPDATE {db.table_with_schema('promises')}
+            SET amount = :amount, c_ = :c_, signed_at = :signed_at
+            WHERE b_ = :b_
             """,
             {
-                "amount": amount,
                 "b_": b_,
+                "amount": amount,
                 "c_": c_,
-                "id": id,
-                "created": db.to_timestamp(db.timestamp_now_str()),
+                "signed_at": db.to_timestamp(db.timestamp_now_str()),
             },
         )
 
@@ -239,7 +394,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ = :b_
+            WHERE b_ = :b_ AND c_ IS NOT NULL
             """,
             {"b_": str(b_)},
         )
@@ -498,6 +653,31 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             },
         )
 
+    async def try_update_mint_quote_last_checked(
+        self,
+        *,
+        quote_id: str,
+        last_checked: int,
+        rate_limit: int,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> bool:
+        threshold = last_checked - rate_limit
+        threshold_ts = db.to_timestamp(db.timestamp_from_seconds(threshold) or "")
+        now_ts = db.to_timestamp(db.timestamp_from_seconds(last_checked) or "")
+        result = await (conn or db).execute(
+            f"""UPDATE {db.table_with_schema('mint_quotes')}
+                SET last_checked = :now
+                WHERE quote = :quote
+                  AND (last_checked IS NULL OR last_checked < :threshold)""",
+            {
+                "now": now_ts,
+                "quote": quote_id,
+                "threshold": threshold_ts,
+            },
+        )
+        return result.rowcount > 0
+
     async def store_melt_quote(
         self,
         *,
@@ -606,8 +786,8 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('keysets')}
-            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk)
-            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk)
+            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts, final_expiry)
+            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts, :final_expiry)
             """,
             {
                 "id": keyset.id,
@@ -626,7 +806,43 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
                 "version": keyset.version,
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
+                "amounts": json.dumps(keyset.amounts),
+                "final_expiry": keyset.final_expiry,
             },
+        )
+
+    async def bump_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET balance = balance + :amount
+            WHERE id = :id
+            """,
+            {"amount": amount, "id": keyset.id},
+        )
+
+    async def bump_keyset_fees_paid(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET fees_paid = fees_paid + :amount
+            WHERE id = :id
+            """,
+            {"amount": amount, "id": keyset.id},
         )
 
     async def get_keyset(
@@ -668,7 +884,41 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             values,
         )
-        return [MintKeyset(**row) for row in rows]
+        return [MintKeyset.from_row(row) for row in rows]  # type: ignore
+
+    async def update_keyset(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET seed = :seed, encrypted_seed = :encrypted_seed, seed_encryption_method = :seed_encryption_method, derivation_path = :derivation_path, valid_from = :valid_from, valid_to = :valid_to, first_seen = :first_seen, active = :active, version = :version, unit = :unit, input_fee_ppk = :input_fee_ppk, final_expiry = :final_expiry
+            WHERE id = :id
+            """,
+            {
+                "id": keyset.id,
+                "seed": keyset.seed,
+                "encrypted_seed": keyset.encrypted_seed,
+                "seed_encryption_method": keyset.seed_encryption_method,
+                "derivation_path": keyset.derivation_path,
+                "valid_from": db.to_timestamp(
+                    keyset.valid_from or db.timestamp_now_str()
+                ),
+                "valid_to": db.to_timestamp(keyset.valid_to or db.timestamp_now_str()),
+                "first_seen": db.to_timestamp(
+                    keyset.first_seen or db.timestamp_now_str()
+                ),
+                "active": keyset.active,
+                "version": keyset.version,
+                "unit": keyset.unit.name,
+                "input_fee_ppk": keyset.input_fee_ppk,
+                "final_expiry": keyset.final_expiry,
+            },
+        )
 
     async def get_proofs_used(
         self,
@@ -684,3 +934,19 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
+
+    async def get_melt_quotes_by_checking_id(
+        self,
+        *,
+        checking_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]:
+        results = await (conn or db).fetchall(
+            f"""
+            SELECT * FROM {db.table_with_schema('melt_quotes')}
+            WHERE checking_id = :checking_id
+            """,
+            {"checking_id": checking_id},
+        )
+        return [MeltQuote.from_row(row) for row in results]  # type: ignore

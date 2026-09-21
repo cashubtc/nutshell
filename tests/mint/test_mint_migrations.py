@@ -4,11 +4,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState
+from cashu.core.base import (
+    BlindedMessage,
+    MeltQuote,
+    MeltQuoteState,
+    MintQuote,
+    MintQuoteState,
+)
+from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.mint import migrations as mint_migrations
 from cashu.mint.auth import migrations as auth_migrations
+from cashu.mint.auth.base import User
+from cashu.mint.auth.crud import AuthLedgerCrudSqlite
+from cashu.mint.auth.server import AuthLedger
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.db.write import DbWriteHelper
 
@@ -281,7 +291,6 @@ async def test_auth_m003_migration():
 
     from cashu.core.base import MintKeyset
     from cashu.mint.auth import migrations as auth_migrations
-    from cashu.mint.crud import LedgerCrudSqlite
 
     db_path = "./test_data/mig_auth"
     if os.path.exists(db_path):
@@ -299,7 +308,7 @@ async def test_auth_m003_migration():
         assert any(col["name"] == "final_expiry" for col in columns)
 
     # Verify that we can successfully store a keyset (which uses the final_expiry column)
-    crud = LedgerCrudSqlite()
+    crud = AuthLedgerCrudSqlite()
     keyset = MintKeyset(
         seed="test_seed",
         derivation_path="m/0'/0'/0'",
@@ -312,6 +321,7 @@ async def test_auth_m003_migration():
     retrieved = await crud.get_keyset(db=db, id=keyset.id)
     assert len(retrieved) == 1
     assert retrieved[0].final_expiry == 123456789
+    assert retrieved[0].amounts == keyset.amounts
 
     # Clean up
     if os.path.exists(db_path):
@@ -320,12 +330,10 @@ async def test_auth_m003_migration():
 
 @pytest.mark.asyncio
 async def test_auth_promises_schema_supports_blinded_message_crud(tmp_path):
-    """The auth ledger reuses LedgerCrudSqlite, so the auth promises table must carry
-    the same columns the mint CRUD writes.
-    """
+    """The auth promises table supports storing then signing blinded messages."""
     db = Database("auth", str(tmp_path / "auth_promises_schema"))
     await migrate_databases(db, auth_migrations)
-    crud = LedgerCrudSqlite()
+    crud = AuthLedgerCrudSqlite()
 
     async with db.connect() as conn:
         columns = {
@@ -358,6 +366,40 @@ async def test_auth_promises_schema_supports_blinded_message_crud(tmp_path):
     assert signature.C_ == c_
     assert signature.amount == 1
     assert signature.id == "keyset_id"
+
+
+@pytest.mark.asyncio
+async def test_fresh_auth_ledger_mints_and_reloads_keyset(tmp_path):
+    db = Database("auth", str(tmp_path / "auth_ledger"))
+    await migrate_databases(db, auth_migrations)
+    ledger = AuthLedger(
+        db=db,
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    await ledger.init_keysets()
+    user = User(id="alice")
+    await ledger.auth_crud.create_user(db=db, user=user)
+
+    B_, _ = step1_alice("auth token")
+    signatures = await ledger.mint_blind_auth(
+        outputs=[BlindedMessage(id=ledger.keyset.id, amount=1, B_=B_.format().hex())],
+        user=user,
+    )
+
+    assert len(signatures) == 1
+    assert signatures[0].id == ledger.keyset.id
+    assert signatures[0].amount == 1
+
+    reloaded = AuthLedger(
+        db=db,
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    await reloaded.init_keysets()
+    assert reloaded.keyset.amounts == [1]
 
 
 @pytest.mark.asyncio
