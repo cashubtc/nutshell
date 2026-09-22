@@ -1387,7 +1387,7 @@ async def m040_add_payment_method_data_to_quotes(db: Database):
                 )
 
 
-async def m040_separate_internal_credits_and_amountless_payments(db: Database):
+async def m041_separate_internal_credits_and_amountless_payments(db: Database):
     """Keep internal credits and exact outgoing msat amounts across restarts."""
     async with db.connect() as conn:
         mint_quotes = db.table_with_schema("mint_quotes")

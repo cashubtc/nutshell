@@ -15,6 +15,7 @@ from ..lightning.base import (
     PaymentResponse,
     PaymentResult,
     PaymentStatus,
+    PaymentStatusResult,
     StatusResponse,
 )
 from .base import PaymentMethodPlugin, PaymentMethodSettings
@@ -77,7 +78,7 @@ def _result(state: int) -> PaymentResult:
         return PaymentResult.PENDING
     if state in (pb.QUOTE_STATE_FAILED, pb.QUOTE_STATE_UNPAID):
         return PaymentResult.FAILED
-    return PaymentResult.UNKNOWN
+    return PaymentResult.ERROR
 
 
 class GrpcPaymentProcessor(PaymentMethodPlugin):
@@ -301,11 +302,11 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         fully_paid = paid > 0 and (quote.amount == 0 or paid >= quote.amount)
         return PaymentStatus(
             result=(
-                PaymentResult.SETTLED
+                PaymentStatusResult.SETTLED
                 if fully_paid
-                else PaymentResult.PENDING
+                else PaymentStatusResult.PENDING
                 if paid
-                else PaymentResult.UNKNOWN
+                else PaymentStatusResult.NOT_FOUND
             ),
             amount_paid=Amount(Unit[quote.unit], paid) if paid else None,
         )
@@ -477,7 +478,7 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         )
         payment = processor._payment_response(response, quote.amount)
         return PaymentStatus(
-            result=payment.result,
+            result=PaymentStatusResult[payment.result.name],
             fee=payment.fee,
             preimage=payment.preimage,
             **(response and _extra(response.extra_json)),

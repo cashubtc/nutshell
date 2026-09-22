@@ -338,7 +338,7 @@ class MeltQuote(LedgerEvent):
     def from_resp_wallet(cls, melt_quote_resp, mint: str):
         return cls(
             quote=melt_quote_resp.quote,
-            method=melt_quote_resp.method,
+            method=melt_quote_resp.method or Method.bolt11.name,
             request=melt_quote_resp.request,
             checking_id="",
             unit=melt_quote_resp.unit,

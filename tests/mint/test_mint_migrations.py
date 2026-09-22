@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -11,6 +11,38 @@ from cashu.mint import migrations as mint_migrations
 from cashu.mint.auth import migrations as auth_migrations
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.db.write import DbWriteHelper
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [39, 40])
+async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
+    db = Database("mint", str(tmp_path / "payment_migration"))
+    previous = ModuleType(mint_migrations.__name__)
+    for name, migration in vars(mint_migrations).items():
+        if name.startswith("m") and name[1:4].isdigit() and int(name[1:4]) <= version:
+            setattr(previous, name, migration)
+    try:
+        await migrate_databases(db, previous)
+        await migrate_databases(db, mint_migrations)
+        # Reopening an already upgraded database must also work.
+        await migrate_databases(db, mint_migrations)
+        async with db.connect() as conn:
+            mint_columns = {
+                row["name"]
+                for row in await conn.fetchall("PRAGMA table_info(mint_quotes)")
+            }
+            melt_columns = {
+                row["name"]
+                for row in await conn.fetchall("PRAGMA table_info(melt_quotes)")
+            }
+            row = await conn.fetchone(
+                "SELECT version FROM dbversions WHERE db = 'mint'"
+            )
+        assert {"method_data", "amount_paid_internal"} <= mint_columns
+        assert {"attempt", "method_data", "amountless_msat"} <= melt_columns
+        assert row and row["version"] == 41
+    finally:
+        await db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -144,7 +176,9 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
                     fee_paid INT,
                     proof TEXT,
                     state TEXT NOT NULL,
-                    expiry TIMESTAMP
+                    expiry TIMESTAMP,
+                    method_data TEXT,
+                    amountless_msat INT
                 )
                 """
             )
@@ -448,7 +482,7 @@ async def test_internal_credit_migration_backfills_only_matching_settlements(led
     await ledger.db.execute(
         f"ALTER TABLE {ledger.db.table_with_schema('melt_quotes')} DROP COLUMN amountless_msat"
     )
-    await mint_migrations.m040_separate_internal_credits_and_amountless_payments(
+    await mint_migrations.m041_separate_internal_credits_and_amountless_payments(
         ledger.db
     )
     restored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)

@@ -1,15 +1,17 @@
 from types import MethodType
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
-from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
+from cashu.core.base import BlindedMessage, MeltQuote, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.models import (
     GetInfoResponse,
+    PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteResponse,
 )
@@ -345,7 +347,48 @@ def test_melt_quote_response_allows_legacy_missing_method():
         "expiry": None,
     }
 
-    assert PostMeltQuoteResponse.model_validate(response).method is None
+    parsed = PostMeltQuoteResponse.model_validate(response)
+    assert parsed.method is None
+    assert MeltQuote.from_resp_wallet(parsed, "https://mint.test").method == "bolt11"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["quote", "status", "melt"])
+@pytest.mark.parametrize("method", ["bolt11", "onchain"])
+async def test_legacy_melt_responses_use_bolt11_method(
+    monkeypatch, api: LedgerAPI, operation, method
+):
+    monkeypatch.setattr(api, "keysets", {"keyset": object()}, raising=False)
+    monkeypatch.setattr(
+        api,
+        "_request",
+        AsyncMock(
+            return_value=_response(
+                200,
+                {
+                    "quote": "q-1",
+                    "amount": 1,
+                    "unit": "sat",
+                    "request": "request",
+                    "fee_reserve": 0,
+                    "state": "UNPAID",
+                },
+            )
+        ),
+    )
+    if operation == "quote":
+        call = api.melt_quote_for_method(
+            method, PostMeltQuoteRequest(unit="sat", request="request")
+        )
+    elif operation == "status":
+        call = api.get_melt_quote_for_method(method, "q-1")
+    else:
+        call = api.melt_for_method(method, "q-1", [], None)
+    if method == "bolt11":
+        assert (await call).method == "bolt11"
+    else:
+        with pytest.raises(Exception, match="different payment method"):
+            await call
 
 
 @pytest.mark.asyncio
@@ -706,7 +749,9 @@ async def test_melt_rejects_deprecated_response(monkeypatch, api: LedgerAPI):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(
+    monkeypatch, api: LedgerAPI
+):
     async def fake_request(self, method, path, **kwargs):
         if path == "keysets":
             return _response(
