@@ -722,7 +722,7 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time, last_checked = :last_checked, amount_paid = :amount_paid, amount_paid_internal = :amount_paid_internal, amount_issued = :amount_issued, updated_at = :updated_at, method_data = :method_data, amountless_msat = :amountless_msat WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time, issued_time = :issued_time, last_checked = :last_checked, amount_paid = :amount_paid, amount_paid_internal = :amount_paid_internal, amount_issued = :amount_issued, updated_at = :updated_at, method_data = :method_data WHERE quote = :quote",
             {
                 "state": quote.state.value,
                 "paid_time": db.to_timestamp(

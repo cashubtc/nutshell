@@ -25,7 +25,7 @@ from cashu.core.models import (
     PostMintQuoteResponse,
 )
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult, PaymentStatus
+from cashu.lightning.base import PaymentStatus, PaymentStatusResult
 from cashu.mint.db.write import DbWriteHelper
 from cashu.mint.ledger import Ledger
 from cashu.payment import payment_method_registry
@@ -269,7 +269,7 @@ async def test_reusable_mint_quote_observes_payments_after_full_issuance(
     monkeypatch.setattr(plugin, "allows_repeated_payments", True)
     get_status = AsyncMock(
         return_value=PaymentStatus(
-            result=PaymentResult.SETTLED,
+            result=PaymentStatusResult.SETTLED,
             amount_paid=Amount(Unit.sat, 20),
         )
     )
@@ -302,7 +302,7 @@ async def test_reusable_quote_timestamps_keep_later_payments_visible(
     monkeypatch.setattr("cashu.mint.ledger.time", clock)
     monkeypatch.setattr("cashu.mint.db.write.time", clock)
     status = PaymentStatus(
-        result=PaymentResult.SETTLED, amount_paid=Amount(Unit.sat, 8)
+        result=PaymentStatusResult.SETTLED, amount_paid=Amount(Unit.sat, 8)
     )
     monkeypatch.setattr(
         plugin, "get_incoming_payment_status", AsyncMock(return_value=status)
@@ -351,10 +351,11 @@ async def test_internal_settlement_and_state_updates_advance_quote_timestamp(
     melt = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="sat", request=quote.request)
     )
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=melt.quote, db=ledger.db)
+    melt_quote = await ledger.db_write._set_melt_quote_pending(melt_quote)
     clock = SimpleNamespace(time=lambda: quote.updated_at - 10)
     monkeypatch.setattr("cashu.mint.ledger.time", clock)
     monkeypatch.setattr("cashu.mint.db.write.time", clock)
-    melt_quote = await ledger.crud.get_melt_quote(quote_id=melt.quote, db=ledger.db)
     await ledger.melt_mint_settle_internally(melt_quote, [])
     paid = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
     assert paid.updated_at > quote.updated_at
@@ -382,7 +383,7 @@ async def test_non_reusable_mint_quote_stays_unpaid_after_partial_payment(
         "get_incoming_payment_status",
         AsyncMock(
             return_value=PaymentStatus(
-                result=PaymentResult.PENDING,
+                result=PaymentStatusResult.PENDING,
                 amount_paid=Amount(Unit.sat, 1),
             )
         ),
@@ -470,18 +471,9 @@ async def test_payment_refresh_preserves_inflight_issuance(
     plugin = payment_method_registry.get("bolt11")
     monkeypatch.setattr(plugin, "allows_partial_mint", True)
     monkeypatch.setattr(plugin, "allows_repeated_payments", True)
-    quote = MintQuote(
-        quote="refresh-race",
-        method="bolt11",
-        request="request",
-        checking_id="checking-id",
-        unit="sat",
-        amount=8,
-        state=MintQuoteState.paid,
-        amount_paid=8,
-        amount_issued=0,
-    )
-    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    quote.state = MintQuoteState.paid
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
     checking, payment_received = asyncio.Event(), asyncio.Event()
     signing, resume_signing = asyncio.Event(), asyncio.Event()
     first_check = True
@@ -493,7 +485,7 @@ async def test_payment_refresh_preserves_inflight_issuance(
             checking.set()
             await payment_received.wait()
         return PaymentStatus(
-            result=PaymentResult.SETTLED,
+            result=PaymentStatusResult.SETTLED,
             amount_paid=Amount(Unit.sat, 9 if payment_received.is_set() else 8),
         )
 
@@ -626,6 +618,7 @@ async def test_internal_credits_are_added_to_backend_receipts(
         PostMeltQuoteRequest(unit="sat", request=quote.request)
     )
     melt_quote = await ledger.crud.get_melt_quote(quote_id=melt.quote, db=ledger.db)
+    melt_quote = await ledger.db_write._set_melt_quote_pending(melt_quote)
     await ledger.melt_mint_settle_internally(melt_quote, [])
     stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
     assert (stored.amount_paid, stored.amount_paid_internal) == (8, 8)
@@ -637,7 +630,8 @@ async def test_internal_credits_are_added_to_backend_receipts(
             "get_incoming_payment_status",
             AsyncMock(
                 return_value=PaymentStatus(
-                    result=PaymentResult.SETTLED, amount_paid=Amount(Unit.sat, external)
+                    result=PaymentStatusResult.SETTLED,
+                    amount_paid=Amount(Unit.sat, external),
                 )
             ),
         )
@@ -660,22 +654,14 @@ async def test_payment_event_during_issuance_preserves_credit_and_notifies(
     plugin = payment_method_registry.get("bolt11")
     monkeypatch.setattr(plugin, "allows_partial_mint", True)
     monkeypatch.setattr(plugin, "allows_repeated_payments", True)
-    quote = MintQuote(
-        quote="event-during-mint",
-        method="bolt11",
-        request="request",
-        checking_id="incoming",
-        unit="sat",
-        amount=8,
-        amount_paid=8,
-        state=MintQuoteState.paid,
-    )
-    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    quote.state = MintQuoteState.paid
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
     incoming = 8
 
     async def status(*args):
         return PaymentStatus(
-            result=PaymentResult.SETTLED, amount_paid=Amount(Unit.sat, incoming)
+            result=PaymentStatusResult.SETTLED, amount_paid=Amount(Unit.sat, incoming)
         )
 
     monkeypatch.setattr(plugin, "get_incoming_payment_status", status)
