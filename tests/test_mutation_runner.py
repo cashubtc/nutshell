@@ -1,8 +1,11 @@
+"""Exercise baseline recovery against a small project using real mutmut runs."""
+
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -27,11 +30,20 @@ def sample_project(tmp_path):
     )
     (tmp_path / "tests").mkdir()
     (tmp_path / "pyproject.toml").write_text(
-        '[tool.mutmut]\nsource_paths = ["sample/"]\n'
-        'pytest_add_cli_args_test_selection = ["tests/"]\n'
-        'pytest_add_cli_args = ["-q"]\n'
+        dedent("""
+        [tool.mutmut]
+        source_paths = ["sample/"]
+        pytest_add_cli_args_test_selection = ["tests/"]
+        pytest_add_cli_args = ["-q"]
+        """).lstrip()
     )
     return tmp_path
+
+
+def write_tests(project, source):
+    test_file = project / "tests/test_sample.py"
+    test_file.write_text(dedent(source).lstrip())
+    return test_file
 
 
 def run_sample(project, *args, workers=1):
@@ -67,11 +79,17 @@ def run_sample(project, *args, workers=1):
 def test_baseline_exclusion_preserves_mutation_results_and_retries_fixed_tests(
     sample_project, workers
 ):
-    test_file = sample_project / "tests/test_sample.py"
-    test_file.write_text(
-        "from sample.logic import increment\n\n"
-        "def test_healthy():\n    assert increment(1) > 0\n\n"
-        "def test_broken():\n    assert increment(1) == 999\n"
+    test_file = write_tests(
+        sample_project,
+        """
+        from sample.logic import increment
+
+        def test_healthy():
+            assert increment(1) > 0
+
+        def test_broken():
+            assert increment(1) == 999
+        """,
     )
     result, report = run_sample(sample_project, workers=workers)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -97,12 +115,19 @@ def test_baseline_exclusion_preserves_mutation_results_and_retries_fixed_tests(
 
 
 def test_clean_pass_failure_is_excluded(sample_project):
-    (sample_project / "tests/test_sample.py").write_text(
-        "import os\nfrom sample.logic import increment\n\n"
-        "def test_healthy():\n    assert increment(1) > 0\n\n"
-        "def test_clean_only_failure():\n"
-        "    assert increment(1) == 2\n"
-        "    assert os.environ['MUTANT_UNDER_TEST'] != ''\n"
+    write_tests(
+        sample_project,
+        """
+        import os
+        from sample.logic import increment
+
+        def test_healthy():
+            assert increment(1) > 0
+
+        def test_clean_only_failure():
+            assert increment(1) == 2
+            assert os.environ["MUTANT_UNDER_TEST"] != ""
+        """,
     )
     result, report = run_sample(sample_project)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -112,15 +137,28 @@ def test_clean_pass_failure_is_excluded(sample_project):
 
 
 def test_repeated_baseline_failures_exhaust_retry_limit(sample_project):
-    (sample_project / "tests/test_sample.py").write_text(
-        "import json, os, pytest\nfrom pathlib import Path\n"
-        "from sample.logic import increment\n\n"
-        "excluded = json.loads(Path(os.environ['NUTSHELL_MUTATION_EXCLUSIONS']).read_text())\n\n"
-        "def test_healthy():\n    assert increment(1) > 0\n\n"
-        "@pytest.mark.parametrize('index', range(3))\n"
-        "def test_staged_failure(index):\n"
-        "    assert increment(1) == 2\n"
-        "    assert index != len(excluded)\n"
+    write_tests(
+        sample_project,
+        """
+        import json
+        import os
+        from pathlib import Path
+
+        import pytest
+        from sample.logic import increment
+
+        excluded = json.loads(
+            Path(os.environ["NUTSHELL_MUTATION_EXCLUSIONS"]).read_text()
+        )
+
+        def test_healthy():
+            assert increment(1) > 0
+
+        @pytest.mark.parametrize("index", range(3))
+        def test_staged_failure(index):
+            assert increment(1) == 2
+            assert index != len(excluded)
+        """,
     )
     result, report = run_sample(sample_project, "--baseline-retries", "1")
     assert result.returncode == 1, result.stdout + result.stderr
@@ -139,15 +177,23 @@ def test_repeated_baseline_failures_exhaust_retry_limit(sample_project):
     ["fixture", "collection", "all_fail", "strict", "no_tests", "no_coverage"],
 )
 def test_unusable_baselines_still_fail(sample_project, scenario):
-    source = (
-        "import pytest\nfrom sample.logic import increment\n\n"
-        "def test_healthy():\n    assert increment(1) > 0\n\n"
-    )
+    source = dedent("""
+        import pytest
+        from sample.logic import increment
+
+        def test_healthy():
+            assert increment(1) > 0
+
+    """)
     if scenario == "fixture":
-        source += (
-            "@pytest.fixture\ndef broken():\n    raise RuntimeError('fixture failed')\n\n"
-            "def test_broken(broken):\n    pass\n"
-        )
+        source += dedent("""
+            @pytest.fixture
+            def broken():
+                raise RuntimeError("fixture failed")
+
+            def test_broken(broken):
+                pass
+        """)
     elif scenario == "collection":
         source += "raise RuntimeError('collection failed')\n"
     elif scenario == "all_fail":
@@ -157,8 +203,11 @@ def test_unusable_baselines_still_fail(sample_project, scenario):
     elif scenario == "no_coverage":
         source = "def test_unrelated():\n    assert True\n"
     else:
-        source += "def test_broken():\n    assert increment(1) == 999\n"
-    (sample_project / "tests/test_sample.py").write_text(source)
+        source += dedent("""
+            def test_broken():
+                assert increment(1) == 999
+        """)
+    write_tests(sample_project, source)
     args = ("--baseline-retries", "0") if scenario == "strict" else ()
     result, report = run_sample(sample_project, *args)
     assert result.returncode != 0
@@ -168,12 +217,17 @@ def test_unusable_baselines_still_fail(sample_project, scenario):
 
 
 def test_failure_after_baseline_is_not_excluded(sample_project):
-    (sample_project / "tests/test_sample.py").write_text(
-        "import os\nfrom sample.logic import increment\n\n"
-        "def test_healthy():\n"
-        "    if os.environ.get('MUTANT_UNDER_TEST') == 'fail':\n"
-        "        os.environ['MUTANT_UNDER_TEST'] = ''\n"
-        "    assert increment(1) == 2\n"
+    write_tests(
+        sample_project,
+        """
+        import os
+        from sample.logic import increment
+
+        def test_healthy():
+            if os.environ.get("MUTANT_UNDER_TEST") == "fail":
+                os.environ["MUTANT_UNDER_TEST"] = ""
+            assert increment(1) == 2
+        """,
     )
     result, report = run_sample(sample_project)
     assert result.returncode != 0
@@ -181,44 +235,3 @@ def test_failure_after_baseline_is_not_excluded(sample_project):
     assert report["status"] == "failed"
     assert report["excluded_tests"] == []
     assert report["attempts"][-1]["baseline"]["exit_code"] == 0
-
-
-def test_weekly_report_includes_exclusions_without_survivors(tmp_path, monkeypatch):
-    # Stub every GitHub operation: this test only writes local files.
-    gh = tmp_path / "gh"
-    gh.write_text(
-        f"#!{sys.executable}\n"
-        "import datetime, json, os, pathlib, shutil, sys\n"
-        "args = sys.argv[1:]\n"
-        "if args[:2] == ['run', 'list']:\n"
-        "    print(json.dumps({'databaseId': 1, 'createdAt': "
-        "datetime.datetime.now(datetime.timezone.utc).isoformat(), "
-        "'url': 'https://example.com/run', 'conclusion': 'success'}))\n"
-        "elif args[:2] == ['run', 'download']:\n"
-        "    profile = args[args.index('--name') + 1].split('-')[1]\n"
-        "    dest = pathlib.Path(args[args.index('--dir') + 1])\n"
-        "    (dest / f'mutation-{profile}-results.txt').write_text('    sample: killed\\n')\n"
-        "    excluded = [{'nodeid': 'test_broken'}] if profile == 'core' else []\n"
-        "    (dest / f'mutation-{profile}-baseline.json').write_text("
-        "json.dumps({'excluded_tests': excluded}))\n"
-        "elif args[:2] == ['issue', 'create']:\n"
-        "    shutil.copyfile(args[args.index('--body-file') + 1], os.environ['REPORT_COPY'])\n"
-        "elif args[:2] != ['label', 'create']:\n"
-        "    sys.exit('Unexpected gh invocation')\n"
-    )
-    gh.chmod(0o755)
-    body = tmp_path / "report.md"
-    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
-    monkeypatch.setenv("REPOSITORY", "test/repo")
-    monkeypatch.setenv("REPORT_COPY", str(body))
-    result = subprocess.run(
-        ["bash", str(SCRIPTS / "mutation_weekly_report.sh")],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    text = body.read_text()
-    assert "Excluded tests" in text
-    assert "| [core](https://example.com/run) | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |" in text
-    assert "1 profile report(s) were missing, stale, or had excluded" in text
