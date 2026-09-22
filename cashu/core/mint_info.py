@@ -6,7 +6,13 @@ from pydantic import BaseModel
 from .base import Method, Unit
 from .json_rpc.base import JSONRPCSubscriptionKinds
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
-from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+from .nuts.nuts import (
+    BLIND_AUTH_NUT,
+    BOOLEAN_SUPPORTED_NUTS,
+    CLEAR_AUTH_NUT,
+    MPP_NUT,
+    WEBSOCKETS_NUT,
+)
 
 
 def _match_protected_endpoint(endpoint_path: str, request_path: str) -> bool:
@@ -51,9 +57,11 @@ class MintInfo(BaseModel):
         return cls.model_validate(json.loads(json_str))
 
     def supports_nut(self, nut: int) -> bool:
-        if self.nuts is None:
+        if not self.nuts or nut not in self.nuts:
             return False
-        return nut in self.nuts
+        if nut in BOOLEAN_SUPPORTED_NUTS:
+            return self.nuts[nut].get("supported") is True
+        return True
 
     def supports_mpp(self, method: str, unit: Unit) -> bool:
         if not self.nuts:

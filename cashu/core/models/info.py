@@ -2,6 +2,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from ..nuts.nuts import BOOLEAN_SUPPORTED_NUTS
+
 
 class MintMethodBolt11OptionSetting(BaseModel):
     description: Optional[bool] = None
@@ -49,8 +51,12 @@ class GetInfoResponse(BaseModel):
     max_array_length: Optional[int] = None
     nuts: Optional[Dict[int, Any]] = None
 
-    def supports(self, nut: int) -> Optional[bool]:
-        return nut in self.nuts if self.nuts else None
+    def supports(self, nut: int) -> bool:
+        if not self.nuts or nut not in self.nuts:
+            return False
+        if nut in BOOLEAN_SUPPORTED_NUTS:
+            return self.nuts[nut].get("supported") is True
+        return True
 
 
 class Nut15MppSupport(BaseModel):
