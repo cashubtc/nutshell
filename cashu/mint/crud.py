@@ -769,11 +769,12 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""UPDATE {db.table_with_schema("mint_quotes")}
                 SET last_checked = :now
                 WHERE quote = :quote
-                  AND (last_checked IS NULL OR last_checked < :threshold)""",
+                  AND (:rate_limit <= 0 OR last_checked IS NULL OR last_checked < :threshold)""",
             {
                 "now": now_ts,
                 "quote": quote_id,
                 "threshold": threshold_ts,
+                "rate_limit": rate_limit,
             },
         )
         return result.rowcount > 0
