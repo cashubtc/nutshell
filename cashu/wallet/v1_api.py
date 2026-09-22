@@ -545,6 +545,8 @@ class LedgerAPI(SupportsAuth):
         self.raise_on_unsupported_version(resp, "POST /v1/melt/quote")
         return_dict = resp.json()
         quote_response = PostMeltQuoteResponse.model_validate(return_dict)
+        if quote_response.method is None and method == Method.bolt11.name:
+            quote_response.method = method
         if quote_response.method != method:
             raise Exception("mint returned a quote for a different payment method")
         return quote_response
@@ -573,6 +575,8 @@ class LedgerAPI(SupportsAuth):
         self.raise_on_error_request(resp)
         return_dict = resp.json()
         quote_response = PostMeltQuoteResponse.model_validate(return_dict)
+        if quote_response.method is None and method == Method.bolt11.name:
+            quote_response.method = method
         if quote_response.method != method:
             raise Exception("mint returned a quote for a different payment method")
         return quote_response
@@ -641,6 +645,8 @@ class LedgerAPI(SupportsAuth):
         )
         self.raise_on_error_request(resp)
         quote_response = PostMeltQuoteResponse.model_validate(resp.json())
+        if quote_response.method is None and method == Method.bolt11.name:
+            quote_response.method = method
         if quote_response.method != method:
             raise Exception("mint returned a quote for a different payment method")
         return quote_response

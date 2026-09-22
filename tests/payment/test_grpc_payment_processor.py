@@ -15,11 +15,12 @@ from cashu.core.base import (
     MeltQuoteState,
     MintQuote,
     MintQuoteState,
+    Proof,
     Unit,
 )
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResult, PaymentStatusResult
 from cashu.mint.ledger import Ledger
 from cashu.payment import payment_method_registry
 from cashu.payment.grpc import payment_processor_pb2 as pb
@@ -162,7 +163,7 @@ async def test_grpc_payment_processor_is_cdk_compatible():
                 state=MintQuoteState.unpaid,
             ),
         )
-        assert incoming_status.result == PaymentResult.SETTLED
+        assert incoming_status.result == PaymentStatusResult.SETTLED
         assert incoming_status.amount_paid == Amount(Unit.sat, 21)
 
         partial_status = await processor.get_incoming_payment_status(
@@ -177,7 +178,7 @@ async def test_grpc_payment_processor_is_cdk_compatible():
                 state=MintQuoteState.unpaid,
             ),
         )
-        assert partial_status.result == PaymentResult.PENDING
+        assert partial_status.result == PaymentStatusResult.PENDING
         assert partial_status.amount_paid == Amount(Unit.sat, 21)
 
         outgoing = await processor.quote_outgoing_payment(
@@ -215,7 +216,7 @@ async def test_grpc_payment_processor_is_cdk_compatible():
         assert payment.fee == Amount(Unit.sat, 1)
 
         status = await processor.get_outgoing_payment_status(processor, melt_quote)
-        assert status.result == PaymentResult.SETTLED
+        assert status.result == PaymentStatusResult.SETTLED
         assert status.preimage == "proof"
     finally:
         await processor.stop(processor)
@@ -546,11 +547,21 @@ async def test_onchain_self_payment_uses_processor_amount_and_status(
     assert stub.GetPaymentQuote.call_args.args[0].onchain_options.amount.value == 8
     quote = await ledger.crud.get_melt_quote(quote_id=response.quote, db=ledger.db)
     assert quote is not None
+    proofs = [
+        Proof(
+            amount=amount,
+            C="signature",
+            secret=f"onchain-{amount}",
+            id=ledger.keyset.id,
+        )
+        for amount in (8, 1)
+    ]
+    quote = await ledger.db_write.verify_and_set_melt_quote_pending(
+        quote=quote, proofs=proofs, keysets=ledger.keysets
+    )
     assert (
-        await ledger.melt_mint_settle_internally(quote, [])
-    ).state == MeltQuoteState.unpaid
-    quote.state = MeltQuoteState.pending
-    await ledger.crud.update_melt_quote(quote=quote, db=ledger.db)
+        await ledger.melt_mint_settle_internally(quote, proofs)
+    ).state == MeltQuoteState.pending
     stub.CheckOutgoingPayment.return_value = pb.MakePaymentResponse(
         status=pb.QUOTE_STATE_PAID, total_spent=pb.AmountMessage(value=9, unit="sat")
     )

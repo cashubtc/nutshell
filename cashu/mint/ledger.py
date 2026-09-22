@@ -402,6 +402,7 @@ class Ledger(
         preimage: Optional[str] = None,
         lock_token: Optional[str] = None,
         expected_attempt: Optional[str] = None,
+        method_data: Optional[Dict[str, Any]] = None,
     ) -> MeltQuote:
         """Atomically issue change, spend proofs, and mark a melt quote paid.
 
@@ -456,6 +457,8 @@ class Ledger(
                 melt_quote.fee_paid = fee_paid
             if preimage:
                 melt_quote.payment_preimage = preimage
+            if method_data:
+                melt_quote.method_data.update(method_data)
             if not melt_quote.paid_time:
                 melt_quote.paid_time = int(time.time())
 
@@ -1046,9 +1049,10 @@ class Ledger(
                 raise QuoteAlreadyIssuedError()
             if quote.state != MintQuoteState.paid:
                 raise QuoteNotPaidError()
-            self._verify_mint_quote_invoice_amount(
-                bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
-            )
+            if quote.method == Method.bolt11.name:
+                self._verify_mint_quote_invoice_amount(
+                    bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
+                )
 
         # Check amount balance. Amountless and reusable quotes can require the
         # entire available balance without allowing partial issuance.
@@ -1105,7 +1109,9 @@ class Ledger(
                         f"quote amount {quote_amounts[i]} exceeds quote {quote.quote} paid balance"
                     )
                 if not partial_mint and quote_amounts[i] != (
-                    available if repeated_payments or quote.amount == 0 else quote.amount
+                    available
+                    if repeated_payments or quote.amount == 0
+                    else quote.amount
                 ):
                     raise TransactionError("amount to mint does not match quote amount")
 
@@ -1345,6 +1351,7 @@ class Ledger(
                     preimage=status.preimage,
                     lock_token=lock_token,
                     expected_attempt=melt_quote.attempt,
+                    method_data=status.model_extra,
                 )
             case PaymentStatusResult.FAILED:
                 if melt_quote.payment_uncertain:
@@ -1420,7 +1427,9 @@ class Ledger(
             mint_quote is not None
             and mint_quote.unit == melt_quote.unit
             and mint_quote.method == melt_quote.method
-            and plugin.supports_internal_settlement(self._get_backend(method, unit))
+            and plugin.supports_internal_settlement(
+                self._get_backend(melt_quote.method, Unit[melt_quote.unit])
+            )
         )
 
         if melt_quote.pending:
@@ -1868,6 +1877,7 @@ class Ledger(
                     preimage=payment.preimage,
                     lock_token=melt_quote.melt_lock,
                     expected_attempt=melt_quote.attempt,
+                    method_data=payment.model_extra,
                 )
                 return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
