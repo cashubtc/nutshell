@@ -139,10 +139,10 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
         keyset=ledger.keyset,
         amount=100,
     )
-    await ledger.crud.bump_keyset_balance(
+    assert await ledger.crud.try_debit_keyset_balance(
         db=ledger.db,
         keyset=ledger.keyset,
-        amount=-proof.amount,
+        amount=proof.amount,
     )
 
     for index in range(3):
@@ -1196,10 +1196,10 @@ async def test_internal_melt_concurrently_issued_quote(ledger: Ledger, monkeypat
         quote_id=internal_melt_quote.quote,
         db=ledger.db,
     )
-    await ledger.crud.bump_keyset_balance(
+    assert await ledger.crud.try_debit_keyset_balance(
         db=ledger.db,
         keyset=ledger.keyset,
-        amount=-proof.amount,
+        amount=proof.amount,
     )
 
     original_get_mint_quote = ledger.crud.get_mint_quote

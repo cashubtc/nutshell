@@ -170,7 +170,9 @@ async def test_mint_blind_auth_enforces_maximum_outputs(monkeypatch):
     monkeypatch.setattr(settings, "mint_auth_max_blind_tokens", 2)
     outputs = [BlindedMessage(id="kid", amount=1, B_=f"b{i}") for i in range(3)]
 
-    with pytest.raises(BlindAuthAmountExceededError, match="Too many outputs") as exc_info:
+    with pytest.raises(
+        BlindAuthAmountExceededError, match="Too many outputs"
+    ) as exc_info:
         await ledger.mint_blind_auth(outputs=outputs, user=User(id="alice"))
     assert exc_info.value.code == 31003
 
@@ -221,11 +223,12 @@ async def test_verify_blind_auth_invalidates_on_success_and_unsets_pending():
         async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
             calls["pending"] = proofs[0].secret
 
-        async def _unset_proofs_pending(self, proofs, keysets):
+        async def _unset_proofs_pending(self, proofs, keysets, **kwargs):
             calls["unset"] = proofs[0].secret
 
-        async def invalidate_proofs(self, *, proofs, keysets):
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
             calls["invalidated"] = proofs[0].secret
+            calls["unset"] = proofs[0].secret
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
     cast(Any, ledger).db_write = DbWrite()
@@ -261,10 +264,10 @@ async def test_verify_blind_auth_warns_on_nut10_secret():
         async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
             return None
 
-        async def _unset_proofs_pending(self, proofs, keysets):
+        async def _unset_proofs_pending(self, proofs, keysets, **kwargs):
             return None
 
-        async def invalidate_proofs(self, *, proofs, keysets):
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
             return None
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
@@ -307,10 +310,10 @@ async def test_verify_blind_auth_wraps_inner_failure_and_still_unsets_pending():
         async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
             return None
 
-        async def _unset_proofs_pending(self, proofs, keysets):
+        async def _unset_proofs_pending(self, proofs, keysets, **kwargs):
             calls["unset"] = True
 
-        async def invalidate_proofs(self, *, proofs, keysets):
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
             calls["invalidated"] = True
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
