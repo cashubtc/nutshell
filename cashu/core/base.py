@@ -961,10 +961,10 @@ class MintKeyset:
         fees_paid: int = 0,
         final_expiry: Optional[int] = None,
     ):
-        DEFAULT_SEED = "supersecretprivatekey"
-        if seed == DEFAULT_SEED:
+        PLACEHOLDER_SEEDS = ("supersecretprivatekey", "<openssl rand -hex 32>")
+        if seed in PLACEHOLDER_SEEDS:
             raise Exception(
-                f"Seed is set to default value '{DEFAULT_SEED}'. Please change it."
+                f"Seed is set to placeholder value '{seed}'. Please change it."
             )
 
         self.derivation_path = derivation_path
