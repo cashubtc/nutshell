@@ -206,8 +206,8 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_m029_witness_cleanup():
-    db = Database("mint", "./test_data/mig_witness_cleanup")
+async def test_m029_witness_cleanup(tmp_path):
+    db = Database("mint", str(tmp_path / "mig_witness_cleanup"))
 
     # Ensure schema is at latest so tables exist
     await migrate_databases(db, mint_migrations)

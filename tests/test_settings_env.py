@@ -30,6 +30,11 @@ class SettingsEnvTests(unittest.TestCase):
                 PYTHONPATH=str(Path(__file__).resolve().parents[1]),
                 MINT_INFO_NAME="shell",
             )
+            if env.get("MUTANT_UNDER_TEST") == "stats":
+                # Mutmut cannot collect coverage from this subprocess, whose
+                # temporary cwd also has no mutation configuration. Disable only
+                # stats collection; keep actual mutant IDs for mutation runs.
+                env["MUTANT_UNDER_TEST"] = ""
             # Local file wins, overrides the shell, and expands variables.
             # Home file is the fallback; no file leaves the shell untouched.
             for expected, expected_file in [

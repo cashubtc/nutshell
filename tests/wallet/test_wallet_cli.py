@@ -476,7 +476,7 @@ def test_send(mint, cli_prefix):
     )
     assert result.exception is None
     print("test_send", result.output)
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert token.token[0].proofs[0].dleq is None, "dleq included"
@@ -490,7 +490,7 @@ def test_send_with_dleq(mint, cli_prefix):
     )
     assert result.exception is None
     print("test_send_with_dleq", result.output)
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert token.token[0].proofs[0].dleq is not None, "no dleq included"
@@ -505,7 +505,7 @@ def test_send_legacy(mint, cli_prefix):
     assert result.exception is None
     print("test_send_legacy", result.output)
     # this is the legacy token in the output
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert token_str.startswith("cashuAey"), "output is not as expected"
 
 
@@ -599,7 +599,7 @@ def test_send_with_lock(mint, cli_prefix):
     )
     assert result.exception is None
     print("test_send_with_lock", result.output)
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
@@ -699,7 +699,7 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     )
     assert result.exception is None
     print("test_send_with_lock_and_refund", result.output)
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
@@ -728,7 +728,7 @@ def test_send_with_lock_and_timelock(mint, cli_prefix):
     after = int(time.time())
     assert result.exception is None
     print("test_send_with_lock_and_timelock", result.output)
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     secret = P2PKSecret.from_secret(
@@ -761,7 +761,7 @@ def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix)
     after = int(time.time())
     assert result.exception is None
     print("test_send_with_lock_uses_locktime_delta_seconds_by_default", result.output)
-    token_str = result.output.split("\n")[0]
+    token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     secret = P2PKSecret.from_secret(
@@ -1146,7 +1146,7 @@ def test_decode_nut26_simple(nut26_cli_prefix):
 
     result = runner.invoke(cli, [*nut26_cli_prefix, "decode", creqb])
     assert result.exception is None, f"Exception: {result.exception}"
-    out = _extract_json(result.output)
+    out = _extract_json(result.stdout)
     assert out["a"] == 42
     assert out["u"] == "sat"
     assert out["d"] == "NUT-26 test"
@@ -1161,7 +1161,7 @@ def test_decode_nut26_spec_vector(nut26_cli_prefix):
     )
     result = runner.invoke(cli, [*nut26_cli_prefix, "decode", spec_creqb])
     assert result.exception is None, f"Exception: {result.exception}"
-    out = _extract_json(result.output)
+    out = _extract_json(result.stdout)
     assert out["a"] == 1000
     assert out["u"] == "sat"
 
@@ -1174,7 +1174,7 @@ def test_decode_nut26_lowercase(nut26_cli_prefix):
 
     result = runner.invoke(cli, [*nut26_cli_prefix, "decode", creqb])
     assert result.exception is None, f"Exception: {result.exception}"
-    out = _extract_json(result.output)
+    out = _extract_json(result.stdout)
     assert out["a"] == 100
     assert out["d"] == "lowercase test"
 

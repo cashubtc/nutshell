@@ -45,12 +45,21 @@ Run the mutation-testing pilot with:
 
 ```bash
 PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
-  MUTATION_TESTING=true TOR=false poetry run mutmut run
+  MUTATION_TESTING=true TOR=false poetry run python scripts/run_mutation.py
 ```
 
 The profiles cover each complete production subsystem: core, mint, wallet,
 lightning, and Tor. A profile target limits mutant execution to its subtree,
 while Mutmut uses the non-fuzz pytest suite to discover relevant tests.
+
+The runner retries baseline failures up to three times, excluding failed tests
+for that invocation and rebuilding mutation coverage and results. Exclusions
+and failure details are saved in `mutation-baseline.json`; results with exclusions
+are explicitly marked as partial coverage. Every new invocation retries all
+tests. Pass `--baseline-retries 0` to stop on the first baseline failure.
+Collection errors, fixture errors, unusable baselines, and failures after the
+baseline still stop the run. Test failures caused by an actual mutant mark that
+mutant as killed and do not stop mutation testing.
 
 For a function-specific rerun within the configured scope, pass a Mutmut
 wildcard:
@@ -58,7 +67,7 @@ wildcard:
 ```bash
 PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
   MUTATION_TESTING=true TOR=false \
-  poetry run mutmut run 'cashu.core.split*'
+  poetry run python scripts/run_mutation.py 'cashu.core.split*'
 ```
 
 Mutmut stores incremental results in the ignored `mutants/` directory. View
@@ -76,7 +85,7 @@ during the initial rollout: improve the relevant tests or document why a mutant
 is equivalent. CI uploads each profile's report and log as artifacts and retains
 its incremental mutation state in a separate cache. On Saturday, CI collects
 the five profile reports and opens a labeled weekly GitHub issue when actionable
-mutants remain or a profile report is unavailable.
+mutants remain, baseline tests were excluded, or a profile report is unavailable.
 Jobs use GitHub's six-hour hosted-runner limit. Mutation execution receives 340
 minutes, leaving time to upload partial results if a profile does not finish.
 Do not add `# pragma: no mutate` or broaden `do_not_mutate` without review.

@@ -5,6 +5,7 @@ import shutil
 import threading
 import time
 from contextlib import contextmanager
+from copy import deepcopy
 from pathlib import Path
 
 import httpx
@@ -71,6 +72,14 @@ settings.mint_rpc_server_mutual_tls = False
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(monkeypatch):
+    """Restore settings after each test, including RPC updates to mutable lists."""
+    for name in type(settings).model_fields:
+        monkeypatch.setattr(settings, name, deepcopy(getattr(settings, name)))
+
 
 # from cashu.mint.startup import lightning_backend  # noqa
 
