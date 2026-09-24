@@ -17,6 +17,7 @@ from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from ..mint import migrations as mint_migrations
 from ..mint.auth import migrations as auth_migrations
+from ..mint.auth.crud import AuthLedgerCrudSqlite
 from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
@@ -90,7 +91,7 @@ auth_ledger = AuthLedger(
     seed="auth seed here",
     amounts=[1],
     derivation_path="m/0'/999'/0'",
-    crud=LedgerCrudSqlite(),
+    crud=AuthLedgerCrudSqlite(),
 )
 
 
