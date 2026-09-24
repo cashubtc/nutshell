@@ -102,6 +102,18 @@ FAKEWALLET_DELAY_OUTGOING_PAYMENT=3
 FAKEWALLET_DELAY_INCOMING_PAYMENT=3
 ```
 
+### Wallet compatibility
+
+With Docker running and Buildx available, test the current wallet against prebuilt mint images:
+
+```bash
+make test-wallet-compatibility
+```
+
+The supported window is the checkout's release line and the latest stable patch
+of the previous two lines. The [shared resolver](tests/compatibility.py) selects
+historical images afresh for each run.
+
 ### Lightning regtest
 
 There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest-enviroment) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.

@@ -3,10 +3,13 @@ from types import SimpleNamespace
 from typing import List, Union
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 import pytest_asyncio
+from coincurve import PublicKeyXOnly
 
 from cashu.core.base import (
+    BlindedMessage,
     MeltQuote,
     MeltQuoteState,
     MintKeyset,
@@ -16,8 +19,10 @@ from cashu.core.base import (
 )
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
+from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.wallet.crud import (
+    bump_secret_derivation,
     get_bolt11_melt_quote,
     get_bolt11_mint_quote,
     get_keysets,
@@ -193,6 +198,125 @@ async def test_mint(wallet1: Wallet):
     assert len(proofs_minted) == len(expected_proof_amounts)
     assert all([p.amount in expected_proof_amounts for p in proofs_minted])
     assert all([p.mint_id == mint_quote_2.quote for p in proofs_minted])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy_required", [False, True])
+async def test_mint_signature_fallback(wallet1: Wallet, monkeypatch, legacy_required):
+    quote = await wallet1.request_mint(64)
+    await pay_if_regtest(quote.request)
+    assert quote.pubkey
+    counter_before = await bump_secret_derivation(
+        wallet1.db, wallet1.keyset_id, skip=True
+    )
+    requests = []
+    original_request = wallet1._request
+
+    async def request(method, path, **kwargs):
+        assert method == "POST" and path == "mint/bolt11"
+        requests.append(copy.deepcopy(kwargs["json"]))
+        if legacy_required and len(requests) == 1:
+            return httpx.Response(
+                400,
+                json={"detail": "Signature for mint request invalid", "code": 20008},
+            )
+        return await original_request(method, path, **kwargs)
+
+    monkeypatch.setattr(wallet1, "_request", request)
+    proofs = await wallet1.mint(64, quote_id=quote.quote)
+
+    assert len(requests) == (2 if legacy_required else 1)
+    public_key = PublicKeyXOnly(bytes.fromhex(quote.pubkey)[1:])
+    outputs = [BlindedMessage.model_validate(o) for o in requests[0]["outputs"]]
+    modern_hash = nut20.construct_message(quote.quote, outputs)
+    legacy_hash = nut20.construct_message_legacy(quote.quote, outputs)
+    assert public_key.verify(bytes.fromhex(requests[0]["signature"]), modern_hash)
+    if legacy_required:
+        assert requests[1]["quote"] == requests[0]["quote"] == quote.quote
+        assert requests[1]["outputs"] == requests[0]["outputs"]
+        signature = bytes.fromhex(requests[1]["signature"])
+        assert public_key.verify(signature, legacy_hash)
+        assert not public_key.verify(signature, modern_hash)
+
+    assert wallet1.balance == 64
+    stored = await get_proofs(db=wallet1.db, mint_id=quote.quote)
+    assert len(stored) == len(proofs)
+    assert sum_proofs(stored) == 64
+    assert await bump_secret_derivation(
+        wallet1.db, wallet1.keyset_id, skip=True
+    ) == counter_before + len(proofs)
+    stored_quote = await get_bolt11_mint_quote(db=wallet1.db, quote=quote.quote)
+    assert stored_quote and stored_quote.state == MintQuoteState.issued
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "errors, has_key",
+    [
+        ((20008, 20008), True),
+        ((20008,), False),
+        ((20003,), True),
+        ((20001,), True),
+        (("20008",), True),
+        ((None,), True),
+        (("http",), True),
+        (("timeout",), True),
+        pytest.param((20008, 20003), True, id="signature-then-mint-error"),
+        pytest.param((20008, "timeout"), True, id="signature-then-timeout"),
+    ],
+)
+async def test_mint_signature_retry_failure(
+    wallet1: Wallet, monkeypatch, errors, has_key
+):
+    quote = await wallet1.request_mint(64)
+    if not has_key:
+        monkeypatch.setattr(
+            "cashu.wallet.wallet.get_bolt11_mint_quote",
+            AsyncMock(return_value=quote.model_copy(update={"privkey": None})),
+        )
+    counter_before = await bump_secret_derivation(
+        wallet1.db, wallet1.keyset_id, skip=True
+    )
+    attempts = 0
+
+    async def request(method, path, **kwargs):
+        nonlocal attempts
+        assert method == "POST" and path == "mint/bolt11"
+        attempts += 1
+        error = errors[attempts - 1]
+        http_request = httpx.Request(method, wallet1.url + "/v1/" + path)
+        if error == "timeout":
+            raise httpx.ReadTimeout("response lost", request=http_request)
+        if error == "http":
+            return httpx.Response(500, text="server error", request=http_request)
+        body = {"detail": "Signature for mint request invalid (Code: 20008)"}
+        if error is not None:
+            body["code"] = error
+        return httpx.Response(400, json=body, request=http_request)
+
+    monkeypatch.setattr(wallet1, "_request", request)
+    final_error = errors[-1]
+    expected_error = (
+        httpx.ReadTimeout
+        if final_error == "timeout"
+        else httpx.HTTPStatusError
+        if final_error == "http"
+        else CashuError
+    )
+    with pytest.raises(expected_error) as exc_info:
+        await wallet1.mint(64, quote_id=quote.quote)
+
+    if isinstance(exc_info.value, CashuError):
+        assert exc_info.value.code == (final_error if final_error is not None else 0)
+    assert attempts == len(errors)
+    assert wallet1.balance == 0
+    assert await get_proofs(db=wallet1.db, mint_id=quote.quote) == []
+    assert (
+        await bump_secret_derivation(wallet1.db, wallet1.keyset_id, skip=True)
+        == counter_before
+    )
+    stored_quote = await get_bolt11_mint_quote(db=wallet1.db, quote=quote.quote)
+    assert stored_quote and stored_quote.state == quote.state
 
 
 @pytest.mark.asyncio

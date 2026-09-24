@@ -50,6 +50,17 @@ def construct_message_legacy(quote_id: str, outputs: List[BlindedMessage]) -> by
     return msgbytes
 
 
+def sign_mint_quote_legacy(
+    quote_id: str,
+    outputs: List[BlindedMessage],
+    private_key: str,
+) -> str:
+    privkey = PrivateKey(bytes.fromhex(private_key))
+    msgbytes = construct_message_legacy(quote_id, outputs)
+    sig = privkey.sign_schnorr(msgbytes)
+    return sig.hex()
+
+
 def verify_mint_quote(
     quote_id: str,
     outputs: List[BlindedMessage],

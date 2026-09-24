@@ -42,6 +42,14 @@ test-mint:
 	DEBUG=true \
 	poetry run pytest tests/mint --cov-report xml --cov cashu
 
+.PHONY: resolve-compatibility-targets test-wallet-compatibility
+resolve-compatibility-targets:
+	poetry run python -m tests.compatibility --current-version "$(VERSION)"
+
+test-wallet-compatibility: resolve-compatibility-targets
+	CASHU_TEST_COMPATIBILITY=true \
+	poetry run pytest tests/wallet/test_wallet_mint_compatibility.py -v
+
 .PHONY: test-spark-regtest test-spark-backend-regtest test-spark-mint test-spark-wallet
 test-spark-regtest:
 	$(MAKE) test-spark-backend-regtest

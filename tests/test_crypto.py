@@ -398,6 +398,8 @@ def test_dleq_carol_on_proof():
 def test_nut20_test_vector():
     from hashlib import sha256
 
+    from coincurve import PublicKeyXOnly
+
     from cashu.core.base import BlindedMessage
     from cashu.core.nuts import nut20
 
@@ -435,6 +437,14 @@ def test_nut20_test_vector():
 
     # Verify signature verification on test vector's expected signature
     assert nut20.verify_mint_quote(quote_id, outputs, pubkey, expected_sig) is True
+
+    legacy_hash = bytes.fromhex(
+        "8191ccee77269f05dfb42a2fd713b75a270f4c599e6952ce02b6f49062cf7874"
+    )
+    legacy_sig = nut20.sign_mint_quote_legacy(quote_id, outputs, privkey_hex)
+    public_key = PublicKeyXOnly(bytes.fromhex(pubkey)[1:])
+    assert public_key.verify(bytes.fromhex(legacy_sig), legacy_hash)
+    assert not public_key.verify(bytes.fromhex(legacy_sig), msg_hash)
 
 
 def test_nut29_test_vector():
