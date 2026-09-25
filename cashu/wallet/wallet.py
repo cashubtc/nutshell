@@ -33,7 +33,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.nutroot import (
     is_nutroot_point_secret,
     keyset_id_transcript_bytes,
-    secret_transcript_bytes,
+    proof_transcript_y,
 )
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.secp import PublicKey as SecpPublicKey
@@ -42,7 +42,7 @@ from ..core.crypto.transcript import (
     TranscriptBlindedOutput,
     TranscriptProofInput,
     TranscriptQuote,
-    transaction_digest,
+    transaction_inputs,
 )
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
@@ -703,7 +703,7 @@ class Wallet(
         signature: str | None = None
         if quote.privkey:
             if is_bls_keyset(outputs[0].id):
-                # V3: sign the transaction digest (quote input + outputs).
+                # V3: sign the quote input digest (quote input + outputs).
                 signature = nut20.sign_mint_quote_v3(
                     quote_id, quote.amount, outputs, quote.privkey
                 )
@@ -757,47 +757,60 @@ class Wallet(
         """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
 
         Builds the transcript from the request's own inputs and outputs and signs
-        its digest with each input's internal key, re-derived from the proof's
-        stored derivation path. Inputs without a re-derivable key are left
-        unsigned. Legacy inputs are included in mixed-transaction transcripts
-        but do not receive a nutroot witness.
+        each input's own input digest with its internal key, re-derived from the
+        proof's stored derivation path (NUT-10). Inputs without a re-derivable
+        key are left unsigned. Legacy inputs are included in mixed-transaction
+        transcripts but do not receive a nutroot witness.
         """
         if not proofs or not any(
             is_nutroot_point_secret(p.secret, p.id) for p in proofs
         ):
             return proofs
-        digest = transaction_digest(
-            TransactionShape(
-                proof_inputs=[
-                    TranscriptProofInput(
-                        amount=p.amount,
-                        keyset_id=keyset_id_transcript_bytes(p.id),
-                        secret=secret_transcript_bytes(p.secret, p.id),
-                        C=bytes.fromhex(p.C),
-                    )
-                    for p in proofs
-                ],
-                blinded_outputs=[
-                    TranscriptBlindedOutput(
-                        amount=o.amount,
-                        keyset_id=keyset_id_transcript_bytes(o.id),
-                        B_=bytes.fromhex(o.B_),
-                    )
-                    for o in outputs
-                ],
-                melt_quote_outputs=(
-                    [TranscriptQuote(amount=melt_quote_amount, quote_id=melt_quote_id)]
-                    if melt_quote_id is not None and melt_quote_amount is not None
-                    else None
-                ),
+        # The transcript names each input by Y (NUT-10); hashed once per proof.
+        ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
+        try:
+            _, proof_contexts, _ = transaction_inputs(
+                TransactionShape(
+                    proof_inputs=[
+                        TranscriptProofInput(
+                            amount=p.amount,
+                            keyset_id=keyset_id_transcript_bytes(p.id),
+                            Y=ys[p.secret],
+                            C=bytes.fromhex(p.C),
+                        )
+                        for p in proofs
+                    ],
+                    blinded_outputs=[
+                        TranscriptBlindedOutput(
+                            amount=o.amount,
+                            keyset_id=keyset_id_transcript_bytes(o.id),
+                            B_=bytes.fromhex(o.B_),
+                        )
+                        for o in outputs
+                    ],
+                    melt_quote_outputs=(
+                        [
+                            TranscriptQuote(
+                                amount=melt_quote_amount, quote_id=melt_quote_id
+                            )
+                        ]
+                        if melt_quote_id is not None and melt_quote_amount is not None
+                        else None
+                    ),
+                )
             )
-        )
+        except ValueError:
+            # A structurally invalid transaction (eg a repeated input) has no
+            # input digests to sign; send it unsigned and let the mint name
+            # the actual problem.
+            return proofs
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue
             secret_key = self._resolve_v3_secret_key(proof)
             if secret_key is None:
                 continue
+            digest = proof_contexts[ys[proof.secret]].digest
             signature = secret_key.sign_schnorr(
                 digest,
                 None,  # type: ignore
@@ -1033,15 +1046,15 @@ class Wallet(
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
         proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
 
-        # Attach nutroot transaction witnesses (v3 keysets); the quote amount
-        # comes from the locally stored melt quote.
+        # Attach nutroot transaction witnesses (v3 keysets); the melt output's amount,
+        # what the quote may take (NUT-10), comes from the locally stored melt quote.
         melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote_id)
         if melt_quote_local is not None:
             proofs = self._attach_nutroot_witnesses(
                 proofs,
                 change_outputs,
                 melt_quote_id=quote_id,
-                melt_quote_amount=melt_quote_local.amount,
+                melt_quote_amount=melt_quote_local.amount + melt_quote_local.fee_reserve,
             )
         try:
             melt_quote_resp = await super().melt(

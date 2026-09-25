@@ -15,7 +15,7 @@ from ..crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
     TranscriptQuote,
-    transaction_digest,
+    transaction_inputs,
 )
 
 
@@ -93,18 +93,19 @@ def verify_mint_quote(
 def construct_transaction_message(
     quote_id: str, amount: int, outputs: List[BlindedMessage]
 ) -> bytes:
-    """V3 (nutroot secrets): the quote is a transaction input signing the
-    transaction digest (NUT-10); NUT-20's separate message retires."""
-    return construct_batch_transaction_message([(quote_id, amount)], outputs)
+    """V3 (nutroot secrets): the quote is a transaction input signing its own
+    input digest (NUT-10); NUT-20's separate message retires."""
+    return construct_batch_transaction_message([(quote_id, amount)], outputs, quote_id)
 
 
 def construct_batch_transaction_message(
-    quotes: List[tuple], outputs: List[BlindedMessage]
+    quotes: List[tuple], outputs: List[BlindedMessage], for_quote_id: str
 ) -> bytes:
-    """The one transaction digest for a (batch) mint: every quote input
-    (quote_id, amount) in request order plus all blinded outputs. Every
-    quote's witness signs this same message (NUT-10)."""
-    return transaction_digest(
+    """The input digest quote `for_quote_id` signs in a (batch) mint: the
+    shared transcript covers every quote input (quote_id, amount) in request
+    order plus all blinded outputs, and each quote's witness signs its own
+    input digest over it (NUT-10)."""
+    _, _, quote_contexts = transaction_inputs(
         TransactionShape(
             mint_quote_inputs=[
                 TranscriptQuote(amount=amount, quote_id=quote_id)
@@ -120,6 +121,9 @@ def construct_batch_transaction_message(
             ],
         )
     )
+    if for_quote_id not in quote_contexts:
+        raise ValueError("quote is not an input of this transaction")
+    return quote_contexts[for_quote_id].digest
 
 
 def sign_mint_quote_v3(
@@ -141,10 +145,12 @@ def verify_mint_quote_v3(
 ) -> bool:
     """Verify a v3 locked-quote witness: key path (hex sig or {"signatures"})
     or script path ({"leaf", "control", ...}) against the quote lock point.
-    For batch mints, pass every quote as `batch_quotes`; the digest covers
-    them all and `quote_id`/`amount` are ignored."""
+    For batch mints, pass every quote as `batch_quotes`; the shared transcript
+    covers them all and `quote_id` selects this quote's input digest."""
     digest = construct_batch_transaction_message(
-        batch_quotes if batch_quotes is not None else [(quote_id, amount)], outputs
+        batch_quotes if batch_quotes is not None else [(quote_id, amount)],
+        outputs,
+        quote_id,
     )
     witness: NutrootWitness | None = None
     if signature.strip().startswith("{"):
@@ -169,10 +175,14 @@ def verify_mint_quote_v3(
 
 
 def sign_mint_quote_batch_v3(
-    quotes: List[tuple], outputs: List[BlindedMessage], private_key: str
+    quotes: List[tuple],
+    outputs: List[BlindedMessage],
+    private_key: str,
+    for_quote_id: str,
 ) -> str:
-    """Sign the batch transaction digest (all quote inputs + outputs)."""
+    """Sign one quote's input digest over the batch transcript (all quote
+    inputs + outputs)."""
     privkey = PrivateKey(bytes.fromhex(private_key))
     return privkey.sign_schnorr(
-        construct_batch_transaction_message(quotes, outputs)
+        construct_batch_transaction_message(quotes, outputs, for_quote_id)
     ).hex()

@@ -7,6 +7,8 @@ test/vectors/nutroot-v3.json; update both in the same commit set).
 import hashlib
 import json
 import os
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from coincurve import PublicKeyXOnly
@@ -14,6 +16,7 @@ from coincurve import PublicKeyXOnly
 from cashu.core.crypto.nutroot import (
     NUTROOT_BRANCH_TAG,
     NUTROOT_LEAF_TAG,
+    NUTROOT_MAX_LEAF_BYTES,
     NUTROOT_TWEAK_TAG,
     NutrootLeaf,
     NutrootWitness,
@@ -40,8 +43,8 @@ SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 with open(os.path.join(os.path.dirname(__file__), "nutroot_v3_vectors.json")) as f:
     VECTORS = json.load(f)
 
-V61 = VECTORS["example_6_1"]
-V62 = VECTORS["example_6_2"]
+V_REFUND = VECTORS["receiver_keyed_refund"]
+V_COVENANT = VECTORS["two_leaf_covenant"]
 
 
 def nutroot_witness(data: dict) -> NutrootWitness:
@@ -61,12 +64,12 @@ def test_vector_tags_match_module_tags():
 
 def test_tlv_roundtrip_and_canonical_rules():
     stream = tlv_record(0x02, b"\x01") + tlv_record(
-        0x04, bytes.fromhex(V61["carol_pub"])
+        0x04, bytes.fromhex(V_REFUND["carol_pub"])
     )
     records = read_tlv_records(stream, unique_ascending=True)
     assert len(records) == 2
     assert records[0] == (0x02, b"\x01")
-    assert records[1][1].hex() == V61["carol_pub"]
+    assert records[1][1].hex() == V_REFUND["carol_pub"]
 
     descending = tlv_record(0x04, b"\x01") + tlv_record(0x02, b"\x01")
     with pytest.raises(ValueError, match="ascend"):
@@ -83,7 +86,7 @@ def test_tlv_roundtrip_and_canonical_rules():
 
 
 def test_minimal_be_integers():
-    assert read_minimal_be(bytes.fromhex("68a3be80")) == V61["refund_time"]
+    assert read_minimal_be(bytes.fromhex("68a3be80")) == V_REFUND["refund_time"]
     with pytest.raises(ValueError, match="minimal"):
         read_minimal_be(b"\x00\x01")
 
@@ -93,17 +96,17 @@ def test_leaf_serialization_6_1():
         NutrootLeaf(
             type="after",
             n=1,
-            keys=[PublicKey(bytes.fromhex(V61["alice_refund_pub"]))],
-            time=V61["refund_time"],
+            keys=[PublicKey(bytes.fromhex(V_REFUND["alice_refund_pub"]))],
+            time=V_REFUND["refund_time"],
         )
     )
-    assert leaf.hex() == V61["leaf_after"]
+    assert leaf.hex() == V_REFUND["leaf_after"]
     parsed = parse_nutroot_leaf(leaf)
     assert parsed.type == "after"
     assert parsed.n == 1
-    assert [key.format().hex() for key in parsed.keys] == [V61["alice_refund_pub"]]
-    assert parsed.time == V61["refund_time"]
-    assert nutroot_leaf_hash(leaf).hex() == V61["merkle_root"]
+    assert [key.format().hex() for key in parsed.keys] == [V_REFUND["alice_refund_pub"]]
+    assert parsed.time == V_REFUND["refund_time"]
+    assert nutroot_leaf_hash(leaf).hex() == V_REFUND["merkle_root"]
 
 
 def test_leaf_serialization_6_2():
@@ -111,30 +114,30 @@ def test_leaf_serialization_6_2():
         NutrootLeaf(
             type="after",
             n=1,
-            keys=[PublicKey(bytes.fromhex(V62["kid_pub"]))],
-            time=V62["vest_time"],
+            keys=[PublicKey(bytes.fromhex(V_COVENANT["kid_pub"]))],
+            time=V_COVENANT["vest_time"],
         )
     )
-    assert after.hex() == V62["leaf_after"]
+    assert after.hex() == V_COVENANT["leaf_after"]
     # The 6.2 melt_to covenant is a spec extensibility example, not an
     # implemented leaf type; its bytes still pin the tree and tweak math,
     # and parsing it must fail closed as an unknown type.
-    melt_to = bytes.fromhex(V62["leaf_melt_to"])
-    assert nutroot_leaf_hash(melt_to).hex() == V62["leaf_hash_melt_to"]
-    assert nutroot_leaf_hash(after).hex() == V62["leaf_hash_after"]
+    melt_to = bytes.fromhex(V_COVENANT["leaf_melt_to"])
+    assert nutroot_leaf_hash(melt_to).hex() == V_COVENANT["leaf_hash_melt_to"]
+    assert nutroot_leaf_hash(after).hex() == V_COVENANT["leaf_hash_after"]
     with pytest.raises(ValueError, match="type"):
         parse_nutroot_leaf(melt_to)
 
 
 def test_leaf_parsing_fails_closed():
-    good = bytes.fromhex(V61["leaf_after"])
+    good = bytes.fromhex(V_REFUND["leaf_after"])
     with pytest.raises(ValueError, match="version"):
         parse_nutroot_leaf(b"\x01" + good[1:])
     with pytest.raises(ValueError, match="type"):
         parse_nutroot_leaf(good[:1] + b"\x7f" + good[2:])
 
     base_fields = tlv_record(0x02, b"\x01") + tlv_record(
-        0x04, bytes.fromhex(V61["carol_pub"])
+        0x04, bytes.fromhex(V_REFUND["carol_pub"])
     )
     unknown_even = b"\x00\x01" + base_fields + tlv_record(0x0C, b"\x01")
     with pytest.raises(ValueError, match="field"):
@@ -148,15 +151,17 @@ def test_leaf_parsing_fails_closed():
     at_limit = (
         b"\x00\x01"
         + base_fields
-        + tlv_record(0x0D, bytes(1024 - 1 - len(base_fields) - 3))
+        + tlv_record(0x0D, bytes(NUTROOT_MAX_LEAF_BYTES - 1 - len(base_fields) - 3))
     )
-    assert len(at_limit) == 1025
+    assert len(at_limit) == NUTROOT_MAX_LEAF_BYTES + 1
     # At the cap the length check passes and parsing reaches the padding
     # field, which rejects as unknown; one byte more and the length fires.
     with pytest.raises(ValueError, match="Unknown leaf field"):
         parse_nutroot_leaf(at_limit)
     over_limit = (
-        b"\x00\x01" + base_fields + tlv_record(0x0D, bytes(1024 - len(base_fields) - 3))
+        b"\x00\x01"
+        + base_fields
+        + tlv_record(0x0D, bytes(NUTROOT_MAX_LEAF_BYTES - len(base_fields) - 3))
     )
     with pytest.raises(ValueError, match="body exceeds"):
         parse_nutroot_leaf(over_limit)
@@ -182,7 +187,7 @@ def test_leaf_parsing_fails_closed():
             NutrootLeaf(
                 type="threshold",
                 n=1,
-                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
+                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
                 time=1,
             )
         )
@@ -199,7 +204,7 @@ def test_leaf_parsing_fails_closed():
     impossible_threshold = (
         b"\x00\x01"
         + tlv_record(0x02, b"\x02")
-        + tlv_record(0x04, bytes.fromhex(V61["carol_pub"]))
+        + tlv_record(0x04, bytes.fromhex(V_REFUND["carol_pub"]))
     )
     with pytest.raises(ValueError, match="key count"):
         parse_nutroot_leaf(impossible_threshold)
@@ -208,24 +213,24 @@ def test_leaf_parsing_fails_closed():
             NutrootLeaf(
                 type="threshold",
                 n=2,
-                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
+                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
             )
         )
 
 
 def test_merkle_tree_6_2():
-    h_melt = bytes.fromhex(V62["leaf_hash_melt_to"])
-    h_after = bytes.fromhex(V62["leaf_hash_after"])
-    assert nutroot_branch_hash(h_melt, h_after).hex() == V62["merkle_root"]
-    assert nutroot_branch_hash(h_after, h_melt).hex() == V62["merkle_root"]
-    assert nutroot_merkle_root([h_melt, h_after]).hex() == V62["merkle_root"]
+    h_melt = bytes.fromhex(V_COVENANT["leaf_hash_melt_to"])
+    h_after = bytes.fromhex(V_COVENANT["leaf_hash_after"])
+    assert nutroot_branch_hash(h_melt, h_after).hex() == V_COVENANT["merkle_root"]
+    assert nutroot_branch_hash(h_after, h_melt).hex() == V_COVENANT["merkle_root"]
+    assert nutroot_merkle_root([h_melt, h_after]).hex() == V_COVENANT["merkle_root"]
 
     path_melt = nutroot_merkle_path([h_melt, h_after], 0)
-    assert [p.hex() for p in path_melt] == V62["melt_witness"]["control"]["path"]
-    assert nutroot_root_from_path(h_melt, path_melt).hex() == V62["merkle_root"]
+    assert [p.hex() for p in path_melt] == V_COVENANT["melt_witness"]["control"]["path"]
+    assert nutroot_root_from_path(h_melt, path_melt).hex() == V_COVENANT["merkle_root"]
     path_after = nutroot_merkle_path([h_melt, h_after], 1)
-    assert [p.hex() for p in path_after] == V62["after_witness_path"]
-    assert nutroot_root_from_path(h_after, path_after).hex() == V62["merkle_root"]
+    assert [p.hex() for p in path_after] == V_COVENANT["after_witness_path"]
+    assert nutroot_root_from_path(h_after, path_after).hex() == V_COVENANT["merkle_root"]
 
 
 def test_merkle_tree_folding():
@@ -269,88 +274,88 @@ def test_merkle_root_is_order_independent():
 
 
 def test_tweak_math_6_1():
-    K = PrivateKey(bytes.fromhex(V61["carol_priv"])).public_key.add(
-        bytes.fromhex(V61["p2bk_r"])
+    K = PrivateKey(bytes.fromhex(V_REFUND["carol_priv"])).public_key.add(
+        bytes.fromhex(V_REFUND["p2bk_r"])
     )
-    root = bytes.fromhex(V61["merkle_root"])
-    assert format(nutroot_tweak(K, root), "064x") == V61["tweak"]
-    assert nutroot_tweak_pubkey(K, root).format().hex() == V61["secret"]
+    root = bytes.fromhex(V_REFUND["merkle_root"])
+    assert format(nutroot_tweak(K, root), "064x") == V_REFUND["tweak"]
+    assert nutroot_tweak_pubkey(K, root).format().hex() == V_REFUND["secret"]
 
     internal_seckey = (
-        int(V61["carol_priv"], 16) + int(V61["p2bk_r"], 16)
+        int(V_REFUND["carol_priv"], 16) + int(V_REFUND["p2bk_r"], 16)
     ) % SECP256K1_N
     p_prime = nutroot_tweak_seckey(
         PrivateKey(internal_seckey.to_bytes(32, "big")), root
     )
-    assert p_prime.secret.hex() == V61["keypath_priv"]
+    assert p_prime.secret.hex() == V_REFUND["keypath_priv"]
     pub = p_prime.public_key
-    assert pub and pub.format().hex() == V61["secret"]
+    assert pub and pub.format().hex() == V_REFUND["secret"]
 
 
 def test_tweak_math_6_2():
-    K = PrivateKey(bytes.fromhex(V62["parent_priv"])).public_key
-    root = bytes.fromhex(V62["merkle_root"])
-    assert format(nutroot_tweak(K, root), "064x") == V62["tweak"]
-    assert nutroot_tweak_pubkey(K, root).format().hex() == V62["secret"]
-    p_prime = nutroot_tweak_seckey(PrivateKey(bytes.fromhex(V62["parent_priv"])), root)
+    K = PrivateKey(bytes.fromhex(V_COVENANT["parent_priv"])).public_key
+    root = bytes.fromhex(V_COVENANT["merkle_root"])
+    assert format(nutroot_tweak(K, root), "064x") == V_COVENANT["tweak"]
+    assert nutroot_tweak_pubkey(K, root).format().hex() == V_COVENANT["secret"]
+    p_prime = nutroot_tweak_seckey(PrivateKey(bytes.fromhex(V_COVENANT["parent_priv"])), root)
     pub = p_prime.public_key
-    assert pub and pub.format().hex() == V62["secret"]
+    assert pub and pub.format().hex() == V_COVENANT["secret"]
 
 
 def test_vector_signatures_verify():
     assert verify_schnorr_digest(
-        bytes.fromhex(V61["keypath_signature"]),
-        bytes.fromhex(V61["transcript_digest"]),
-        bytes.fromhex(V61["secret"]),
+        bytes.fromhex(V_REFUND["keypath_signature"]),
+        bytes.fromhex(V_REFUND["illustrative_input_digest"]),
+        bytes.fromhex(V_REFUND["secret"]),
     )
     assert verify_schnorr_digest(
-        bytes.fromhex(V61["scriptpath_witness"]["signatures"][0]),
-        bytes.fromhex(V61["transcript_digest"]),
-        bytes.fromhex(V61["alice_refund_pub"]),
+        bytes.fromhex(V_REFUND["scriptpath_witness"]["signatures"][0]),
+        bytes.fromhex(V_REFUND["illustrative_input_digest"]),
+        bytes.fromhex(V_REFUND["alice_refund_pub"]),
     )
     assert verify_schnorr_digest(
-        bytes.fromhex(V62["melt_witness"]["signatures"][0]),
-        bytes.fromhex(V62["transcript_digest"]),
-        bytes.fromhex(V62["kid_pub"]),
+        bytes.fromhex(V_COVENANT["melt_witness"]["signatures"][0]),
+        bytes.fromhex(V_COVENANT["illustrative_input_digest"]),
+        bytes.fromhex(V_COVENANT["kid_pub"]),
     )
 
 
 def test_keypath_signature_reproduces():
-    p_prime = bytes.fromhex(V61["keypath_priv"])
+    p_prime = bytes.fromhex(V_REFUND["keypath_priv"])
     sig = PrivateKey(p_prime).sign_schnorr(
-        bytes.fromhex(V61["transcript_digest"]), b"\x00" * 32
+        bytes.fromhex(V_REFUND["illustrative_input_digest"]), b"\x00" * 32
     )
-    assert sig.hex() == V61["keypath_signature"]
+    assert sig.hex() == V_REFUND["keypath_signature"]
 
 
 def test_script_path_commitment():
     assert verify_nutroot_commitment(
-        PrivateKey(bytes.fromhex(V61["keypath_priv"])).public_key,
-        PrivateKey(bytes.fromhex(V61["carol_priv"])).public_key.add(
-            bytes.fromhex(V61["p2bk_r"])
+        PrivateKey(bytes.fromhex(V_REFUND["keypath_priv"])).public_key,
+        PrivateKey(bytes.fromhex(V_REFUND["carol_priv"])).public_key.add(
+            bytes.fromhex(V_REFUND["p2bk_r"])
         ),
-        bytes.fromhex(V61["scriptpath_witness"]["leaf"]),
-        [bytes.fromhex(p) for p in V61["scriptpath_witness"]["control"]["path"]],
+        bytes.fromhex(V_REFUND["scriptpath_witness"]["leaf"]),
+        [bytes.fromhex(p) for p in V_REFUND["scriptpath_witness"]["control"]["path"]],
     )
     assert verify_nutroot_commitment(
-        PublicKey(bytes.fromhex(V62["secret"])),
-        PublicKey(bytes.fromhex(V62["melt_witness"]["control"]["K"])),
-        bytes.fromhex(V62["melt_witness"]["leaf"]),
-        [bytes.fromhex(p) for p in V62["melt_witness"]["control"]["path"]],
+        PublicKey(bytes.fromhex(V_COVENANT["secret"])),
+        PublicKey(bytes.fromhex(V_COVENANT["melt_witness"]["control"]["K"])),
+        bytes.fromhex(V_COVENANT["melt_witness"]["leaf"]),
+        [bytes.fromhex(p) for p in V_COVENANT["melt_witness"]["control"]["path"]],
     )
     # Wrong merkle path fails
     assert not verify_nutroot_commitment(
-        PublicKey(bytes.fromhex(V62["secret"])),
-        PublicKey(bytes.fromhex(V62["melt_witness"]["control"]["K"])),
-        bytes.fromhex(V62["melt_witness"]["leaf"]),
-        [bytes.fromhex(V62["leaf_hash_melt_to"])],
+        PublicKey(bytes.fromhex(V_COVENANT["secret"])),
+        PublicKey(bytes.fromhex(V_COVENANT["melt_witness"]["control"]["K"])),
+        bytes.fromhex(V_COVENANT["melt_witness"]["leaf"]),
+        [bytes.fromhex(V_COVENANT["leaf_hash_melt_to"])],
     )
     # Wrong internal key fails
     assert not verify_nutroot_commitment(
-        PublicKey(bytes.fromhex(V62["secret"])),
-        PublicKey(bytes.fromhex(V61["internal_key"])),
-        bytes.fromhex(V62["melt_witness"]["leaf"]),
-        [bytes.fromhex(p) for p in V62["melt_witness"]["control"]["path"]],
+        PublicKey(bytes.fromhex(V_COVENANT["secret"])),
+        PublicKey(bytes.fromhex(V_REFUND["internal_key"])),
+        bytes.fromhex(V_COVENANT["melt_witness"]["leaf"]),
+        [bytes.fromhex(p) for p in V_COVENANT["melt_witness"]["control"]["path"]],
     )
     # Depth cap
     filler = hashlib.sha256(b"\x09").digest()
@@ -363,7 +368,7 @@ def test_script_path_commitment():
 def test_zero_tweak_keeps_internal_key(monkeypatch):
     from cashu.core.crypto import nutroot as nutroot_crypto
 
-    internal_key = PublicKey(bytes.fromhex(V61["internal_key"]))
+    internal_key = PublicKey(bytes.fromhex(V_REFUND["internal_key"]))
     monkeypatch.setattr(nutroot_crypto, "nutroot_tweak", lambda *_: 0)
     assert (
         nutroot_crypto.nutroot_tweak_pubkey(internal_key).format()
@@ -372,8 +377,8 @@ def test_zero_tweak_keeps_internal_key(monkeypatch):
 
 
 def test_bearer_contrast():
-    pub = PrivateKey(bytes.fromhex(V61["bearer_contrast"]["k"])).public_key
-    assert pub and pub.format().hex() == V61["bearer_contrast"]["secret"]
+    pub = PrivateKey(bytes.fromhex(V_REFUND["bearer_contrast"]["k"])).public_key
+    assert pub and pub.format().hex() == V_REFUND["bearer_contrast"]["secret"]
 
 
 @pytest.mark.asyncio
@@ -415,8 +420,9 @@ async def test_nut13_v3_derivation_type_vectors():
         assert key.secret.hex() == leaf["privkey"]
         pub = key.public_key
         assert pub and pub.format().hex() == leaf["pubkey"]
+    mint_identity = nut13["mint_identity"]
     for lock in nut13["quote_locks"]:
-        key = secrets.derive_v3_quote_lock_key(lock["counter"])
+        key = secrets.derive_v3_quote_lock_key(lock["counter"], mint_identity)
         assert key.secret.hex() == lock["privkey"]
         pub = key.public_key
         assert pub and pub.format().hex() == lock["pubkey"]
@@ -426,7 +432,7 @@ async def test_nut13_v3_derivation_type_vectors():
         secrets.derive_v3_secret_key(counter, keyset_id).secret,
         secrets.derive_v3_nums_offset(counter, keyset_id).secret,
         secrets.derive_v3_leaf_key(counter, keyset_id, 0).secret,
-        secrets.derive_v3_quote_lock_key(counter).secret,
+        secrets.derive_v3_quote_lock_key(counter, mint_identity).secret,
     }
     assert len(derived) == 4
 
@@ -476,16 +482,22 @@ def test_point_secret_hashes_as_raw_bytes():
         with pytest.raises(TransactionError):
             secret_to_hash_input(rejected)
 
-    from cashu.core.crypto.nutroot import secret_transcript_bytes
+    from cashu.core.crypto.b_dhke import hash_to_curve
+    from cashu.core.crypto.nutroot import proof_transcript_y
 
     point = output["secret"]
-    assert secret_transcript_bytes(
-        point, VECTORS["nut13_v3"]["keyset_id"]
-    ) == bytes.fromhex(point)
-    assert secret_transcript_bytes(point, "01" + "11" * 32) == point.encode()
+    # Y follows the keyset's curve: the v3 vector's G1 point, or secp256k1 over
+    # the same text under a pre-v3 keyset. The secret itself never appears.
+    v3_id = VECTORS["nut13_v3"]["keyset_id"]
+    assert proof_transcript_y(point, v3_id) == bytes.fromhex(output["Y"])
+    assert (
+        proof_transcript_y(point, "01" + "11" * 32)
+        == hash_to_curve(point.encode()).format()
+    )
 
 
 def _tx_from_vector(tx: dict):
+    from cashu.core.crypto.nutroot import proof_transcript_y
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
@@ -498,7 +510,7 @@ def _tx_from_vector(tx: dict):
             TranscriptProofInput(
                 amount=p["amount"],
                 keyset_id=bytes.fromhex(p["keyset_id"]),
-                secret=bytes.fromhex(p["secret"]),
+                Y=proof_transcript_y(p["secret"], p["keyset_id"]),
                 C=bytes.fromhex(p["C"]),
             )
             for p in tx.get("proof_inputs", [])
@@ -524,13 +536,11 @@ def _tx_from_vector(tx: dict):
 
 def test_transaction_transcript_vectors():
     from cashu.core.crypto.transcript import (
-        TRANSCRIPT_DOMAIN_TAG,
         build_transaction_transcript,
         transaction_digest,
     )
 
     tv = VECTORS["transcript"]
-    assert tv["domain_tag"] == TRANSCRIPT_DOMAIN_TAG
     for name in ("swap", "mint", "melt", "melt_with_change"):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
@@ -539,12 +549,88 @@ def test_transaction_transcript_vectors():
 
 
 def test_transcript_swap_signature_is_keypath_witness():
+    from cashu.core.crypto.transcript import transaction_inputs
+
     tv = VECTORS["transcript"]["swap"]
-    assert verify_schnorr_digest(
-        bytes.fromhex(tv["signature"]),
-        bytes.fromhex(tv["digest"]),
-        bytes.fromhex(tv["tx"]["proof_inputs"][0]["secret"]),
+    _, proof_contexts, _ = transaction_inputs(_tx_from_vector(tv["tx"]))
+    secret = bytes.fromhex(tv["tx"]["proof_inputs"][0]["secret"])
+    y = bytes.fromhex(VECTORS["nut13_v3"]["outputs"][0]["Y"])
+    context = proof_contexts[y]
+    # The vector pins the container hash and the derived per-input digest.
+    assert hashlib.sha256(context.container).hexdigest() == tv["input_id"]
+    assert context.digest.hex() == tv["input_digest"]
+    assert verify_schnorr_digest(bytes.fromhex(tv["signature"]), context.digest, secret)
+    # The shared transaction digest is never signed directly (NUT-10).
+    assert not verify_schnorr_digest(
+        bytes.fromhex(tv["signature"]), bytes.fromhex(tv["digest"]), secret
     )
+
+
+def test_transcript_multi_input_vector_uses_per_input_digests():
+    from cashu.core.crypto.transcript import transaction_digest, transaction_inputs
+
+    vector = VECTORS["transcript"]["multi_input"]
+    tx = _tx_from_vector(vector["tx"])
+    digest, proof_contexts, _ = transaction_inputs(tx)
+    assert digest == bytes.fromhex(vector["digest"])
+    from cashu.core.crypto.nutroot import proof_transcript_y
+
+    for proof, expected in zip(vector["tx"]["proof_inputs"], vector["inputs"]):
+        secret = bytes.fromhex(proof["secret"])
+        y = proof_transcript_y(proof["secret"], proof["keyset_id"])
+        context = proof_contexts[y]
+        assert hashlib.sha256(context.container).hexdigest() == expected["input_id"]
+        assert context.digest.hex() == expected["input_digest"]
+        assert verify_schnorr_digest(
+            bytes.fromhex(expected["signature"]), context.digest, secret
+        )
+    assert vector["inputs"][0]["input_digest"] != vector["inputs"][1]["input_digest"]
+    assert transaction_digest(tx) == digest
+
+
+def test_transcript_mixed_keyset_vector_names_inputs_by_y():
+    """NUT-10 tests, "Mixed keysets": a pre-v3 input beside a v3 one, each
+    named by the Y its own keyset's curve gives; neither secret appears."""
+    from cashu.core.crypto.nutroot import proof_transcript_y
+    from cashu.core.crypto.transcript import (
+        TransactionShape,
+        TranscriptBlindedOutput,
+        TranscriptProofInput,
+        build_transaction_transcript,
+        transaction_inputs,
+    )
+
+    inputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b", "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"}, {"amount": 2, "id": "00456a94ab4e1c46", "secret": "d341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6", "C": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"}]
+    outputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}, {"amount": 2, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}]
+    tx = TransactionShape(
+        proof_inputs=[
+            TranscriptProofInput(
+                amount=p["amount"],
+                keyset_id=bytes.fromhex(p["id"]),
+                Y=proof_transcript_y(p["secret"], p["id"]),
+                C=bytes.fromhex(p["C"]),
+            )
+            for p in inputs
+        ],
+        blinded_outputs=[
+            TranscriptBlindedOutput(
+                amount=o["amount"],
+                keyset_id=bytes.fromhex(o["id"]),
+                B_=bytes.fromhex(o["B_"]),
+            )
+            for o in outputs
+        ],
+    )
+    transcript = build_transaction_transcript(tx)
+    assert transcript.hex() == "01008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba203005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+    assert inputs[0]["secret"] not in transcript.hex()
+    assert inputs[1]["secret"].encode().hex() not in transcript.hex()
+    digest, proof_contexts, _ = transaction_inputs(tx)
+    assert digest.hex() == "e8eb75f3f209bbf592e7cc7ed727dcd33fe118add5ab7a992a3a2d7a9392d893"
+    v3 = proof_contexts[bytes.fromhex("a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73")]
+    assert v3.digest.hex() == "3f48aab72fb7ec0e29d1fa49e4e194f09110068fe94a95e8553f53755af55837"
+    legacy = proof_contexts[bytes.fromhex("029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae")]
+    assert hashlib.sha256(legacy.container).hexdigest() == "22df4d688b7337f49aa47dd5d0dc6578506229c36908d79608c50d7814d1bd04"
 
 
 def test_transcript_rejects_empty_sections():
@@ -590,11 +676,11 @@ def test_mint_verifies_nutroot_transaction_witnesses():
     with pytest.raises(TransactionError, match="missing nutroot transaction witness"):
         verify(proofs, outputs)
 
-    # Valid witness passes, and the digest it signed is attached to the
-    # proof for NUT-07 storage.
+    # Valid witness passes, and the input digest it signed is attached to
+    # the proof for NUT-07 storage.
     proofs[0].witness = json.dumps({"signatures": [tv["signature"]]})
     verify(proofs, outputs)
-    assert proofs[0].digest == tv["digest"]
+    assert proofs[0].digest == tv["input_digest"]
 
     # Tampered signature rejects.
     bad_sig = tv["signature"][:-2] + ("00" if tv["signature"][-2:] != "00" else "01")
@@ -666,7 +752,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     signatures = json.loads(out[0].witness)["signatures"]
     assert verify_schnorr_digest(
         bytes.fromhex(signatures[0]),
-        bytes.fromhex(tv["digest"]),
+        bytes.fromhex(tv["input_digest"]),
         bytes.fromhex(proofs[0].secret),
     )
 
@@ -693,25 +779,24 @@ async def test_wallet_attaches_nutroot_witnesses():
     assert mixed[0].witness is not None
     assert mixed[1].witness is None
 
-    from cashu.core.crypto.nutroot import keyset_id_transcript_bytes
+    from cashu.core.crypto.nutroot import (
+        keyset_id_transcript_bytes,
+        proof_transcript_y,
+    )
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        transaction_digest,
+        transaction_inputs,
     )
 
-    mixed_digest = transaction_digest(
+    _, mixed_contexts, _ = transaction_inputs(
         TransactionShape(
             proof_inputs=[
                 TranscriptProofInput(
                     amount=proof.amount,
                     keyset_id=keyset_id_transcript_bytes(proof.id),
-                    secret=(
-                        bytes.fromhex(proof.secret)
-                        if proof is proofs[0]
-                        else proof.secret.encode()
-                    ),
+                    Y=proof_transcript_y(proof.secret, proof.id),
                     C=bytes.fromhex(proof.C),
                 )
                 for proof in mixed
@@ -729,7 +814,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     mixed_signature = json.loads(mixed[0].witness)["signatures"][0]
     assert verify_schnorr_digest(
         bytes.fromhex(mixed_signature),
-        mixed_digest,
+        mixed_contexts[proof_transcript_y(mixed[0].secret, mixed[0].id)].digest,
         bytes.fromhex(mixed[0].secret),
     )
 
@@ -745,7 +830,7 @@ def test_spend_info_roundtrips_through_tokenv4():
         C="84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327",
         spend_info=SpendInfo(
             k=n13["outputs"][0]["secret_key"],
-            tree=[VECTORS["example_6_1"]["leaf_after"]],
+            tree=[VECTORS["receiver_keyed_refund"]["leaf_after"]],
         ),
     )
     token = TokenV4(
@@ -786,7 +871,7 @@ def test_leaf_forms_match_the_shared_vectors():
     )
 
     lf = VECTORS["leaf_forms"]
-    v = VECTORS["example_6_1"]
+    v = VECTORS["receiver_keyed_refund"]
     carol = PublicKey(bytes.fromhex(v["carol_pub"]))
     alice = PublicKey(bytes.fromhex(v["alice_refund_pub"]))
 
@@ -919,13 +1004,13 @@ def test_script_path_spend_after_leaf_vectors():
     """6.1: refund via the after leaf, evaluated with the vector witness."""
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
-    v61 = VECTORS["example_6_1"]
+    v61 = VECTORS["receiver_keyed_refund"]
     witness = nutroot_witness({
         "leaf": v61["scriptpath_witness"]["leaf"],
         "control": v61["scriptpath_witness"]["control"],
         "signatures": v61["scriptpath_witness"]["signatures"],
     })
-    digest = bytes.fromhex(v61["transcript_digest"])
+    digest = bytes.fromhex(v61["illustrative_input_digest"])
     secret = PublicKey(bytes.fromhex(v61["secret"]))
     # After the locktime: passes.
     verify_script_path_spend(secret, digest, witness, now=v61["refund_time"] + 1)
@@ -949,7 +1034,7 @@ def test_script_path_spend_after_leaf_vectors():
         witness.model_dump(by_alias=True)
         | {
             "signatures": [
-                VECTORS["example_6_2"]["melt_witness"]["signatures"][0]
+                VECTORS["two_leaf_covenant"]["melt_witness"]["signatures"][0]
             ]
         }
     )
@@ -958,10 +1043,10 @@ def test_script_path_spend_after_leaf_vectors():
 
 
 def test_script_path_unknown_leaf_type_fails_closed():
-    """6.2: the example melt_to leaf (0x04) is unknown and unsatisfiable."""
+    """6.2: the example melt_to leaf (0x05) is unknown and unsatisfiable."""
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
-    v62 = VECTORS["example_6_2"]
+    v62 = VECTORS["two_leaf_covenant"]
     witness = nutroot_witness({
         "leaf": v62["melt_witness"]["leaf"],
         "control": v62["melt_witness"]["control"],
@@ -970,7 +1055,7 @@ def test_script_path_unknown_leaf_type_fails_closed():
     with pytest.raises(ValueError, match="Unknown leaf type"):
         verify_script_path_spend(
             PublicKey(bytes.fromhex(v62["secret"])),
-            bytes.fromhex(v62["transcript_digest"]),
+            bytes.fromhex(v62["illustrative_input_digest"]),
             witness,
         )
 
@@ -1098,25 +1183,26 @@ def test_mint_accepts_script_path_witness_on_swap():
 
     verify = LedgerVerification._verify_nutroot_transaction_witnesses
     tv, proofs, outputs = _swap_vector_proofs_and_outputs()
-    v61 = VECTORS["example_6_1"]
+    v61 = VECTORS["receiver_keyed_refund"]
 
     # Replace the input with the 6.1 tweaked secret, spent via the after leaf,
     # signed by the refund key (4) over this swap's real transcript digest.
     proofs[0].secret = v61["secret"]
+    from cashu.core.crypto.nutroot import proof_transcript_y
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        transaction_digest,
+        transaction_inputs,
     )
 
-    digest = transaction_digest(
+    _, proof_contexts, _ = transaction_inputs(
         TransactionShape(
             proof_inputs=[
                 TranscriptProofInput(
                     amount=p.amount,
                     keyset_id=bytes.fromhex(p.id),
-                    secret=bytes.fromhex(p.secret),
+                    Y=proof_transcript_y(p.secret, p.id),
                     C=bytes.fromhex(p.C),
                 )
                 for p in proofs
@@ -1131,6 +1217,8 @@ def test_mint_accepts_script_path_witness_on_swap():
             ],
         )
     )
+    y = proof_transcript_y(proofs[0].secret, proofs[0].id)
+    digest = proof_contexts[y].digest
     proofs[0].witness = json.dumps(
         {
             "leaf": v61["scriptpath_witness"]["leaf"],
@@ -1155,7 +1243,7 @@ def test_leaf_time_is_bounded():
     huge = (
         b"\x00\x02"
         + tlv_record(0x02, b"\x01")
-        + tlv_record(0x04, bytes.fromhex(V61["carol_pub"]))
+        + tlv_record(0x04, bytes.fromhex(V_REFUND["carol_pub"]))
         + tlv_record(0x06, bytes.fromhex("0fffffffffffffff"))
     )
     with pytest.raises(ValueError, match="time out of range"):
@@ -1165,7 +1253,7 @@ def test_leaf_time_is_bounded():
             NutrootLeaf(
                 type="after",
                 n=1,
-                keys=[PublicKey(bytes.fromhex(V61["carol_pub"]))],
+                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
                 time=NUTROOT_MAX_LEAF_TIME + 1,
             )
         )
@@ -1208,7 +1296,7 @@ def test_v3_witness_does_not_travel_in_a_token():
     proof = Proof(
         id=v3_keyset,
         amount=8,
-        secret=V61["carol_pub"],
+        secret=V_REFUND["carol_pub"],
         C="aa" * 48,
         witness='{"signatures":["' + "00" * 64 + '"]}',
     )
@@ -1254,3 +1342,214 @@ def test_duplicate_leaves_fold_and_spend():
             "signatures": [_sign_digest(3, digest)],
         }),
     )
+
+
+def test_disclosure_field_parses_and_fails_closed():
+    """disclosure (0x0a) accepts mode 0x01 only; a private leaf has one encoding."""
+    lf = VECTORS["leaf_forms"]
+    leaf = parse_nutroot_leaf(bytes.fromhex(lf["threshold_1of1_disclosure"]))
+    assert leaf.disclosure == 0x01
+    assert serialize_nutroot_leaf(leaf).hex() == lf["threshold_1of1_disclosure"]
+    for bad in ("leaf_disclosure_mode0", "leaf_disclosure_empty", "leaf_disclosure_mode2"):
+        with pytest.raises(ValueError, match="disclosure mode"):
+            parse_nutroot_leaf(bytes.fromhex(lf[bad]))
+    with pytest.raises(ValueError, match="disclosure mode"):
+        serialize_nutroot_leaf(
+            NutrootLeaf(
+                type="threshold",
+                n=1,
+                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
+                disclosure=2,
+            )
+        )
+
+
+def test_auditable_lock_vector_reconstructs():
+    """The canonical auditable lock (NUMS offset, disclosure leaf) matches the vector."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend, witness_discloses
+    from cashu.core.crypto.transcript import (
+        build_transaction_transcript,
+        transaction_digest,
+        transaction_inputs,
+    )
+
+    aud = VECTORS["auditable_lock"]
+    leaf = bytes.fromhex(aud["leaf"])
+    root = nutroot_leaf_hash(leaf)
+    assert root.hex() == aud["merkle_root"]
+    K = PublicKey(bytes.fromhex(aud["K"]))
+    assert nutroot_tweak_pubkey(K, root).format().hex() == aud["secret"]
+    tx = _tx_from_vector(aud["tx"])
+    digest, contexts, _ = transaction_inputs(tx)
+    context = contexts[bytes.fromhex(aud["Y"])]
+    assert build_transaction_transcript(tx).hex() == aud["transcript"]
+    assert transaction_digest(tx).hex() == aud["digest"]
+    assert hashlib.sha256(context.container).hexdigest() == aud["input_id"]
+    assert context.digest.hex() == aud["input_digest"]
+    # The spend's witness verifies and is marked for publication.
+    revealed = verify_script_path_spend(
+        PublicKey(bytes.fromhex(aud["secret"])),
+        bytes.fromhex(aud["input_digest"]),
+        NutrootWitness.model_validate_json(aud["witness"]),
+    )
+    assert revealed.disclosure == 0x01
+    assert witness_discloses(aud["witness"])
+    # A key-path witness discloses nothing, whatever the tree held.
+    assert not witness_discloses(json.dumps({"signatures": ["00" * 64]}))
+
+
+def test_commit_leaf_vectors():
+    """NUT-10 commit leaf (0x04): one hash, never a spend path, one sibling hash to the mint."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend
+
+    v = VECTORS["commit_leaf"]
+    h = bytes.fromhex(v["hash"])
+    commit = serialize_nutroot_leaf(NutrootLeaf(type="commit", hash=h))
+    assert commit.hex() == v["leaf_commit"]
+    parsed = parse_nutroot_leaf(commit)
+    assert (parsed.type, parsed.n, parsed.keys, parsed.hash, parsed.disclosure) == (
+        "commit",
+        0,
+        [],
+        h,
+        None,
+    )
+    threshold = bytes.fromhex(v["leaf_threshold"])
+    hashes = [nutroot_leaf_hash(threshold), nutroot_leaf_hash(commit)]
+    assert hashes[1].hex() == v["leaf_hash_commit"]
+    root = nutroot_merkle_root(hashes)
+    assert root.hex() == v["merkle_root"]
+    K = PublicKey(bytes.fromhex(v["K"]))
+    assert nutroot_tweak_pubkey(K, root).format().hex() == v["secret"]
+    # The threshold leaf's path is the commit hash: the mint sees the
+    # commitment as one sibling and nothing more.
+    assert [p.hex() for p in nutroot_merkle_path(hashes, 0)] == [v["leaf_hash_commit"]]
+    # Revealing the commit leaf reconstructs the secret and is still refused.
+    witness = nutroot_witness({
+        "leaf": v["leaf_commit"],
+        "control": {"K": v["K"], "path": [v["leaf_hash_threshold"]]},
+        "signatures": ["00" * 64],
+    })
+    with pytest.raises(ValueError, match="not a spend path"):
+        verify_script_path_spend(
+            PublicKey(bytes.fromhex(v["secret"])), b"\x00" * 32, witness
+        )
+
+
+def test_commit_leaf_carries_exactly_the_hash():
+    v = VECTORS["commit_leaf"]
+    commit = bytes.fromhex(v["leaf_commit"])
+    malformed = [
+        b"\x00\x04",
+        b"\x00\x04" + tlv_record(0x08, b"\xaa" * 31),
+        commit + tlv_record(0x0A, b"\x01"),
+        b"\x00\x04" + tlv_record(0x02, b"\x01") + commit[2:],
+    ]
+    for bad in malformed:
+        with pytest.raises(ValueError, match="exactly"):
+            parse_nutroot_leaf(bad)
+    with pytest.raises(ValueError, match="32-byte hash"):
+        serialize_nutroot_leaf(NutrootLeaf(type="commit", hash=b"\xab"))
+    with pytest.raises(ValueError, match="only a hash"):
+        serialize_nutroot_leaf(
+            NutrootLeaf(
+                type="commit",
+                n=1,
+                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
+                hash=b"\xab" * 32,
+            )
+        )
+
+
+def test_spend_commitment_vectors():
+    """NUT-07: tagged_hash(tag, Y || input_digest || SHA256(witness)) over the exact string."""
+    from cashu.core.crypto.transcript import spend_commitment
+
+    for name in ("keypath_private", "disclosed_script_path"):
+        v = VECTORS["nut07_commitments"][name]
+        assert hashlib.sha256(v["witness"].encode()).hexdigest() == v["witness_hash"]
+        assert (
+            spend_commitment(
+                bytes.fromhex(v["Y"]),
+                bytes.fromhex(v["input_digest"]),
+                v["witness"],
+            ).hex()
+            == v["commitment"]
+        )
+
+
+def test_nut07_spent_state_discloses_only_flagged_spends():
+    """Checkstate: v3 spends return the commitment; the witness and input digest
+    only when the exercised leaf carries disclosure mode 0x01."""
+    from cashu.core.base import Proof
+    from cashu.mint.db.read import _spent_proof_state
+
+    v3 = dict(id="02" + "ab" * 32, secret="02" + "79be667e" * 8)
+    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    private = _spent_proof_state(
+        kp["Y"], Proof(**v3, witness=kp["witness"], digest=kp["input_digest"])
+    )
+    assert private.witness is None
+    assert private.input_digest is None
+    assert private.commitment == kp["commitment"]
+
+    aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
+    disclosed = _spent_proof_state(
+        aud["Y"], Proof(**v3, witness=aud["witness"], digest=aud["input_digest"])
+    )
+    assert disclosed.witness == aud["witness"]
+    assert disclosed.input_digest == aud["input_digest"]
+    assert disclosed.commitment == aud["commitment"]
+
+    # Pre-v3: the witness serves as always, whatever digest the row carries.
+    legacy = _spent_proof_state(
+        "02" + "ab" * 32,
+        Proof(id="01" + "ab" * 7, witness='{"signatures":["00"]}', digest="00" * 32),
+    )
+    assert legacy.witness == '{"signatures":["00"]}'
+    assert legacy.input_digest is None
+    assert legacy.commitment is None
+
+
+@pytest.mark.asyncio
+async def test_nut17_spent_event_uses_the_nut07_disclosure_filter():
+    """Live proof_state events must not reopen the witness leak closed by checkstate."""
+    from cashu.core.base import Proof
+    from cashu.mint.db.write import DbWriteHelper
+
+    class Connection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    proof_input = VECTORS["transcript"]["swap"]["tx"]["proof_inputs"][0]
+    proof = Proof(
+        id=proof_input["keyset_id"],
+        amount=proof_input["amount"],
+        secret=proof_input["secret"],
+        C=proof_input["C"],
+        witness=kp["witness"],
+        digest=kp["input_digest"],
+    )
+    crud = SimpleNamespace(
+        invalidate_proof=AsyncMock(),
+        bump_keyset_balance=AsyncMock(),
+    )
+    events = SimpleNamespace(submit=AsyncMock())
+    helper = DbWriteHelper(
+        SimpleNamespace(get_connection=lambda _: Connection()),
+        crud,
+        events,
+        SimpleNamespace(),
+    )
+
+    await helper.invalidate_proofs([proof], {proof.id: SimpleNamespace()})
+
+    state = events.submit.await_args.args[0]
+    assert state.Y == kp["Y"]
+    assert state.witness is None
+    assert state.input_digest is None
+    assert state.commitment == kp["commitment"]
