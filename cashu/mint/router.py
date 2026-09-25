@@ -274,14 +274,16 @@ async def keys():
     keyset = ledger.keyset
     keyset_for_response = []
     for keyset in ledger.keysets.values():
-        if keyset.active:
+        if keyset.is_active:
             keyset_for_response.append(
                 KeysResponseKeyset(
                     id=keyset.id,
                     unit=keyset.unit.name,
-                    active=keyset.active,
+                    active=keyset.is_active,
                     input_fee_ppk=keyset.input_fee_ppk,
                     keys={k: v for k, v in keyset.public_keys_hex.items()},
+                    active_from=keyset.active_from,
+                    active_until=keyset.active_until,
                     final_expiry=keyset.final_expiry,  # NEW: Include final expiry to align with NUT-02 PR #182
                 )
             )
@@ -318,9 +320,11 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
         unit=keyset.unit.name,
-        active=keyset.active,
+        active=keyset.is_active,
         input_fee_ppk=keyset.input_fee_ppk,
         keys={k: v for k, v in keyset.public_keys_hex.items()},
+        active_from=keyset.active_from,
+        active_until=keyset.active_until,
         final_expiry=keyset.final_expiry,
     )
     return KeysResponse(keysets=[keyset_for_response])
@@ -342,8 +346,10 @@ async def keysets() -> KeysetsResponse:
             KeysetsResponseKeyset(
                 id=keyset.id,
                 unit=keyset.unit.name,
-                active=keyset.active,
+                active=keyset.is_active,
                 input_fee_ppk=keyset.input_fee_ppk,
+                active_from=keyset.active_from,
+                active_until=keyset.active_until,
                 final_expiry=keyset.final_expiry,
             )
         )
