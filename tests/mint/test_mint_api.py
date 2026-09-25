@@ -639,18 +639,19 @@ async def test_api_check_state(ledger: Ledger):
 async def test_api_check_state_v3_serves_witness_digest(
     ledger: Ledger, wallet: Wallet
 ):
-    """A spent v3 proof's state carries the transaction digest its witness
-    signed (NUT-07): the witness verifies only against it."""
+    """A spent v3 proof's state carries the spend commitment (NUT-07); the
+    witness and input digest stay private for an undisclosed key-path spend."""
     from cashu.core.base import ProofSpentState
     from cashu.core.crypto.nutroot import (
         keyset_id_transcript_bytes,
-        secret_transcript_bytes,
+        proof_transcript_y,
     )
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        transaction_digest,
+        spend_commitment,
+        transaction_inputs,
     )
 
     mint_quote = await wallet.request_mint(64)
@@ -667,13 +668,13 @@ async def test_api_check_state_v3_serves_witness_digest(
     response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
     assert response.status_code == 200, f"{response.url} {response.status_code}"
 
-    expected_digest = transaction_digest(
+    _, proof_contexts, _ = transaction_inputs(
         TransactionShape(
             proof_inputs=[
                 TranscriptProofInput(
                     amount=p.amount,
                     keyset_id=keyset_id_transcript_bytes(p.id),
-                    secret=secret_transcript_bytes(p.secret, p.id),
+                    Y=proof_transcript_y(p.secret, p.id),
                     C=bytes.fromhex(p.C),
                 )
                 for p in inputs
@@ -687,7 +688,54 @@ async def test_api_check_state_v3_serves_witness_digest(
                 for o in outputs
             ],
         )
-    ).hex()
+    )
+
+    state_payload = PostCheckStateRequest(Ys=[p.Y for p in inputs])
+    response = httpx.post(
+        f"{BASE_URL}/v1/checkstate", json=state_payload.model_dump()
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    states = PostCheckStateResponse.model_validate(response.json()).states
+    assert states
+    by_y = {p.Y: p for p in inputs}
+    for state in states:
+        assert state.state == ProofSpentState.spent
+        # No disclosure leaf was exercised: the witness and input digest stay
+        # with the mint, and the commitment binds them for a later opening.
+        assert state.witness is None
+        assert state.input_digest is None
+        proof = by_y[state.Y]
+        y = proof_transcript_y(proof.secret, proof.id)
+        input_digest = proof_contexts[y].digest
+        assert proof.witness
+        assert state.commitment == spend_commitment(
+            bytes.fromhex(state.Y), input_digest, proof.witness
+        ).hex()
+
+
+@pytest.mark.asyncio
+async def test_api_check_state_pre_v3_ignores_request_digest(
+    ledger: Ledger, wallet: Wallet
+):
+    """A pre-v3 P2PK spend publishes its witness (NUT-07) even when the swap
+    inputs carry a digest field: the keyset version decides, not the request."""
+    from cashu.core.base import ProofSpentState
+
+    await use_v2_keyset(wallet)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    secret_lock = await wallet.create_p2pk_lock(await wallet.create_p2pk_pubkey())
+    _, inputs = await wallet.swap_to_send(wallet.proofs, 8, secret_lock=secret_lock)
+    secrets, rs, _ = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([8], secrets, rs)
+    inputs = wallet.sign_proofs_inplace_swap(inputs, outputs)
+    payload = {
+        "inputs": [{**p.to_dict(), "digest": "00" * 32} for p in inputs],
+        "outputs": [o.model_dump() for o in outputs],
+    }
+    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
 
     state_payload = PostCheckStateRequest(Ys=[p.Y for p in inputs])
     response = httpx.post(
@@ -698,8 +746,9 @@ async def test_api_check_state_v3_serves_witness_digest(
     assert states
     for state in states:
         assert state.state == ProofSpentState.spent
-        assert state.witness
-        assert state.digest == expected_digest
+        assert state.witness is not None
+        assert state.input_digest is None
+        assert state.commitment is None
 
 
 @pytest.mark.asyncio
@@ -776,10 +825,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote1.privkey
     assert mint_quote2.privkey
 
-    # Signatures over the one batch transaction digest (all quote inputs + outputs)
+    # Each quote signs its own input digest over the shared batch transcript
     batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
-    sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey)
-    sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey)
+    sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey, mint_quote1.quote)
+    sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey, mint_quote2.quote)
 
     outputs_payload = [o.model_dump() for o in outputs]
 
