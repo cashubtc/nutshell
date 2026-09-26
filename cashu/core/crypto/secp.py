@@ -1,5 +1,7 @@
 from coincurve import PrivateKey, PublicKey
 
+from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
+
 
 # We extend the public key to define some operations on points
 # Picked from https://github.com/WTRMQDev/secp256k1-zkp-py/blob/master/secp256k1_zkp/__init__.py
@@ -26,8 +28,11 @@ class PublicKeyExt(PublicKey):
     def __mul__(self, privkey):
         if isinstance(privkey, PrivateKey):
             return self.multiply(bytes.fromhex(privkey.to_hex()))
+        elif isinstance(privkey, BlsPrivateKey):
+            # If it's a BLS PrivateKey or similar scalar, we can multiply
+            return self.multiply(bytes.fromhex(PrivateKey(bytes.fromhex(privkey.to_hex())).to_hex()))
         else:
-            raise TypeError("Can't multiply with non privatekey")
+            raise TypeError(f"Can't multiply with non privatekey: {type(privkey)}")
 
     def __eq__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):

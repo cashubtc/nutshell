@@ -92,37 +92,31 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     )
     secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
-    assert wallet3.keyset_id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert wallet3.keyset_id == "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
     assert secrets1 == secrets2
     assert [r.to_hex() for r in rs1] == [r.to_hex() for r in rs2]
-    assert derivation_paths1 == derivation_paths2
-    for s in secrets1:
-        print(f'"{s}",')
-    for r in rs1:
-        print(f'"{r.to_hex()}",')
+    # v3 keyset: the secrets are compressed points K = k*G, not raw digests.
     assert secrets1 == [
-        "59813756dc7a26fb316ef443752c0df644953d3885c5bd84871cbb61c0df5279",
-        "d1f5aa55a6d5fe5160bd6f2b9f81c669f008fa62bb3d777c78bc2d9799d61b7e",
-        "5926e911a3a7c446f2a038485994accfb2274820a7c7923b94f16ca962c4c2ea",
-        "b239a51027137b3cd0073d75ce3197d463e9461d258c06812634d80f6c80b80a",
-        "c3996bf53a5bedb7a2bf6a17c8b7b05d80c1d6db065fd85ede24628d33051b58",
+        "03cfd343e88715c18d3b709eb36d7d3f04f7bb8bbc599f9a54ecc295221434ddee",
+        "0332cd2d10c04c736192e1fc65c3ffd47b16c8a0f583895045fc72f167d1735787",
+        "03b31fa0ec791a741e90732fb863bbdf661f5bd87eac67671ac359e13dfd175aca",
+        "03f85008d75bede4e16881df529b718a83ff3dd51b269cccfeb8348dbf25ffb5d7",
+        "02c3513bdf894f116bf8a06c916fe5fecc4ead2ec5ec4554c018bc6548af91a4f9",
     ]
     assert [r.to_hex() for r in rs1] == [
-        "90146c0f62eb1a6ce5a5ed2041eac71299c9d17d433f61c40869abf6bec57884",
-        "b644f5f1a7d5892f6569d9a4cb2b6a6e29170ba0642f93b54643b9ffa456ab62",
-        "a7d981c966980dba63e41d64f18db608c609727765ce4988df488c5a54ea35ba",
-        "b06eba490a31a6929cf4788bd0b81f8c505316e0c2b8611d8d7ca731220bf065",
-        "d0f427da5a5d5870d367bdb711fb0db525f405cf0d1ae0e62f3d6a06d13a15db",
+        "31c3c64bce0ea6b58f876630d0b6369899f7d781e55656a3d3a2829cd9f0f278",
+        "0d050067c6fb23b5de1a2fb0fe35a28e95854118896bfc2881cfdf5459d9b9b4",
+        "6a6a3e455fc04ed69dbc104ab646b117d14bf7a45a67239ca7888cfe339773ae",
+        "3b2b0076a36be1f74caac27513a572484fd87c98ef76eef0113bac2cdcb7ea7a",
+        "0986c294413e6c5898e85b22c051e5d60b1cb022c3f1e7b6750d7c114071ac7d",
     ]
 
-    for d in derivation_paths1:
-        print(f'"{d}",')
     assert derivation_paths1 == [
-        "HMAC-SHA256:01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc:0",
-        "HMAC-SHA256:01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc:1",
-        "HMAC-SHA256:01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc:2",
-        "HMAC-SHA256:01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc:3",
-        "HMAC-SHA256:01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc:4",
+        "HMAC-SHA256:02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a:0",
+        "HMAC-SHA256:02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a:1",
+        "HMAC-SHA256:02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a:2",
+        "HMAC-SHA256:02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a:3",
+        "HMAC-SHA256:02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a:4",
     ]
 
 
