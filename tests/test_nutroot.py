@@ -1536,7 +1536,7 @@ async def test_nut17_spent_event_uses_the_nut07_disclosure_filter():
     )
     crud = SimpleNamespace(
         invalidate_proof=AsyncMock(),
-        bump_keyset_balance=AsyncMock(),
+        try_debit_keyset_balance=AsyncMock(return_value=True),
     )
     events = SimpleNamespace(submit=AsyncMock())
     helper = DbWriteHelper(
