@@ -9,6 +9,7 @@ from loguru import logger
 from mnemonic import Mnemonic
 
 from ..core.crypto.bls import PrivateKey as BlsPrivateKey
+from ..core.crypto.bls import curve_order as BLS_FR_ORDER
 from ..core.crypto.keys import PrivateKey, get_keyset_id_version, is_bls_keyset
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.db import Database, LockOptions
@@ -23,9 +24,6 @@ from ..wallet.crud import (
 from .protocols import SupportsDb, SupportsKeysets
 
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-BLS_FR_ORDER = (
-    52435875175126190479447740508185965837690552500527637822603658699938581184513
-)
 
 # NUT-13 derivation types. 0x00-0x03 are components of one proof allocation and
 # share the keyset's proof counter; 0x04 has its own quote counter.
