@@ -508,7 +508,7 @@ async def test_verify_blind_auth_v3_requires_a_valid_request_witness():
         async def _unset_proofs_pending(self, proofs, keysets):
             pass
 
-        async def invalidate_proofs(self, *, proofs, keysets):
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
             pass
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
