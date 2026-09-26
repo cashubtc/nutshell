@@ -724,6 +724,23 @@ def test_quote_key_path_witness_takes_exactly_one_signature():
     )
 
 
+def test_partial_mint_vector_commits_amount_issued():
+    from cashu.core.base import BlindedMessage
+    from cashu.core.nuts import nut20
+
+    vector = VECTORS["transcript"]["partial_mint"]
+    quote = vector["tx"]["mint_quote_inputs"][0]
+    outputs = [
+        BlindedMessage(amount=o["amount"], id=o["keyset_id"], B_=o["B_"])
+        for o in vector["tx"]["blinded_outputs"]
+    ]
+    args = (outputs, vector["lock_pubkey"], vector["signature"])
+    assert nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args)
+    assert not nut20.verify_mint_quote_v3(
+        quote["quote_id"], vector["quote_amount"], *args
+    )
+
+
 @pytest.mark.asyncio
 async def test_wallet_attaches_nutroot_witnesses():
     """The wallet re-derives k from the proof's derivation path and signs the transcript."""

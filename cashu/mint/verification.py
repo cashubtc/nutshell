@@ -584,10 +584,11 @@ class LedgerVerification(
         if outputs and is_bls_keyset(outputs[0].id):
             # V3: the quote is a transaction input; its lock key signs the
             # quote input digest (key or script path). For batch mints the
-            # digest covers every quote input.
+            # digest covers every quote input. The input commits the amount
+            # issued, not the quote amount (NUT-04).
             return nut20.verify_mint_quote_v3(
                 quote.quote,
-                quote.amount,
+                sum(o.amount for o in outputs),
                 outputs,
                 quote.pubkey,
                 signature,
