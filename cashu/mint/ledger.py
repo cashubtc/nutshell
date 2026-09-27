@@ -888,6 +888,12 @@ class Ledger(
                 bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
             )
 
+        # A v3 batch commits each quote's amount, so it must name them and issue
+        # exactly their total (NUT-29).
+        v3 = is_bls_keyset(payload.outputs[0].id)
+        if v3 and not payload.quote_amounts:
+            raise TransactionError("a v3 batch must carry quote_amounts")
+
         # Check amount balance
         if payload.quote_amounts:
             if len(payload.quote_amounts) != len(quotes):
@@ -906,7 +912,7 @@ class Ledger(
                     )
 
         quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
-        if Method.bolt11.name in methods:
+        if Method.bolt11.name in methods or v3:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
                     "amount to mint does not match quote amounts sum"

@@ -121,6 +121,31 @@ async def test_ledger_mint_batch_unlocked_quote_rejected_on_v3(
 
 
 @pytest.mark.asyncio
+async def test_ledger_mint_batch_v3_requires_quote_amounts(
+    ledger: Ledger, wallet: Wallet
+):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, _ = await wallet.generate_secrets_from_to(10300, 10301)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+    assert is_bls_keyset(outputs[0].id), "wallet should be on the v3 keyset"
+    assert mint_quote1.privkey and mint_quote2.privkey
+    quotes = [mint_quote1, mint_quote2]
+    sigs = [sign_batch_v3(quotes, outputs, q.privkey, q) for q in quotes]
+
+    with pytest.raises(Exception, match="must carry quote_amounts"):
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[q.quote for q in quotes], outputs=outputs, signatures=sigs
+            )
+        )
+
+
+@pytest.mark.asyncio
 async def test_ledger_mint_batch_wrong_amount(ledger: Ledger, wallet: Wallet):
     await wallet.load_mint()
     mint_quote1 = await wallet.request_mint(64)
