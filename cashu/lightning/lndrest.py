@@ -68,6 +68,7 @@ class LndRestWallet(LightningBackend):
     supports_incoming_payment_stream = True
     supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True
+    supports_amountless: bool = True
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -207,6 +208,11 @@ class LndRestWallet(LightningBackend):
     ) -> PaymentResponse:
         # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
+        if not invoice.amount_msat and not quote.amount_msat:
+            return PaymentResponse(
+                result=PaymentResult.FAILED,
+                error_message="Amountless invoice requires an amount",
+            )
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
             quote_amount = Amount(Unit[quote.unit], quote.amount)
@@ -226,6 +232,9 @@ class LndRestWallet(LightningBackend):
             "no_inflight_updates": True,
             "allow_self_payment": settings.mint_lnd_allow_self_payment,
         }
+
+        if not invoice.amount_msat:
+            data["amt_msat"] = str(quote.amount_msat)
 
         async with self.client.stream(
             "POST", "/v2/router/send", json=data, timeout=None
@@ -521,16 +530,17 @@ class LndRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
-        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
+        amount_msat = melt_quote.amountless_amount or (
+            melt_quote.mpp_amount if melt_quote.is_mpp else None
+        )
 
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-
         if amount_msat is None:
+            assert invoice_obj.amount_msat, "invoice has no amount."
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
-        if not melt_quote.is_mpp:
+        if not melt_quote.is_mpp and melt_quote.amountless_amount is None:
             try:
                 response = await self.client.post(
                     "/v2/router/route/estimatefee",

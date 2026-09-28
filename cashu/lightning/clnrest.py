@@ -57,6 +57,7 @@ class CLNRestWallet(LightningBackend):
     supports_mpp = settings.mint_clnrest_enable_mpp
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
+    supports_amountless: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -192,8 +193,8 @@ class CLNRestWallet(LightningBackend):
                 error_message=str(exc),
             )
 
-        if not invoice.amount_msat or invoice.amount_msat <= 0:
-            error_message = "0 amount invoices are not allowed"
+        if not invoice.amount_msat and not quote.amount_msat:
+            error_message = "Amountless invoice requires an amount"
             return PaymentResponse(
                 result=PaymentResult.FAILED,
                 error_message=error_message,
@@ -207,7 +208,9 @@ class CLNRestWallet(LightningBackend):
 
         # Handle Multi-Mint payout where we must only pay part of the invoice amount
         logger.trace(f"{quote_amount_msat = }, {invoice.amount_msat = }")
-        if quote_amount_msat != invoice.amount_msat:
+        if not invoice.amount_msat:
+            post_data["amount_msat"] = quote.amount_msat
+        elif quote_amount_msat != invoice.amount_msat:
             logger.trace("Detected Multi-Nut payment")
             if self.supports_mpp:
                 post_data["partial_msat"] = quote_amount_msat
@@ -401,11 +404,11 @@ class CLNRestWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
-        amount_msat = (
-            melt_quote.mpp_amount if melt_quote.is_mpp else (invoice_obj.amount_msat)
+        amount_msat = melt_quote.amountless_amount or (
+            melt_quote.mpp_amount if melt_quote.is_mpp else invoice_obj.amount_msat
         )
+        assert amount_msat, "invoice has no amount."
+        assert amount_msat > 0, "invoice has 0 amount."
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)

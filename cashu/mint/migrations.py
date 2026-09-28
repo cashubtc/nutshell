@@ -1347,3 +1347,12 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_add_amount_msat_to_melt_quotes(db: Database):
+    """Preserve the exact payment amount for amountless BOLT11 invoices."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            f"ADD COLUMN amount_msat {db.big_int} DEFAULT NULL"
+        )

@@ -58,16 +58,19 @@ class LightningWallet(Wallet):
             payment_request=mint_quote.request,
         )
 
-    async def pay_invoice(self, request: str) -> PaymentResponse:
+    async def pay_invoice(
+        self, request: str, amount_msat: Optional[int] = None
+    ) -> PaymentResponse:
         """Pay lightning invoice
 
         Args:
             request (str): bolt11 payment request
+            amount_msat (int, optional): amountless or partial payment amount in msat
 
         Returns:
             PaymentResponse: containing details of the operation
         """
-        quote = await self.melt_quote(request)
+        quote = await self.melt_quote(request, amount_msat)
         total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:

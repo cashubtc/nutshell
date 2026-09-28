@@ -279,6 +279,8 @@ class MeltQuote(LedgerEvent):
     checking_id: str
     unit: str
     amount: int
+    # Exact Lightning amount for amountless invoices, independent of the ecash unit.
+    amount_msat: Optional[int] = None
     fee_reserve: int
     state: MeltQuoteState
     attempt: str = ""
@@ -316,6 +318,7 @@ class MeltQuote(LedgerEvent):
             fee_reserve=row["fee_reserve"],
             state=MeltQuoteState(row["state"]),
             attempt=str(attempt) if attempt is not None else "",
+            amount_msat=row.get("amount_msat"),  # type: ignore
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],

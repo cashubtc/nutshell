@@ -10,8 +10,13 @@ class PostMeltRequestOptionMpp(BaseModel):
     amount: int = Field(gt=0)  # input amount
 
 
+class PostMeltRequestOptionAmountless(BaseModel):
+    amount_msat: int = Field(gt=0, strict=True)
+
+
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
+    amountless: Optional[PostMeltRequestOptionAmountless] = None
 
 
 class PostMeltQuoteRequest(BaseModel):
@@ -21,6 +26,12 @@ class PostMeltQuoteRequest(BaseModel):
     )  # output payment request
     options: Optional[PostMeltRequestOptions] = None
     prefer_async: bool = False
+
+    @property
+    def amountless_amount(self) -> Optional[int]:
+        if self.options and self.options.amountless:
+            return self.options.amountless.amount_msat
+        return None
 
     @property
     def is_mpp(self) -> bool:

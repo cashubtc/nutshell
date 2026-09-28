@@ -1021,6 +1021,12 @@ class Ledger(
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
             raise TransactionError("payment quote amount units do not match")
+        if melt_quote.amountless_amount is not None and unit in (Unit.sat, Unit.msat):
+            expected = Amount(Unit.msat, melt_quote.amountless_amount).to(
+                unit, round="up"
+            )
+            if payment_quote.amount.amount != expected.amount:
+                raise AmountMismatchError("quote amount not as requested")
         # fee from the backend must be in the same unit as the amount
         if not payment_quote.fee.unit == unit:
             raise TransactionError("payment quote fee units do not match")
@@ -1051,6 +1057,25 @@ class Ledger(
         # NOTE: we normalize the request to lowercase to avoid case sensitivity
         # This works with Lightning but might not work with other methods
         request = melt_quote.request.lower()
+
+        invoice_obj = bolt11.decode(request)
+        if melt_quote.amountless_amount is not None:
+            if invoice_obj.amount_msat:
+                raise TransactionError(
+                    "amountless option requires an amountless invoice"
+                )
+            if melt_quote.is_mpp:
+                raise TransactionError(
+                    "amountless and mpp options are mutually exclusive"
+                )
+            if not self.backends[method][unit].supports_amountless:
+                raise AmountlessInvoiceNotSupportedError(
+                    "backend does not support amountless invoices"
+                )
+        elif not invoice_obj.amount_msat:
+            raise TransactionError(
+                "amountless invoice requires options.amountless.amount_msat"
+            )
 
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
@@ -1085,9 +1110,6 @@ class Ledger(
 
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
-        invoice_obj = bolt11.decode(melt_quote.request)
-        if not invoice_obj.amount_msat:
-            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         now = int(time.time())
         expiry = None
@@ -1103,6 +1125,7 @@ class Ledger(
             checking_id=payment_quote.checking_id,
             unit=unit.name,
             amount=payment_quote.amount.to(unit).amount,
+            amount_msat=melt_quote.amountless_amount,
             state=MeltQuoteState.unpaid,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=now,
