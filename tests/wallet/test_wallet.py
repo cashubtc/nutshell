@@ -26,6 +26,7 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet2
+from tests.compatibility import mint_older_than
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
@@ -35,6 +36,13 @@ from tests.helpers import (
     is_regtest,
     is_spark_backend,
     pay_if_regtest,
+)
+
+# The test mint's sat keyset. Mints before 0.20.0 derive version 00 keyset IDs.
+KEYSET_ID = (
+    "009a1f293253e41e"
+    if mint_older_than("0.20.0")
+    else "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 )
 
 
@@ -100,10 +108,7 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    assert (
-        keyset.id
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    assert keyset.id == KEYSET_ID
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -582,13 +587,9 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == [
-        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    ]
+    assert list(wallet1.keysets.keys()) == [KEYSET_ID]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
-    await wallet1.activate_keyset(
-        keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    await wallet1.activate_keyset(keyset_id=KEYSET_ID)
     # expect deprecated keyset id to be present
     await assert_err(
         wallet1.activate_keyset(keyset_id="nonexistent"),

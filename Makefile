@@ -42,6 +42,17 @@ test-mint:
 	DEBUG=true \
 	poetry run pytest tests/mint --cov-report xml --cov cashu
 
+.PHONY: compatibility-targets test-wallet-compatibility
+compatibility-targets:
+	poetry run python -m tests.compatibility
+
+test-wallet-compatibility:
+	@test -n "$$CASHU_TEST_MINT_IMAGE" || \
+		(echo "Set CASHU_TEST_MINT_IMAGE, e.g. CASHU_TEST_MINT_IMAGE=cashubtc/nutshell:0.20.3" && exit 1)
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	poetry run pytest tests/wallet --cov-report xml --cov cashu
+
 .PHONY: test-spark-regtest test-spark-backend-regtest test-spark-mint test-spark-wallet
 test-spark-regtest:
 	$(MAKE) test-spark-backend-regtest

@@ -1,0 +1,75 @@
+name: wallet-compatibility
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.12"
+        type: string
+      poetry-version:
+        default: "2.3.2"
+        type: string
+      os:
+        default: "ubuntu-latest"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  targets:
+    name: Resolve released mints
+    runs-on: ${{ inputs.os }}
+    outputs:
+      targets: ${{ steps.resolve.outputs.targets }}
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+      - name: Resolve latest patch of each recent release line
+        id: resolve
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # Assign first: a failing command substitution inside echo would not fail the step.
+        run: |
+          targets=$(make -s compatibility-targets)
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+  wallet:
+    name: Run (Nutshell ${{ matrix.target.version }})
+    needs: targets
+    runs-on: ${{ inputs.os }}
+    # A mint error the wallet keeps retrying can otherwise hang the job.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+      - name: Run tests
+        env:
+          CASHU_TEST_MINT_IMAGE: ${{ matrix.target.image }}
+          MINT_BACKEND_BOLT11_SAT: FakeWallet
+          TOR: false
+        run: |
+          make test-wallet-compatibility
+      - name: Released mint failure diagnostics
+        if: failure()
+        run: |
+          tail -n 100 test_data/released-mint.log
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
