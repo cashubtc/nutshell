@@ -206,20 +206,27 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
-        if not invoice.amount_msat and not quote.amount_msat:
+        if quote.amount_option_type and not quote.amount_msat:
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                error_message="Amountless invoice requires an amount",
+                error_message="Payment amount option requires an amount",
             )
-        if invoice.amount_msat:
-            amount_msat = int(invoice.amount_msat)
-            quote_amount = Amount(Unit[quote.unit], quote.amount)
-            if amount_msat > quote_amount.to(Unit.msat).amount and self.supports_mpp:
-                return await self.pay_partial_invoice(
-                    quote, quote_amount, fee_limit_msat
+        if not invoice.amount_msat and quote.amount_option_type != "nut-23":
+            return PaymentResponse(
+                result=PaymentResult.FAILED,
+                error_message="Amountless invoice requires a nut-23 amount option",
+            )
+        if quote.amount_option_type == "nut-15":
+            if not self.supports_mpp:
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message="mint does not support MPP",
                 )
+            assert quote.amount_msat
+            return await self.pay_partial_invoice(
+                quote, Amount(Unit.msat, quote.amount_msat), fee_limit_msat
+            )
 
         # pay the invoice with routerrpc.SendPaymentV2 (POST /v2/router/send),
         # a streaming endpoint that sends payment updates until a terminal
@@ -233,7 +240,7 @@ class LndRestWallet(LightningBackend):
             "allow_self_payment": settings.mint_lnd_allow_self_payment,
         }
 
-        if not invoice.amount_msat:
+        if quote.amount_option_type == "nut-23":
             data["amt_msat"] = str(quote.amount_msat)
 
         async with self.client.stream(
@@ -304,9 +311,6 @@ class LndRestWallet(LightningBackend):
     ) -> PaymentResponse:
         attempts = 0
 
-        # set the fee limit for the payment
-        lnrpcFeeLimit = dict()
-        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
         invoice = bolt11.decode(quote.request)
 
         invoice_amount = invoice.amount_msat
@@ -328,11 +332,12 @@ class LndRestWallet(LightningBackend):
         for attempt in range(MAX_ROUTE_RETRIES):
             attempts += 1
             # get the route
-            route = await self.client.post(
-                url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
-                json={
-                    "fee_limit": lnrpcFeeLimit,
-                    "use_mission_control": True,
+            route = await self.client.get(
+                url=f"/v1/graph/routes/{pubkey}/0",
+                params={
+                    "amt_msat": str(amount.to(Unit.msat).amount),
+                    "fee_limit.fixed_msat": str(fee_limit_msat),
+                    "use_mission_control": "true",
                 },
                 timeout=None,
             )
@@ -530,9 +535,7 @@ class LndRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
-        amount_msat = melt_quote.amountless_amount or (
-            melt_quote.mpp_amount if melt_quote.is_mpp else None
-        )
+        amount_msat = melt_quote.amount_msat
 
         invoice_obj = decode(melt_quote.request)
         if amount_msat is None:

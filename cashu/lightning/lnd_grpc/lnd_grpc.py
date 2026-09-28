@@ -176,20 +176,27 @@ class LndRPCWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
-        if not invoice.amount_msat and not quote.amount_msat:
+        if quote.amount_option_type and not quote.amount_msat:
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                error_message="Amountless invoice requires an amount",
+                error_message="Payment amount option requires an amount",
             )
-        if invoice.amount_msat:
-            amount_msat = int(invoice.amount_msat)
-            quote_amount = Amount(Unit[quote.unit], quote.amount)
-            if amount_msat > quote_amount.to(Unit.msat).amount and self.supports_mpp:
-                return await self.pay_partial_invoice(
-                    quote, quote_amount, fee_limit_msat
+        if not invoice.amount_msat and quote.amount_option_type != "nut-23":
+            return PaymentResponse(
+                result=PaymentResult.FAILED,
+                error_message="Amountless invoice requires a nut-23 amount option",
+            )
+        if quote.amount_option_type == "nut-15":
+            if not self.supports_mpp:
+                return PaymentResponse(
+                    result=PaymentResult.FAILED,
+                    error_message="mint does not support MPP",
                 )
+            assert quote.amount_msat
+            return await self.pay_partial_invoice(
+                quote, Amount(Unit.msat, quote.amount_msat), fee_limit_msat
+            )
 
         # pay the invoice with routerrpc.SendPaymentV2, a streaming RPC that
         # sends payment updates until a terminal status is reached. The
@@ -201,7 +208,7 @@ class LndRPCWallet(LightningBackend):
             no_inflight_updates=True,
             allow_self_payment=settings.mint_lnd_allow_self_payment,
         )
-        if not invoice.amount_msat:
+        if quote.amount_option_type == "nut-23":
             assert quote.amount_msat
             request.amt_msat = quote.amount_msat
         try:
@@ -287,7 +294,7 @@ class LndRPCWallet(LightningBackend):
                     route = await lnstub.QueryRoutes(
                         lnrpc.QueryRoutesRequest(
                             pub_key=pubkey,
-                            amt=amount.to(Unit.sat).amount,
+                            amt_msat=amount.to(Unit.msat).amount,
                             fee_limit=feelimit,
                             use_mission_control=True,
                         )
@@ -460,9 +467,7 @@ class LndRPCWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
-        amount_msat = melt_quote.amountless_amount or (
-            melt_quote.mpp_amount if melt_quote.is_mpp else None
-        )
+        amount_msat = melt_quote.amount_msat
 
         invoice_obj = bolt11.decode(melt_quote.request)
         if amount_msat is None:

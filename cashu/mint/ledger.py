@@ -1009,22 +1009,11 @@ class Ledger(
         )
         if not payment_quote.checking_id:
             raise Exception("quote has no checking id")
-        # verify that payment quote amount is as expected
-        if (
-            melt_quote.is_mpp
-            and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount
-        ):
-            logger.error(
-                f"expected {payment_quote.amount.to(Unit.msat).amount} msat but got {melt_quote.mpp_amount}"
-            )
-            raise AmountMismatchError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
             raise TransactionError("payment quote amount units do not match")
-        if melt_quote.amountless_amount is not None and unit in (Unit.sat, Unit.msat):
-            expected = Amount(Unit.msat, melt_quote.amountless_amount).to(
-                unit, round="up"
-            )
+        if melt_quote.amount_msat is not None and unit in (Unit.sat, Unit.msat):
+            expected = Amount(Unit.msat, melt_quote.amount_msat).to(unit, round="up")
             if payment_quote.amount.amount != expected.amount:
                 raise AmountMismatchError("quote amount not as requested")
         # fee from the backend must be in the same unit as the amount
@@ -1076,6 +1065,8 @@ class Ledger(
             raise TransactionError(
                 "amountless invoice requires options.amountless.amount_msat"
             )
+        elif melt_quote.is_mpp and melt_quote.mpp_amount > invoice_obj.amount_msat:
+            raise TransactionError("mpp amount exceeds invoice amount")
 
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
@@ -1125,7 +1116,8 @@ class Ledger(
             checking_id=payment_quote.checking_id,
             unit=unit.name,
             amount=payment_quote.amount.to(unit).amount,
-            amount_msat=melt_quote.amountless_amount,
+            amount_msat=melt_quote.amount_msat,
+            amount_option_type=melt_quote.amount_option_type,
             state=MeltQuoteState.unpaid,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=now,

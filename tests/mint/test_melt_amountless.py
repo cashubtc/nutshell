@@ -98,6 +98,7 @@ async def test_amountless_quote_checks_rounded_amount(ledger, monkeypatch, amoun
         stored = await ledger.crud.get_melt_quote(quote_id=response.quote, db=ledger.db)
         assert stored.amount == 2
         assert stored.amount_msat == 1001
+        assert stored.amount_option_type == "nut-23"
         assert stored.request == request.request
 
 
@@ -126,18 +127,22 @@ async def test_amountless_migration_preserves_existing_quotes(tmp_path):
         await crud.store_melt_quote(quote=quote, db=db)
         # Reconstruct the preceding schema with an existing quote.
         await db.execute("ALTER TABLE melt_quotes DROP COLUMN amount_msat")
+        await db.execute("ALTER TABLE melt_quotes DROP COLUMN amount_option_type")
         await migrations.m040_add_amount_msat_to_melt_quotes(db)
         legacy = await crud.get_melt_quote(quote_id="legacy", db=db)
         assert legacy is not None
         assert legacy.amount_msat is None
+        assert legacy.amount_option_type is None
         assert legacy.amount == 17
         assert legacy.unpaid
         quote.quote = "amountless"
         quote.amount_msat = 16_001
+        quote.amount_option_type = "nut-23"
         await crud.store_melt_quote(quote=quote, db=db)
         restored = await crud.get_melt_quote(quote_id=quote.quote, db=db)
         assert restored is not None
         assert restored.amount_msat == 16_001
+        assert restored.amount_option_type == "nut-23"
     finally:
         await db.engine.dispose()
 

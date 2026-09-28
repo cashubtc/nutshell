@@ -48,6 +48,7 @@ async def test_amountless_backend_pays_exact_msat(monkeypatch, backend_cls):
         unit="sat",
         amount=17,
         amount_msat=16_001,
+        amount_option_type="nut-23",
         fee_reserve=2,
         state=MeltQuoteState.unpaid,
     )

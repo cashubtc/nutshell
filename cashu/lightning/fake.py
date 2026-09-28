@@ -201,7 +201,7 @@ class FakeWallet(LightningBackend):
             raise Exception("FakeWallet pay_invoice exception")
 
         invoice = decode(quote.request)
-        if not invoice.amount_msat:
+        if quote.amount_option_type == "nut-23":
             assert quote.amount_msat, "amountless invoice requires an amount"
             invoice.amount_msat = MilliSatoshi(quote.amount_msat)
 
