@@ -15,6 +15,7 @@ from cashu.core.p2pk import P2PKSecret
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
+from tests.compatibility import xfail_below_minimum
 from tests.helpers import (
     get_real_invoice,
     is_fake,
@@ -157,6 +158,7 @@ def test_pay_invoice_regtest(mint, cli_prefix):
 
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+@xfail_below_minimum
 def test_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -170,6 +172,7 @@ def test_invoice(mint, cli_prefix):
 
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+@xfail_below_minimum
 def test_invoice_verbose(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -183,6 +186,7 @@ def test_invoice_verbose(mint, cli_prefix):
     assert "Response: 200" in result.output
 
 
+@xfail_below_minimum
 def test_invoice_return_immediately(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -206,6 +210,7 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exit_code == 0
 
 
+@xfail_below_minimum
 def test_invoice_with_memo(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -229,6 +234,7 @@ def test_invoice_with_memo(mint, cli_prefix):
     assert invoice_obj.description == "test memo"
 
 
+@xfail_below_minimum
 def test_invoice_with_split(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -468,6 +474,7 @@ def test_wallets(cli_prefix):
     assert result.exit_code == 0
 
 
+@xfail_below_minimum
 def test_send(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -482,6 +489,7 @@ def test_send(mint, cli_prefix):
     assert token.token[0].proofs[0].dleq is None, "dleq included"
 
 
+@xfail_below_minimum
 def test_send_with_dleq(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -496,6 +504,7 @@ def test_send_with_dleq(mint, cli_prefix):
     assert token.token[0].proofs[0].dleq is not None, "no dleq included"
 
 
+@xfail_below_minimum
 def test_send_legacy(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -509,6 +518,7 @@ def test_send_legacy(mint, cli_prefix):
     assert token_str.startswith("cashuAey"), "output is not as expected"
 
 
+@xfail_below_minimum
 def test_send_offline(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -560,6 +570,7 @@ def test_pending(cli_prefix):
     assert result.exit_code == 0
 
 
+@xfail_below_minimum
 def test_selfpay(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -571,6 +582,7 @@ def test_selfpay(cli_prefix):
     assert result.exit_code == 0
 
 
+@xfail_below_minimum
 def test_send_with_lock(mint, cli_prefix):
     # call "cashu locks" first and get the lock
     runner = CliRunner()
@@ -669,6 +681,7 @@ def test_lock_p2pk_with_timelock_and_refund(cli_prefix):
     assert result.exit_code == 0
 
 
+@xfail_below_minimum
 def test_send_with_lock_and_refund(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -705,6 +718,7 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
 
 
+@xfail_below_minimum
 def test_send_with_lock_and_timelock(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -738,6 +752,7 @@ def test_send_with_lock_and_timelock(mint, cli_prefix):
     assert before + 5 <= secret.locktime <= after + 5
 
 
+@xfail_below_minimum
 def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -791,6 +806,7 @@ def mint_tokens(runner, cli_prefix, amount: str):
     return result
 
 
+@xfail_below_minimum
 def test_proofs_basic(cli_prefix):
     """Test basic proofs command functionality"""
     runner = CliRunner()
@@ -823,6 +839,7 @@ def test_proofs_basic(cli_prefix):
         assert sorted(proof.keys()) == ["C", "amount", "dleq", "id", "secret"]
 
 
+@xfail_below_minimum
 def test_proofs_json_structure(cli_prefix):
     """Test that proofs have correct JSON structure"""
     runner = CliRunner()
@@ -854,6 +871,7 @@ def test_proofs_json_structure(cli_prefix):
         assert "dleq" in proof.keys()  # will not be present if '--no-dleq' is passed
 
 
+@xfail_below_minimum
 def test_proofs_with_no_dleq_flag(cli_prefix):
     """Test --no-dleq flag excludes DLEQ proofs"""
     runner = CliRunner()
@@ -896,6 +914,7 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
         )
 
 
+@xfail_below_minimum
 def test_proofs_with_keyset_filter(cli_prefix):
     """Test --keyset flag filters proofs by keyset ID"""
     runner = CliRunner()
@@ -957,6 +976,7 @@ def test_proofs_invalid_keyset(cli_prefix):
     assert "No proofs found for keyset: nonexistent" in result.stdout
 
 
+@xfail_below_minimum
 def test_proofs_with_all_flag(cli_prefix):
     """Test --all flag includes reserved proofs"""
     runner = CliRunner()

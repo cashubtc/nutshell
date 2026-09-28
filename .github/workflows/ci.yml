@@ -28,6 +28,19 @@ jobs:
       poetry-version: ${{ matrix.poetry-version }}
       mint-database: ${{ matrix.mint-database }}
 
+  wallet-compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.12"]
+        poetry-version: ["2.3.2"]
+    uses: ./.github/workflows/wallet-compatibility.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
+      poetry-version: ${{ matrix.poetry-version }}
+
   tests_redis_cache:
     strategy:
       fail-fast: false
