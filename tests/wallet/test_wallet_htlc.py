@@ -18,6 +18,7 @@ from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
+from tests.compatibility import mint_older_than
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import pay_if_regtest
 
@@ -554,10 +555,13 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
     for p, sig in zip(send_proofs_copy, signatures1):
         p.witness = HTLCWitness(preimage=preimage, signatures=[sig]).model_dump_json()
 
-    # Should fail because the refund path requires 2 signatures.
+    # Should fail because the refund path requires 2 signatures. Mints before 0.21.0
+    # (cashubtc/nutshell#1008) reject the wrong preimage first.
     await assert_err(
         wallet1.redeem(send_proofs_copy),
-        "Mint Error: not enough pubkeys (3) or signatures (1) present for n_sigs (2)",
+        "Mint Error: HTLC preimage does not match."
+        if mint_older_than("0.21.0")
+        else "Mint Error: not enough pubkeys (3) or signatures (1) present for n_sigs (2)",
     )
 
     # NOW: try to redeem via locktime path but with only 1 signature
