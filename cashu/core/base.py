@@ -648,15 +648,22 @@ class MintQuote(LedgerEvent):
         self.state_val = value
         if value == MintQuoteState.pending:
             return
-        if value in [MintQuoteState.paid, MintQuoteState.issued]:
-            self.amount_paid = self.amount
-        else:
-            self.amount_paid = 0
-
+        if value == MintQuoteState.unpaid:
+            self.amount_paid = self.amount_issued = 0
+            return
+        # Paid keeps what was already issued: a quote may be drawn in parts (NUT-XX).
+        self.amount_paid = self.amount
         if value == MintQuoteState.issued:
             self.amount_issued = self.amount
-        else:
+        elif self.amount_issued is None:
             self.amount_issued = 0
+
+    @property
+    def mintable(self) -> int:
+        """amount_paid - amount_issued; zero unless the quote is paid (or pending)."""
+        if self.state not in (MintQuoteState.paid, MintQuoteState.pending):
+            return 0
+        return (self.amount_paid or self.amount) - (self.amount_issued or 0)
 
     @property
     def identifier(self) -> str:

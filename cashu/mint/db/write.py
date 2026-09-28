@@ -248,7 +248,9 @@ class DbWriteHelper:
             raise TransactionError("Mint quote not found.")
         return quote
 
-    async def _set_mint_quotes_pending(self, quote_ids: List[str]) -> List[MintQuote]:
+    async def _set_mint_quotes_pending(
+        self, quote_ids: List[str], conn: Optional[Connection] = None
+    ) -> List[MintQuote]:
         """Sets multiple mint quotes as pending.
 
         Args:
@@ -275,6 +277,7 @@ class DbWriteHelper:
                     parameters=lock_parameters,
                 )
             ],
+            conn=conn,
         ) as conn:
             for quote_id in quote_ids:
                 quote = await self.crud.get_mint_quote(
@@ -577,6 +580,7 @@ class DbWriteHelper:
         quote: MeltQuote,
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
+        conn: Optional[Connection] = None,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -599,6 +603,7 @@ class DbWriteHelper:
                 ),
                 LockOptions(table="proofs_pending", timeout=1),
             ],
+            conn=conn,
         ) as conn:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn

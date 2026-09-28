@@ -140,7 +140,7 @@
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount issued, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8), 06 change quote output (01 lock key). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -329,6 +329,68 @@
           "signature": "83a816f0bb9137e3523711e6136ce565229d0bd45ef2d0090a89b1c653046fc5fa067210310990ab3aed1ffabcb24a67f2db7d7700cc1243c5de20017b717728"
         }
       ]
+    },
+    "partial_mint": {
+      "quote_amount": 8,
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 4,
+            "quote_id": "quote-mint-0004"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 4,
+            "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "0200160100010402000f71756f74652d6d696e742d3030303403005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "e02e360bcd1f8350548ad44518f911eb026d4118aa068f1ec31935fa1ff83541",
+      "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+      "input_id": "8a290719012a102a7de2957618a858a62075ef5651b84e3cb7287a5fc9959998",
+      "input_digest": "7578e345637e38e71f68291a43d439d5284c3d16b02521660c8cd08dd3db2371",
+      "signature": "1b6de2bf4674d6b6f8ea63ee221bd7c6d382166e8d6fb942d85133d31135402239b9bb3eb339476c76a192805aceaab59a3df3768d402d70639bb9cbec46c5cc"
+    },
+    "mint_quote_to_melt": {
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-mint-0001"
+          }
+        ],
+        "melt_quote_outputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-melt-0001"
+          }
+        ]
+      },
+      "transcript": "0200160100010802000f71756f74652d6d696e742d303030310400160100010802000f71756f74652d6d656c742d30303031",
+      "digest": "fdc2a7f407e99fd4a001b2c9eb705a87a890754dc82f7a604154e8013f6e0907",
+      "input_id": "c7892510d9bd10a53d590f3454790546f0b5ae46d3ee2b6905b77592e4cb0346",
+      "input_digest": "f730a60513aebe597c28893d90e5b1c75315f5c24b3e2bbbea7351783c0821f7"
+    },
+    "proof_to_change": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+            "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
+            "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+          }
+        ],
+        "change_pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4"
+      },
+      "change_container": "060024010021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+      "transcript": "01008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327060024010021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+      "digest": "80e4d96cc790582b2942475875785a8f2d9620e07cff6c2cace25f048d83b106",
+      "input_id": "44002fef2fb9ce3168f3a4e88315290a890080c6c333c2fc47d5327f6c3616f3",
+      "input_digest": "bffb1f8bdf9468802ff97ff9be88b2e89185341072ab587bac26952cfb70c72c"
     }
   },
   "tokens_v4": {
