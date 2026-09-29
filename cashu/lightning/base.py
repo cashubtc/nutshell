@@ -142,6 +142,14 @@ class LightningBackend(ABC):
         if unit not in self.supported_units:
             raise Unsupported(f"Unit {unit} is not supported")
 
+    def validate_payment_request(self, request: str) -> None:
+        """Validate locally without submitting a payment or making network calls.
+
+        Raise if the request cannot be paid. Backends without local validation
+        can retain this default implementation.
+        """
+        pass
+
     @abstractmethod
     def __init__(self, unit: Unit, **kwargs):
         pass
