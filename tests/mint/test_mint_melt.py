@@ -701,6 +701,17 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
     assert all([s.pending for s in states])
 
+    # Proof-state checks do not refresh the backend status. Poll the melt quote
+    # to reconcile a failure that becomes visible after the payment returns.
+    settings.fakewallet_payment_state = PaymentStatusResult.FAILED.name
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.pending for state in states)
+
+    quote = await ledger.get_melt_quote(quote_id)
+    assert quote.state == MeltQuoteState.unpaid
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.unspent for state in states)
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
