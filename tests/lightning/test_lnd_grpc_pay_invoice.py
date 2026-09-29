@@ -67,7 +67,7 @@ async def test_lndrpc_pay_invoice_sends_allow_self_payment(
     )
     monkeypatch.setattr(
         "cashu.lightning.lnd_grpc.lnd_grpc.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     monkeypatch.setattr(
         "cashu.lightning.lnd_grpc.lnd_grpc.settings.mint_lnd_allow_self_payment",
