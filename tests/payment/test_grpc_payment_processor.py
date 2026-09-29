@@ -556,6 +556,12 @@ async def test_onchain_self_payment_uses_processor_amount_and_status(
         )
         for amount in (8, 1)
     ]
+    # Model the issuance backing these synthetic proofs before reserving them.
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db,
+        keyset=ledger.keyset,
+        amount=sum(proof.amount for proof in proofs),
+    )
     quote = await ledger.db_write.verify_and_set_melt_quote_pending(
         quote=quote, proofs=proofs, keysets=ledger.keysets
     )
