@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuoteState
+from cashu.core.models import PostMeltQuoteResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import get_proofs
 from cashu.wallet.wallet import Wallet
@@ -31,6 +32,16 @@ async def wallet():
     )
     await wallet.load_mint()
     yield wallet
+
+
+async def wait_for_failed_melt(task: asyncio.Task[PostMeltQuoteResponse]) -> None:
+    try:
+        response = await asyncio.wait_for(task, 90)
+    except Exception as exc:
+        assert "could not pay invoice" in str(exc)
+    else:
+        # A failed payment can still have a pending backend status initially.
+        assert response.state == MeltQuoteState.pending
 
 
 @pytest.mark.asyncio
@@ -111,6 +122,12 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
 
     await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(preimage_hash=preimage_hash)
+    await wait_for_failed_melt(task)
+    await wait_for_result(
+        lambda: wallet.get_melt_quote(quote.quote),
+        lambda response: response is not None
+        and response.state == MeltQuoteState.unpaid,
+    )
     await wait_for_result(
         lambda: wallet.check_proof_state(send_proofs),
         lambda response: all(state.unspent for state in response.states),
@@ -120,8 +137,6 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.unspent for s in states.states])
-    with pytest.raises(Exception, match="could not pay invoice"):
-        await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -169,6 +184,12 @@ async def test_regtest_get_melt_quote_melt_fail_restore_pending_batch_check(
     # fail the payment, melt will unset the proofs as reserved
     await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(preimage_hash=preimage_hash)
+    await wait_for_failed_melt(task)
+    await wait_for_result(
+        lambda: wallet.get_melt_quote(quote.quote),
+        lambda response: response is not None
+        and response.state == MeltQuoteState.unpaid,
+    )
     await wait_for_result(
         lambda: wallet.check_proof_state(send_proofs),
         lambda response: all(state.unspent for state in response.states),
@@ -180,10 +201,12 @@ async def test_regtest_get_melt_quote_melt_fail_restore_pending_batch_check(
     spent_proofs = await wallet.get_spent_proofs_check_states_batched(send_proofs)
     assert len(spent_proofs) == 0
 
-    proofs_db_later = await get_proofs(db=wallet.db, melt_id=quote.quote)
-    assert all([p.reserved is False for p in proofs_db_later])
-    with pytest.raises(Exception, match="could not pay invoice"):
-        await asyncio.wait_for(task, 90)
+    proofs_db_later = {
+        proof.secret: proof for proof in await get_proofs(db=wallet.db)
+    }
+    for proof in send_proofs:
+        assert not proofs_db_later[proof.secret].reserved
+        assert not proofs_db_later[proof.secret].melt_id
 
 
 @pytest.mark.asyncio
@@ -240,6 +263,11 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
     # fail the payment, melt will unset the proofs as reserved
     await wait_for_hold_invoice(str(invoice_dict["payment_request"]))
     cancel_invoice(preimage_hash=preimage_hash)
+    await wait_for_result(
+        lambda: wallet.get_melt_quote(quote.quote),
+        lambda response: response is not None
+        and response.state == MeltQuoteState.unpaid,
+    )
     await wait_for_result(
         lambda: wallet.check_proof_state(send_proofs),
         lambda response: all(state.unspent for state in response.states),
