@@ -701,6 +701,17 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
     assert all([s.pending for s in states])
 
+    # Proof-state checks do not refresh the backend status. Poll the melt quote
+    # to reconcile a failure that becomes visible after the payment returns.
+    settings.fakewallet_payment_state = PaymentStatusResult.FAILED.name
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.pending for state in states)
+
+    quote = await ledger.get_melt_quote(quote_id)
+    assert quote.state == MeltQuoteState.unpaid
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.unspent for state in states)
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
@@ -1078,9 +1089,9 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
 
     # We expect them to NOT be pending if the bug is fixed
-    assert not any(s.pending for s in states), (
-        "Proofs from failed melt request stuck in pending!"
-    )
+    assert not any(
+        s.pending for s in states
+    ), "Proofs from failed melt request stuck in pending!"
 
 
 @pytest.mark.asyncio
@@ -1430,3 +1441,119 @@ async def test_melt_status_resolution_across_attempts(
     assert result.state == MeltQuoteState.unpaid
     states = await ledger.db_read.get_proofs_states([proof_b.Y])
     assert states[0].unspent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unknown", [False, True])
+async def test_grpc_failed_payment_releases_proofs(
+    ledger, wallet, monkeypatch, unknown
+):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.base import ProofSpentState
+    from cashu.core.errors import LightningPaymentFailedError
+    from cashu.payment import payment_method_registry
+    from cashu.payment.grpc import payment_processor_pb2 as pb
+    from cashu.payment.grpc_processor import GrpcPaymentProcessor
+
+    funding = await wallet.request_mint(8)
+    await pay_if_regtest(funding.request)
+    proofs = await wallet.mint(8, quote_id=funding.quote)
+    processor = GrpcPaymentProcessor("testpay", Unit.sat, {})
+    processor._stub = stub = AsyncMock()
+    monkeypatch.setitem(payment_method_registry._plugins, "testpay", processor)
+    monkeypatch.setattr(
+        ledger, "backends", {**ledger.backends, "testpay": {Unit.sat: processor}}
+    )
+    identifier = pb.PaymentIdentifier(
+        type=pb.PAYMENT_IDENTIFIER_TYPE_QUOTE_ID, id="failed-send"
+    )
+    stub.GetPaymentQuote.return_value = pb.PaymentQuoteResponse(
+        request_identifier=identifier,
+        amount=pb.AmountMessage(value=8, unit="sat"),
+        fee=pb.AmountMessage(value=0, unit="sat"),
+    )
+    result = pb.MakePaymentResponse(
+        payment_identifier=identifier,
+        status=pb.QUOTE_STATE_UNSPECIFIED if unknown else pb.QUOTE_STATE_UNPAID,
+        total_spent=pb.AmountMessage(value=0, unit="sat"),
+    )
+    stub.MakePayment.return_value = result
+    stub.CheckOutgoingPayment.return_value = result
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request="merchant"), "testpay"
+    )
+    if unknown:
+        assert (await ledger.melt(proofs=proofs, quote=quote.quote)).state == "PENDING"
+    else:
+        with pytest.raises(LightningPaymentFailedError):
+            await ledger.melt(proofs=proofs, quote=quote.quote)
+    states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    assert all(
+        s.state == (ProofSpentState.pending if unknown else ProofSpentState.unspent)
+        for s in states
+    )
+    assert not ledger.disable_melt
+    stored = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored.state == (
+        MeltQuoteState.pending if unknown else MeltQuoteState.unpaid
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recover_status", [False, True])
+async def test_grpc_settlement_preserves_payment_metadata(
+    ledger, wallet, monkeypatch, recover_status
+):
+    from unittest.mock import AsyncMock
+
+    from cashu.payment import payment_method_registry
+    from cashu.payment.grpc import payment_processor_pb2 as pb
+    from cashu.payment.grpc_processor import GrpcPaymentProcessor
+
+    funding = await wallet.request_mint(8)
+    await pay_if_regtest(funding.request)
+    proofs = await wallet.mint(8, quote_id=funding.quote)
+    processor = GrpcPaymentProcessor("testpay", Unit.sat, {})
+    processor._stub = stub = AsyncMock()
+    monkeypatch.setitem(payment_method_registry._plugins, "testpay", processor)
+    monkeypatch.setattr(
+        ledger, "backends", {**ledger.backends, "testpay": {Unit.sat: processor}}
+    )
+    identifier = pb.PaymentIdentifier(
+        type=pb.PAYMENT_IDENTIFIER_TYPE_QUOTE_ID, id="settled-send"
+    )
+    stub.GetPaymentQuote.return_value = pb.PaymentQuoteResponse(
+        request_identifier=identifier,
+        amount=pb.AmountMessage(value=8, unit="sat"),
+        fee=pb.AmountMessage(value=0, unit="sat"),
+        extra_json='{"destination": "merchant"}',
+    )
+    settled = pb.MakePaymentResponse(
+        payment_identifier=identifier,
+        status=pb.QUOTE_STATE_PAID,
+        total_spent=pb.AmountMessage(value=8, unit="sat"),
+        payment_proof="processor-proof",
+        extra_json='{"receipt": "processor-receipt"}',
+    )
+    stub.MakePayment.return_value = (
+        pb.MakePaymentResponse(status=pb.QUOTE_STATE_UNSPECIFIED)
+        if recover_status
+        else settled
+    )
+    stub.CheckOutgoingPayment.return_value = settled
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request="merchant"), "testpay"
+    )
+    result = await ledger.melt(proofs=proofs, quote=quote.quote)
+    assert result.state == "PAID"
+    assert result.payment_preimage == "processor-proof"
+    assert result.model_extra == {
+        "destination": "merchant",
+        "receipt": "processor-receipt",
+    }
+    stored = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored and stored.method_data == result.model_extra
+    assert all(
+        s.spent for s in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    )

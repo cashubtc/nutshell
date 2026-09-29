@@ -5,9 +5,10 @@ import pytest
 from fastapi import FastAPI, Request, Response
 
 from cashu.core.errors import ClearAuthFailedError
-from cashu.core.settings import settings
+from cashu.core.settings import Settings, settings
 from cashu.mint.auth.base import User
 from cashu.mint.middleware import BlindAuthMiddleware, ClearAuthMiddleware
+from cashu.mint.startup import ledger
 
 
 def _request(path: str, headers: list[tuple[bytes, bytes]] | None = None) -> Request:
@@ -209,3 +210,70 @@ def test_mint_require_blind_auth_paths_includes_batch_mint():
     )
 
     assert mint_info.requires_blind_auth_path("POST", "/v1/mint/bolt11/batch")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["bolt11", "bolt12", "onchain", "testpay"])
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/v1/mint/quote/{method}",
+        "/v1/mint/{method}",
+        "/v1/mint/{method}/batch",
+        "/v1/melt/quote/{method}",
+        "/v1/melt/{method}",
+    ],
+)
+async def test_default_auth_protects_all_payment_methods(monkeypatch, method, route):
+    monkeypatch.setattr(settings, "mint_require_auth", True)
+    monkeypatch.setattr(settings, "mint_auth_oicd_discovery_url", "https://auth.test")
+    monkeypatch.setattr(
+        settings,
+        "mint_require_blind_auth_paths",
+        Settings.model_fields["mint_require_blind_auth_paths"].default,
+    )
+    mint_info = ledger.mint_info
+    path = route.format(method=method)
+    assert mint_info.requires_blind_auth_path("POST", path)
+    assert not mint_info.requires_blind_auth_path("GET", path)
+
+    verified = []
+
+    @asynccontextmanager
+    async def verify_blind_auth(token):
+        verified.append(token)
+        yield
+
+    monkeypatch.setattr(
+        "cashu.mint.middleware.auth_ledger",
+        SimpleNamespace(
+            mint_info=mint_info,
+            verify_blind_auth=verify_blind_auth,
+        ),
+    )
+    middleware = BlindAuthMiddleware(FastAPI())
+    request = _request(path)
+    request.scope["method"] = "POST"
+
+    async def call_next(request):
+        assert verified == ["valid-bat"]
+        return Response(status_code=200)
+
+    with pytest.raises(Exception, match="Missing blind auth token"):
+        await middleware.dispatch(request, call_next)
+    assert not verified
+    authorized_request = _request(path, [(b"blind-auth", b"valid-bat")])
+    authorized_request.scope["method"] = "POST"
+    response = await middleware.dispatch(authorized_request, call_next)
+    assert response.status_code == 200
+
+
+def test_explicit_auth_paths_remain_configurable(monkeypatch):
+    monkeypatch.setattr(settings, "mint_require_auth", True)
+    monkeypatch.setattr(settings, "mint_auth_oicd_discovery_url", "https://auth.test")
+    monkeypatch.setattr(
+        settings, "mint_require_blind_auth_paths", [["POST", "/v1/mint/bolt11"]]
+    )
+    mint_info = ledger.mint_info
+    assert mint_info.requires_blind_auth_path("POST", "/v1/mint/bolt11")
+    assert not mint_info.requires_blind_auth_path("POST", "/v1/mint/onchain")

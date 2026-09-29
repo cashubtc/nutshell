@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -110,6 +110,12 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_msat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
+    # Entry-point names in the ``cashu.payment_methods`` group. Plugins are never
+    # auto-loaded merely because they are installed.
+    mint_payment_method_plugins: List[str] = Field(default=[])
+    # Additive structured backend declarations for non-BOLT11 methods. Legacy
+    # BOLT11 variables above remain supported and authoritative.
+    mint_payment_backends: List[Dict[str, Any]] = Field(default=[])
 
     mint_strike_key: Optional[str] = Field(default=None)
 
@@ -343,10 +349,8 @@ class AuthSettings(MintSettings):
     ]
     mint_require_blind_auth_paths: List[List[str]] = [
         ["POST", "/v1/swap"],
-        ["POST", "/v1/mint/quote/bolt11"],
-        ["POST", "/v1/mint/bolt11"],
-        ["POST", "/v1/mint/bolt11/batch"],
-        ["POST", "/v1/melt/bolt11"],
+        ["POST", "/v1/mint/*"],
+        ["POST", "/v1/melt/*"],
     ]
 
 
