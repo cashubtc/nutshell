@@ -69,25 +69,27 @@ async def reset_wallet_db(wallet: Wallet):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
+async def wallet1(mint, tmp_path):
     wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet1",
+        db=str(tmp_path / "wallet1"),
         name="wallet1",
     )
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2():
+async def wallet2(tmp_path):
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet2",
+        db=str(tmp_path / "wallet2"),
         name="wallet2",
     )
     await wallet2.load_mint()
     yield wallet2
+    await wallet2.db.engine.dispose()
 
 
 @pytest.mark.asyncio

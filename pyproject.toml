@@ -77,6 +77,10 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.mutmut]
 source_paths = ["cashu/"]
+# Each baseline and mutant imports fresh fixtures and resets its test databases.
+# Do not fork a process that has already started gRPC or run the test suite.
+process_isolation = "forkserver"
+forkserver_warmup = "none"
 pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/fuzz"]
 pytest_add_cli_args = ["-o", "addopts=", "-x", "-q"]
 do_not_mutate = [

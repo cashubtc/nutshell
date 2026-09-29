@@ -10,5 +10,5 @@ jobs:
     uses: ./.github/workflows/_mutation-profile.yml
     with:
       profile: lightning
-      target: "cashu.lightning*"
+      shards: "[0,1]"
       prefix: "cashu.lightning"
