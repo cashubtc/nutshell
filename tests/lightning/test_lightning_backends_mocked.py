@@ -457,7 +457,7 @@ async def test_lndrest_pay_invoice_settled_reads_stream_result(monkeypatch):
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
@@ -500,7 +500,7 @@ async def test_lndrest_pay_invoice_sends_allow_self_payment(
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     monkeypatch.setattr(
         "cashu.lightning.lndrest.settings.mint_lnd_allow_self_payment",
@@ -537,7 +537,7 @@ async def test_lndrest_pay_invoice_returns_failed_on_payment_failure(monkeypatch
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
@@ -561,7 +561,7 @@ async def test_lndrest_pay_invoice_returns_failed_on_rest_proxy_error(monkeypatc
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
@@ -588,7 +588,7 @@ async def test_lndrest_pay_invoice_unknown_on_stream_error(monkeypatch):
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
@@ -610,7 +610,7 @@ async def test_lndrest_pay_invoice_unknown_on_empty_stream(monkeypatch):
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=1000),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=1000),
     )
     result = await wallet.pay_invoice(
         _quote("lnbc1fake", amount=1), fee_limit_msat=1000
@@ -683,8 +683,10 @@ async def test_lndrest_get_payment_quote_uses_mpp_amount(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat
     monkeypatch.setattr(
-        "cashu.lightning.lndrest.decode",
-        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="ph"),
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(
+            has_expired=lambda: False, amount_msat=2000, payment_hash="ph"
+        ),
     )
     request = PostMeltQuoteRequest(
         unit="sat",
@@ -880,8 +882,10 @@ async def test_lndrest_get_payment_quote_adds_base_reserve(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat
     monkeypatch.setattr(
-        "cashu.lightning.lndrest.decode",
-        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="ph"),
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(
+            has_expired=lambda: False, amount_msat=2000, payment_hash="ph"
+        ),
     )
     monkeypatch.setattr(
         "cashu.lightning.lndrest.settings.lightning_reserve_fee_min", 2000
@@ -913,7 +917,9 @@ async def test_lndgrpc_get_payment_quote_sets_rpc_deadline(monkeypatch):
     wallet.combined_creds = object()
     monkeypatch.setattr(
         "cashu.lightning.lnd_grpc.lnd_grpc.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="ph"),
+        lambda request: SimpleNamespace(
+            has_expired=lambda: False, amount_msat=2000, payment_hash="ph"
+        ),
     )
     monkeypatch.setattr(
         "cashu.lightning.lnd_grpc.lnd_grpc.settings.lightning_reserve_fee_min",

@@ -6,13 +6,11 @@ from typing import AsyncGenerator, Dict, Optional
 
 import bolt11
 import httpx
-from bolt11 import (
-    TagChar,
-    decode,
-)
+from bolt11 import TagChar
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import QuoteExpiredError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -202,9 +200,18 @@ class LndRestWallet(LightningBackend):
             error_message=None,
         )
 
+    def validate_payment_request(self, request: str) -> None:
+        if bolt11.decode(request).has_expired():
+            raise QuoteExpiredError("invoice expired")
+
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
+        try:
+            self.validate_payment_request(quote.request)
+        except QuoteExpiredError as exc:
+            return PaymentResponse(result=PaymentResult.FAILED, error_message=str(exc))
+
         # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
@@ -523,7 +530,8 @@ class LndRestWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
-        invoice_obj = decode(melt_quote.request)
+        invoice_obj = bolt11.decode(melt_quote.request)
+        self.validate_payment_request(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         if amount_msat is None:

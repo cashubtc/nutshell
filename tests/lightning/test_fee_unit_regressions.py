@@ -49,7 +49,7 @@ async def test_lnd_mpp_preserves_msat_quote_amount_unit(
     monkeypatch.setattr(wallet, "pay_partial_invoice", pay_partial_invoice)
     monkeypatch.setattr(
         decode_path,
-        lambda request: SimpleNamespace(amount_msat=2_000),
+        lambda request: SimpleNamespace(amount_msat=2_000, has_expired=lambda: False),
     )
 
     await wallet.pay_invoice(

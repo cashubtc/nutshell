@@ -78,7 +78,7 @@ def _mock_grpc(monkeypatch, wallet, invoice_amount_msat: int) -> dict[str, Any]:
     )
     monkeypatch.setattr(
         "cashu.lightning.lnd_grpc.lnd_grpc.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=invoice_amount_msat),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=invoice_amount_msat),
     )
     monkeypatch.setattr(
         "cashu.lightning.lnd_grpc.lnd_grpc.settings.mint_lnd_allow_self_payment", False
@@ -158,7 +158,7 @@ def _mock_rest(monkeypatch, wallet, invoice_amount_msat: int) -> dict[str, Any]:
     wallet.client = FakeClient()
     monkeypatch.setattr(
         "cashu.lightning.lndrest.bolt11.decode",
-        lambda request: SimpleNamespace(amount_msat=invoice_amount_msat),
+        lambda request: SimpleNamespace(has_expired=lambda: False, amount_msat=invoice_amount_msat),
     )
     monkeypatch.setattr(
         "cashu.lightning.lndrest.settings.mint_lnd_allow_self_payment", False

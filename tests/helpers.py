@@ -62,6 +62,30 @@ async def get_random_invoice_data():
     return {"out": False, "amount": 10, "memo": f"test_memo_{get_random_string(10)}"}
 
 
+def get_fake_invoice(
+    sats: int, *, date: int | None = None, expiry: int | None = 3600
+) -> str:
+    """Create a signed invoice without relying on a Lightning node."""
+    tags = bolt11.Tags(
+        [
+            bolt11.Tag(bolt11.TagChar.payment_hash, os.urandom(32).hex()),
+            bolt11.Tag(bolt11.TagChar.payment_secret, os.urandom(32).hex()),
+            bolt11.Tag(bolt11.TagChar.description, "test invoice"),
+        ]
+    )
+    if expiry is not None:
+        tags.add(bolt11.TagChar.expire_time, expiry)
+    return bolt11.encode(
+        bolt11.Bolt11(
+            currency="bcrt",
+            date=int(time.time()) if date is None else date,
+            amount_msat=bolt11.MilliSatoshi(sats * 1000),
+            tags=tags,
+        ),
+        "11" * 32,
+    )
+
+
 wallets_module = importlib.import_module("cashu.lightning")
 wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class(unit=Unit.sat)
