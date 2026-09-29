@@ -113,7 +113,7 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
     quote = MeltQuote(
         quote="concurrent-finalize-quote",
         method=Method.bolt11.name,
-        request="concurrent-finalize-request",
+        request=get_fake_invoice(10),
         checking_id="concurrent-finalize-checking-id",
         unit=Unit.sat.name,
         state=MeltQuoteState.pending,
@@ -189,12 +189,13 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
     payment_task = asyncio.create_task(
         ledger._execute_melt_payment(quote, [proof], outputs=None)
     )
-    await payment_started.wait()
     try:
+        await asyncio.wait_for(payment_started.wait(), timeout=10)
         lookup_result = await ledger.get_melt_quote(quote.quote)
     finally:
         release_payment.set()
-    payment_result = await payment_task
+        # Surface payment failures even if the task never signals that it started.
+        payment_result = await asyncio.wait_for(payment_task, timeout=10)
     retry_result = await ledger._finalize_melt_paid(
         quote.quote,
         fee_paid=1,
