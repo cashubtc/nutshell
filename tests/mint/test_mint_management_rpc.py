@@ -1,3 +1,4 @@
+import hashlib
 import time
 from unittest.mock import AsyncMock
 
@@ -162,20 +163,39 @@ async def test_update_auth_limits(rpc_servicer):
     with pytest.raises(Exception, match="No auth limit was specified"):
         await rpc_servicer.UpdateAuthLimits(request_empty, None)
 
+
 @pytest.mark.asyncio
-async def test_rotate_next_keyset(rpc_servicer):
+@pytest.mark.parametrize(
+    "final_expiry, expected_suffix",
+    [(None, ""), (0, "|final_expiry:0"), (2059210353, "|final_expiry:2059210353")],
+)
+async def test_rotate_next_keyset(rpc_servicer, final_expiry, expected_suffix):
     request = management_pb2.RotateNextKeysetRequest(
         unit="sat",
         input_fee_ppk=2,
-        final_expiry=86400,
-        max_order=12
+        final_expiry=final_expiry,
+        max_order=12,
     )
     response = await rpc_servicer.RotateNextKeyset(request, None)
-    
+
     assert response.unit == "sat"
     assert response.input_fee_ppk == 2
-    assert response.final_expiry == 86400
+    assert response.HasField("final_expiry") == (final_expiry is not None)
+    assert response.final_expiry == (final_expiry or 0)
     assert response.max_order > 0
+
+    ledger = rpc_servicer.ledger
+    keyset = ledger.keysets[response.id]
+    stored_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=response.id))[0]
+    assert keyset.final_expiry == final_expiry
+    assert stored_keyset.final_expiry == final_expiry
+    preimage = ",".join(
+        f"{amount}:{pubkey}"
+        for amount, pubkey in sorted(keyset.public_keys_hex.items())
+    )
+    preimage += "|unit:sat|input_fee_ppk:2" + expected_suffix
+    assert response.id == "01" + hashlib.sha256(preimage.encode("utf-8")).hexdigest()
+
 
 @pytest.mark.asyncio
 async def test_nut04_quote(rpc_servicer):
