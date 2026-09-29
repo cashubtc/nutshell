@@ -63,6 +63,10 @@ async def run(
         raise TransactionError("transaction repeats a mint quote.")
     if any(o.amount == 0 for o in outputs):
         raise TransactionError("blank outputs are not allowed: use a change quote.")
+    # Outputs cannot be signed if their keyset rotates during the payment (NUT-02);
+    # the change quote is where their value goes then.
+    if outputs and payload.melt_quote_outputs and not payload.change_pubkey:
+        raise TransactionError("a melt with blinded outputs requires a change_pubkey.")
     if ledger._at_least_one_proof_has_sig_all(proofs):
         raise TransactionError("SIG_ALL inputs are not supported here.")
     change_key = bytes.fromhex(payload.change_pubkey) if payload.change_pubkey else None
@@ -335,11 +339,22 @@ async def settle(
         """,
         {"digest": digest},
     )
+    unsigned = 0
     if rows:
-        # These outputs were validated and reserved while their keyset was active.
-        await ledger._sign_blinded_messages(
-            [BlindedMessage.from_row(r) for r in rows], conn, allow_inactive=True
-        )
+        messages = [BlindedMessage.from_row(r) for r in rows]
+        if ledger.keysets[messages[0].id].active:
+            await ledger._sign_blinded_messages(messages, conn)
+        else:
+            # The keyset rotated during the payment: nothing is signed (NUT-02),
+            # the outputs' value returns through the change quote.
+            unsigned = sum(m.amount for m in messages)
+            await conn.execute(
+                f"""
+                DELETE FROM {ledger.db.table_with_schema("promises")}
+                WHERE swap_id = :digest AND c_ IS NULL
+                """,
+                {"digest": digest},
+            )
     for quote_id, amount in json.loads(record["mint_quotes"]):
         quote = await ledger.crud.get_mint_quote(
             quote_id=quote_id, db=ledger.db, conn=conn
@@ -350,7 +365,7 @@ async def settle(
         state = MintQuoteState.issued if drawn else MintQuoteState.paid
         ledger.db_write._set_mint_quote_state(quote, state)
         await ledger.crud.update_mint_quote(quote=quote, db=ledger.db, conn=conn)
-    change = record["excess"] - fee_paid
+    change = record["excess"] + unsigned - fee_paid
     if change < 0:
         raise TransactionError("negative change.")
     change_quote = None

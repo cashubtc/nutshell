@@ -10,7 +10,7 @@ from cashu.core.crypto.transcript import (
     TranscriptQuote,
     transaction_inputs,
 )
-from cashu.core.errors import KeysetInactiveError
+from cashu.core.errors import KeysetInactiveError, TransactionError
 from cashu.core.models import (
     PostMeltQuoteRequest,
     PostTransactionRequest,
@@ -75,6 +75,7 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
     amount = 62 + melt.fee_reserve + 4
     quote, key = await locked_quote(ledger, amount)
     outputs = [output(ledger, 4)]
+    _, change_key = nut20.generate_keypair()
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote)],
         blinded_outputs=[
@@ -87,7 +88,21 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
         melt_quote_outputs=[
             TranscriptQuote(amount=62 + melt.fee_reserve, quote_id=melt.quote)
         ],
+        change_pubkey=bytes.fromhex(change_key),
     )
+    # A melt with outputs must name a change key: rotation would strand them otherwise.
+    with pytest.raises(TransactionError, match="change_pubkey"):
+        await ledger.transaction(
+            PostTransactionRequest(
+                mint_quote_inputs=[
+                    TransactionQuoteInput(quote=quote.quote, amount=amount, witness="")
+                ],
+                blinded_outputs=outputs,
+                melt_quote_outputs=[
+                    TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
+                ],
+            )
+        )
     backend = ledger.backends[Method.bolt11][Unit.sat]
     original = backend.pay_invoice
 
@@ -110,10 +125,15 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
             melt_quote_outputs=[
                 TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
             ],
+            change_pubkey=change_key,
         )
     )
+    # The rotated keyset signs nothing (NUT-02); the outputs' value is change.
     assert result.state == "PAID"
-    assert [s.amount for s in result.signatures] == [4]
+    assert result.signatures == []
+    fee_paid = (await ledger.get_melt_quote(melt.quote)).fee_paid
+    assert result.change_quote is not None
+    assert result.change_quote.amount == amount - 62 - fee_paid
     assert (await ledger.get_mint_quote(quote.quote)).issued
     with pytest.raises(KeysetInactiveError):
         await ledger._sign_blinded_messages([output(ledger, 4)])

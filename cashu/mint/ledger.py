@@ -1763,8 +1763,6 @@ class Ledger(
         self,
         outputs: List[BlindedMessage],
         conn: Optional[Connection] = None,
-        *,
-        allow_inactive: bool = False,
     ) -> list[BlindedSignature]:
         """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
 
@@ -1774,7 +1772,6 @@ class Ledger(
         called. Only call this function if the transaction is fully validated!
 
         Args:
-            allow_inactive: Only for settlement of outputs reserved while active.
             B_s (List[BlindedMessage]): Blinded secret (point on curve)
             keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset.
                 If not given will use the keyset of the first output. Defaults to None.
@@ -1804,7 +1801,7 @@ class Ledger(
                 
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
-            if not keyset.active and not allow_inactive:
+            if not keyset.active:
                 raise KeysetInactiveError()
             keyset_id = output.id
             logger.trace(f"Generating promise with keyset {keyset_id}.")
