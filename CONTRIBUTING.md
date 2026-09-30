@@ -111,6 +111,14 @@ FAKEWALLET_DELAY_OUTGOING_PAYMENT=3
 FAKEWALLET_DELAY_INCOMING_PAYMENT=3
 ```
 
+A test can also choose the outcome of a single melt. If the description of the invoice being paid is JSON of this shape, it overrides the mint-wide `FAKEWALLET_*` payment settings for that invoice only:
+
+```json
+{"pay_invoice_state": "PENDING", "check_payment_state": "PAID", "pay_err": false, "check_err": false}
+```
+
+All four fields are required. States are `PAID` (or `SETTLED`), `PENDING`, `FAILED` (or `UNPAID`) and `UNKNOWN`. `pay_err` makes the payment raise and `check_err` makes the status check raise. The format matches the CDK fake wallet, and `get_fake_invoice` in `tests/helpers.py` builds such an invoice.
+
 ### Lightning regtest
 
 There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest-enviroment) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.
