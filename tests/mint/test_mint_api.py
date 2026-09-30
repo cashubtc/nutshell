@@ -434,6 +434,8 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     reason="only works on regtest",
 )
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # internal invoice
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
