@@ -282,6 +282,43 @@ def get_real_invoice_fee_leaf(sats: int) -> str:
     return run_cmd_json([*cmd, "addinvoice", str(sats)])["payment_request"]
 
 
+# signing key of CDK's create_fake_invoice
+FAKE_INVOICE_PRIVKEY = (
+    "e126f68f7eafcc8b74f54d269fe206be715000f94dac067d1c04a8ca3b2db734"
+)
+
+
+def get_fake_invoice(sats: int, description: Union[str, dict] = "") -> str:
+    """External invoice for FakeWallet melts; a dict description is sent as JSON.
+
+    Follows CDK's create_fake_invoice, whose parser needs the features tag.
+    """
+    tags = bolt11.Tags()
+    tags.add(bolt11.TagChar.payment_hash, os.urandom(32).hex())
+    tags.add(bolt11.TagChar.payment_secret, os.urandom(32).hex())
+    tags.add(
+        bolt11.TagChar.description,
+        json.dumps(description) if isinstance(description, dict) else description,
+    )
+    tags.add(bolt11.TagChar.min_final_cltv_expiry, 144)
+    tags.add(
+        bolt11.TagChar.features,
+        bolt11.Features.from_feature_list(
+            {
+                bolt11.Feature.var_onion_optin: bolt11.FeatureState.required,
+                bolt11.Feature.payment_secret: bolt11.FeatureState.required,
+            }
+        ),
+    )
+    invoice = bolt11.Bolt11(
+        currency="bc",
+        amount_msat=bolt11.MilliSatoshi(sats * 1000),
+        date=int(time.time()),
+        tags=tags,
+    )
+    return bolt11.encode(invoice, FAKE_INVOICE_PRIVKEY)
+
+
 async def pay_if_regtest(bolt11: str) -> None:
     if is_spark_backend and os.getenv("CASHU_SPARK_REGTEST", "").lower() == "true":
         from tests.spark_regtest import pay_regtest_invoice
