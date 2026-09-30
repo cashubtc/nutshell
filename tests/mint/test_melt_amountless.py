@@ -74,13 +74,15 @@ async def test_amountless_support_is_backend_specific(ledger, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("amount", [1, 2, 3])
 async def test_amountless_quote_checks_rounded_amount(ledger, monkeypatch, amount):
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    monkeypatch.setattr(backend, "supports_amountless", True)
     request = PostMeltQuoteRequest(
         unit="sat",
         request=invoice_response(None).payment_request,
         options={"amountless": {"amount_msat": 1001}},
     )
     monkeypatch.setattr(
-        ledger.backends[Method.bolt11][Unit.sat],
+        backend,
         "get_payment_quote",
         AsyncMock(
             return_value=PaymentQuoteResponse(
