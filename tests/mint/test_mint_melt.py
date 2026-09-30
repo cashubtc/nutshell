@@ -30,6 +30,8 @@ from cashu.lightning.base import (
     PaymentStatus,
     PaymentStatusResult,
 )
+from cashu.lightning.lnd_grpc.lnd_grpc import LndRPCWallet
+from cashu.lightning.lndrest import LndRestWallet
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -70,16 +72,25 @@ async def wallet(ledger: Ledger):
     yield wallet1
 
 
+@pytest.fixture(params=[LndRestWallet, LndRPCWallet], ids=["rest", "grpc"])
+def lnd_payment_validation(ledger: Ledger, monkeypatch, request):
+    # Keep local invoice validation active even when running with FakeWallet.
+    validation_backend = object.__new__(request.param)
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat],
+        "validate_payment_request",
+        validation_backend.validate_payment_request,
+    )
+
+
 async def create_pending_melts(
     ledger: Ledger, check_id: str = "checking_id", quote_id: str = "quote_id"
 ) -> Tuple[Proof, MeltQuote]:
-    """Helper function for startup tests for fakewallet. Creates fake pending melt
-    quote and fake proofs that are in the pending table that look like they're being
-    used to pay the pending melt quote."""
+    """Create a pending melt quote and synthetic proofs for payment-state tests."""
     quote = MeltQuote(
         quote=quote_id,
         method="bolt11",
-        request="asdasd",
+        request=get_fake_invoice(100),
         checking_id=check_id,
         unit="sat",
         state=MeltQuoteState.pending,
@@ -543,7 +554,7 @@ async def test_fakewallet_pending_quote_get_melt_quote_exception(
 
 @pytest.mark.asyncio
 async def test_execute_melt_failed_payment_uses_settled_status(
-    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, lnd_payment_validation
 ):
     proof, quote = await create_pending_melts(ledger)
     backend = ledger.backends[Method.bolt11][Unit.sat]
@@ -569,7 +580,7 @@ async def test_execute_melt_failed_payment_uses_settled_status(
 
 @pytest.mark.asyncio
 async def test_execute_melt_payment_and_status_exceptions_keep_pending(
-    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, lnd_payment_validation
 ):
     proof, quote = await create_pending_melts(ledger)
     backend = ledger.backends[Method.bolt11][Unit.sat]
