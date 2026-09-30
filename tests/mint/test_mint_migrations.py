@@ -172,7 +172,15 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
             fee_reserve=1,
             state=MeltQuoteState.unpaid,
         )
-        await crud.store_melt_quote(quote=quote, db=db)
+        # Seed the historical schema without using today's INSERT columns.
+        await db.execute(
+            """
+            INSERT INTO melt_quotes
+            (quote, method, request, checking_id, unit, amount, fee_reserve, fee_paid, state)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :fee_paid, :state)
+            """,
+            {**quote.model_dump(), "state": quote.state.value},
+        )
 
         await mint_migrations.m039_add_attempt_to_melt_quotes(db)
 
@@ -383,7 +391,7 @@ async def test_auth_m005_migration_preserves_existing_promises(tmp_path):
     async with db.connect() as conn:
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')} (id, amount, b_, c_, created)
+            INSERT INTO {db.table_with_schema("promises")} (id, amount, b_, c_, created)
             VALUES (:id, :amount, :b_, :c_, :created)
             """,
             {

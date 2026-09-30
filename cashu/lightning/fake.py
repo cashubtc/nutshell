@@ -68,6 +68,7 @@ class FakeWallet(LightningBackend):
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
+    supports_amountless: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -200,6 +201,9 @@ class FakeWallet(LightningBackend):
             raise Exception("FakeWallet pay_invoice exception")
 
         invoice = decode(quote.request)
+        if quote.amount_option_type == "nut-23":
+            assert quote.amount_msat, "amountless invoice requires an amount"
+            invoice.amount_msat = MilliSatoshi(quote.amount_msat)
 
         if settings.fakewallet_delay_outgoing_payment:
             await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
@@ -260,15 +264,15 @@ class FakeWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = melt_quote.amountless_amount or invoice_obj.amount_msat
+        assert amount_msat, "invoice has no amount."
 
         if self.unit == Unit.sat or self.unit == Unit.msat:
-            amount_msat = int(invoice_obj.amount_msat)
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)
         elif self.unit == Unit.usd or self.unit == Unit.eur:
-            amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
+            amount_usd = math.ceil(amount_msat / 1e9 * self.fake_btc_price)
             amount = Amount(unit=self.unit, amount=amount_usd)
             fees = Amount(unit=self.unit, amount=2)
         else:

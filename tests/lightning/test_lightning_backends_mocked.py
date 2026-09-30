@@ -41,7 +41,9 @@ def _response(status_code: int, json_data=None, text: str = "") -> httpx.Respons
     return httpx.Response(status_code, text=text, request=request)
 
 
-def _quote(request: str, amount: int = 1, unit: str = "sat") -> MeltQuote:
+def _quote(
+    request: str, amount: int = 1, unit: str = "sat", *, mpp_msat: int | None = None
+) -> MeltQuote:
     return MeltQuote(
         quote="q1",
         method="bolt11",
@@ -49,6 +51,8 @@ def _quote(request: str, amount: int = 1, unit: str = "sat") -> MeltQuote:
         checking_id="checking-1",
         unit=unit,
         amount=amount,
+        amount_msat=mpp_msat,
+        amount_option_type="nut-15" if mpp_msat is not None else None,
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
     )
@@ -196,14 +200,15 @@ async def test_clnrest_pay_invoice_mpp_not_supported(monkeypatch):
     )
 
     result = await wallet.pay_invoice(
-        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+        _quote("lnbc1fake", amount=1, mpp_msat=1000), fee_limit_msat=1000
     )
     assert result.result == PaymentResult.FAILED
     assert result.error_message == "mint does not support MPP"
 
 
 @pytest.mark.asyncio
-async def test_clnrest_pay_invoice_uses_xpay(monkeypatch):
+@pytest.mark.parametrize("invoice_msat,quote_sat", [(1000, 1), (1001, 2)])
+async def test_clnrest_pay_invoice_uses_xpay(monkeypatch, invoice_msat, quote_sat):
     wallet = object.__new__(CLNRestWallet)
     wallet.unit = Unit.sat
     wallet.supports_mpp = True
@@ -221,18 +226,20 @@ async def test_clnrest_pay_invoice_uses_xpay(monkeypatch):
                     "payment_preimage": "preimage",
                     "failed_parts": 0,
                     "successful_parts": 1,
-                    "amount_msat": 1000,
-                    "amount_sent_msat": 1100,
+                    "amount_msat": invoice_msat,
+                    "amount_sent_msat": invoice_msat + 100,
                 },
             )
 
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.clnrest.decode",
-        lambda request: SimpleNamespace(amount_msat=1000, payment_hash="hash"),
+        lambda request: SimpleNamespace(amount_msat=invoice_msat, payment_hash="hash"),
     )
 
-    result = await wallet.pay_invoice(_quote("lnbc1fake", amount=1), fee_limit_msat=100)
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=quote_sat), fee_limit_msat=100
+    )
 
     assert request_data == {"invstring": "lnbc1fake", "maxfee": 100}
     assert result.result == PaymentResult.SETTLED
@@ -258,23 +265,25 @@ async def test_clnrest_xpay_uses_partial_msat_for_mpp(monkeypatch):
                     "payment_preimage": "preimage",
                     "failed_parts": 0,
                     "successful_parts": 1,
-                    "amount_msat": 1000,
-                    "amount_sent_msat": 1000,
+                    "amount_msat": 16_001,
+                    "amount_sent_msat": 16_001,
                 },
             )
 
     cast(Any, wallet).client = Client()
     monkeypatch.setattr(
         "cashu.lightning.clnrest.decode",
-        lambda request: SimpleNamespace(amount_msat=2000, payment_hash="hash"),
+        lambda request: SimpleNamespace(amount_msat=17_000, payment_hash="hash"),
     )
 
-    result = await wallet.pay_invoice(_quote("lnbc1fake", amount=1), fee_limit_msat=100)
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=17, mpp_msat=16_001), fee_limit_msat=100
+    )
 
     assert request_data == {
         "invstring": "lnbc1fake",
         "maxfee": 100,
-        "partial_msat": 1000,
+        "partial_msat": 16_001,
     }
     assert result.result == PaymentResult.SETTLED
 

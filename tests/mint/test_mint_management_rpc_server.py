@@ -143,7 +143,8 @@ async def test_update_metadata_and_contacts(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_and_update_quote_rpcs():
+@pytest.mark.parametrize("amount_option_type", [None, "nut-15", "nut-23"])
+async def test_get_and_update_quote_rpcs(amount_option_type):
     mint_quote = MintQuote(
         quote="quote-1",
         method="bolt11",
@@ -163,6 +164,8 @@ async def test_get_and_update_quote_rpcs():
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
         attempt="internal-attempt-nonce",
+        amount_msat=1001 if amount_option_type else None,
+        amount_option_type=amount_option_type,
     )
     updates = []
 
@@ -206,7 +209,11 @@ async def test_get_and_update_quote_rpcs():
     assert get_mint.quote.state == MintQuoteState.unpaid.name
     assert get_melt.quote.quote == "melt-1"
     assert get_melt.quote.state == MeltQuoteState.unpaid.name
-    assert "attempt" not in {field.name for field, _ in get_melt.quote.ListFields()}
+    assert get_melt.quote.amount == melt_quote.amount
+    assert get_melt.quote.fee_reserve == melt_quote.fee_reserve
+    assert {"attempt", "amount_msat", "amount_option_type"}.isdisjoint(
+        field.name for field, _ in get_melt.quote.ListFields()
+    )
 
     await rpc.UpdateNut04Quote(SimpleNamespace(quote_id="quote-1", state="PAID"), None)
     await rpc.UpdateNut05Quote(SimpleNamespace(quote_id="melt-1", state="PAID"), None)
