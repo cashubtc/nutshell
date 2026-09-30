@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from cashu.core.base import BlindedMessage, BlindedSignature, MintQuote, Proof, Unit
 from cashu.core.crypto.b_dhke import step1_alice, step3_alice
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.models import PostMintBatchRequest
 from cashu.core.split import amount_split
@@ -11,7 +12,12 @@ from cashu.mint.ledger import Ledger
 def make_outputs(
     ledger: Ledger, amount: int, unit: Unit
 ) -> tuple[list[BlindedMessage], list[tuple[str, PrivateKey]]]:
-    keyset = next(k for k in ledger.keysets.values() if k.active and k.unit == unit)
+    # plain secrets are only valid on pre-v3 keysets
+    keyset = next(
+        k
+        for k in ledger.keysets.values()
+        if k.active and k.unit == unit and not is_bls_keyset(k.id)
+    )
     outputs = []
     secrets = []
     for denomination in amount_split(amount):
