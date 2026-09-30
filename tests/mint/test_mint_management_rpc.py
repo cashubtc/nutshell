@@ -166,10 +166,10 @@ async def test_update_auth_limits(rpc_servicer):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "final_expiry, expected_suffix",
-    [(None, ""), (0, "|final_expiry:0"), (2059210353, "|final_expiry:2059210353")],
+    "final_expiry, expected_hash_suffix",
+    [(None, ""), (0, ""), (2059210353, "|final_expiry:2059210353")],
 )
-async def test_rotate_next_keyset(rpc_servicer, final_expiry, expected_suffix):
+async def test_rotate_next_keyset(rpc_servicer, final_expiry, expected_hash_suffix):
     request = management_pb2.RotateNextKeysetRequest(
         unit="sat",
         input_fee_ppk=2,
@@ -189,11 +189,12 @@ async def test_rotate_next_keyset(rpc_servicer, final_expiry, expected_suffix):
     stored_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=response.id))[0]
     assert keyset.final_expiry == final_expiry
     assert stored_keyset.final_expiry == final_expiry
+
     preimage = ",".join(
         f"{amount}:{pubkey}"
         for amount, pubkey in sorted(keyset.public_keys_hex.items())
     )
-    preimage += "|unit:sat|input_fee_ppk:2" + expected_suffix
+    preimage += "|unit:sat|input_fee_ppk:2" + expected_hash_suffix
     assert response.id == "01" + hashlib.sha256(preimage.encode("utf-8")).hexdigest()
 
 
