@@ -20,7 +20,13 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_fake_invoice,
+    get_real_invoice,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+)
 
 
 async def assert_err(f, msg):
@@ -593,7 +599,7 @@ async def test_melt_preserves_change_signatures_order_integration(
     invoice_payment_request = (
         invoice_dict["payment_request"]
         if is_regtest
-        else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+        else get_fake_invoice(64)
     )
     if type(invoice_payment_request) is dict:
         invoice_payment_request = invoice_payment_request["payment_request"]
