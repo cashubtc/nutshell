@@ -6,6 +6,7 @@ import jwt
 from loguru import logger
 
 from ...core.base import AuthProof, BlindedMessage, BlindedSignature
+from ...core.crypto.keys import is_bls_keyset
 from ...core.db import Database
 from ...core.errors import (
     BlindAuthAmountExceededError,
@@ -13,7 +14,7 @@ from ...core.errors import (
     BlindAuthRateLimitExceededError,
     ClearAuthFailedError,
 )
-from ...core.nuts import nut10
+from ...core.nuts import nut10, nut22
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
@@ -23,6 +24,13 @@ from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
 
 class AuthLedger(Ledger):
+    # BATs carry no transaction fees; a v3 keyset id commits the fee, so the
+    # auth keyset must be generated with the fee it serves.
+    keyset_input_fee_ppk = 0
+    # Keycloak 25 omits `sub` from public-client access tokens by default. Only
+    # per-user claims qualify: `azp` is the client id and would merge all users.
+    _USER_ID_CLAIMS = ("sub", "preferred_username")
+
     auth_crud: AuthLedgerCrud
     jwks_url: str
     jwks_client: jwt.PyJWKClient
@@ -146,7 +154,14 @@ class AuthLedger(Ledger):
         Returns:
             User: User object
         """
-        user_id = decoded_token["sub"]
+        user_id = next(
+            (decoded_token[c] for c in self._USER_ID_CLAIMS if decoded_token.get(c)),
+            None,
+        )
+        if not user_id:
+            raise Exception(
+                f"Token has no usable subject claim (tried {', '.join(self._USER_ID_CLAIMS)})"
+            )
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")
@@ -172,7 +187,8 @@ class AuthLedger(Ledger):
             self._verify_oicd_issuer(clear_auth_token)
             decoded = self._verify_decode_jwt(clear_auth_token)
             user = await self._get_user(decoded)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Clear auth error: {e}")
             raise ClearAuthFailedError()
 
         logger.info(f"User authenticated: {user.id}")
@@ -219,10 +235,21 @@ class AuthLedger(Ledger):
         return promises
 
     @asynccontextmanager
-    async def verify_blind_auth(self, blind_auth_token):
+    async def verify_blind_auth(
+        self,
+        blind_auth_token,
+        *,
+        method: str = "",
+        target: str = "",
+        body: bytes = b"",
+    ):
         """Wrapper context that puts blind auth tokens into pending list and
         melts them if the wrapped call succeeds. If it fails, the blind auth
         token is not invalidated.
+
+        On a version 02 (v3) auth keyset the BAT is a point secret and its
+        witness must sign this request's transcript (NUT-22); method, target
+        and body are the request as received.
 
         Args:
             blind_auth_token (str): Blind auth token.
@@ -231,14 +258,21 @@ class AuthLedger(Ledger):
             Exception: Blind auth token validation failed.
         """
         try:
-            proof = AuthProof.from_base64(blind_auth_token).to_proof()
-            condition = nut10.parse_spending_condition(proof.secret)
-            if condition is not None:
-                logger.warning(
-                    "Blind-auth token uses a NUT-10-style secret, but blind-auth "
-                    "does not enforce spending conditions in this path. Treating it "
-                    "as a plain secret."
-                )
+            auth_proof = AuthProof.from_base64(blind_auth_token)
+            proof = auth_proof.to_proof()
+            if is_bls_keyset(proof.id):
+                if not nut22.verify_bat_request_witness(
+                    auth_proof, method, target, body
+                ):
+                    raise BlindAuthFailedError()
+            else:
+                condition = nut10.parse_spending_condition(proof.secret)
+                if condition is not None:
+                    logger.warning(
+                        "Blind-auth token uses a NUT-10-style secret, but blind-auth "
+                        "does not enforce spending conditions in this path. Treating it "
+                        "as a plain secret."
+                    )
             await self.verify_inputs_and_outputs(proofs=[proof])
             await self.db_write._verify_spent_proofs_and_set_pending(
                 [proof], self.keysets

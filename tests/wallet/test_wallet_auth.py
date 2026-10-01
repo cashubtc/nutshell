@@ -1,5 +1,3 @@
-import hashlib
-import os
 import shutil
 from pathlib import Path
 
@@ -153,9 +151,9 @@ async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
         raise Exception("No clear auth token available.")
 
     amounts = auth_wallet.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
-    secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-    rs = [PrivateKey(os.urandom(32)) for _ in amounts]
-    outputs, rs = auth_wallet._construct_outputs(amounts, secrets, rs)
+    # v3 BATs are point secrets
+    secrets = [PrivateKey().public_key.format().hex() for _ in amounts]
+    outputs, rs = auth_wallet._construct_outputs(amounts, secrets)
 
     # should fail because of invalid CAT
     await assert_err(
@@ -213,10 +211,11 @@ async def test_wallet_auth_invoice_invalid_bat(wallet: Wallet):
     await auth_wallet.load_proofs()
     assert len(auth_wallet.proofs) == auth_wallet.mint_info.bat_max_mint
 
-    # invalidate blind auth proofs
+    # invalidate blind auth proofs with unsigned point secrets
     for p in auth_wallet.proofs:
+        bogus = PrivateKey().public_key.format().hex()
         await auth_wallet.db.execute(
-            f"UPDATE proofs SET secret = '{generate_uuid_v7()}' WHERE secret = '{p.secret}'"
+            f"UPDATE proofs SET secret = '{bogus}' WHERE secret = '{p.secret}'"
         )
 
     wallet.auth_db = auth_wallet.db

@@ -11,6 +11,11 @@ from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
+    # The input fee committed into newly generated keyset ids. None means the
+    # configured mint fee; the auth ledger overrides to 0, since BATs carry no
+    # transaction fees and a v3 keyset id commits the fee it serves.
+    keyset_input_fee_ppk: Optional[int] = None
+
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -158,7 +163,11 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 derivation_path=derivation_path,
                 amounts=self.amounts,
                 version=version,
-                input_fee_ppk=settings.mint_input_fee_ppk,
+                input_fee_ppk=(
+                    self.keyset_input_fee_ppk
+                    if self.keyset_input_fee_ppk is not None
+                    else settings.mint_input_fee_ppk
+                ),
                 final_expiry=None,
             )
             logger.debug(f"Generated new keyset with ID '{keyset.id}'.")
