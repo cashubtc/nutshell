@@ -8,7 +8,7 @@ from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
 from ...core.base import Proof
-from ...core.crypto.keys import PrivateKey, is_bls_keyset
+from ...core.crypto.keys import is_bls_keyset
 from ...core.crypto.secp import PrivateKey as SecpPrivateKey
 from ...core.db import Database
 from ...core.nuts.nut22 import BATKEY_PREFIX
@@ -238,8 +238,8 @@ class WalletAuth(Wallet):
         else:
             secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
             derivation_paths = ["" for _ in amounts]
-        rs: List[PrivateKey] = [SecpPrivateKey(os.urandom(32)) for _ in amounts] # type: ignore[misc]
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+        # blinding factors must match the keyset's curve, so let step1 pick them
+        outputs, rs = self._construct_outputs(amounts, secrets)
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
         new_proofs = await self._construct_proofs(
             promises, secrets, rs, derivation_paths
