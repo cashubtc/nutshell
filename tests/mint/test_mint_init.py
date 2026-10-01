@@ -30,6 +30,7 @@ from tests.helpers import (
     is_regtest,
     pay_if_regtest,
     settle_invoice,
+    use_v2_keyset,
     wait_for_hold_invoice,
     wait_for_result,
 )
@@ -299,6 +300,8 @@ async def start_unrecorded_melt(ledger, quote, proofs):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Ledger):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -338,6 +341,8 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Ledger):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -389,6 +394,8 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Ledger):
     """Simulate a failure to pay the hodl invoice by canceling it."""
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -445,6 +452,8 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     """Simulate an unknown payment by executing a pending payment, then
     manipulating the melt_quote in the mint's db so that its checking_id
     points to an unknown payment."""
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
 
     # fill wallet
     mint_quote = await wallet.request_mint(64)

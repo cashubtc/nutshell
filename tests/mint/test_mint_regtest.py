@@ -24,6 +24,7 @@ from tests.helpers import (
     pay_if_regtest,
     pay_real_invoice,
     settle_invoice,
+    use_v2_keyset,
     wait_for_hold_invoice,
     wait_for_result,
 )
@@ -420,6 +421,8 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
