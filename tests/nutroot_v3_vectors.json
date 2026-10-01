@@ -140,7 +140,7 @@
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount issued, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -329,6 +329,30 @@
           "signature": "83a816f0bb9137e3523711e6136ce565229d0bd45ef2d0090a89b1c653046fc5fa067210310990ab3aed1ffabcb24a67f2db7d7700cc1243c5de20017b717728"
         }
       ]
+    },
+    "partial_mint": {
+      "quote_amount": 8,
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 4,
+            "quote_id": "quote-mint-0004"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 4,
+            "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "0200160100010402000f71756f74652d6d696e742d3030303403005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "e02e360bcd1f8350548ad44518f911eb026d4118aa068f1ec31935fa1ff83541",
+      "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+      "input_id": "8a290719012a102a7de2957618a858a62075ef5651b84e3cb7287a5fc9959998",
+      "input_digest": "7578e345637e38e71f68291a43d439d5284c3d16b02521660c8cd08dd3db2371",
+      "signature": "1b6de2bf4674d6b6f8ea63ee221bd7c6d382166e8d6fb942d85133d31135402239b9bb3eb339476c76a192805aceaab59a3df3768d402d70639bb9cbec46c5cc"
     }
   },
   "tokens_v4": {
