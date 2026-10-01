@@ -753,6 +753,7 @@ class Wallet(
         outputs: List[BlindedMessage],
         melt_quote_id: Optional[str] = None,
         melt_quote_amount: Optional[int] = None,
+        change_pubkey: Optional[str] = None,
     ) -> List[Proof]:
         """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
 
@@ -796,6 +797,9 @@ class Wallet(
                         ]
                         if melt_quote_id is not None and melt_quote_amount is not None
                         else None
+                    ),
+                    change_pubkey=(
+                        bytes.fromhex(change_pubkey) if change_pubkey else None
                     ),
                 )
             )
