@@ -105,6 +105,22 @@ async def test_get_user_creates_missing_user():
 
 
 @pytest.mark.asyncio
+async def test_get_user_falls_back_when_sub_is_missing():
+    ledger = _ledger()
+
+    class Crud:
+        async def get_user(self, user_id, db):
+            return User(id=user_id)
+
+    cast(Any, ledger).auth_crud = Crud()
+    user = await ledger._get_user({"preferred_username": "carol", "azp": "client"})
+    assert user.id == "carol"
+    # the client id is shared by every user, so it never names one
+    with pytest.raises(Exception, match="no usable subject claim"):
+        await ledger._get_user({"azp": "client"})
+
+
+@pytest.mark.asyncio
 async def test_verify_clear_auth_maps_verification_errors(monkeypatch):
     ledger = _ledger()
 

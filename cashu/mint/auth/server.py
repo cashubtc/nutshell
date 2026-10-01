@@ -27,6 +27,9 @@ class AuthLedger(Ledger):
     # BATs carry no transaction fees; a v3 keyset id commits the fee, so the
     # auth keyset must be generated with the fee it serves.
     keyset_input_fee_ppk = 0
+    # Keycloak 25 omits `sub` from public-client access tokens by default. Only
+    # per-user claims qualify: `azp` is the client id and would merge all users.
+    _USER_ID_CLAIMS = ("sub", "preferred_username")
 
     auth_crud: AuthLedgerCrud
     jwks_url: str
@@ -151,7 +154,14 @@ class AuthLedger(Ledger):
         Returns:
             User: User object
         """
-        user_id = decoded_token["sub"]
+        user_id = next(
+            (decoded_token[c] for c in self._USER_ID_CLAIMS if decoded_token.get(c)),
+            None,
+        )
+        if not user_id:
+            raise Exception(
+                f"Token has no usable subject claim (tried {', '.join(self._USER_ID_CLAIMS)})"
+            )
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")
