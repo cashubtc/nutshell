@@ -152,6 +152,12 @@ def verify_mint_quote_v3(
         outputs,
         quote_id,
     )
+    return verify_quote_input_witness(digest, public_key, signature)
+
+
+def verify_quote_input_witness(digest: bytes, public_key: str, signature: str) -> bool:
+    """Verify a quote input witness over its input digest: key path (hex sig
+    or {"signatures"}) or script path, against the quote lock point."""
     witness: NutrootWitness | None = None
     if signature.strip().startswith("{"):
         try:

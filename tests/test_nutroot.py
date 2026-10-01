@@ -531,6 +531,9 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
+        change_pubkey=(
+            bytes.fromhex(tx["change_pubkey"]) if "change_pubkey" in tx else None
+        ),
     )
 
 
@@ -541,11 +544,35 @@ def test_transaction_transcript_vectors():
     )
 
     tv = VECTORS["transcript"]
-    for name in ("swap", "mint", "melt", "melt_with_change"):
+    for name in (
+        "swap",
+        "mint",
+        "melt",
+        "melt_with_change",
+        "mint_quote_to_melt",
+        "proof_to_change",
+    ):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
         assert build_transaction_transcript(tx).hex() == example["transcript"]
         assert transaction_digest(tx).hex() == example["digest"]
+
+
+def test_transaction_vectors_input_digests():
+    from cashu.core.crypto.transcript import transaction_inputs
+
+    tv = VECTORS["transcript"]
+    quote_tx = tv["mint_quote_to_melt"]
+    _, _, quotes = transaction_inputs(_tx_from_vector(quote_tx["tx"]))
+    context = quotes["quote-mint-0001"]
+    assert hashlib.sha256(context.container).hexdigest() == quote_tx["input_id"]
+    assert context.digest.hex() == quote_tx["input_digest"]
+
+    change_tx = tv["proof_to_change"]
+    assert change_tx["transcript"].endswith(change_tx["change_container"])
+    _, proofs, _ = transaction_inputs(_tx_from_vector(change_tx["tx"]))
+    (context,) = proofs.values()
+    assert context.digest.hex() == change_tx["input_digest"]
 
 
 def test_transcript_swap_signature_is_keypath_witness():

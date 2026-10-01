@@ -495,6 +495,8 @@ class LedgerCrudSqlite(LedgerCrud):
         b_s: List[str],
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]:
+        if not b_s:
+            return []
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema("promises")}
@@ -540,7 +542,12 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[MeltQuote]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema("melt_quotes")} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema("proofs_pending")})
+            SELECT * from {db.table_with_schema("melt_quotes")} WHERE quote IN (
+                SELECT DISTINCT melt_quote FROM {db.table_with_schema("proofs_pending")}
+                UNION
+                SELECT melt_quote FROM {db.table_with_schema("transactions")}
+                WHERE state = 'PENDING' AND melt_quote IS NOT NULL
+            )
             """
         )
         return [MeltQuote.from_row(r) for r in rows]  # type: ignore
@@ -568,6 +575,8 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
+        if not Ys:
+            return []
         query = f"""
         SELECT * from {db.table_with_schema("proofs_pending")}
         WHERE y IN ({",".join([f":y_{i}" for i in range(len(Ys))])})
@@ -1098,6 +1107,8 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
+        if not Ys:
+            return []
         query = f"""
         SELECT * from {db.table_with_schema("proofs_used")}
         WHERE y IN ({",".join([f":y_{i}" for i in range(len(Ys))])})

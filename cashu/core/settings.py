@@ -62,6 +62,7 @@ class MintSettings(CashuSettings):
     mint_max_witness_length: int = Field(default=1024)
 
     mint_input_fee_ppk: int = Field(default=100)
+    mint_quote_input_fee_ppk: int = Field(default=0)  # NUT-XX
     mint_disable_melt_on_error: bool = Field(default=False)
     mint_quote_ttl: Optional[int] = Field(
         default=None,
@@ -343,6 +344,8 @@ class AuthSettings(MintSettings):
     ]
     mint_require_blind_auth_paths: List[List[str]] = [
         ["POST", "/v1/swap"],
+        ["POST", "/v1/transaction"],
+        ["POST", "/v1/mint/change"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
         ["POST", "/v1/mint/bolt11/batch"],

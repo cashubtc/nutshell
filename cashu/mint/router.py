@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 
-from ..core.errors import KeysetNotFoundError
+from ..core.errors import KeysetNotFoundError, TransactionError
 from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
@@ -31,6 +31,8 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
+    PostTransactionRequest,
+    PostTransactionResponse,
 )
 from ..core.nuts.nuts import (
     BATCH_MINT_NUT,
@@ -600,6 +602,62 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
         )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
+
+
+@router.post(
+    "/v1/transaction",
+    name="Transaction",
+    summary="Spend proofs and paid quotes into outputs, a melt and a change quote",
+    response_model=PostTransactionResponse,
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def transaction(
+    request: Request, payload: PostTransactionRequest
+) -> PostTransactionResponse:
+    logger.trace(f"> POST /v1/transaction: {payload}")
+    return await ledger.transaction(payload)
+
+
+@router.get(
+    "/v1/transaction/{digest}",
+    name="Get transaction",
+    summary="Get a transaction record by its digest",
+    response_model=PostTransactionResponse,
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_transaction(request: Request, digest: str) -> PostTransactionResponse:
+    return await ledger.get_transaction(digest)
+
+
+@router.get(
+    "/v1/mint/quote/change/{quote}",
+    name="Get change quote",
+    summary="Get a change quote created by a transaction",
+    response_model=PostMintQuoteResponse,
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_change_quote(request: Request, quote: str) -> PostMintQuoteResponse:
+    change_quote = await ledger.get_mint_quote(quote)
+    if change_quote.method != "change":
+        raise TransactionError("not a change quote.")
+    return PostMintQuoteResponse.from_mint_quote(change_quote)
+
+
+@router.post(
+    "/v1/mint/change",
+    name="Mint a change quote",
+    summary="Redeem a change quote for new proofs",
+    response_model=PostMintResponse,
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
+async def mint_change(request: Request, payload: PostMintRequest) -> PostMintResponse:
+    if (await ledger.get_mint_quote(payload.quote)).method != "change":
+        raise TransactionError("not a change quote.")
+    promises = await ledger.mint(
+        outputs=payload.outputs, quote_id=payload.quote, signature=payload.signature
+    )
+    return PostMintResponse(signatures=promises)
 
 
 @router.post(

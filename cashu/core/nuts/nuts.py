@@ -1,3 +1,7 @@
+from typing import Annotated, Union
+
+from pydantic import Field
+
 SWAP_NUT = 3
 MINT_NUT = 4
 MELT_NUT = 5
@@ -18,5 +22,9 @@ CLEAR_AUTH_NUT = 21
 BLIND_AUTH_NUT = 22
 METHOD_BOLT11_NUT = 23
 BATCH_MINT_NUT = 29
+TRANSACTION_NUT = "XX"  # renumber when assigned
 
 BOOLEAN_SUPPORTED_NUTS = frozenset({7, 8, 9, 10, 11, 12, 14, 20})
+
+# Info keys are NUT numbers, plus string ids for unnumbered drafts; ints win.
+NutKey = Annotated[Union[int, str], Field(union_mode="left_to_right")]
