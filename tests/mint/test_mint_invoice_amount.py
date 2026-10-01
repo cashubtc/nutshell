@@ -29,8 +29,11 @@ async def amount_ledger(ledger: Ledger, monkeypatch):
             }
         },
     )
-    for unit in (Unit.msat, Unit.eur):
-        await ledger.activate_keyset(derivation_path=f"m/0'/{unit.value}'/0'")
+    # plain secrets need pre-v3 keysets; the test mint only provisions one for sat
+    for unit in (Unit.msat, Unit.usd, Unit.eur):
+        await ledger.activate_keyset(
+            derivation_path=f"m/0'/{unit.value}'/1'", version="0.20.0"
+        )
     return ledger
 
 

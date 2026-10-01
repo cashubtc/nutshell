@@ -164,9 +164,8 @@ async def test_restore_wallet_after_mint(wallet3: Wallet):
     assert wallet3.balance == 64
 
     # expect that DLEQ proofs are restored
-    assert all([p.dleq for p in wallet3.proofs])
-    assert all([p.dleq.e for p in wallet3.proofs])  # type: ignore
-    assert all([p.dleq.s for p in wallet3.proofs])  # type: ignore
+    # NUT-12 is version-scoped: v3 proofs carry no DLEQ.
+    assert all([p.dleq is None for p in wallet3.proofs])
 
 
 @pytest.mark.asyncio

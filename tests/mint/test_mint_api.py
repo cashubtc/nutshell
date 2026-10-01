@@ -183,9 +183,8 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
     assert result["signatures"][0]["id"] == ledger.keyset.id
-    assert result["signatures"][0]["dleq"]
-    assert "e" in result["signatures"][0]["dleq"]
-    assert "s" in result["signatures"][0]["dleq"]
+    # NUT-12 is version-scoped: v3 signatures carry no DLEQ.
+    assert result["signatures"][0].get("dleq") is None
 
 
 @pytest.mark.asyncio
@@ -274,9 +273,8 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
     assert result["signatures"][0]["id"] == ledger.keyset.id
-    assert result["signatures"][0]["dleq"]
-    assert "e" in result["signatures"][0]["dleq"]
-    assert "s" in result["signatures"][0]["dleq"]
+    # NUT-12 is version-scoped: v3 signatures carry no DLEQ.
+    assert result["signatures"][0].get("dleq") is None
 
 
 @pytest.mark.asyncio
@@ -434,6 +432,8 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     reason="only works on regtest",
 )
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # internal invoice
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -767,7 +767,8 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     original_proof = next(
         proof for proof in wallet.proofs if proof.secret == secrets[0]
     )
-    assert original_proof.dleq
+    # NUT-12 is version-scoped: v3 proofs carry no DLEQ.
+    assert original_proof.dleq is None
 
     payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
@@ -783,9 +784,7 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert len(restore_response.signatures) == 1
     assert len(restore_response.outputs) == 1
     assert restore_response.outputs == outputs
-    assert restore_response.signatures[0].dleq
-    assert restore_response.signatures[0].dleq.e == original_proof.dleq.e
-    assert restore_response.signatures[0].dleq.s == original_proof.dleq.s
+    assert restore_response.signatures[0].dleq is None
 
 
 @pytest.mark.asyncio
