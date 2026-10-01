@@ -495,6 +495,8 @@ class LedgerCrudSqlite(LedgerCrud):
         b_s: List[str],
         conn: Optional[Connection] = None,
     ) -> List[BlindedMessage]:
+        if not b_s:
+            return []
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema("promises")}
@@ -573,6 +575,8 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
+        if not Ys:
+            return []
         query = f"""
         SELECT * from {db.table_with_schema("proofs_pending")}
         WHERE y IN ({",".join([f":y_{i}" for i in range(len(Ys))])})
@@ -1103,6 +1107,8 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
+        if not Ys:
+            return []
         query = f"""
         SELECT * from {db.table_with_schema("proofs_used")}
         WHERE y IN ({",".join([f":y_{i}" for i in range(len(Ys))])})
