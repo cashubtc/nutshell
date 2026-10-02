@@ -29,10 +29,26 @@ class BaselineReport:
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, config, items):
+        relevant = None
+        if os.environ.get("NUTSHELL_MUTATION_PATHS") and self.phase in ("", "fail"):
+            from mutmut.state import state
+
+            # File-scoped profiles run without explicit mutant IDs so cached
+            # verdicts survive. Retain the old profile-specific clean/forced
+            # baseline selection using the coverage collected by mutmut.
+            relevant = {
+                nodeid.removeprefix("mutants/")
+                for tests in state().tests_by_mangled_function_name.values()
+                for nodeid in tests
+            }
         deselected = [
             item
             for item in items
             if item.nodeid.removeprefix("mutants/") in self.excluded
+            or (
+                relevant is not None
+                and item.nodeid.removeprefix("mutants/") not in relevant
+            )
         ]
         if deselected:
             items[:] = [item for item in items if item not in deselected]
