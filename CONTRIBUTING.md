@@ -54,7 +54,8 @@ lightning, and Tor. Use `--profile mint` (or another subsystem) to generate
 mutants only for that subtree and resume previously completed results. Mutmut
 uses the non-fuzz pytest suite to discover relevant tests, then limits clean
 baseline checks to those tests. Profile caches are
-invalidated when source, tests, runner, dependencies, or configuration change.
+invalidated when source, tests, runner, dependencies, or configuration change,
+including resolved shell/`.env` settings and pytest or regtest flags.
 
 Each invocation uses one worker because the integration tests share database
 paths and HTTP/RPC ports. Mutmut's fork server starts each baseline and mutant

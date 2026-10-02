@@ -20,10 +20,46 @@ def profile_paths(profile, shard, shards):
     ]
 
 
-def prepare_profile_cache(paths):
+def configuration_fingerprint():
+    """Resolve .env settings in a fresh process, keeping credentials out of output."""
+    from cashu.core.settings import settings
+
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if (
+            name.startswith(("CASHU_", "PYTEST_")) and name != "PYTEST_CURRENT_TEST"
+        )
+        or name
+        in ("GITHUB_ACTIONS", "MUTATION_TESTING", "PYTHONPATH", "PYTHONHASHSEED")
+    }
+    return hashlib.sha256(
+        json.dumps(
+            {"settings": settings.model_dump(mode="json"), "environment": environment},
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
+def prepare_profile_cache(paths, env=None):
     # Uninstrumented dependencies can change behavior too. Reuse verdicts only
-    # for identical source, tests, runner, configuration, and selected files.
+    # for identical source, tests, runner, effective configuration, and selection.
     digest = hashlib.sha256(json.dumps(paths).encode())
+    # Loading settings applies .env overrides and interpolation. Isolate those
+    # side effects from the runner and fingerprint the environment tests receive.
+    configuration = subprocess.check_output(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "from run_mutation import configuration_fingerprint; "
+            "print(configuration_fingerprint())",
+            str(Path(__file__).resolve().parent),
+        ],
+        env=env,
+        text=True,
+    )
+    digest.update(configuration.encode())
     inputs = [Path("pyproject.toml"), Path("poetry.lock")]
     for directory in ("cashu", "tests", "scripts"):
         inputs.extend(sorted(Path(directory).rglob("*.py")))
@@ -91,7 +127,7 @@ def run(args):
             env.pop("NUTSHELL_MUTATION_PATHS", None)
         # Switching back to a full or explicit-target run must also rebuild
         # coverage: a prior profile did not instrument the other subsystems.
-        prepare_profile_cache(paths)
+        prepare_profile_cache(paths, env)
         env["NUTSHELL_MUTATION_BASELINE_REPORT"] = str(baseline_path)
         env["NUTSHELL_MUTATION_EXCLUSIONS"] = str(exclusions_path)
         env["PYTHONPATH"] = os.pathsep.join(
