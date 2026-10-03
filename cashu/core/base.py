@@ -462,7 +462,7 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
             last_checked=last_checked,
-            pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
+            pubkey=(row["pubkey"] or None) if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
             amount_paid=row["amount_paid"] if row["amount_paid"] is not None else None,
             amount_issued=(
