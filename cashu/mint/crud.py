@@ -655,7 +655,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 )
                 if quote.last_checked
                 else None,
-                "pubkey": quote.pubkey or "",
+                "pubkey": quote.pubkey or None,
                 "amount_paid": quote.amount_paid,
                 "amount_issued": quote.amount_issued,
                 "updated_at": db.to_timestamp(
