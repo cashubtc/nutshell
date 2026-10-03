@@ -41,8 +41,11 @@ def test_auth_token_rejects_long_nested_fields(field, limit):
 
 
 def test_auth_token_rejects_long_secret_before_proof_conversion(monkeypatch):
-    monkeypatch.setattr(settings, "mint_max_secret_length", 8)
-    payload = {"id": "00deadbeefdeadbe", "C": POINT, "secret": "x" * 9}
+    payload = {
+        "id": "00deadbeefdeadbe",
+        "C": POINT,
+        "secret": "x" * (settings.mint_max_secret_length + 1),
+    }
     token = (
         AuthProof.prefix
         + base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
@@ -71,16 +74,3 @@ def test_auth_token_limit_accepts_maximum_valid_fields(secret_character, padded)
 
     assert len(token) <= AuthProof.max_token_length()
     assert AuthProof.from_base64(token) == proof
-
-
-def test_auth_token_limit_tracks_configured_secret_length(monkeypatch):
-    original_limit = AuthProof.max_token_length()
-    monkeypatch.setattr(
-        settings, "mint_max_secret_length", settings.mint_max_secret_length * 2
-    )
-    proof = AuthProof(
-        id="01" + "11" * 32, C=POINT, secret="😀" * settings.mint_max_secret_length
-    )
-
-    assert AuthProof.max_token_length() > original_limit
-    assert AuthProof.from_base64(proof.to_base64()) == proof

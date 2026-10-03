@@ -16,7 +16,6 @@ from pydantic import (
     ConfigDict,
     Field,
     RootModel,
-    field_validator,
     model_validator,
 )
 from sqlalchemy import RowMapping
@@ -1559,27 +1558,21 @@ class AuthProof(BaseModel):
     """
 
     model_config = ConfigDict(hide_input_in_errors=True)
+    max_secret_length: ClassVar[int] = settings.mint_max_secret_length
 
     id: str = Field(..., max_length=MAX_KEYSET_ID_LEN)
-    secret: str  # secret
+    secret: str = Field(..., max_length=max_secret_length)
     C: str = Field(..., max_length=MAX_PUBKEY_LEN)  # signature
     amount: int = 1  # default amount
 
     prefix: ClassVar[str] = "authA"
-
-    @field_validator("secret")
-    @classmethod
-    def validate_secret(cls, secret: str) -> str:
-        if len(secret) > settings.mint_max_secret_length:
-            raise ValueError(f"secret too long. max: {settings.mint_max_secret_length}")
-        return secret
 
     @classmethod
     def max_token_length(cls) -> int:
         # JSON can use two six-character Unicode escapes per input character.
         # Include field names/separators and padded base64 encoding overhead.
         max_json_length = 12 * (
-            MAX_KEYSET_ID_LEN + settings.mint_max_secret_length + MAX_PUBKEY_LEN
+            MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN
         ) + 64
         return len(cls.prefix) + 4 * ((max_json_length + 2) // 3)
 

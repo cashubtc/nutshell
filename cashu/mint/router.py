@@ -592,11 +592,11 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
     if payload.prefer_async:
         resp = await ledger.async_melt(
-            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+            proofs=list(payload.inputs), quote=payload.quote, outputs=payload.outputs
         )
     else:
         resp = await ledger.melt(
-            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+            proofs=list(payload.inputs), quote=payload.quote, outputs=payload.outputs
         )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
@@ -626,7 +626,7 @@ async def swap(
     logger.trace(f"> POST /v1/swap: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
-    signatures = await ledger.swap(proofs=payload.inputs, outputs=payload.outputs)
+    signatures = await ledger.swap(proofs=list(payload.inputs), outputs=payload.outputs)
 
     return PostSwapResponse(signatures=signatures)
 

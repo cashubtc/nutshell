@@ -1,23 +1,12 @@
-from typing import Annotated, Any
-
-from pydantic import BeforeValidator
+from pydantic import ConfigDict, Field
 
 from cashu.core.base import Proof
 from cashu.core.settings import settings
 
 
-def validate_input_proof(value: Any) -> Any:
-    """Check request secrets before constructing and hashing nested proofs."""
-    secret: Any
-    if isinstance(value, Proof):
-        secret = value.secret
-    elif isinstance(value, dict):
-        secret = value.get("secret")
-    else:
-        return value
-    if isinstance(secret, str) and len(secret) > settings.mint_max_secret_length:
-        raise ValueError(f"secret too long. max: {settings.mint_max_secret_length}")
-    return value
+class ProofInput(Proof):
+    """Request proof whose secret is validated before hashing."""
 
+    model_config = ConfigDict(from_attributes=True, revalidate_instances="always")
 
-ProofInput = Annotated[Proof, BeforeValidator(validate_input_proof)]
+    secret: str = Field(default="", max_length=settings.mint_max_secret_length)

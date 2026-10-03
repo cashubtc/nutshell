@@ -515,7 +515,6 @@ def test_oversized_point_is_not_rendered_in_validation_errors(monkeypatch, path,
     [("/v1/swap", {}), ("/v1/melt/bolt11", {"quote": "quote"})],
 )
 def test_router_rejects_long_secrets_before_hashing(monkeypatch, path, fields):
-    monkeypatch.setattr(settings, "mint_max_secret_length", 8)
     monkeypatch.setattr(settings, "mint_rate_limit", False)
     monkeypatch.setattr(settings, "mint_require_auth", False)
     monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
@@ -527,11 +526,19 @@ def test_router_rejects_long_secrets_before_hashing(monkeypatch, path, fields):
         path,
         json={
             **fields,
-            "inputs": [{"id": "00deadbeefdeadbe", "amount": 1, "C": "aa", "secret": "x" * 9}],
+            "inputs": [
+                {
+                    "id": "00deadbeefdeadbe",
+                    "amount": 1,
+                    "C": "aa",
+                    "secret": "x" * (settings.mint_max_secret_length + 1),
+                }
+            ],
             "outputs": [],
         },
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"][0]["loc"] == ["body", "inputs", 0]
+    assert response.json()["detail"][0]["loc"] == ["body", "inputs", 0, "secret"]
+    assert response.json()["detail"][0]["type"] == "string_too_long"
     hashed.assert_not_called()
