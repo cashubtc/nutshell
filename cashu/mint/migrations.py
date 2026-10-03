@@ -1145,17 +1145,43 @@ async def m029_remove_overlong_witness_values(db: Database):
     Delete any witness values longer than 1024 characters in proofs tables.
     """
     async with db.connect() as conn:
-        # Clean proofs_used
-        await conn.execute(
-            f"UPDATE {db.table_with_schema('proofs_used')} SET witness = NULL "
-            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
-        )
+        for table in ("proofs_used", "proofs_pending"):
+            if db.type != "SQLITE":
+                await conn.execute(
+                    f"UPDATE {db.table_with_schema(table)} SET witness = NULL "
+                    "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
+                )
+                continue
 
-        # Clean proofs_pending (column exists in newer schemas)
-        await conn.execute(
-            f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
-            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
-        )
+            # SQLite TEXT length stops at NUL. Filter by complete byte length,
+            # then check Python character length so valid Unicode is preserved.
+            # Four bytes per character is the maximum encoding size. Clear
+            # larger values in SQL before loading the remaining candidates.
+            await conn.execute(
+                f"UPDATE {db.table_with_schema(table)} SET witness = NULL "
+                "WHERE witness IS NOT NULL AND LENGTH(CAST(witness AS BLOB)) > 4096"
+            )
+            after_rowid = None
+            while True:
+                cursor_filter = (
+                    "AND rowid > :after_rowid " if after_rowid is not None else ""
+                )
+                rows = await conn.fetchall(
+                    f"SELECT rowid AS witness_rowid, witness FROM {db.table_with_schema(table)} "
+                    "WHERE witness IS NOT NULL AND LENGTH(CAST(witness AS BLOB)) > 1024 "
+                    f"{cursor_filter}ORDER BY rowid LIMIT 1000",
+                    {"after_rowid": after_rowid} if after_rowid is not None else {},
+                )
+                if not rows:
+                    break
+                for row in rows:
+                    if len(row["witness"]) > 1024:
+                        await conn.execute(
+                            f"UPDATE {db.table_with_schema(table)} SET witness = NULL "
+                            "WHERE rowid = :witness_rowid",
+                            {"witness_rowid": row["witness_rowid"]},
+                        )
+                after_rowid = rows[-1]["witness_rowid"]
 
 
 async def m030_remove_overlong_witness_values(db: Database):
@@ -1347,3 +1373,8 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_repeat_witness_cleanup(db: Database):
+    """Recheck legacy witness lengths after making SQLite cleanup NUL-aware."""
+    await m029_remove_overlong_witness_values(db)

@@ -120,7 +120,7 @@ class LedgerEventClientManager:
 
             # Handle the request
             try:
-                logger.debug(f"Request: {req.model_dump_json()}")
+                logger.debug(f"Websocket request: {req.method} (id {req.id})")
                 resp = await self._handle_request(req)
                 # Send the response
                 await self._send_msg(resp)
@@ -139,7 +139,7 @@ class LedgerEventClientManager:
                 continue
 
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
-        logger.debug(f"Received websocket message: {data}")
+        logger.debug(f"Handling websocket request: {data.method} (id {data.id})")
         if data.method == JSONRPCMethods.SUBSCRIBE.value:
             subscribe_params = JSONRPCSubscribeParams.model_validate(data.params)
             self.add_subscription(
