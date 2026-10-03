@@ -6,9 +6,77 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from textwrap import dedent
 
 
 class SettingsEnvTests(unittest.TestCase):
+    def test_secret_limits_use_startup_configuration(self):
+        script = dedent(
+            """
+            import sys
+            from unittest.mock import patch
+            from pydantic import ValidationError
+            from cashu.core.base import AuthProof
+            from cashu.core.models import PostMeltRequest, PostSwapRequest
+            from cashu.core.settings import settings
+
+            limit = settings.mint_max_secret_length
+            assert limit == int(sys.argv[1])
+            proof = {
+                "id": "00deadbeefdeadbe", "amount": 1,
+                "C": "02" + "11" * 32, "secret": "😀" * limit,
+            }
+            auth = AuthProof(**proof)
+            token = auth.to_base64()
+            assert len(token) <= AuthProof.max_token_length()
+            assert AuthProof.from_base64(token) == auth
+            for model, fields in (
+                (PostSwapRequest, {}), (PostMeltRequest, {"quote": "quote"}),
+            ):
+                request = model(inputs=[proof], outputs=[], **fields)
+                assert request.inputs[0].secret == proof["secret"]
+                assert request.inputs[0].Y
+                proof["secret"] += "x"
+                with patch("cashu.core.base.hash_to_curve") as hashed:
+                    try:
+                        model(inputs=[proof], outputs=[], **fields)
+                    except ValidationError as exc:
+                        assert exc.errors(include_input=False)[0]["loc"] == (
+                            "inputs", 0, "secret"
+                        )
+                    else:
+                        raise AssertionError("request accepted overlong secret")
+                    hashed.assert_not_called()
+                try:
+                    AuthProof(**proof)
+                except ValidationError as exc:
+                    assert exc.errors(include_input=False)[0]["loc"] == ("secret",)
+                else:
+                    raise AssertionError("auth accepted overlong secret")
+                proof["secret"] = "😀" * limit
+            """
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+            }
+            if env.get("MUTANT_UNDER_TEST") == "stats":
+                # Stats collection cannot run from the temporary subprocess cwd.
+                env["MUTANT_UNDER_TEST"] = ""
+            for limit in (8, 2048):
+                with self.subTest(limit=limit):
+                    (root / ".env").write_text(
+                        f"MINT_MAX_SECRET_LENGTH={limit}\n", encoding="utf-8"
+                    )
+                    subprocess.run(
+                        [sys.executable, "-c", script, str(limit)],
+                        cwd=root,
+                        env=env,
+                        check=True,
+                    )
+
     def test_env_file_precedence(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
