@@ -1,5 +1,6 @@
 from types import MethodType
 from typing import Any, cast
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -770,3 +771,59 @@ async def test_restore_rejects_oversized_mint_response(
         await api.restore_promises([output])
 
     assert exc.value.errors(include_input=False)[0]["loc"][0] == "signatures"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["swap", "melt"])
+async def test_wallet_sends_proof_above_local_mint_secret_limit(
+    monkeypatch, api: LedgerAPI, operation
+):
+    point = PrivateKey().public_key.format().hex()
+    proof = Proof(
+        id="00deadbeefdeadbe",
+        amount=1,
+        C=point,
+        secret="x" * (settings.mint_max_secret_length + 1),
+        witness='{"signatures":[]}',
+    )
+    output = BlindedMessage(id=proof.id, amount=1, B_=point)
+    requests = []
+    remote_secret_limit = settings.mint_max_secret_length + 1024
+
+    async def fake_request(self, method, path, **kwargs):
+        requests.append(path)
+        assert method == "POST"
+        sent_proof = kwargs["json"]["inputs"][0]
+        assert sent_proof == proof.to_dict()
+        assert len(sent_proof["secret"]) <= remote_secret_limit
+        if path == "swap":
+            return _response(
+                200, {"signatures": [{"id": proof.id, "amount": 1, "C_": point}]}
+            )
+        assert path == "melt/bolt11"
+        return _response(
+            200,
+            {
+                "quote": "quote",
+                "amount": 1,
+                "unit": "sat",
+                "request": "lnbc1",
+                "fee_reserve": 0,
+                "state": "PAID",
+                "expiry": None,
+            },
+        )
+
+    hashed = Mock(side_effect=AssertionError("wallet proof must not be rehashed"))
+    monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    monkeypatch.setattr(api, "keysets", {proof.id: object()}, raising=False)
+    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object())
+
+    if operation == "swap":
+        await api.split([proof], [output])
+        assert requests == ["swap"]
+    else:
+        await api.melt(quote="quote", proofs=[proof], outputs=None)
+        assert requests == ["melt/bolt11"]
+    hashed.assert_not_called()

@@ -513,13 +513,8 @@ class LedgerAPI(SupportsAuth):
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
-        payload = PostMeltRequest.model_validate(
-            {
-                "quote": quote,
-                "inputs": proofs,
-                "outputs": outputs,
-                "prefer_async": prefer_async,
-            }
+        payload = PostMeltRequest(
+            quote=quote, inputs=proofs, outputs=outputs, prefer_async=prefer_async
         )
 
         def _meltrequest_include_fields(
@@ -556,9 +551,7 @@ class LedgerAPI(SupportsAuth):
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
         logger.debug(f"Calling split. POST {self.api_prefix}/swap")
-        split_payload = PostSwapRequest.model_validate(
-            {"inputs": proofs, "outputs": outputs}
-        )
+        split_payload = PostSwapRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):

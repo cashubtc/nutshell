@@ -14,11 +14,13 @@ class SettingsEnvTests(unittest.TestCase):
         script = dedent(
             """
             import sys
+            from typing import Annotated
             from unittest.mock import patch
-            from pydantic import ValidationError
+            from pydantic import BeforeValidator, TypeAdapter, ValidationError
             from cashu.core.base import AuthProof
             from cashu.core.models import PostMeltRequest, PostSwapRequest
             from cashu.core.settings import settings
+            from cashu.mint.validation import validate_input_secret_lengths
 
             limit = settings.mint_max_secret_length
             assert limit == int(sys.argv[1])
@@ -33,13 +35,17 @@ class SettingsEnvTests(unittest.TestCase):
             for model, fields in (
                 (PostSwapRequest, {}), (PostMeltRequest, {"quote": "quote"}),
             ):
-                request = model(inputs=[proof], outputs=[], **fields)
+                adapter = TypeAdapter(
+                    Annotated[model, BeforeValidator(validate_input_secret_lengths)]
+                )
+                body = {"inputs": [proof], "outputs": [], **fields}
+                request = adapter.validate_python(body)
                 assert request.inputs[0].secret == proof["secret"]
                 assert request.inputs[0].Y
                 proof["secret"] += "x"
                 with patch("cashu.core.base.hash_to_curve") as hashed:
                     try:
-                        model(inputs=[proof], outputs=[], **fields)
+                        adapter.validate_python(body)
                     except ValidationError as exc:
                         assert exc.errors(include_input=False)[0]["loc"] == (
                             "inputs", 0, "secret"
@@ -47,6 +53,8 @@ class SettingsEnvTests(unittest.TestCase):
                     else:
                         raise AssertionError("request accepted overlong secret")
                     hashed.assert_not_called()
+                wallet_request = model.model_validate(body)
+                assert wallet_request.inputs[0].secret == proof["secret"]
                 try:
                     AuthProof(**proof)
                 except ValidationError as exc:

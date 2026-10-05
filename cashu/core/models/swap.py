@@ -5,13 +5,13 @@ from pydantic import BaseModel, Field
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
+    Proof,
 )
-from cashu.core.models.proof import ProofInput
 from cashu.core.settings import settings
 
 
 class PostSwapRequest(BaseModel):
-    inputs: List[ProofInput] = Field(..., max_length=settings.mint_max_request_length)
+    inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
     outputs: List[BlindedMessage] = Field(
         ..., max_length=settings.mint_max_request_length
     )

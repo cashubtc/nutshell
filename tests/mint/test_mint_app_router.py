@@ -514,7 +514,11 @@ def test_oversized_point_is_not_rendered_in_validation_errors(monkeypatch, path,
     "path,fields",
     [("/v1/swap", {}), ("/v1/melt/bolt11", {"quote": "quote"})],
 )
-def test_router_rejects_long_secrets_before_hashing(monkeypatch, path, fields):
+@pytest.mark.parametrize("length", [settings.mint_max_secret_length + 1, 2_000_000])
+@pytest.mark.parametrize("index", [0, 1])
+def test_router_rejects_long_secrets_before_hashing(
+    monkeypatch, path, fields, length, index
+):
     monkeypatch.setattr(settings, "mint_rate_limit", False)
     monkeypatch.setattr(settings, "mint_require_auth", False)
     monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
@@ -526,12 +530,12 @@ def test_router_rejects_long_secrets_before_hashing(monkeypatch, path, fields):
         path,
         json={
             **fields,
-            "inputs": [
+            "inputs": [{"secret": "valid"}] * index + [
                 {
                     "id": "00deadbeefdeadbe",
                     "amount": 1,
                     "C": "aa",
-                    "secret": "x" * (settings.mint_max_secret_length + 1),
+                    "secret": "x" * length,
                 }
             ],
             "outputs": [],
@@ -539,6 +543,8 @@ def test_router_rejects_long_secrets_before_hashing(monkeypatch, path, fields):
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"][0]["loc"] == ["body", "inputs", 0, "secret"]
+    assert response.json()["detail"][0]["loc"] == ["body", "inputs", index, "secret"]
     assert response.json()["detail"][0]["type"] == "string_too_long"
+    assert "input" not in response.json()["detail"][0]
+    assert len(response.content) < 1024
     hashed.assert_not_called()

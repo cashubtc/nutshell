@@ -21,7 +21,6 @@ from cashu.core.models import (
     PostRestoreResponse,
     PostSwapRequest,
 )
-from cashu.core.models.proof import ProofInput
 from cashu.core.settings import settings
 
 POINT = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
@@ -132,54 +131,6 @@ def test_batch_mint_preserves_optional_quote_signatures(signatures):
 @pytest.mark.parametrize(
     "model,fields", [(PostSwapRequest, {}), (PostMeltRequest, {"quote": "quote"})]
 )
-@pytest.mark.parametrize("input_kind", ["dict", "proof", "request_proof", "bytes"])
-def test_request_rejects_long_secret_before_hashing(
-    monkeypatch, model, fields, input_kind
-):
-    proof = {
-        "id": "00deadbeefdeadbe",
-        "amount": 1,
-        "C": POINT,
-        "secret": "x" * (settings.mint_max_secret_length + 1),
-    }
-    if input_kind == "proof":
-        value = Proof(**proof)
-    elif input_kind == "request_proof":
-        value = ProofInput.model_construct(**proof)
-    elif input_kind == "bytes":
-        value = {**proof, "secret": proof["secret"].encode()}
-    else:
-        value = proof
-    hashed = Mock(side_effect=AssertionError("rejected secret must not be hashed"))
-    monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
-
-    with pytest.raises(ValidationError) as exc:
-        model.model_validate({**fields, "inputs": [value], "outputs": []})
-
-    assert exc.value.errors(include_input=False)[0]["loc"] == ("inputs", 0, "secret")
-    assert exc.value.errors(include_input=False)[0]["type"] == "string_too_long"
-    hashed.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    "model,fields", [(PostSwapRequest, {}), (PostMeltRequest, {"quote": "quote"})]
-)
-@pytest.mark.parametrize("secret_character", ["a", "😀"])
-def test_request_secret_limit_accepts_boundary(model, fields, secret_character):
-    proof = {
-        "id": "00deadbeefdeadbe",
-        "amount": 1,
-        "C": POINT,
-        "secret": secret_character * settings.mint_max_secret_length,
-    }
-    request = model.model_validate({**fields, "inputs": [proof], "outputs": []})
-    assert request.inputs[0].secret == proof["secret"]
-    assert request.inputs[0].Y == Proof(**proof).Y
-
-
-@pytest.mark.parametrize(
-    "model,fields", [(PostSwapRequest, {}), (PostMeltRequest, {"quote": "quote"})]
-)
 def test_request_preserves_existing_wallet_proof(monkeypatch, model, fields):
     proof = Proof(
         id="00deadbeefdeadbe",
@@ -202,7 +153,7 @@ def test_request_preserves_existing_wallet_proof(monkeypatch, model, fields):
 
     request = model.model_validate({**fields, "inputs": [proof], "outputs": []})
 
-    assert request.inputs[0].model_dump() == proof.model_dump()
+    assert request.inputs[0] is proof
     hashed.assert_not_called()
 
 
