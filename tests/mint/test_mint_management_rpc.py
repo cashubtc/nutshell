@@ -167,7 +167,7 @@ async def test_update_auth_limits(rpc_servicer):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "final_expiry, expected_hash_suffix",
-    [(None, ""), (0, ""), (2059210353, "|final_expiry:2059210353")],
+    [(None, ""), (2059210353, "|final_expiry:2059210353")],
 )
 async def test_rotate_next_keyset(rpc_servicer, final_expiry, expected_hash_suffix):
     request = management_pb2.RotateNextKeysetRequest(
@@ -196,6 +196,21 @@ async def test_rotate_next_keyset(rpc_servicer, final_expiry, expected_hash_suff
     )
     preimage += "|unit:sat|input_fee_ppk:2" + expected_hash_suffix
     assert response.id == "01" + hashlib.sha256(preimage.encode("utf-8")).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_rotate_next_keyset_preserves_explicit_zero_expiry(rpc_servicer):
+    request = management_pb2.RotateNextKeysetRequest(unit="sat", final_expiry=0)
+
+    response = await rpc_servicer.RotateNextKeyset(request, None)
+
+    assert response.HasField("final_expiry")
+    assert response.final_expiry == 0
+
+    ledger = rpc_servicer.ledger
+    assert ledger.keysets[response.id].final_expiry == 0
+    stored_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=response.id))[0]
+    assert stored_keyset.final_expiry == 0
 
 
 @pytest.mark.asyncio

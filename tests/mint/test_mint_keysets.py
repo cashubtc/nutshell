@@ -147,20 +147,6 @@ async def test_keyset_id_v2_derivation():
     assert len(v2_id_with_expiry) == 66, "Should be 66 characters"
 
 
-@pytest.mark.parametrize("input_fee_ppk", [0, 100])
-def test_keyset_id_v2_zero_expiry_matches_no_expiry(input_fee_ppk):
-    keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.21.0")
-    assert keyset.public_keys
-
-    id_without_expiry = derive_keyset_id_v2(
-        keyset.public_keys, "sat", final_expiry=None, input_fee_ppk=input_fee_ppk
-    )
-    id_with_zero_expiry = derive_keyset_id_v2(
-        keyset.public_keys, "sat", final_expiry=0, input_fee_ppk=input_fee_ppk
-    )
-    assert id_with_zero_expiry == id_without_expiry
-
-
 @pytest.mark.asyncio
 async def test_keyset_id_v2_units():
     """Test that different units produce different keyset IDs."""
