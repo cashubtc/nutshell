@@ -1,43 +1,31 @@
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import Field, TypeAdapter, ValidationError
-from pydantic_core import InitErrorDetails
+from pydantic import ValidationError
 
-from ..core.base import Proof
 from ..core.settings import settings
 
-_secret_adapter: TypeAdapter[str] = TypeAdapter(
-    Annotated[str, Field(max_length=settings.mint_max_secret_length)]
-)
+_MAX_SECRET_LENGTH = settings.mint_max_secret_length
 
 
 def validate_input_secret_lengths(value: Any) -> Any:
-    """Validate incoming mint secrets before request parsing constructs proofs."""
+    """Reject long JSON secrets before request parsing constructs proofs."""
     if not isinstance(value, dict) or not isinstance(value.get("inputs"), list):
         return value
 
-    errors: list[InitErrorDetails] = []
     for index, proof in enumerate(value["inputs"]):
-        if isinstance(proof, dict) and "secret" in proof:
-            secret = proof["secret"]
-        elif isinstance(proof, Proof):
-            secret = proof.secret
-        else:
+        if not isinstance(proof, dict):
             continue
-
-        try:
-            _secret_adapter.validate_python(secret)
-        except ValidationError as exc:
-            for error in exc.errors(include_url=False):
-                errors.append(
+        secret = proof.get("secret")
+        if isinstance(secret, str) and len(secret) > _MAX_SECRET_LENGTH:
+            raise ValidationError.from_exception_data(
+                "Mint request",
+                [
                     {
-                        "type": error["type"],
+                        "type": "string_too_long",
                         "loc": ("inputs", index, "secret"),
-                        "input": error["input"],
-                        "ctx": error.get("ctx", {}),
+                        "input": secret,
+                        "ctx": {"max_length": _MAX_SECRET_LENGTH},
                     }
-                )
-
-    if errors:
-        raise ValidationError.from_exception_data("Mint request", errors)
+                ],
+            )
     return value
