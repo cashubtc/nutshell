@@ -57,6 +57,7 @@ class CLNRestWallet(LightningBackend):
     supports_mpp = settings.mint_clnrest_enable_mpp
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
+    supports_amountless: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -192,31 +193,30 @@ class CLNRestWallet(LightningBackend):
                 error_message=str(exc),
             )
 
-        if not invoice.amount_msat or invoice.amount_msat <= 0:
-            error_message = "0 amount invoices are not allowed"
+        if quote.amount_option_type and not quote.amount_msat:
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                error_message=error_message,
+                error_message="Payment amount option requires an amount",
+            )
+        if not invoice.amount_msat and quote.amount_option_type != "nut-23":
+            return PaymentResponse(
+                result=PaymentResult.FAILED,
+                error_message="Amountless invoice requires a nut-23 amount option",
             )
 
-        quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
         post_data = {
             "invstring": quote.request,
             "maxfee": fee_limit_msat,
         }
-
-        # Handle Multi-Mint payout where we must only pay part of the invoice amount
-        logger.trace(f"{quote_amount_msat = }, {invoice.amount_msat = }")
-        if quote_amount_msat != invoice.amount_msat:
-            logger.trace("Detected Multi-Nut payment")
-            if self.supports_mpp:
-                post_data["partial_msat"] = quote_amount_msat
-            else:
-                error_message = "mint does not support MPP"
-                logger.error(error_message)
+        if quote.amount_option_type == "nut-23":
+            post_data["amount_msat"] = quote.amount_msat
+        elif quote.amount_option_type == "nut-15":
+            if not self.supports_mpp:
                 return PaymentResponse(
-                    result=PaymentResult.FAILED, error_message=error_message
+                    result=PaymentResult.FAILED,
+                    error_message="mint does not support MPP",
                 )
+            post_data["partial_msat"] = quote.amount_msat
         r = await self.client.post("/v1/xpay", data=post_data, timeout=None)
 
         if r.is_error or "message" in r.json():
@@ -401,11 +401,9 @@ class CLNRestWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
-        amount_msat = (
-            melt_quote.mpp_amount if melt_quote.is_mpp else (invoice_obj.amount_msat)
-        )
+        amount_msat = melt_quote.amount_msat or invoice_obj.amount_msat
+        assert amount_msat, "invoice has no amount."
+        assert amount_msat > 0, "invoice has 0 amount."
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)

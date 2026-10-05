@@ -2,6 +2,7 @@ from .blind_auth import PostAuthBlindMintRequest, PostAuthBlindMintResponse
 from .check import PostCheckStateRequest, PostCheckStateResponse
 from .info import (
     GetInfoResponse,
+    MeltMethodBolt11OptionSetting,
     MeltMethodSetting,
     MintInfoContact,
     MintInfoProtectedEndpoint,
@@ -19,6 +20,7 @@ from .melt import PostMeltRequest
 from .melt_quote import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
+    PostMeltRequestOptionAmountless,
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
 )
@@ -42,6 +44,7 @@ __all__ = [
     "PostCheckStateRequest",
     "PostCheckStateResponse",
     "GetInfoResponse",
+    "MeltMethodBolt11OptionSetting",
     "MeltMethodSetting",
     "MintInfoContact",
     "MintInfoProtectedEndpoint",
@@ -55,6 +58,7 @@ __all__ = [
     "PostMeltRequest",
     "PostMeltQuoteRequest",
     "PostMeltQuoteResponse",
+    "PostMeltRequestOptionAmountless",
     "PostMeltRequestOptionMpp",
     "PostMeltRequestOptions",
     "PostMintBatchRequest",

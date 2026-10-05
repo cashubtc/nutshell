@@ -2,6 +2,7 @@ import copy
 import json
 from typing import List
 
+import bolt11
 from sqlalchemy import RowMapping
 
 from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof
@@ -1347,3 +1348,35 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_add_amount_msat_to_melt_quotes(db: Database):
+    """Persist explicit NUT-15/NUT-23 amounts and identify legacy partial quotes."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            f"ADD COLUMN amount_msat {db.big_int} DEFAULT NULL"
+        )
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            "ADD COLUMN amount_option_type TEXT DEFAULT NULL"
+        )
+        # Before this migration, MPP quotes only persisted their ecash amount.
+        # Ordinary quotes round up, so only partial quotes are below the invoice.
+        rows = await conn.fetchall(
+            f"SELECT quote, request, amount, unit FROM {db.table_with_schema('melt_quotes')} "
+            "WHERE method = 'bolt11' AND unit IN ('sat', 'msat')"
+        )
+        for row in rows:
+            try:
+                invoice = bolt11.decode(row["request"])
+            except bolt11.Bolt11Exception:
+                continue
+            amount_msat = row["amount"] * (1000 if row["unit"] == "sat" else 1)
+            if invoice.amount_msat and 0 < amount_msat < invoice.amount_msat:
+                await conn.execute(
+                    f"UPDATE {db.table_with_schema('melt_quotes')} "
+                    "SET amount_msat = :amount_msat, amount_option_type = 'nut-15' "
+                    "WHERE quote = :quote",
+                    {"quote": row["quote"], "amount_msat": amount_msat},
+                )

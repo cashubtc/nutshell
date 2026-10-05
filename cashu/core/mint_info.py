@@ -5,11 +5,17 @@ from pydantic import BaseModel
 
 from .base import Method, Unit
 from .json_rpc.base import JSONRPCSubscriptionKinds
-from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
+from .models import (
+    MeltMethodSetting,
+    MintInfoContact,
+    MintInfoProtectedEndpoint,
+    Nut15MppSupport,
+)
 from .nuts.nuts import (
     BLIND_AUTH_NUT,
     BOOLEAN_SUPPORTED_NUTS,
     CLEAR_AUTH_NUT,
+    MELT_NUT,
     MPP_NUT,
     WEBSOCKETS_NUT,
 )
@@ -62,6 +68,18 @@ class MintInfo(BaseModel):
         if nut in BOOLEAN_SUPPORTED_NUTS:
             return self.nuts[nut].get("supported") is True
         return True
+
+    def supports_amountless(self, method: str, unit: Unit) -> bool:
+        for entry in self.nuts.get(MELT_NUT, {}).get("methods", []):
+            setting = MeltMethodSetting.model_validate(entry)
+            if (
+                setting.method == method
+                and setting.unit == unit.name
+                and setting.options
+                and setting.options.amountless
+            ):
+                return True
+        return False
 
     def supports_mpp(self, method: str, unit: Unit) -> bool:
         if not self.nuts:
