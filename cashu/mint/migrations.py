@@ -1,11 +1,17 @@
 import copy
 import json
-from typing import List
+from typing import List, Optional
 
+from loguru import logger
 from sqlalchemy import RowMapping
 
 from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof
-from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
+from ..core.crypto.b_dhke import hash_to_curve
+from ..core.crypto.keys import (
+    derive_keyset_id,
+    derive_keyset_id_deprecated,
+    derive_keyset_id_v2,
+)
 from ..core.db import Connection, Database
 from ..core.settings import settings
 
@@ -1347,3 +1353,107 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_reconstruct_missing_proof_signatures(db: Database):
+    """Backfill empty C values using each proof's exact historical keyset.
+
+    Leave records empty when their original keyset or denomination key is
+    unavailable. Never substitute the current mint seed or active keyset.
+    """
+    keysets: dict[str, Optional[MintKeyset]] = {}
+    async with db.connect() as conn:
+        for table in ("proofs_used", "proofs_pending"):
+            repaired = 0
+            missing = await conn.fetchone(
+                f"SELECT COUNT(*) AS count FROM {db.table_with_schema(table)} WHERE c = ''"
+            )
+            assert missing is not None
+            if not missing["count"]:
+                continue
+            # Later table rebuilds dropped the original secret index. This partial
+            # index supports both pagination and updates, including proofs without Y.
+            index_name = f"m040_{table}_empty_c_secret_idx"
+            await conn.execute(
+                f"CREATE INDEX IF NOT EXISTS {index_name} "
+                f"ON {db.table_with_schema(table)} (secret) "
+                "WHERE c = ''"
+            )
+            last_secret: Optional[str] = None
+            while True:
+                # Bound memory use without revisiting rows we could not repair.
+                after = "AND p.secret > :last_secret" if last_secret is not None else ""
+                rows = await conn.fetchall(
+                    f"SELECT p.id, p.amount, p.secret FROM {db.table_with_schema(table)} p "
+                    f"JOIN {db.table_with_schema('keysets')} k ON k.id = p.id "
+                    f"WHERE p.c = '' {after} ORDER BY p.secret LIMIT 10000",
+                    {"last_secret": last_secret} if last_secret is not None else {},
+                )
+                if not rows:
+                    break
+                last_secret = rows[-1]["secret"]
+                updates = []
+                for row in rows:
+                    keyset_id = row["id"]
+                    if keyset_id and keyset_id not in keysets:
+                        keyset_row = await conn.fetchone(
+                            f"SELECT * FROM {db.table_with_schema('keysets')} "
+                            "WHERE id = :id",
+                            {"id": keyset_id},
+                        )
+                        keysets[keyset_id] = None
+                        # A missing version would default to today's key derivation.
+                        if keyset_row and keyset_row["version"]:
+                            try:
+                                keyset = MintKeyset.from_row(keyset_row)  # type: ignore[arg-type]
+                                assert keyset.public_keys
+                                # Verify the recovered keys, including historical ID aliases.
+                                if keyset_id not in {
+                                    derive_keyset_id(keyset.public_keys),
+                                    derive_keyset_id_deprecated(keyset.public_keys),
+                                    derive_keyset_id_v2(
+                                        keyset.public_keys,
+                                        keyset.unit.name,
+                                        keyset.final_expiry,
+                                        keyset.input_fee_ppk,
+                                    ),
+                                }:
+                                    raise ValueError("Recovered keys do not match keyset ID")
+                                keysets[keyset_id] = keyset
+                            except Exception:
+                                logger.warning(
+                                    "Historical keyset {} is unavailable for proof signature backfill",
+                                    keyset_id,
+                                )
+                    keyset = keysets.get(keyset_id)
+                    key = keyset.private_keys.get(row["amount"]) if keyset else None
+                    if key is None:
+                        continue
+                    Y = hash_to_curve(row["secret"].encode("utf-8"))
+                    C = (Y * key).format().hex()  # type: ignore[operator]
+                    updates.append(
+                        {
+                            "c": C,
+                            "id": keyset_id,
+                            "amount": row["amount"],
+                            "secret": row["secret"],
+                        }
+                    )
+                if updates:
+                    # Executemany avoids a database round trip for every proof.
+                    await conn.conn.execute(
+                        conn.rewrite_query(
+                            f"UPDATE {db.table_with_schema(table)} SET c = :c "
+                            "WHERE id = :id AND amount = :amount "
+                            "AND secret = :secret AND c = ''"
+                        ),
+                        updates,
+                    )
+                    repaired += len(updates)
+            await conn.execute(f"DROP INDEX {db.table_with_schema(index_name)}")
+            logger.info(
+                "Proof signature backfill for {}: repaired {}, left {} empty",
+                table,
+                repaired,
+                missing["count"] - repaired,
+            )
