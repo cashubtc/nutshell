@@ -141,6 +141,35 @@ async def test_decrypt_seed():
     )
 
 
+@pytest.mark.asyncio
+async def test_encrypted_seed_not_stored_in_plaintext(ledger: Ledger, monkeypatch):
+    monkeypatch.setattr(settings, "mint_seed_decryption_key", DECRYPTON_KEY)
+    ledger_encrypted = Ledger(
+        db=ledger.db,
+        seed=ENCRYPTED_SEED,
+        seed_decryption_key=DECRYPTON_KEY,
+        derivation_path=DERIVATION_PATH,
+        backends={},
+        crud=LedgerCrudSqlite(),
+    )
+    await ledger_encrypted.init_keysets()
+    old_keyset = ledger_encrypted.keyset
+
+    # rotation stores the new keyset and updates the old one
+    new_keyset = await ledger_encrypted.rotate_next_keyset(unit=Unit.sat)
+
+    aes = AESCipher(DECRYPTON_KEY)
+    for keyset in (old_keyset, new_keyset):
+        row = await ledger.db.fetchone(
+            f"SELECT * FROM {ledger.db.table_with_schema('keysets')} WHERE id = :id",
+            {"id": keyset.id},
+        )
+        assert row
+        assert row["seed"] == ""
+        assert row["seed_encryption_method"] == "aes"
+        assert aes.decrypt(row["encrypted_seed"]) == SEED
+
+
 async def create_pending_melts(
     ledger: Ledger, check_id: str = "checking_id"
 ) -> Tuple[Proof, MeltQuote]:
