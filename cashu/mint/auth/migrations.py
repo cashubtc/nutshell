@@ -194,12 +194,14 @@ async def m005_align_promises_with_mint_schema(db: Database):
             )
 
 
-async def m006_add_digest_to_proofs(db: Database):
-    """Mirror the mint's m040: the shared CRUD writes the v3 input digest."""
+async def m006_add_digest_to_auth_proofs(db: Database):
+    """Align auth proof tables with the shared ledger's proof persistence."""
     async with db.connect() as conn:
         await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('proofs_used')} ADD COLUMN digest TEXT DEFAULT NULL"
+            f"ALTER TABLE {db.table_with_schema('proofs_used')} "
+            "ADD COLUMN digest TEXT DEFAULT NULL"
         )
         await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('proofs_pending')} ADD COLUMN digest TEXT DEFAULT NULL"
+            f"ALTER TABLE {db.table_with_schema('proofs_pending')} "
+            "ADD COLUMN digest TEXT DEFAULT NULL"
         )

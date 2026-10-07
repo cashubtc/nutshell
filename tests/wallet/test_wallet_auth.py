@@ -128,7 +128,7 @@ async def test_wallet_auth_mint_manually(wallet: Wallet):
     reason="settings.mint_require_auth is False",
 )
 @pytest.mark.asyncio
-async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
+async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet, monkeypatch):
     auth_wallet = await WalletAuth.with_db(
         url=wallet.url,
         db=wallet.db.db_location,
@@ -144,20 +144,12 @@ async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
 
     # invalidate CAT in the database
     auth_wallet.oidc_client.access_token = generate_uuid_v7()
-
-    # this is the code executed in auth_wallet.mint_blind_auth():
-    clear_auth_token = auth_wallet.oidc_client.access_token
-    if not clear_auth_token:
-        raise Exception("No clear auth token available.")
-
-    amounts = auth_wallet.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
-    # v3 BATs are point secrets
-    secrets = [PrivateKey().public_key.format().hex() for _ in amounts]
-    outputs, rs = auth_wallet._construct_outputs(amounts, secrets)
+    # Send the malformed token to the mint without parsing it for local expiry.
+    monkeypatch.setattr(auth_wallet.oidc_client, "is_token_expired", lambda: False)
 
     # should fail because of invalid CAT
     await assert_err(
-        auth_wallet.blind_mint_blind_auth(clear_auth_token, outputs),
+        auth_wallet.mint_blind_auth(),
         ClearAuthFailedError.detail,
     )
 
@@ -213,9 +205,10 @@ async def test_wallet_auth_invoice_invalid_bat(wallet: Wallet):
 
     # invalidate blind auth proofs with unsigned point secrets
     for p in auth_wallet.proofs:
-        bogus = PrivateKey().public_key.format().hex()
+        tampered_secret = PrivateKey().public_key.format().hex()
         await auth_wallet.db.execute(
-            f"UPDATE proofs SET secret = '{bogus}' WHERE secret = '{p.secret}'"
+            "UPDATE proofs SET secret = :tampered_secret WHERE secret = :secret",
+            {"tampered_secret": tampered_secret, "secret": p.secret},
         )
 
     wallet.auth_db = auth_wallet.db
