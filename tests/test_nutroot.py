@@ -501,6 +501,7 @@ def _tx_from_vector(tx: dict):
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
+        TranscriptChangeOutput,
         TranscriptProofInput,
         TranscriptQuote,
     )
@@ -531,9 +532,12 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
-        change_pubkey=(
-            bytes.fromhex(tx["change_pubkey"]) if "change_pubkey" in tx else None
-        ),
+        change_quote_outputs=[
+            TranscriptChangeOutput(
+                pubkey=bytes.fromhex(c["pubkey"]), amount=c.get("amount")
+            )
+            for c in tx.get("change_quote_outputs", [])
+        ],
     )
 
 
@@ -551,6 +555,7 @@ def test_transaction_transcript_vectors():
         "melt_with_change",
         "mint_quote_to_melt",
         "proof_to_change",
+        "proof_to_two_change",
     ):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
@@ -573,6 +578,12 @@ def test_transaction_vectors_input_digests():
     _, proofs, _ = transaction_inputs(_tx_from_vector(change_tx["tx"]))
     (context,) = proofs.values()
     assert context.digest.hex() == change_tx["input_digest"]
+
+    two_tx = tv["proof_to_two_change"]
+    assert two_tx["transcript"].endswith("".join(two_tx["change_containers"]))
+    _, proofs, _ = transaction_inputs(_tx_from_vector(two_tx["tx"]))
+    (context,) = proofs.values()
+    assert context.digest.hex() == two_tx["input_digest"]
 
 
 def test_transcript_swap_signature_is_keypath_witness():

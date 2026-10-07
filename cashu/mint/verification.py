@@ -31,6 +31,7 @@ from ..core.crypto.transcript import (
     InputContext,
     TransactionShape,
     TranscriptBlindedOutput,
+    TranscriptChangeOutput,
     TranscriptProofInput,
     TranscriptQuote,
     transaction_inputs,
@@ -270,7 +271,7 @@ class LedgerVerification(
         outputs: List[BlindedMessage],
         melt_quote: Optional[MeltQuote] = None,
         mint_quote_inputs: Optional[List[TranscriptQuote]] = None,
-        change_pubkey: Optional[bytes] = None,
+        change_quote_outputs: Optional[List[TranscriptChangeOutput]] = None,
     ) -> Optional[Tuple[bytes, Dict[str, InputContext]]]:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
@@ -324,7 +325,7 @@ class LedgerVerification(
                     if melt_quote is not None
                     else None
                 ),
-                change_pubkey=change_pubkey,
+                change_quote_outputs=change_quote_outputs,
             )
         )
         for proof in proofs:

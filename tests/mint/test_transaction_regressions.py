@@ -7,6 +7,7 @@ from cashu.core.base import Method, Unit
 from cashu.core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
+    TranscriptChangeOutput,
     TranscriptQuote,
     transaction_inputs,
 )
@@ -14,6 +15,7 @@ from cashu.core.errors import KeysetInactiveError, TransactionError
 from cashu.core.models import (
     PostMeltQuoteRequest,
     PostTransactionRequest,
+    TransactionChangeOutput,
     TransactionMeltOutput,
     TransactionQuoteInput,
 )
@@ -40,7 +42,7 @@ async def test_redeem_remainder_through_mint(ledger, change):
         change_key, pubkey = nut20.generate_keypair()
         shape = TransactionShape(
             mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote)],
-            change_pubkey=bytes.fromhex(pubkey),
+            change_quote_outputs=[TranscriptChangeOutput(bytes.fromhex(pubkey))],
         )
         result = await ledger.transaction(
             PostTransactionRequest(
@@ -51,11 +53,11 @@ async def test_redeem_remainder_through_mint(ledger, change):
                         witness=quote_witness(key, shape, quote.quote),
                     )
                 ],
-                change_pubkey=pubkey,
+                change_quote_outputs=[TransactionChangeOutput(pubkey=pubkey)],
             )
         )
-        assert result.change_quote is not None
-        quote = await ledger.get_mint_quote(result.change_quote.quote)
+        assert result.change_quotes[0] is not None
+        quote = await ledger.get_mint_quote(result.change_quotes[0].quote)
         key = change_key
     await ledger.transaction(draw(ledger, quote, key, 4))
     outputs = [output(ledger, 4)]
@@ -88,10 +90,10 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
         melt_quote_outputs=[
             TranscriptQuote(amount=62 + melt.fee_reserve, quote_id=melt.quote)
         ],
-        change_pubkey=bytes.fromhex(change_key),
+        change_quote_outputs=[TranscriptChangeOutput(bytes.fromhex(change_key))],
     )
-    # A melt with outputs must name a change key: rotation would strand them otherwise.
-    with pytest.raises(TransactionError, match="change_pubkey"):
+    # A melt with outputs needs a remainder quote: rotation would strand them otherwise.
+    with pytest.raises(TransactionError, match="remainder quote"):
         await ledger.transaction(
             PostTransactionRequest(
                 mint_quote_inputs=[
@@ -125,15 +127,15 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
             melt_quote_outputs=[
                 TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
             ],
-            change_pubkey=change_key,
+            change_quote_outputs=[TransactionChangeOutput(pubkey=change_key)],
         )
     )
     # The rotated keyset signs nothing (NUT-02); the outputs' value is change.
     assert result.state == "PAID"
     assert result.signatures == []
     fee_paid = (await ledger.get_melt_quote(melt.quote)).fee_paid
-    assert result.change_quote is not None
-    assert result.change_quote.amount == amount - 62 - fee_paid
+    assert result.change_quotes[0] is not None
+    assert result.change_quotes[0].amount == amount - 62 - fee_paid
     assert (await ledger.get_mint_quote(quote.quote)).issued
     with pytest.raises(KeysetInactiveError):
         await ledger._sign_blinded_messages([output(ledger, 4)])

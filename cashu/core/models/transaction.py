@@ -22,6 +22,11 @@ class TransactionMeltOutput(BaseModel):
     fee_index: Optional[int] = None  # NUT-30 quotes with fee_options
 
 
+class TransactionChangeOutput(BaseModel):
+    pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # change quote lock key
+    amount: Optional[int] = Field(None, gt=0)  # omitted on the remainder quote
+
+
 class PostTransactionRequest(BaseModel):
     proof_inputs: List[Proof] = Field([], max_length=settings.mint_max_request_length)
     mint_quote_inputs: List[TransactionQuoteInput] = Field(
@@ -32,9 +37,9 @@ class PostTransactionRequest(BaseModel):
     )
     # Multi-melt is reserved (NUT-XX).
     melt_quote_outputs: List[TransactionMeltOutput] = Field([], max_length=1)
-    change_pubkey: Optional[str] = Field(
-        None, max_length=MAX_PUBKEY_LEN
-    )  # change quote lock key
+    change_quote_outputs: List[TransactionChangeOutput] = Field(
+        [], max_length=settings.mint_max_request_length
+    )
     prefer_async: Optional[bool] = None
 
 
@@ -43,4 +48,4 @@ class PostTransactionResponse(BaseModel):
     state: str  # PENDING, PAID or FAILED
     signatures: List[BlindedSignature] = []
     melt_quotes: List[PostMeltQuoteResponse] = []
-    change_quote: Optional[PostMintQuoteResponse] = None
+    change_quotes: List[Optional[PostMintQuoteResponse]] = []

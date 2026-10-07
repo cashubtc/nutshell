@@ -41,18 +41,34 @@ class TranscriptBlindedOutput:
 
 
 @dataclass
+class TranscriptChangeOutput:
+    pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
+    amount: Optional[int] = None  # None on the remainder quote
+
+
+@dataclass
 class TransactionShape:
     proof_inputs: Optional[List[TranscriptProofInput]] = None
     mint_quote_inputs: Optional[List[TranscriptQuote]] = None
     blinded_outputs: Optional[List[TranscriptBlindedOutput]] = None
     melt_quote_outputs: Optional[List[TranscriptQuote]] = None
-    change_pubkey: Optional[bytes] = None  # 33-byte compressed key (NUT-XX)
+    change_quote_outputs: Optional[List[TranscriptChangeOutput]] = None
 
 
 def _amount_record(amount: int) -> bytes:
     if amount < 0:
         raise ValueError("Transcript amount must be non-negative")
     return tlv_record(0x01, minimal_be(amount))
+
+
+def _change_output_container(c: TranscriptChangeOutput) -> bytes:
+    if len(c.pubkey) != 33:
+        raise ValueError("Transcript change lock key must be 33 bytes")
+    return tlv_record(
+        _CONTAINER_CHANGE_QUOTE_OUTPUT,
+        (_amount_record(c.amount) if c.amount is not None else b"")
+        + tlv_record(0x02, c.pubkey),
+    )
 
 
 def _proof_input_container(p: TranscriptProofInput) -> bytes:
@@ -93,13 +109,11 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
     mint_quotes = tx.mint_quote_inputs or []
     blinded = tx.blinded_outputs or []
     melt_quotes = tx.melt_quote_outputs or []
-    change = tx.change_pubkey
+    change = tx.change_quote_outputs or []
     if not proofs and not mint_quotes:
         raise ValueError("Transaction requires at least one input")
-    if not blinded and not melt_quotes and change is None:
+    if not blinded and not melt_quotes and not change:
         raise ValueError("Transaction requires at least one output")
-    if change is not None and len(change) != 33:
-        raise ValueError("Transcript change lock key must be 33 bytes")
     # NUT-10: the same proof or quote twice would sign one input digest for two inputs.
     if len({p.Y for p in proofs}) != len(proofs):
         raise ValueError("Transaction repeats a proof input")
@@ -110,11 +124,7 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
         + b"".join(_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q) for q in mint_quotes)
         + b"".join(_blinded_output_container(o) for o in blinded)
         + b"".join(_quote_container(_CONTAINER_MELT_QUOTE_OUTPUT, q) for q in melt_quotes)
-        + (
-            tlv_record(_CONTAINER_CHANGE_QUOTE_OUTPUT, tlv_record(0x01, change))
-            if change is not None
-            else b""
-        )
+        + b"".join(_change_output_container(c) for c in change)
     )
 
 

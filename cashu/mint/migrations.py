@@ -1373,9 +1373,9 @@ async def m041_add_transactions(db: Database):
                 unit TEXT NOT NULL,
                 melt_quote TEXT,
                 mint_quotes TEXT NOT NULL,
-                change_key TEXT,
+                change_outputs TEXT NOT NULL,
                 excess {db.big_int} NOT NULL,
-                change_quote TEXT,
+                change_quotes TEXT,
                 created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}
             );
             """

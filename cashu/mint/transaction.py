@@ -1,5 +1,5 @@
 """NUT-XX transactions: proofs and paid quotes in; blinded messages, one melt
-and a change quote out. The record is keyed by transaction digest."""
+and change quotes out. The record is keyed by transaction digest."""
 
 import asyncio
 import json
@@ -21,7 +21,7 @@ from ..core.base import (
 )
 from ..core.crypto.keys import generate_uuid_v7, is_bls_keyset
 from ..core.crypto.secp import PublicKey
-from ..core.crypto.transcript import TranscriptQuote
+from ..core.crypto.transcript import TranscriptChangeOutput, TranscriptQuote
 from ..core.db import Connection, LockOptions
 from ..core.errors import (
     NotAllowedError,
@@ -53,10 +53,15 @@ async def run(
 ) -> PostTransactionResponse:
     """Validate, record and run one transaction (NUT-XX)."""
     proofs, outputs = payload.proof_inputs, payload.blinded_outputs
+    change_outputs = payload.change_quote_outputs
     if not (proofs or payload.mint_quote_inputs):
         raise TransactionError("transaction requires at least one input.")
-    if not (outputs or payload.melt_quote_outputs or payload.change_pubkey):
+    if not (outputs or payload.melt_quote_outputs or change_outputs):
         raise TransactionError("transaction requires at least one output.")
+    # The amount-less entry is the remainder quote; it takes the balance (NUT-XX).
+    has_remainder = any(c.amount is None for c in change_outputs)
+    if sum(c.amount is None for c in change_outputs) > 1:
+        raise TransactionError("at most one change quote output may omit its amount.")
     if len({q.quote for q in payload.mint_quote_inputs}) != len(
         payload.mint_quote_inputs
     ):
@@ -64,14 +69,15 @@ async def run(
     if any(o.amount == 0 for o in outputs):
         raise TransactionError("blank outputs are not allowed: use a change quote.")
     # Outputs cannot be signed if their keyset rotates during the payment (NUT-02);
-    # the change quote is where their value goes then.
-    if outputs and payload.melt_quote_outputs and not payload.change_pubkey:
-        raise TransactionError("a melt with blinded outputs requires a change_pubkey.")
+    # the remainder quote is where their value goes then.
+    if outputs and payload.melt_quote_outputs and not has_remainder:
+        raise TransactionError(
+            "a melt with blinded outputs requires a remainder quote."
+        )
     if ledger._at_least_one_proof_has_sig_all(proofs):
         raise TransactionError("SIG_ALL inputs are not supported here.")
-    change_key = bytes.fromhex(payload.change_pubkey) if payload.change_pubkey else None
-    if change_key is not None:
-        PublicKey(change_key)  # raises unless a valid compressed point
+    for c in change_outputs:
+        PublicKey(bytes.fromhex(c.pubkey))  # raises unless a valid compressed point
 
     if any(m.fee_index is not None for m in payload.melt_quote_outputs):
         raise TransactionError("fee_index applies only to quotes offering fee_options.")
@@ -94,7 +100,10 @@ async def run(
             TranscriptQuote(amount=q.amount, quote_id=q.quote)
             for q in payload.mint_quote_inputs
         ],
-        change_pubkey=change_key,
+        change_quote_outputs=[
+            TranscriptChangeOutput(pubkey=bytes.fromhex(c.pubkey), amount=c.amount)
+            for c in change_outputs
+        ],
     )
     assert verified is not None
     digest_bytes, quote_contexts = verified
@@ -166,10 +175,12 @@ async def run(
     inputs = sum(p.amount for p in proofs) + sum(
         q.amount for q in payload.mint_quote_inputs
     )
-    sum_outputs = sum(o.amount for o in outputs)
+    sum_outputs = sum(o.amount for o in outputs) + sum(
+        c.amount for c in change_outputs if c.amount is not None
+    )
     melt_amount = melt.amount if melt else 0
     required = sum_outputs + melt_amount + (melt.fee_reserve if melt else 0) + fee
-    if inputs < required or (change_key is None and inputs != required):
+    if inputs < required or (not has_remainder and inputs != required):
         raise TransactionError(
             f"inputs ({inputs}) do not balance outputs, melt and fee ({required})."
         )
@@ -211,8 +222,8 @@ async def run(
         await conn.execute(
             f"""
             INSERT INTO {ledger.db.table_with_schema("transactions")}
-            (digest, state, unit, melt_quote, mint_quotes, change_key, excess)
-            VALUES (:digest, :state, :unit, :melt_quote, :mint_quotes, :change_key, :excess)
+            (digest, state, unit, melt_quote, mint_quotes, change_outputs, excess)
+            VALUES (:digest, :state, :unit, :melt_quote, :mint_quotes, :change_outputs, :excess)
             """,
             {
                 "digest": digest,
@@ -222,7 +233,9 @@ async def run(
                 "mint_quotes": json.dumps(
                     [[q.quote, q.amount] for q in payload.mint_quote_inputs]
                 ),
-                "change_key": payload.change_pubkey,
+                "change_outputs": json.dumps(
+                    [[c.pubkey, c.amount] for c in change_outputs]
+                ),
                 "excess": inputs - fee - sum_outputs - melt_amount,
             },
         )
@@ -277,19 +290,26 @@ async def get(ledger: "Ledger", digest: str) -> PostTransactionResponse:
         )
         assert melt is not None
         melts.append(PostMeltQuoteResponse.from_melt_quote(melt))
-    change = None
-    if record["change_quote"]:
-        quote = await ledger.crud.get_mint_quote(
-            quote_id=record["change_quote"], db=ledger.db
+    # One entry per request entry, in order; null until the quote exists (NUT-XX).
+    quote_ids: List[Optional[str]] = (
+        json.loads(record["change_quotes"])
+        if record["change_quotes"]
+        else [None] * len(json.loads(record["change_outputs"]))
+    )
+    change: List[Optional[PostMintQuoteResponse]] = []
+    for quote_id in quote_ids:
+        quote = (
+            await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db)
+            if quote_id
+            else None
         )
-        assert quote is not None
-        change = PostMintQuoteResponse.from_mint_quote(quote)
+        change.append(PostMintQuoteResponse.from_mint_quote(quote) if quote else None)
     return PostTransactionResponse(
         digest=digest,
         state=record["state"],
         signatures=signatures,
         melt_quotes=melts,
-        change_quote=change,
+        change_quotes=change,
     )
 
 
@@ -329,7 +349,7 @@ async def _finalize_proofs(ledger: "Ledger", proofs, conn: Connection) -> None:
 async def settle(
     ledger: "Ledger", digest: str, fee_paid: int, conn: Connection
 ) -> None:
-    """Sign the outputs, issue the quote inputs and create the change quote."""
+    """Sign the outputs, issue the quote inputs and create the change quotes."""
     record = await _get_row(ledger, digest, conn=conn)
     assert record is not None and record["state"] == PENDING
     rows = await conn.fetchall(
@@ -346,7 +366,7 @@ async def settle(
             await ledger._sign_blinded_messages(messages, conn)
         else:
             # The keyset rotated during the payment: nothing is signed (NUT-02),
-            # the outputs' value returns through the change quote.
+            # the outputs' value returns through the remainder quote.
             unsigned = sum(m.amount for m in messages)
             await conn.execute(
                 f"""
@@ -368,33 +388,37 @@ async def settle(
     change = record["excess"] + unsigned - fee_paid
     if change < 0:
         raise TransactionError("negative change.")
-    change_quote = None
-    if record["change_key"] and change > 0:
+    change_quotes: List[Optional[str]] = []
+    now = int(time.time())
+    for pubkey, fixed in json.loads(record["change_outputs"]):
+        amount = fixed if fixed is not None else change
+        if amount <= 0:  # a remainder quote with zero change is not created
+            change_quotes.append(None)
+            continue
         # Moved value, not a deposit: nothing here touches keyset balances.
-        now = int(time.time())
         quote = MintQuote(
             quote=generate_uuid_v7(),
             method=CHANGE_METHOD,
             request=digest,
-            checking_id=f"{CHANGE_METHOD}:{digest}",
+            checking_id=f"{CHANGE_METHOD}:{digest}:{len(change_quotes)}",
             unit=record["unit"],
-            amount=change,
+            amount=amount,
             state=MintQuoteState.paid,
-            amount_paid=change,
+            amount_paid=amount,
             amount_issued=0,
-            pubkey=record["change_key"],
+            pubkey=pubkey,
             created_time=now,
             paid_time=now,
             updated_at=now,
         )
         await ledger.crud.store_mint_quote(quote=quote, db=ledger.db, conn=conn)
-        change_quote = quote.quote
+        change_quotes.append(quote.quote)
     await conn.execute(
         f"""
         UPDATE {ledger.db.table_with_schema("transactions")}
-        SET state = :state, change_quote = :change_quote WHERE digest = :digest
+        SET state = :state, change_quotes = :change_quotes WHERE digest = :digest
         """,
-        {"state": PAID, "change_quote": change_quote, "digest": digest},
+        {"state": PAID, "change_quotes": json.dumps(change_quotes), "digest": digest},
     )
 
 

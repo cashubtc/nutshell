@@ -38,6 +38,7 @@ from .swap import PostSwapRequest, PostSwapResponse
 from .transaction import (
     PostTransactionRequest,
     PostTransactionResponse,
+    TransactionChangeOutput,
     TransactionMeltOutput,
     TransactionQuoteInput,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "PostSwapResponse",
     "PostTransactionRequest",
     "PostTransactionResponse",
+    "TransactionChangeOutput",
     "TransactionMeltOutput",
     "TransactionQuoteInput",
 ]
