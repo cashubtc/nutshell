@@ -66,7 +66,7 @@ async def test_transaction_proofs_to_fixed_and_remainder_quotes(
     wallet1: Wallet, ledger: Ledger
 ):
     """A 3-sat change quote plus a remainder quote, in request order
-    (the proof_to_two_change transcript vector)."""
+    (the proof_to_two_changes transcript vector)."""
     mint_quote = await wallet1.request_mint(8)
     await wallet1.mint(8, quote_id=mint_quote.quote)
     proofs = wallet1.proofs
