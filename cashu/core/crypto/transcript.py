@@ -21,10 +21,11 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
 
-_CONTAINER_PROOF_INPUT = 0x01
-_CONTAINER_MINT_QUOTE_INPUT = 0x02
-_CONTAINER_BLINDED_OUTPUT = 0x03
-_CONTAINER_MELT_QUOTE_OUTPUT = 0x04
+# The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+_CONTAINER_PROOF_INPUT = 0x11
+_CONTAINER_MINT_QUOTE_INPUT = 0x12
+_CONTAINER_BLINDED_OUTPUT = 0x21
+_CONTAINER_MELT_QUOTE_OUTPUT = 0x22
 
 
 @dataclass
