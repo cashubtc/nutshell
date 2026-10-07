@@ -11,7 +11,10 @@ from cashu.core.crypto.keys import (
     is_keyset_id_v2,
 )
 from cashu.core.crypto.secp import PublicKey
+from cashu.core.db import Database
+from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
+from cashu.mint import migrations as mint_migrations
 from cashu.mint.ledger import Ledger
 from tests.mint.test_mint_init import (
     DECRYPTON_KEY,
@@ -365,6 +368,39 @@ def test_keysets_from_0_22_use_v3_keys(version: str | None):
         "eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
     )
     assert all(len(key) == 192 for key in keyset.public_keys_hex.values())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["0.20.0", "0.21.0", "0.21.99"])
+async def test_v2_ledger_keysets_reload_after_0_22_upgrade(
+    monkeypatch, tmp_path, version
+):
+    db = Database("mint", str(tmp_path))
+    ledger = Ledger(
+        db=db, seed=SEED, derivation_path=DERIVATION_PATH, backends={}
+    )
+    try:
+        monkeypatch.setattr(settings, "version", version)
+        await migrate_databases(db, mint_migrations)
+        await ledger.init_keysets()
+        assert ledger.keyset.id == V2_KEYSET_ID
+        original_keys = ledger.keyset.public_keys_hex
+
+        monkeypatch.setattr(settings, "version", "0.22.0")
+        restarted = Ledger(
+            db=db, seed=SEED, derivation_path=DERIVATION_PATH, backends={}
+        )
+        await restarted.init_keysets()
+        assert restarted.keyset.id == V2_KEYSET_ID
+        assert restarted.keyset.version == version
+        assert restarted.keyset.public_keys_hex == original_keys
+
+        new_keyset = await restarted.activate_keyset(derivation_path="m/0'/0'/1'")
+        assert new_keyset.version == "0.22.0"
+        assert new_keyset.id.startswith("02")
+        assert all(len(key) == 192 for key in new_keyset.public_keys_hex.values())
+    finally:
+        await db.engine.dispose()
 
 
 # ==================== KEYSET IDs NUT-02 TEST VECTORS ====================
