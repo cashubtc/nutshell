@@ -94,9 +94,16 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
             # verifier rebuilds the request transcript from these. The body is
             # read only for version 02 tokens; Starlette caches the read for
             # the downstream app.
-            target = request.url.path + (
-                f"?{request.url.query}" if request.url.query else ""
+            raw_path = request.scope.get("raw_path")
+            # Some ASGI transports include the query in raw_path.
+            target = (
+                raw_path.split(b"?", 1)[0].decode("ascii")
+                if raw_path is not None
+                else request.url.path
             )
+            query_string = request.scope["query_string"]
+            if query_string:
+                target += "?" + query_string.decode("ascii")
             body = b""
             try:
                 if is_bls_keyset(AuthProof.from_base64(blind_auth_token).id):

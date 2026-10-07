@@ -5,7 +5,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
+from cashu.core.base import AuthProof, BlindedMessage, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.models import (
@@ -13,6 +13,7 @@ from cashu.core.models import (
     PostMeltQuoteResponse,
     PostMintQuoteResponse,
 )
+from cashu.core.nuts import nut22
 from cashu.core.settings import settings
 from cashu.wallet.v1_api import LedgerAPI
 
@@ -29,13 +30,19 @@ class DummyMintInfo:
         return self.clear
 
 
-class DummyHTTPXClient:
+class DummyHTTPXClient(httpx.AsyncClient):
     def __init__(self, response: httpx.Response):
+        super().__init__(base_url="https://mint.test")
         self.response = response
         self.calls: list[tuple[str, str, dict]] = []
+        self.sent: list[httpx.Request] = []
 
-    async def request(self, method: str, path: str, **kwargs):
+    def build_request(self, method: str, path: str, **kwargs):
         self.calls.append((method, path, kwargs))
+        return super().build_request(method, path, **kwargs)
+
+    async def send(self, request: httpx.Request, **kwargs):
+        self.sent.append(request)
         return self.response
 
 
@@ -98,11 +105,101 @@ async def test_request_adds_blind_auth_header(monkeypatch, api: LedgerAPI):
     cast(Any, api).httpx = DummyHTTPXClient(_response(200, {"ok": True}))
     await api._request("POST", "swap", json={"k": "v"})
 
-    method, path, kwargs = cast(Any, api).httpx.calls[0]
+    method, path, _ = cast(Any, api).httpx.calls[0]
     assert method == "POST"
     assert path == "v1/swap"
-    assert kwargs["headers"]["Blind-auth"].startswith("authA")
+    assert api.httpx.sent[0].headers["Blind-auth"].startswith("authA")
     assert invalidated["proof"] == proof
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method, path, noprefix, kwargs, target",
+    [
+        (
+            "POST",
+            "swap",
+            False,
+            {"params": {"q": "a b"}, "json": {"k": "välue"}},
+            "/prefix/v1/swap?q=a%20b",
+        ),
+        (
+            "GET",
+            "/v1/info",
+            True,
+            {},
+            "/prefix/v1/info",
+        ),
+        (
+            "POST",
+            "s%77ap?b=2&a=1&q=a%20b",
+            False,
+            {"content": b"raw request body"},
+            "/prefix/v1/s%77ap?b=2&a=1&q=a%20b",
+        ),
+        (
+            "POST",
+            "swap",
+            False,
+            {"params": [("q", "a b"), ("q", "c+d")], "data": {"k": "a b"}},
+            "/prefix/v1/swap?q=a%20b&q=c%2Bd",
+        ),
+    ],
+)
+async def test_v3_blind_auth_signs_httpx_request(
+    monkeypatch, api: LedgerAPI, method, path, noprefix, kwargs, target
+):
+    key = PrivateKey()
+    proof = Proof(
+        id="02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+        amount=1,
+        secret=key.public_key.format().hex(),
+        C="00" * 48,
+        derivation_path=nut22.BATKEY_PREFIX + key.to_hex(),
+    )
+    api.url = "https://mint.test/prefix"
+    api.mint_info = cast(Any, DummyMintInfo(blind=True, clear=True))
+    api.auth_db = api.db
+    api.auth_keyset_id = proof.id
+    invalidated = []
+
+    async def fake_get_proofs(**kwargs):
+        return [proof]
+
+    async def fake_invalidate_proof(*, proof, db):
+        invalidated.append(proof)
+
+    def handle_request(request: httpx.Request):
+        assert request.url.raw_path.decode("ascii") == target
+        assert request.headers["Clear-auth"] == "clear-token"
+        assert request.headers["X-Custom"] == "custom"
+        assert request.headers["Authorization"] == "Basic dXNlcjpwYXNz"
+        assert request.extensions["timeout"]["read"] == 7
+        auth_proof = AuthProof.from_base64(request.headers["Blind-auth"])
+        assert nut22.verify_bat_request_witness(
+            auth_proof, request.method, target, request.content
+        )
+        assert invalidated == [proof]
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr("cashu.wallet.v1_api.get_proofs", fake_get_proofs)
+    monkeypatch.setattr("cashu.wallet.v1_api.invalidate_proof", fake_invalidate_proof)
+    async with httpx.AsyncClient(
+        base_url=api.url, transport=httpx.MockTransport(handle_request)
+    ) as client:
+        api.httpx = client
+        response = await api._request(
+            method,
+            path,
+            noprefix=noprefix,
+            clear_auth_token="clear-token",
+            headers={"X-Custom": "custom"},
+            auth=("user", "pass"),
+            follow_redirects=False,
+            timeout=7,
+            **kwargs,
+        )
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -692,7 +789,9 @@ async def test_melt_rejects_deprecated_response(monkeypatch, api: LedgerAPI):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(
+    monkeypatch, api: LedgerAPI
+):
     async def fake_request(self, method, path, **kwargs):
         if path == "keysets":
             return _response(

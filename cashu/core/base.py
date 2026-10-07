@@ -1102,7 +1102,7 @@ class MintKeyset:
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
-            amounts=json.loads(row["amounts"]),
+            amounts=json.loads(row["amounts"]) if row["amounts"] is not None else None,
             balance=row["balance"],
             fees_paid=row["fees_paid"],
             final_expiry=row["final_expiry"],
