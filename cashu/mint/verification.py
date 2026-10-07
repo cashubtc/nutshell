@@ -335,7 +335,8 @@ class LedgerVerification(
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
-            digest = proof_contexts[ys[proof.secret]].digest
+            context = proof_contexts[ys[proof.secret]]
+            digest = context.digest
             # Stored with the spent proof, opening the NUT-07 commitment: the
             # witness verifies only against this input digest. A failure below
             # aborts the transaction, so nothing unverified is ever persisted.
@@ -352,7 +353,10 @@ class LedgerVerification(
                 # Script path: leaf -> root -> tweak -> P, then evaluate (NUT-10).
                 try:
                     verify_script_path_spend(
-                        SecpPublicKey(bytes.fromhex(proof.secret)), digest, witness
+                        SecpPublicKey(bytes.fromhex(proof.secret)),
+                        digest,
+                        witness,
+                        outputs=context.outputs,
                     )
                 except Exception as e:
                     raise TransactionError(

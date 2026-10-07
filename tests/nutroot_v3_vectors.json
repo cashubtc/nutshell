@@ -42,33 +42,54 @@
     "illustrative_input_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd"
   },
   "two_leaf_covenant": {
-    "comment": "Allowance covenant: kid may melt toward family node until vesting, parent holds key path. Two leaves, one branch. The melt_to leaf type (0x05) is unallocated in NUT-10, so the nuts tests reuse this tree as the fail-closed unknown-type vector.",
+    "comment": "Allowance covenant: until vesting the kid (key 3) can only spend into the template outputs (3 sat to key 5, remainder to key 6); after vest_time the after leaf lets the kid spend freely; the parent (key 6) holds the key path. Two leaves, one branch: template_witness reveals leaf 0 with path [leaf_hash_after], the after path is [leaf_hash_template].",
     "kid_priv": "0000000000000000000000000000000000000000000000000000000000000003",
     "kid_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
     "parent_priv": "0000000000000000000000000000000000000000000000000000000000000006",
     "internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
-    "node_pub": "03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
     "vest_time": 1758240000,
-    "leaf_melt_to": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+    "leaf_template": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90800201588c70281ee4113a1dc18656ad41d197be43c5b04228dfa3d1653d8a8259815",
     "leaf_after": "00020200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f906000468cc9d00",
-    "leaf_hash_melt_to": "8714a51c3019861df9c4d0d6a1f30f0465ea1252e9c3b949802f73eda61cb101",
+    "leaf_hash_template": "01c1bb685570527e12818a1fad9c7559ce86091327a2f1ecfcf698ffd210c7d9",
     "leaf_hash_after": "80468218b6e329d4d80682883617af0acd1d4a9d5b1658fbc448cc4781b4f254",
-    "merkle_root": "9d8170c0f86d30de108834ff1ee334decac6ae094fb07652801d9c159c7b1bed",
-    "tweak": "153e9c65e6bea3351f4e78145f328e5aae7e7a4722967bf347f057bcaa47bfba",
-    "secret": "02f4ff2c2894698847760b62bce9d0d6c6c745d0d85c83577a00337d75437bccf0",
-    "melt_witness": {
-      "leaf": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+    "merkle_root": "b0fb2ec177a0174b64ef26b81e90a54c9a6e084f8ec4bd072ef100855a6ead90",
+    "tweak": "bc74a8d5cba612135913d023a54001978ba82f3305f85051d4924a910842577e",
+    "secret": "02df187378a0e18c6d3f85cdca1ee23251f9ec10ce9be01407c66716209ad1237a",
+    "Y": "8a5361f408b802e1cccc8200cd71ad62a993e50a50683f5881f77a0c51145109098c2d80dd9ee1f1e18db2f42457aaf1",
+    "tx": {
+      "proof_inputs": [
+        {
+          "amount": 8,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "secret": "02df187378a0e18c6d3f85cdca1ee23251f9ec10ce9be01407c66716209ad1237a",
+          "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+        }
+      ],
+      "change_quote_outputs": [
+        {
+          "pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+          "amount": 3
+        },
+        {
+          "pubkey": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556"
+        }
+      ]
+    },
+    "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f60300308a5361f408b802e1cccc8200cd71ad62a993e50a50683f5881f77a0c51145109098c2d80dd9ee1f1e18db2f42457aaf104003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723002801000103020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe423002402002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+    "digest": "f831e5cab00d8d1d412a8c45c9333b7017bc7f9f36d697c0d398a7a32ee7a00a",
+    "input_id": "8d9a5fbd32d34e75dbc5ebdf738edddde7c1333c779eb46500b0179a8ce7f518",
+    "input_digest": "dcb113b68d91cf2254dfbe876fe0cac09efb221c18a440dacc41dd7578fc0ce2",
+    "template_witness": {
+      "leaf": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90800201588c70281ee4113a1dc18656ad41d197be43c5b04228dfa3d1653d8a8259815",
       "control": {
         "K": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
         "path": ["80468218b6e329d4d80682883617af0acd1d4a9d5b1658fbc448cc4781b4f254"]
       },
       "signatures": [
-        "27f53ffb8fe7bae5da0a754fd63aeb04fbfc7ee16c865fb5af3fb4411785b784df09a810c470386602fab69c450dc249efb465cff27f5322d1305e3eaec4d6fb"
+        "9965e9aea05f078981a1a1a0e30ae1b764719562656cd377cc6199d308473e009b4e7a48f9abb30defae15d5381bf1d9c5b4e996808c0e7b6197142a6613a488"
       ]
     },
-    "after_witness_path": ["8714a51c3019861df9c4d0d6a1f30f0465ea1252e9c3b949802f73eda61cb101"],
-    "illustrative_input_digest_preimage": "illustrative melt transcript",
-    "illustrative_input_digest": "c3530da6be5c8425076a9235228d3ffd24998b9595a5b548b6ee6a4342361765"
+    "after_witness_path": ["01c1bb685570527e12818a1fad9c7559ce86091327a2f1ecfcf698ffd210c7d9"]
   },
   "nut13_v3": {
     "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(scope_bytes)) || scope_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), 0x04 a mint quote lock key on its own per-mint quote counter, whose scope_bytes is the mint identity pubkey (mint_identity, the NUT-06 example identity) rather than a keyset id, so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 7, 1, 2, 2 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
@@ -535,7 +556,8 @@
     "threshold_1of1_disclosure": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000101",
     "leaf_disclosure_mode0": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000100",
     "leaf_disclosure_empty": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a0000",
-    "leaf_disclosure_mode2": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000102"
+    "leaf_disclosure_mode2": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a000102",
+    "leaf_unknown_type": "00060200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
   },
   "auditable_lock": {
     "comment": "Canonical auditable lock: NUMS offset u = 7, one threshold leaf n = 1 to test key 3 with disclosure mode 0x01, spent in the pinned transaction.",
@@ -610,5 +632,54 @@
     "signing_package": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWFiYTQ2YTQ2M2QzZDEwYjU5ZmExNTMyYTMyZDlhNWU4ZmE4ZTk5NjJhOGM2NTcxOTE3OTgxYTZmYTRkNWZhZmIwOGMyMWJiZmY5NDE4OWUyNGU1YzI1NmZjMGE3ZmU3MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDViMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMzBiNDJhMGJjYzM5NTk4ZGIxZGNhNjE3YWVlYTZiYzM2N2YyNTY2NjM2ODI2ZGM5NjFhNTRmYWFlMTViM2I4ZDEwYWZjMWNiMDIwNmU3MGFiM2IwZTEyYzJiOTQ3OGNkNTUyMTAwNWIwMTAwMDEwNDAyMDAyMTAyYjdlMDc3ZDAyMGZhYmVkNDU2YTZiZTEzOGE4ZTIwZTllZjQwYjQ0ZDg3M2ZhMTJjMDA1YjY1NmViMGNmOTlmNjAzMDAzMGI0MmEwYmNjMzk1OThkYjFkY2E2MTdhZWVhNmJjMzY3ZjI1NjY2MzY4MjZkYzk2MWE1NGZhYWUxNWIzYjhkMTBhZmMxY2IwMjA2ZTcwYWIzYjBlMTJjMmI5NDc4Y2Q1NSIsInNwZW5kcyI6W3siaW5wdXQiOjAsInNlY3JldCI6IjAyZmMxMWJmNGY5MzlmMmJmZDQ3ZTRjZWU3OTljODI1NGZjNGFjYzI3YTEzNGM3MjllZGZjM2M2YTNjMTNhMDUzYiIsImxlYWYiOiIwMDAxMDIwMDAxMDEwNDAwMjEwMmY5MzA4YTAxOTI1OGMzMTA0OTM0NGY4NWY4OWQ1MjI5YjUzMWM4NDU4MzZmOTliMDg2MDFmMTEzYmNlMDM2ZjkwYTAwMDEwMSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6W119XX0",
     "signing_package_signed": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWFiYTQ2YTQ2M2QzZDEwYjU5ZmExNTMyYTMyZDlhNWU4ZmE4ZTk5NjJhOGM2NTcxOTE3OTgxYTZmYTRkNWZhZmIwOGMyMWJiZmY5NDE4OWUyNGU1YzI1NmZjMGE3ZmU3MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDViMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMzBiNDJhMGJjYzM5NTk4ZGIxZGNhNjE3YWVlYTZiYzM2N2YyNTY2NjM2ODI2ZGM5NjFhNTRmYWFlMTViM2I4ZDEwYWZjMWNiMDIwNmU3MGFiM2IwZTEyYzJiOTQ3OGNkNTUyMTAwNWIwMTAwMDEwNDAyMDAyMTAyYjdlMDc3ZDAyMGZhYmVkNDU2YTZiZTEzOGE4ZTIwZTllZjQwYjQ0ZDg3M2ZhMTJjMDA1YjY1NmViMGNmOTlmNjAzMDAzMGI0MmEwYmNjMzk1OThkYjFkY2E2MTdhZWVhNmJjMzY3ZjI1NjY2MzY4MjZkYzk2MWE1NGZhYWUxNWIzYjhkMTBhZmMxY2IwMjA2ZTcwYWIzYjBlMTJjMmI5NDc4Y2Q1NSIsInNwZW5kcyI6W3siaW5wdXQiOjAsInNlY3JldCI6IjAyZmMxMWJmNGY5MzlmMmJmZDQ3ZTRjZWU3OTljODI1NGZjNGFjYzI3YTEzNGM3MjllZGZjM2M2YTNjMTNhMDUzYiIsImxlYWYiOiIwMDAxMDIwMDAxMDEwNDAwMjEwMmY5MzA4YTAxOTI1OGMzMTA0OTM0NGY4NWY4OWQ1MjI5YjUzMWM4NDU4MzZmOTliMDg2MDFmMTEzYmNlMDM2ZjkwYTAwMDEwMSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyJlOGRjMzgzOWQ2NDQ4NWY3NTU1NWQ5YjQ1OWFiMGYwY2FiNDZkNWEwNDIwYmI4MGY2NjFiMjUzZTk0MzFkMGU0MjUyNmY5NzRmNDExOGM1MmY5NWIxMjQyN2Y5Y2ZkMmFkMjRmYTdkM2MyYzkzNTYwYTA4MDYzZjg0OTAyNjEwMCJdfV19",
     "spend_receipt": "nutrcAeyJ0b2tlbiI6ImNhc2h1Qm8yRnRjV2gwZEhCek9pOHZiV2x1ZEM1MFpYTjBZWFZqYzJGMFlYU0JvbUZwU0FLMzRIZlFJUHEtWVhDQnBHRmhDR0Z6ZUVJd01tVTJaVGRqWm1FM1lqZ3laRFJpTTJJME5EbG1ZVFkwTmpaak9Ea3pORFk1WVRjeU4yUXdNakUwWkRRNFpHSTBPVFUyWVRZd05UUmlPREF5TW1FeU9XSmhZMWd3aE5HM0tScmxjMzg4aFJxalBLX2c5Nl9yWE10Tm9JYkVncnVGdDFKZVlWUl9HMXB0R2dHeF90SDVZTkdwMERNblluTnBvV0ZyV0NCSEdXM0FnUlVNNFRfUTVIaTR0eGd4dUNXLU9KSVJ5Y1ZxZ0dLbUd2Y0RSdyIsInJlY2VpcHRzIjpbeyJZIjoiYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczIiwia2V5c2V0SWQiOiIwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYiLCJpbnB1dERpZ2VzdCI6ImNiNDY0NDEzZDA4OGFlNzM4YjlmNzgxNDFhMDJkNDlmNTFjNmFkODUwMjliNmU0M2NiM2FjODZlZjMyNzk5MGUiLCJ3aXRuZXNzIjoie1wic2lnbmF0dXJlc1wiOltcIjQ1ZmE0ODI0MGY3NzkzYjc0OWFhNWE1YjdjNGE5YWJhZjgzNmE4MWRmYWE2OTBkZjIwYTYxZDY5MTZiODEyMTMwZmViZGIwMmUzODA2YmU1OWExZGQwMWEwM2JmOGVlNTEyNTJlNDJjZmY4N2E2ZTA2NWFhMWRhYTJjNWU5YzBhXCJdfSIsImNvbW1pdG1lbnQiOiI5MGQ1ZTBiZGZkOWY4OTNjNjY2Y2I0NWUzOTdhMWU1ODIxNjU5ZTJjYmJhYzdjOWU1MzA2NjcwNDQwZjFlNDE1IiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczMDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDViMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMzBiNDJhMGJjYzM5NTk4ZGIxZGNhNjE3YWVlYTZiYzM2N2YyNTY2NjM2ODI2ZGM5NjFhNTRmYWFlMTViM2I4ZDEwYWZjMWNiMDIwNmU3MGFiM2IwZTEyYzJiOTQ3OGNkNTUyMTAwNWIwMTAwMDEwNDAyMDAyMTAyYjdlMDc3ZDAyMGZhYmVkNDU2YTZiZTEzOGE4ZTIwZTllZjQwYjQ0ZDg3M2ZhMTJjMDA1YjY1NmViMGNmOTlmNjAzMDAzMGI0MmEwYmNjMzk1OThkYjFkY2E2MTdhZWVhNmJjMzY3ZjI1NjY2MzY4MjZkYzk2MWE1NGZhYWUxNWIzYjhkMTBhZmMxY2IwMjA2ZTcwYWIzYjBlMTJjMmI5NDc4Y2Q1NSJ9XX0"
+  },
+  "template_lock": {
+    "comment": "Template covenant: NUMS offset u = 7, one template leaf n = 1 to test key 3 whose hash is SHA256 over the output section (the two change quote containers of proof_to_two_changes), spent into exactly those outputs. rejected_outputs is the same transaction with the fixed quote at 4 sat: its output section hashes differently, so the witness is rejected.",
+    "u": "0000000000000000000000000000000000000000000000000000000000000007",
+    "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+    "output_section": "23002801000103020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe423002402002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+    "hash": "1588c70281ee4113a1dc18656ad41d197be43c5b04228dfa3d1653d8a8259815",
+    "leaf": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90800201588c70281ee4113a1dc18656ad41d197be43c5b04228dfa3d1653d8a8259815",
+    "merkle_root": "01c1bb685570527e12818a1fad9c7559ce86091327a2f1ecfcf698ffd210c7d9",
+    "tweak": "b6fe45ed53027f8fd19aff922c65d243f119435d8b80b60705586e2be8ad4800",
+    "secret": "03a2fbdd81e55c93d58f5133a4481070e46a4df977dcc0999ebef0270df84ce502",
+    "Y": "a051ba45c2446a196a235b68ee33ca0f516c873cd3d6e5fb70d3cd8dcae76578f3f1e5a669e36a4ad113cf8a6b58cb73",
+    "tx": {
+      "proof_inputs": [
+        {
+          "amount": 8,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "secret": "03a2fbdd81e55c93d58f5133a4481070e46a4df977dcc0999ebef0270df84ce502",
+          "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+        }
+      ],
+      "change_quote_outputs": [
+        {
+          "pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+          "amount": 3
+        },
+        {
+          "pubkey": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556"
+        }
+      ]
+    },
+    "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a051ba45c2446a196a235b68ee33ca0f516c873cd3d6e5fb70d3cd8dcae76578f3f1e5a669e36a4ad113cf8a6b58cb7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723002801000103020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe423002402002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+    "digest": "e9199005d1830f10b8a83ad61d09d3d24a624d14ba4d2e613f439438334dc1b7",
+    "input_id": "8afd9da5b574659731c6a11d12fa014bbca2d01ab63e9f95446d0adac04317af",
+    "input_digest": "9658787826425a4dce2e90edf4213f7727ba21a2fb5e71a1873c91e085ab01cc",
+    "witness": "{\"leaf\":\"00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90800201588c70281ee4113a1dc18656ad41d197be43c5b04228dfa3d1653d8a8259815\",\"control\":{\"K\":\"028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407\",\"path\":[]},\"signatures\":[\"fff6b7bb62409bfd1f7ad58c411b6c081eadaa47d85b5c41d9cd10b225730a4b9b18155904ef055ad505880d679f472e67695f42dae8bc39a93a81c47c834f96\"]}",
+    "rejected_outputs": {
+      "change_quote_outputs": [
+        {
+          "pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+          "amount": 4
+        },
+        {
+          "pubkey": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556"
+        }
+      ],
+      "output_section": "23002801000104020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe423002402002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+      "hash": "c859f4a83d97c153e11e5b8c59f485a8befcce05870a877467d876c64a2e6a7d"
+    }
   }
 }

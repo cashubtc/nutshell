@@ -120,14 +120,24 @@ def test_leaf_serialization_6_2():
         )
     )
     assert after.hex() == V_COVENANT["leaf_after"]
-    # The 6.2 melt_to covenant is a spec extensibility example, not an
-    # implemented leaf type; its bytes still pin the tree and tweak math,
-    # and parsing it must fail closed as an unknown type.
-    melt_to = bytes.fromhex(V_COVENANT["leaf_melt_to"])
-    assert nutroot_leaf_hash(melt_to).hex() == V_COVENANT["leaf_hash_melt_to"]
+    # The 6.2 template leaf: hash over the output section of the spend.
+    template = serialize_nutroot_leaf(
+        NutrootLeaf(
+            type="template",
+            n=1,
+            keys=[PublicKey(bytes.fromhex(V_COVENANT["kid_pub"]))],
+            hash=hashlib.sha256(
+                bytes.fromhex(VECTORS["template_lock"]["output_section"])
+            ).digest(),
+        )
+    )
+    assert template.hex() == V_COVENANT["leaf_template"]
+    assert parse_nutroot_leaf(template).type == "template"
+    assert nutroot_leaf_hash(template).hex() == V_COVENANT["leaf_hash_template"]
     assert nutroot_leaf_hash(after).hex() == V_COVENANT["leaf_hash_after"]
+    # An unallocated type fails closed.
     with pytest.raises(ValueError, match="type"):
-        parse_nutroot_leaf(melt_to)
+        parse_nutroot_leaf(bytes.fromhex(VECTORS["leaf_forms"]["leaf_unknown_type"]))
 
 
 def test_leaf_parsing_fails_closed():
@@ -220,14 +230,14 @@ def test_leaf_parsing_fails_closed():
 
 
 def test_merkle_tree_6_2():
-    h_melt = bytes.fromhex(V_COVENANT["leaf_hash_melt_to"])
+    h_melt = bytes.fromhex(V_COVENANT["leaf_hash_template"])
     h_after = bytes.fromhex(V_COVENANT["leaf_hash_after"])
     assert nutroot_branch_hash(h_melt, h_after).hex() == V_COVENANT["merkle_root"]
     assert nutroot_branch_hash(h_after, h_melt).hex() == V_COVENANT["merkle_root"]
     assert nutroot_merkle_root([h_melt, h_after]).hex() == V_COVENANT["merkle_root"]
 
     path_melt = nutroot_merkle_path([h_melt, h_after], 0)
-    assert [p.hex() for p in path_melt] == V_COVENANT["melt_witness"]["control"]["path"]
+    assert [p.hex() for p in path_melt] == V_COVENANT["template_witness"]["control"]["path"]
     assert nutroot_root_from_path(h_melt, path_melt).hex() == V_COVENANT["merkle_root"]
     path_after = nutroot_merkle_path([h_melt, h_after], 1)
     assert [p.hex() for p in path_after] == V_COVENANT["after_witness_path"]
@@ -315,8 +325,8 @@ def test_vector_signatures_verify():
         bytes.fromhex(V_REFUND["alice_refund_pub"]),
     )
     assert verify_schnorr_digest(
-        bytes.fromhex(V_COVENANT["melt_witness"]["signatures"][0]),
-        bytes.fromhex(V_COVENANT["illustrative_input_digest"]),
+        bytes.fromhex(V_COVENANT["template_witness"]["signatures"][0]),
+        bytes.fromhex(V_COVENANT["input_digest"]),
         bytes.fromhex(V_COVENANT["kid_pub"]),
     )
 
@@ -340,23 +350,23 @@ def test_script_path_commitment():
     )
     assert verify_nutroot_commitment(
         PublicKey(bytes.fromhex(V_COVENANT["secret"])),
-        PublicKey(bytes.fromhex(V_COVENANT["melt_witness"]["control"]["K"])),
-        bytes.fromhex(V_COVENANT["melt_witness"]["leaf"]),
-        [bytes.fromhex(p) for p in V_COVENANT["melt_witness"]["control"]["path"]],
+        PublicKey(bytes.fromhex(V_COVENANT["template_witness"]["control"]["K"])),
+        bytes.fromhex(V_COVENANT["template_witness"]["leaf"]),
+        [bytes.fromhex(p) for p in V_COVENANT["template_witness"]["control"]["path"]],
     )
     # Wrong merkle path fails
     assert not verify_nutroot_commitment(
         PublicKey(bytes.fromhex(V_COVENANT["secret"])),
-        PublicKey(bytes.fromhex(V_COVENANT["melt_witness"]["control"]["K"])),
-        bytes.fromhex(V_COVENANT["melt_witness"]["leaf"]),
-        [bytes.fromhex(V_COVENANT["leaf_hash_melt_to"])],
+        PublicKey(bytes.fromhex(V_COVENANT["template_witness"]["control"]["K"])),
+        bytes.fromhex(V_COVENANT["template_witness"]["leaf"]),
+        [bytes.fromhex(V_COVENANT["leaf_hash_template"])],
     )
     # Wrong internal key fails
     assert not verify_nutroot_commitment(
         PublicKey(bytes.fromhex(V_COVENANT["secret"])),
         PublicKey(bytes.fromhex(V_REFUND["internal_key"])),
-        bytes.fromhex(V_COVENANT["melt_witness"]["leaf"]),
-        [bytes.fromhex(p) for p in V_COVENANT["melt_witness"]["control"]["path"]],
+        bytes.fromhex(V_COVENANT["template_witness"]["leaf"]),
+        [bytes.fromhex(p) for p in V_COVENANT["template_witness"]["control"]["path"]],
     )
     # Depth cap
     filler = hashlib.sha256(b"\x09").digest()
@@ -1095,7 +1105,7 @@ def test_script_path_spend_after_leaf_vectors():
         witness.model_dump(by_alias=True)
         | {
             "signatures": [
-                VECTORS["two_leaf_covenant"]["melt_witness"]["signatures"][0]
+                VECTORS["two_leaf_covenant"]["template_witness"]["signatures"][0]
             ]
         }
     )
@@ -1103,22 +1113,53 @@ def test_script_path_spend_after_leaf_vectors():
         verify_script_path_spend(secret, digest, bad_sig, now=v61["refund_time"] + 1)
 
 
+def test_script_path_template_leaf():
+    """6.2: the template leaf spends only into the committed output section."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend
+    from cashu.core.crypto.transcript import transaction_inputs
+
+    for v in (VECTORS["two_leaf_covenant"], VECTORS["template_lock"]):
+        witness = nutroot_witness(
+            v["template_witness"] if "template_witness" in v else json.loads(v["witness"])
+        )
+        secret = PublicKey(bytes.fromhex(v["secret"]))
+        digest = bytes.fromhex(v["input_digest"])
+        outputs = bytes.fromhex(VECTORS["template_lock"]["output_section"])
+        assert verify_script_path_spend(secret, digest, witness, outputs=outputs).type == "template"
+        with pytest.raises(ValueError, match="outputs"):
+            verify_script_path_spend(secret, digest, witness)
+        with pytest.raises(ValueError, match="outputs"):
+            verify_script_path_spend(
+                secret,
+                digest,
+                witness,
+                outputs=bytes.fromhex(
+                    VECTORS["template_lock"]["rejected_outputs"]["output_section"]
+                ),
+            )
+    # The mint's own transcript builder produces the section the leaf commits to.
+    _, contexts, _ = transaction_inputs(_tx_from_vector(VECTORS["template_lock"]["tx"]))
+    (context,) = contexts.values()
+    assert context.outputs.hex() == VECTORS["template_lock"]["output_section"]
+    assert context.digest.hex() == VECTORS["template_lock"]["input_digest"]
+
+
 def test_script_path_unknown_leaf_type_fails_closed():
-    """6.2: the example melt_to leaf (0x05) is unknown and unsatisfiable."""
+    """An unallocated leaf type (0x06) is unsatisfiable even when it commits."""
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v62 = VECTORS["two_leaf_covenant"]
-    witness = nutroot_witness({
-        "leaf": v62["melt_witness"]["leaf"],
-        "control": v62["melt_witness"]["control"],
-        "signatures": v62["melt_witness"]["signatures"],
-    })
-    with pytest.raises(ValueError, match="Unknown leaf type"):
+    witness = nutroot_witness(
+        v62["template_witness"] | {"leaf": VECTORS["leaf_forms"]["leaf_unknown_type"]}
+    )
+    with pytest.raises(ValueError, match="commitment"):
         verify_script_path_spend(
             PublicKey(bytes.fromhex(v62["secret"])),
-            bytes.fromhex(v62["illustrative_input_digest"]),
+            bytes.fromhex(v62["input_digest"]),
             witness,
         )
+    with pytest.raises(ValueError, match="Unknown leaf type"):
+        parse_nutroot_leaf(bytes.fromhex(VECTORS["leaf_forms"]["leaf_unknown_type"]))
 
 
 def test_script_path_threshold_and_hashlock():

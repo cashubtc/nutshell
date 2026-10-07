@@ -162,7 +162,10 @@ async def run(
                 bolt11.decode(mq.request), Amount(Unit[mq.unit], mq.amount)
             )
         if not nut20.verify_quote_input_witness(
-            quote_contexts[q.quote].digest, k, q.witness
+            quote_contexts[q.quote].digest,
+            k,
+            q.witness,
+            quote_contexts[q.quote].outputs,
         ):
             raise QuoteSignatureInvalidError()
 
