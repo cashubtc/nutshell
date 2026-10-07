@@ -66,6 +66,19 @@ settings.db_connection_pool = True
 # Preserve mint_require_auth from the environment for the Keycloak integration job.
 settings.mint_watchdog_enabled = False
 
+# Legacy compatibility tests share the integration-test mint with v3 tests.
+# Provision their v2 keyset in the test harness rather than exposing a production
+# setting that makes a fresh v3 mint advertise newly generated legacy keysets.
+_startup_keysets = Ledger._startup_keysets
+
+
+async def _startup_test_keysets(ledger: Ledger) -> None:
+    await _startup_keysets(ledger)
+    await ledger.activate_keyset(derivation_path="m/0'/0'/1'", version="0.20.0")
+
+
+Ledger._startup_keysets = _startup_test_keysets
+
 settings.mint_rpc_server_enable = True
 settings.mint_rpc_server_mutual_tls = False
 

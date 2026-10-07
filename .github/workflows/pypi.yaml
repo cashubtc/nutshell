@@ -47,6 +47,8 @@ jobs:
         with:
           name: distributions
           path: dist
+      - name: Configure Rust for source dependencies
+        run: rustup default stable
       - run: python scripts/check_package.py dist
 
   publish:

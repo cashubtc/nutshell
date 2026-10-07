@@ -30,6 +30,7 @@ from tests.helpers import (
     is_regtest,
     pay_if_regtest,
     settle_invoice,
+    use_v2_keyset,
     wait_for_hold_invoice,
     wait_for_result,
 )
@@ -70,7 +71,9 @@ async def wallet(ledger: Ledger):
 async def test_init_keysets(ledger: Ledger):
     ledger.keysets = {}
     await ledger.init_keysets()
-    assert len(ledger.keysets) == 2
+    # sat and usd on v3, plus the v2 sat keyset conftest activates for the
+    # pre-v3 secret formats.
+    assert len(ledger.keysets) == 3
 
 
 @pytest.mark.asyncio
@@ -103,13 +106,13 @@ async def test_decrypt_seed():
     )
     assert (
         private_key_1
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
+        == "51cfc6ff65fc935718ce8be4d4903c7c439b2c3e6cfe3866cddfc7effab70402"
     )
     pubkeys = ledger.keysets[list(ledger.keysets.keys())[0]].public_keys
     assert pubkeys
     assert (
         pubkeys[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+        == "b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8abe24c66581adc4a849ab8c4b2fe512334c6beeca1d05548d1663e7e04f6ed6c845eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
     )
 
     ledger_encrypted = Ledger(
@@ -129,7 +132,11 @@ async def test_decrypt_seed():
     )
     assert (
         private_key_1
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
+        == "51cfc6ff65fc935718ce8be4d4903c7c439b2c3e6cfe3866cddfc7effab70402"
+    )
+    assert (
+        private_key_1
+        == "51cfc6ff65fc935718ce8be4d4903c7c439b2c3e6cfe3866cddfc7effab70402"
     )
     pubkeys_encrypted = ledger_encrypted.keysets[
         list(ledger_encrypted.keysets.keys())[0]
@@ -137,7 +144,7 @@ async def test_decrypt_seed():
     assert pubkeys_encrypted
     assert (
         pubkeys_encrypted[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
+        == "b8df0ca950067cb9c29002aa9d6a2218660f774dd36728bae916400b63d8d24bca8abe24c66581adc4a849ab8c4b2fe512334c6beeca1d05548d1663e7e04f6ed6c845eb3017030292e9779a9ee43bcb587b511afd0329a0faa927f50ec74ac4"
     )
 
 
@@ -162,7 +169,13 @@ async def create_pending_melts(
         quote=quote,
         db=ledger.db,
     )
-    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=ledger.keyset.id)
+    # v3 keysets take point secrets, so the placeholder is a compressed point.
+    pending_proof = Proof(
+        amount=123,
+        C="asdasd",
+        secret="02" + "ab" * 32,
+        id=ledger.keyset.id,
+    )
     await ledger.crud.set_proof_pending(
         db=ledger.db,
         proof=pending_proof,
@@ -287,6 +300,8 @@ async def start_unrecorded_melt(ledger, quote, proofs):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Ledger):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -326,6 +341,8 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Ledger):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -377,6 +394,8 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Ledger):
     """Simulate a failure to pay the hodl invoice by canceling it."""
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # fill wallet
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -433,6 +452,8 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     """Simulate an unknown payment by executing a pending payment, then
     manipulating the melt_quote in the mint's db so that its checking_id
     points to an unknown payment."""
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
 
     # fill wallet
     mint_quote = await wallet.request_mint(64)

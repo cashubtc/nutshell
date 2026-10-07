@@ -21,7 +21,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import pay_if_regtest
+from tests.helpers import pay_if_regtest, use_v2_keyset
 
 
 async def assert_err(f, msg):
@@ -47,6 +47,8 @@ async def wallet1():
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
+    # NUT-10 secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 
@@ -58,6 +60,8 @@ async def wallet2():
     await migrate_databases(wallet2.db, migrations)
     wallet2.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet2.load_mint()
+    # NUT-10 secrets belong on a pre-v3 keyset.
+    await use_v2_keyset(wallet2)
     yield wallet2
 
 
@@ -719,6 +723,7 @@ async def test_p2pk_locktime_with_3_of_3_refund_pubkeys(
     await migrate_databases(wallet3.db, migrations)
     wallet3.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet3.load_mint()
+    await use_v2_keyset(wallet3)
 
     # Get tokens and create public keys for all wallets
     mint_quote = await wallet1.request_mint(64)
