@@ -9,6 +9,7 @@ from cashu.core.nuts import nut20
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -28,6 +29,7 @@ async def test_transaction_proofs_only_to_change_quote(wallet1: Wallet, ledger: 
     """Proofs in, a change quote out: no blinded outputs and no melt quote
     (the proof_to_change transcript vector)."""
     mint_quote = await wallet1.request_mint(8)
+    await pay_if_regtest(mint_quote.request)
     await wallet1.mint(8, quote_id=mint_quote.quote)
     assert wallet1.balance == 8
 
@@ -68,6 +70,7 @@ async def test_transaction_proofs_to_fixed_and_remainder_quotes(
     """A 3-sat change quote plus a remainder quote, in request order
     (the proof_to_two_changes transcript vector)."""
     mint_quote = await wallet1.request_mint(8)
+    await pay_if_regtest(mint_quote.request)
     await wallet1.mint(8, quote_id=mint_quote.quote)
     proofs = wallet1.proofs
 
@@ -101,6 +104,7 @@ async def test_transaction_rejects_two_remainder_quotes(
     wallet1: Wallet, ledger: Ledger
 ):
     mint_quote = await wallet1.request_mint(8)
+    await pay_if_regtest(mint_quote.request)
     await wallet1.mint(8, quote_id=mint_quote.quote)
     change_outputs = [
         TransactionChangeOutput(pubkey=nut20.generate_keypair()[1]),
