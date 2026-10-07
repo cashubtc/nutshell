@@ -21,11 +21,12 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
 
-_CONTAINER_PROOF_INPUT = 0x01
-_CONTAINER_MINT_QUOTE_INPUT = 0x02
-_CONTAINER_BLINDED_OUTPUT = 0x03
-_CONTAINER_MELT_QUOTE_OUTPUT = 0x04
-_CONTAINER_AUTHORIZED_REQUEST = 0x05
+# The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+_CONTAINER_PROOF_INPUT = 0x11
+_CONTAINER_MINT_QUOTE_INPUT = 0x12
+_CONTAINER_BLINDED_OUTPUT = 0x21
+_CONTAINER_MELT_QUOTE_OUTPUT = 0x22
+_CONTAINER_AUTHORIZED_REQUEST = 0xF1
 
 
 @dataclass
@@ -177,7 +178,7 @@ def spend_commitment(Y: bytes, input_digest_: bytes, witness: str) -> bytes:
 def build_request_transcript(method: str, target: str, body: bytes) -> bytes:
     """Serialize a request to its authorized-request transcript (NUT-22).
 
-    One 0x05 container: 01 the uppercase HTTP method, 02 the origin-form
+    One 0xF1 container: 01 the uppercase HTTP method, 02 the origin-form
     request-target as sent, 03 SHA256 over the exact body bytes (a request
     without a body hashes the empty byte string).
     """
