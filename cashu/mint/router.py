@@ -355,6 +355,7 @@ async def keysets() -> KeysetsResponse:
     name="Request mint quote",
     summary="Request a quote for minting of new tokens",
     response_model=PostMintQuoteResponse,
+    response_model_exclude_none=True,
     response_description="A payment request to mint tokens of a denomination",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -390,6 +391,7 @@ async def mint_quote(
     "/v1/mint/quote/bolt11/{quote}",
     summary="Get mint quote",
     response_model=PostMintQuoteResponse,
+    response_model_exclude_none=True,
     response_description="Get an existing mint quote to check its status.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -421,6 +423,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     name="Batch check mint quotes",
     summary="Batch check mint quotes",
     response_model=list[PostMintQuoteResponse],
+    response_model_exclude_none=True,
     response_description="A list of mint quotes",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
