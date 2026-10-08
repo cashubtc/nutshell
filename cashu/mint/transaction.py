@@ -19,7 +19,8 @@ from ..core.base import (
     MintQuoteState,
     Unit,
 )
-from ..core.crypto.keys import generate_uuid_v7, is_bls_keyset
+from ..core.crypto.keys import is_bls_keyset
+from ..core.crypto.nutroot import change_quote_id
 from ..core.crypto.secp import PublicKey
 from ..core.crypto.transcript import TranscriptChangeOutput, TranscriptQuote
 from ..core.db import Connection, LockOptions
@@ -78,6 +79,8 @@ async def run(
         raise TransactionError("SIG_ALL inputs are not supported here.")
     for c in change_outputs:
         PublicKey(bytes.fromhex(c.pubkey))  # raises unless a valid compressed point
+    if len({c.pubkey for c in change_outputs}) != len(change_outputs):
+        raise TransactionError("transaction repeats a change quote lock key.")
 
     if any(m.fee_index is not None for m in payload.melt_quote_outputs):
         raise TransactionError("fee_index applies only to quotes offering fee_options.")
@@ -202,6 +205,7 @@ async def run(
     )
     # Reservations, outputs and the recovery record commit or roll back together.
     async with ledger.db.get_connection(locks=locks) as conn:
+        await _verify_change_keys_unused(ledger, change_outputs, conn)
         locked = await ledger.db_write._set_mint_quotes_pending(quote_ids, conn=conn)
         for q, mq in zip(payload.mint_quote_inputs, locked):
             if q.amount > mq.mintable:
@@ -336,6 +340,26 @@ async def pending_for_melt(
     return row["digest"] if row else None
 
 
+async def _verify_change_keys_unused(
+    ledger: "Ledger", change_outputs, conn: Connection
+) -> None:
+    """A lock key names one change quote: refuse one already created or pending."""
+    for c in change_outputs:
+        quote_id = change_quote_id(bytes.fromhex(c.pubkey))
+        if await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db, conn=conn):
+            raise TransactionError("change quote lock key already used.")
+        # Pending transactions hold their keys in the record, not as quotes yet.
+        row = await conn.fetchone(
+            f"""
+            SELECT 1 FROM {ledger.db.table_with_schema("transactions")}
+            WHERE state = :state AND change_outputs LIKE :key
+            """,
+            {"state": PENDING, "key": f'%"{c.pubkey}"%'},
+        )
+        if row:
+            raise TransactionError("change quote lock key already used.")
+
+
 async def _finalize_proofs(ledger: "Ledger", proofs, conn: Connection) -> None:
     if not proofs:
         return
@@ -399,7 +423,7 @@ async def settle(
             continue
         # Moved value, not a deposit: nothing here touches keyset balances.
         quote = MintQuote(
-            quote=generate_uuid_v7(),
+            quote=change_quote_id(bytes.fromhex(pubkey)),
             method=CHANGE_METHOD,
             request=digest,
             checking_id=f"{CHANGE_METHOD}:{digest}:{len(change_quotes)}",

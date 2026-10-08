@@ -20,6 +20,7 @@ from cashu.core.crypto.nutroot import (
     NUTROOT_TWEAK_TAG,
     NutrootLeaf,
     NutrootWitness,
+    change_quote_id,
     nutroot_branch_hash,
     nutroot_leaf_hash,
     nutroot_merkle_path,
@@ -582,12 +583,18 @@ def test_transaction_vectors_input_digests():
     _, proofs, _ = transaction_inputs(_tx_from_vector(change_tx["tx"]))
     (context,) = proofs.values()
     assert context.digest.hex() == change_tx["input_digest"]
+    (change_out,) = change_tx["tx"]["change_quote_outputs"]
+    assert change_quote_id(bytes.fromhex(change_out["pubkey"])) == change_tx["quote_id"]
 
     two_tx = tv["proof_to_two_changes"]
     assert two_tx["transcript"].endswith("".join(two_tx["change_containers"]))
     _, proofs, _ = transaction_inputs(_tx_from_vector(two_tx["tx"]))
     (context,) = proofs.values()
     assert context.digest.hex() == two_tx["input_digest"]
+    assert [
+        change_quote_id(bytes.fromhex(c["pubkey"]))
+        for c in two_tx["tx"]["change_quote_outputs"]
+    ] == two_tx["quote_ids"]
 
 
 def test_transcript_swap_signature_is_keypath_witness():

@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 from pydantic import ValidationError
 
-from cashu.core.crypto.nutroot import is_nutroot_point_secret
+from cashu.core.crypto.nutroot import change_quote_id, is_nutroot_point_secret
 from cashu.core.errors import TransactionError
 from cashu.core.models import PostTransactionRequest, TransactionChangeOutput
 from cashu.core.nuts import nut20
@@ -54,6 +54,7 @@ async def test_transaction_proofs_only_to_change_quote(wallet1: Wallet, ledger: 
     assert change_quote.method == "change"
     assert change_quote.amount == sum(p.amount for p in proofs)
     assert change_quote.pubkey == change_pubkey
+    assert change_quote.quote == change_quote_id(bytes.fromhex(change_pubkey))
 
     # resubmitting returns the existing record rather than spending again
     again = await ledger.transaction(
@@ -97,6 +98,56 @@ async def test_transaction_proofs_to_fixed_and_remainder_quotes(
     assert fixed.quote != remainder.quote
     fetched = await ledger.get_transaction(result.digest)
     assert [q.quote for q in fetched.change_quotes] == [fixed.quote, remainder.quote]
+
+
+@pytest.mark.asyncio
+async def test_transaction_rejects_reused_change_lock_key(
+    wallet1: Wallet, ledger: Ledger
+):
+    """One lock key names one change quote: a repeat in the request or a key
+    with a change quote already is refused."""
+    mint_quote = await wallet1.request_mint(8)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(8, quote_id=mint_quote.quote)
+    _, change_pubkey = nut20.generate_keypair()
+
+    repeated = [
+        TransactionChangeOutput(pubkey=change_pubkey, amount=3),
+        TransactionChangeOutput(pubkey=change_pubkey),
+    ]
+    with pytest.raises(TransactionError, match="repeats a change quote lock key"):
+        await ledger.transaction(
+            PostTransactionRequest(
+                proof_inputs=wallet1._attach_nutroot_witnesses(
+                    wallet1.proofs, [], change_quote_outputs=repeated
+                ),
+                change_quote_outputs=repeated,
+            )
+        )
+
+    change_outputs = [TransactionChangeOutput(pubkey=change_pubkey)]
+    first = await ledger.transaction(
+        PostTransactionRequest(
+            proof_inputs=wallet1._attach_nutroot_witnesses(
+                wallet1.proofs, [], change_quote_outputs=change_outputs
+            ),
+            change_quote_outputs=change_outputs,
+        )
+    )
+    assert first.state == "PAID"
+
+    mint_quote = await wallet1.request_mint(4)
+    await pay_if_regtest(mint_quote.request)
+    fresh = await wallet1.mint(4, quote_id=mint_quote.quote)
+    with pytest.raises(TransactionError, match="lock key already used"):
+        await ledger.transaction(
+            PostTransactionRequest(
+                proof_inputs=wallet1._attach_nutroot_witnesses(
+                    fresh, [], change_quote_outputs=change_outputs
+                ),
+                change_quote_outputs=change_outputs,
+            )
+        )
 
 
 @pytest.mark.asyncio
