@@ -120,6 +120,10 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
         # Other rails need their own amount and settlement rules.
         return self.method == "bolt11"
 
+    def canonicalize_request(self, request: str) -> str:
+        # Match the legacy BOLT11 invoice lookup while preserving other rails.
+        return request.lower() if self.method == "bolt11" else request
+
     @property
     def _metadata(self) -> tuple[tuple[str, str], ...]:
         return ((CDK_VERSION_HEADER, CDK_PAYMENT_PROCESSOR_PROTOCOL_VERSION),)
