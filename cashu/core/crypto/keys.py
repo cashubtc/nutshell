@@ -92,8 +92,8 @@ def derive_keyset_id_v2(
     if input_fee_ppk > 0:
         keyset_id_bytes += f"|input_fee_ppk:{input_fee_ppk}".encode("utf-8")
 
-    # only include final_expiry if provided (per spec discussion)
-    if final_expiry is not None:
+    # NUT-02 treats a zero expiry the same as an omitted expiry.
+    if final_expiry is not None and final_expiry != 0:
         keyset_id_bytes += f"|final_expiry:{final_expiry}".encode("utf-8")
 
     # SHA256 hash the concatenated byte array
