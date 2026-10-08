@@ -429,10 +429,8 @@ async def pay(
     if method == Method.bolt11.name:
         quote = await wallet.melt_quote(invoice, amount_mpp_msat)
     else:
-        if amount is not None:
-            parsed_method_options.setdefault("amount", amount)
         quote = await wallet.melt_quote_for_method(
-            method, invoice, parsed_method_options
+            method, invoice, parsed_method_options, amount=amount
         )
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
