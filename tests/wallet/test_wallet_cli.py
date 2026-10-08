@@ -39,6 +39,15 @@ def nut26_cli_prefix():
     return ["--wallet", "test_nut26_cli", "--host", settings.mint_url, "--tests"]
 
 
+@pytest.fixture
+def funded_cli_prefix(tmp_path, monkeypatch):
+    """Give spending tests their own wallet and funds, independent of test order."""
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    prefix = ["--wallet", "funded", "--host", settings.mint_url, "--tests"]
+    mint_tokens(CliRunner(), prefix, "64")
+    return prefix
+
+
 def _extract_json(output: str) -> dict:
     """Extract the first JSON object from CLI output that may include log lines."""
     start = output.index("{")
@@ -560,7 +569,8 @@ def test_pending(cli_prefix):
     assert result.exit_code == 0
 
 
-def test_selfpay(cli_prefix):
+def test_selfpay(funded_cli_prefix):
+    cli_prefix = funded_cli_prefix
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -571,7 +581,8 @@ def test_selfpay(cli_prefix):
     assert result.exit_code == 0
 
 
-def test_send_with_lock(mint, cli_prefix):
+def test_send_with_lock(mint, funded_cli_prefix):
+    cli_prefix = funded_cli_prefix
     # call "cashu locks" first and get the lock
     runner = CliRunner()
     result = runner.invoke(
@@ -669,7 +680,8 @@ def test_lock_p2pk_with_timelock_and_refund(cli_prefix):
     assert result.exit_code == 0
 
 
-def test_send_with_lock_and_refund(mint, cli_prefix):
+def test_send_with_lock_and_refund(mint, funded_cli_prefix):
+    cli_prefix = funded_cli_prefix
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -705,7 +717,8 @@ def test_send_with_lock_and_refund(mint, cli_prefix):
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
 
 
-def test_send_with_lock_and_timelock(mint, cli_prefix):
+def test_send_with_lock_and_timelock(mint, funded_cli_prefix):
+    cli_prefix = funded_cli_prefix
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -738,7 +751,8 @@ def test_send_with_lock_and_timelock(mint, cli_prefix):
     assert before + 5 <= secret.locktime <= after + 5
 
 
-def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, cli_prefix):
+def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, funded_cli_prefix):
+    cli_prefix = funded_cli_prefix
     runner = CliRunner()
     result = runner.invoke(
         cli,
