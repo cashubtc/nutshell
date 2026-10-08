@@ -388,7 +388,7 @@ async def test_nut13_v3_secret_derivation_vectors():
 
     nut13 = VECTORS["nut13_v3"]
     secrets = WalletSecrets()
-    secrets.seed = nut13["seed_utf8"].encode()
+    secrets.seed = bytes.fromhex(nut13["seed_hex"])
     secrets.keyset_id = nut13["keyset_id"]
     for output in nut13["outputs"]:
         secret, r, path = await secrets.generate_determinstic_secret(output["counter"])
@@ -410,7 +410,7 @@ async def test_nut13_v3_derivation_type_vectors():
 
     nut13 = VECTORS["nut13_v3"]
     secrets = WalletSecrets()
-    secrets.seed = nut13["seed_utf8"].encode()
+    secrets.seed = bytes.fromhex(nut13["seed_hex"])
     keyset_id = nut13["keyset_id"]
     for output in nut13["outputs"]:
         offset = secrets.derive_v3_nums_offset(output["counter"], keyset_id)
@@ -733,7 +733,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     tv = VECTORS["transcript"]["swap"]
     n13 = VECTORS["nut13_v3"]
     wallet = Wallet.__new__(Wallet)
-    wallet.seed = n13["seed_utf8"].encode()
+    wallet.seed = bytes.fromhex(n13["seed_hex"])
     proofs = [
         Proof(
             amount=8,
