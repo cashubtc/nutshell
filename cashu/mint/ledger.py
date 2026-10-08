@@ -780,6 +780,11 @@ class Ledger(
                     if not quote:
                         raise Exception("quote not found")
                     total_paid = reported_paid + quote.amount_paid_internal
+                    if quote.amount and not plugin.supports_repeated_payments(backend):
+                        # An internally settled invoice can still be paid on the
+                        # backend. Single-payment quotes can fund only their
+                        # original amount, even on a forced refresh after issuance.
+                        total_paid = min(total_paid, quote.amount)
                     if total_paid > (quote.amount_paid or 0):
                         quote.amount_paid = total_paid
                         fully_paid = total_paid >= quote.amount
@@ -826,6 +831,15 @@ class Ledger(
             quotes.append(quote)
         return quotes
 
+    @staticmethod
+    def _mint_quote_available_balance(quote: MintQuote, repeated_payments: bool) -> int:
+        amount_paid = quote.amount_paid or 0
+        if quote.amount and not repeated_payments:
+            # Legacy counters may already include a second payment received
+            # after internal settlement. They cannot authorize extra issuance.
+            amount_paid = min(amount_paid, quote.amount)
+        return amount_paid - (quote.amount_issued or 0)
+
     async def mint(
         self,
         *,
@@ -859,14 +873,19 @@ class Ledger(
         quote = await self.get_mint_quote(quote_id)
         if method_str is not None and quote.method != method_str:
             raise NotAllowedError("quote payment method does not match endpoint")
+        plugin = payment_method_registry.get(quote.method)
+        backend = self._get_backend(quote.method, Unit[quote.unit])
+        repeated_payments = plugin.supports_repeated_payments(backend)
         if quote.pending:
             raise QuotePendingError("Mint quote already pending.")
-        if quote.issued:
+        if quote.issued or (
+            quote.amount
+            and not repeated_payments
+            and (quote.amount_issued or 0) >= quote.amount
+        ):
             raise QuoteAlreadyIssuedError()
         if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
-        plugin = payment_method_registry.get(quote.method)
-        backend = self._get_backend(quote.method, Unit[quote.unit])
 
         # Also validate quotes created before invoice amount checks were added.
         if quote.method == Method.bolt11.name:
@@ -881,13 +900,11 @@ class Ledger(
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
-            available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
+            available = self._mint_quote_available_balance(quote, repeated_payments)
             if sum_amount_outputs > available:
                 raise TransactionError("amount to mint exceeds paid quote balance")
             if not plugin.supports_partial_mint(backend) and sum_amount_outputs != (
-                available
-                if quote.amount == 0 or plugin.supports_repeated_payments(backend)
-                else quote.amount
+                available if quote.amount == 0 or repeated_payments else quote.amount
             ):
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
@@ -971,7 +988,11 @@ class Ledger(
         for quote in quotes:
             if quote.pending:
                 raise QuotePendingError("mint quote already pending")
-            if quote.issued:
+            if quote.issued or (
+                quote.amount
+                and not repeated_payments
+                and (quote.amount_issued or 0) >= quote.amount
+            ):
                 raise QuoteAlreadyIssuedError()
             if quote.state != MintQuoteState.paid:
                 raise QuoteNotPaidError()
@@ -983,7 +1004,7 @@ class Ledger(
         # Check amount balance. Amountless and reusable quotes can require the
         # entire available balance without allowing partial issuance.
         default_amounts = [
-            (q.amount_paid or 0) - (q.amount_issued or 0)
+            self._mint_quote_available_balance(q, repeated_payments)
             if partial_mint or repeated_payments or q.amount == 0
             else q.amount
             for q in quotes
@@ -996,7 +1017,7 @@ class Ledger(
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
                     )
-                available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
+                available = self._mint_quote_available_balance(quote, repeated_payments)
                 if payload.quote_amounts[i] > available:
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} paid balance"
@@ -1029,7 +1050,7 @@ class Ledger(
             for i, quote in enumerate(quotes):
                 if quote.expiry and quote.expiry < int(time.time()):
                     raise QuoteExpiredError("quote expired")
-                available = (quote.amount_paid or 0) - (quote.amount_issued or 0)
+                available = self._mint_quote_available_balance(quote, repeated_payments)
                 if quote_amounts[i] > available:
                     raise TransactionError(
                         f"quote amount {quote_amounts[i]} exceeds quote {quote.quote} paid balance"

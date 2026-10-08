@@ -508,6 +508,92 @@ async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: Ledge
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation,field",
+    [("mint_quote", field) for field in ("unit", "amount", "description", "pubkey")]
+    + [("melt_quote", field) for field in ("unit", "request", "amount", "options")]
+    + [("melt", field) for field in ("quote", "inputs", "outputs", "prefer_async")],
+)
+async def test_method_options_cannot_override_request_fields(
+    monkeypatch, api: LedgerAPI, operation, field
+):
+    cast(Any, api).keysets = {"loaded": object()}
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    request = AsyncMock(
+        return_value=_response(
+            200,
+            {
+                "quote": "q-1",
+                "request": "request",
+                "amount": 8,
+                "unit": "sat",
+                "method": "bolt11",
+                "state": "UNPAID",
+            },
+        )
+    )
+    monkeypatch.setattr(api, "_request", request)
+    with pytest.raises(ValueError, match=rf"method_options.*{field}"):
+        if operation == "mint_quote":
+            await api.mint_quote_for_method(
+                "bolt11", 8, Unit.sat, method_options={field: "override"}
+            )
+        elif operation == "melt_quote":
+            await api.melt_quote_for_method(
+                "bolt11",
+                PostMeltQuoteRequest(unit="sat", request="request"),
+                method_options={field: "override"},
+            )
+        else:
+            await api.melt_for_method(
+                "bolt11", "quote", [], None, method_options={field: "override"}
+            )
+    request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["mint_quote", "melt_quote", "melt"])
+async def test_method_options_preserve_extra_payment_fields(
+    monkeypatch, api: LedgerAPI, operation
+):
+    cast(Any, api).keysets = {"loaded": object()}
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    request = AsyncMock(
+        return_value=_response(
+            200,
+            {
+                "quote": "q-1",
+                "request": "request",
+                "amount": 8,
+                "unit": "sat",
+                "method": "testpay",
+                "state": "UNPAID",
+            },
+        )
+    )
+    monkeypatch.setattr(api, "_request", request)
+    if operation == "mint_quote":
+        await api.mint_quote_for_method(
+            "testpay", 8, Unit.sat, method_options={"account": "alice"}
+        )
+    elif operation == "melt_quote":
+        await api.melt_quote_for_method(
+            "testpay",
+            PostMeltQuoteRequest(unit="sat", request="request"),
+            method_options={"account": "alice"},
+        )
+    else:
+        await api.melt_for_method(
+            "testpay", "q-1", [], None, method_options={"account": "alice"}
+        )
+    assert request.await_args.kwargs["json"]["account"] == "alice"
+
+
+@pytest.mark.asyncio
 async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: LedgerAPI):
     output = BlindedMessage(id="kid", amount=1, B_="ab")
     proof = Proof(
