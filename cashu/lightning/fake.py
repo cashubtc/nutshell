@@ -1,9 +1,10 @@
 import asyncio
 import hashlib
+import json
 import math
 from datetime import datetime
 from os import urandom
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, Dict, List, NamedTuple, Optional, Tuple
 
 from bolt11 import (
     Bolt11,
@@ -32,6 +33,48 @@ from .base import (
     StatusResponse,
 )
 
+# Melt quote states accepted in an invoice description, CDK spellings included.
+FAKE_INVOICE_STATES: Dict[str, Tuple[PaymentResult, PaymentStatusResult]] = {
+    "SETTLED": (PaymentResult.SETTLED, PaymentStatusResult.SETTLED),
+    "PAID": (PaymentResult.SETTLED, PaymentStatusResult.SETTLED),
+    "PENDING": (PaymentResult.PENDING, PaymentStatusResult.PENDING),
+    "FAILED": (PaymentResult.FAILED, PaymentStatusResult.FAILED),
+    "UNPAID": (PaymentResult.FAILED, PaymentStatusResult.FAILED),
+    "UNKNOWN": (PaymentResult.ERROR, PaymentStatusResult.NOT_FOUND),
+}
+
+
+class FakeInvoiceDescription(NamedTuple):
+    """Payment outcome requested by an invoice through its description.
+
+    Overrides the mint-wide fakewallet settings for that invoice only.
+    All four fields are required, as in CDK's fake wallet.
+    """
+
+    pay_invoice_state: PaymentResult
+    check_payment_state: PaymentStatusResult
+    pay_err: bool
+    check_err: bool
+
+    @classmethod
+    def from_description(
+        cls, description: Optional[str]
+    ) -> Optional["FakeInvoiceDescription"]:
+        """Returns None for any description that is not the full JSON shape."""
+        try:
+            data = json.loads(description or "")
+            pay_err, check_err = data["pay_err"], data["check_err"]
+            if not (isinstance(pay_err, bool) and isinstance(check_err, bool)):
+                return None
+            return cls(
+                pay_invoice_state=FAKE_INVOICE_STATES[data["pay_invoice_state"]][0],
+                check_payment_state=FAKE_INVOICE_STATES[data["check_payment_state"]][1],
+                pay_err=pay_err,
+                check_err=check_err,
+            )
+        except (ValueError, KeyError, TypeError):
+            return None
+
 
 class FakeWallet(LightningBackend):
     unit: Unit
@@ -46,6 +89,7 @@ class FakeWallet(LightningBackend):
         return self._paid_invoices_queue
 
     payment_secrets: Dict[str, str] = dict()
+    invoice_overrides: Dict[str, FakeInvoiceDescription] = dict()
     created_invoices: List[Bolt11] = []
     paid_invoices_outgoing: List[Bolt11] = []
     paid_invoices_incoming: List[Bolt11] = []
@@ -196,19 +240,32 @@ class FakeWallet(LightningBackend):
         )
 
     async def pay_invoice(self, quote: MeltQuote, fee_limit: int) -> PaymentResponse:
-        if settings.fakewallet_pay_invoice_state_exception:
-            raise Exception("FakeWallet pay_invoice exception")
-
         invoice = decode(quote.request)
+        override = FakeInvoiceDescription.from_description(invoice.description)
+        if override:
+            # kept by payment hash, which is all get_payment_status receives
+            self.invoice_overrides[invoice.payment_hash] = override
+
+        if (
+            override.pay_err
+            if override
+            else settings.fakewallet_pay_invoice_state_exception
+        ):
+            raise Exception("FakeWallet pay_invoice exception")
 
         if settings.fakewallet_delay_outgoing_payment:
             await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
 
-        if settings.fakewallet_pay_invoice_state:
-            if settings.fakewallet_pay_invoice_state == "SETTLED":
+        pay_invoice_state = (
+            override.pay_invoice_state.name
+            if override
+            else settings.fakewallet_pay_invoice_state
+        )
+        if pay_invoice_state:
+            if pay_invoice_state == "SETTLED":
                 self.update_balance(invoice, incoming=False)
             return PaymentResponse(
-                result=PaymentResult[settings.fakewallet_pay_invoice_state],
+                result=PaymentResult[pay_invoice_state],
                 checking_id=invoice.payment_hash,
                 fee=Amount(unit=self.unit, amount=1),
                 preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
@@ -248,6 +305,11 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
+        override = self.invoice_overrides.get(checking_id)
+        if override:
+            if override.check_err:
+                raise Exception("FakeWallet get_payment_status exception")
+            return PaymentStatus(result=override.check_payment_state)
         if settings.fakewallet_payment_state_exception:
             raise Exception("FakeWallet get_payment_status exception")
         if settings.fakewallet_payment_state:
