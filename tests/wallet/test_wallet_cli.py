@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Tuple
 
 import bolt11
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -140,6 +141,55 @@ def test_balance(cli_prefix):
     w = asyncio.run(init_wallet())
     assert f"Balance: {w.available_balance}" in result.output
     assert result.exit_code == 0
+
+
+def test_pay_onchain_passes_amount_as_standard_field(monkeypatch):
+    payloads = []
+    original_request = Wallet._request
+
+    async def capture_request(wallet, method, path, **kwargs):
+        if path != "melt/quote/onchain":
+            return await original_request(wallet, method, path, **kwargs)
+        payloads.append(kwargs["json"])
+        return httpx.Response(
+            200,
+            json={
+                "quote": "onchain-cli-quote",
+                "method": "onchain",
+                "request": "bc1qexample",
+                "unit": "sat",
+                "amount": 10,
+                "fee_reserve": 1,
+                "state": "UNPAID",
+            },
+            request=httpx.Request("POST", wallet.url),
+        )
+
+    monkeypatch.setattr(Wallet, "_request", capture_request)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--wallet",
+            "test_method_quote_cli",
+            "--host",
+            settings.mint_url,
+            "--tests",
+            "pay",
+            "bc1qexample",
+            "10",
+            "--method",
+            "onchain",
+            "--method-options",
+            '{"account":"alice"}',
+            "--yes",
+        ],
+    )
+
+    assert result.exception is None
+    assert len(payloads) == 1
+    assert payloads[0]["amount"] == 10
+    assert payloads[0]["account"] == "alice"
+    assert "Balance too low" in result.output
 
 
 @pytest.mark.skipif(is_fake, reason="only works with FakeWallet")

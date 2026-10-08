@@ -40,6 +40,7 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
+    PostMeltRequestOptions,
 )
 from ..core.nuts import nut20
 from ..core.p2pk import Secret
@@ -913,8 +914,13 @@ class Wallet(
         method: str,
         request: str,
         method_options: Optional[dict] = None,
+        *,
+        amount: Optional[int] = None,
+        options: Optional[PostMeltRequestOptions] = None,
     ) -> MeltQuote:
-        payload = PostMeltQuoteRequest(unit=self.unit.name, request=request)
+        payload = PostMeltQuoteRequest(
+            unit=self.unit.name, request=request, amount=amount, options=options
+        )
         response = await super().melt_quote_for_method(
             method, payload, method_options=method_options
         )

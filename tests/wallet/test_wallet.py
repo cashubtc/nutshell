@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from typing import List, Union
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 import pytest_asyncio
 
@@ -16,11 +17,13 @@ from cashu.core.base import (
 )
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
+from cashu.core.models import PostMeltRequestOptions
 from cashu.core.settings import settings
 from cashu.wallet.crud import (
     get_bolt11_melt_quote,
     get_bolt11_mint_quote,
     get_keysets,
+    get_payment_melt_quote,
     get_proofs,
     store_keyset,
 )
@@ -169,6 +172,54 @@ async def test_get_keysets(wallet1: Wallet):
 async def test_request_mint(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
     assert mint_quote.request
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method,amount,options,quoted_amount",
+    [
+        ("onchain", 10, None, 10),
+        ("bolt12", None, {"amountless": {"amount_msat": 11_000}}, 11),
+        ("testpay", 25, {"routing": "merchant"}, 25),
+    ],
+)
+async def test_melt_quote_for_method_accepts_standard_fields(
+    wallet1: Wallet, monkeypatch, method, amount, options, quoted_amount
+):
+    response = httpx.Response(
+        200,
+        json={
+            "quote": f"{method}-quote",
+            "method": method,
+            "request": "destination",
+            "unit": "sat",
+            "amount": quoted_amount,
+            "fee_reserve": 1,
+            "state": "UNPAID",
+        },
+        request=httpx.Request("POST", wallet1.url),
+    )
+    request = AsyncMock(return_value=response)
+    monkeypatch.setattr(wallet1, "_request", request)
+    typed_options = PostMeltRequestOptions.model_validate(options) if options else None
+
+    quote = await wallet1.melt_quote_for_method(
+        method,
+        "destination",
+        {"account": "alice"},
+        amount=amount,
+        options=typed_options,
+    )
+
+    payload = request.await_args.kwargs["json"]
+    assert payload["amount"] == amount
+    assert payload["options"] == (
+        typed_options.model_dump() if typed_options else None
+    )
+    assert payload["account"] == "alice"
+    stored = await get_payment_melt_quote(wallet1.db, quote.quote, method)
+    assert stored and stored.amount == quoted_amount
+    assert stored.method == method
 
 
 @pytest.mark.asyncio
