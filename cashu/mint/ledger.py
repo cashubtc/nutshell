@@ -907,6 +907,10 @@ class Ledger(
                 bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
             )
 
+        # Every quote input commits its lock key, so one unlocked quote breaks the whole transcript.
+        if is_bls_keyset(payload.outputs[0].id) and not all(q.pubkey for q in quotes):
+            raise TransactionError("minting on a v3 keyset requires a locked quote.")
+
         # Check amount balance
         if payload.quote_amounts:
             if len(payload.quote_amounts) != len(quotes):
@@ -949,7 +953,9 @@ class Ledger(
                 quote,
                 payload.outputs,
                 sig,
-                batch_quotes=list(zip(payload.quotes, quote_amounts)),
+                batch_quotes=[
+                    (q.quote, a, q.pubkey) for q, a in zip(quotes, quote_amounts)
+                ],
             ):
                 raise QuoteSignatureInvalidError()
 

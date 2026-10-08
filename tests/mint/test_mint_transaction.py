@@ -64,7 +64,7 @@ async def test_transaction_mint_quote_to_melt_with_change(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 70)
     change_privkey, change_key = nut20.generate_keypair()
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
@@ -131,7 +131,7 @@ async def test_transaction_fee_overrun_does_not_eat_surplus(ledger: Ledger, monk
     quote, privkey = await locked_quote(ledger, 70)
     _, change_key = nut20.generate_keypair()
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
@@ -163,7 +163,7 @@ async def test_transaction_quote_to_outputs_and_change(ledger: Ledger):
     _, change_key = nut20.generate_keypair()
     outputs = [output(ledger, 4)]
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4,
@@ -202,7 +202,7 @@ async def test_transaction_rejects_blank_outputs_and_imbalance(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 8)
     outputs = [output(ledger, 4)]
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4,
@@ -241,7 +241,7 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 62 + melt.fee_reserve)
     amount = quote.amount
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         melt_quote_outputs=[TranscriptQuote(amount=amount, quote_id=melt.quote)],
     )
     request = PostTransactionRequest(
@@ -272,7 +272,7 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
 def draw(ledger: Ledger, quote, privkey: str, amount: int):
     outputs = [output(ledger, a) for a in amount_split(amount)]
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=o.amount,

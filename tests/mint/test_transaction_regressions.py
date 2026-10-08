@@ -41,7 +41,7 @@ async def test_redeem_remainder_through_mint(ledger, change):
     if change:
         change_key, pubkey = nut20.generate_keypair()
         shape = TransactionShape(
-            mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote)],
+            mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
             change_quote_outputs=[TranscriptChangeOutput(bytes.fromhex(pubkey))],
         )
         result = await ledger.transaction(
@@ -79,7 +79,7 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
     outputs = [output(ledger, 4)]
     _, change_key = nut20.generate_keypair()
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4,
@@ -151,7 +151,7 @@ async def test_internal_quote_only_recovers_finalization(ledger, monkeypatch, re
         PostMeltQuoteRequest(unit="sat", request=destination.request)
     )
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=source.quote)],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey))],
         melt_quote_outputs=[TranscriptQuote(amount=8, quote_id=melt.quote)],
     )
     original = ledger._finalize_melt_paid
@@ -200,7 +200,7 @@ async def test_interrupted_acceptance_can_retry(ledger, monkeypatch, with_melt):
     quote, key = await locked_quote(ledger, amount)
     if melt:
         shape = TransactionShape(
-            mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote)],
+            mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
             melt_quote_outputs=[TranscriptQuote(amount=amount, quote_id=melt.quote)],
         )
         request = PostTransactionRequest(

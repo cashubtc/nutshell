@@ -89,6 +89,13 @@ async def run(
     # bolt11 quotes offer no fee_options, so the reserve is the quote's own (NUT-XX).
     if melt and payload.melt_quote_outputs[0].fee_reserve != melt.fee_reserve:
         raise TransactionError("melt fee_reserve does not match the quote.")
+    # The transcript commits each quote input's lock key, so the quotes come first.
+    mint_quotes = [
+        await ledger.get_mint_quote(q.quote) for q in payload.mint_quote_inputs
+    ]
+    lock_keys = [mq.pubkey or "" for mq in mint_quotes]
+    if not all(lock_keys):
+        raise TransactionError("quote inputs must be locked.")
     # The digest is mint-side state; the witness check below derives it.
     for p in proofs:
         p.digest = None
@@ -97,8 +104,8 @@ async def run(
         outputs,
         melt,
         mint_quote_inputs=[
-            TranscriptQuote(amount=q.amount, quote_id=q.quote)
-            for q in payload.mint_quote_inputs
+            TranscriptQuote(amount=q.amount, quote_id=q.quote, pubkey=bytes.fromhex(k))
+            for q, k in zip(payload.mint_quote_inputs, lock_keys)
         ],
         change_quote_outputs=[
             TranscriptChangeOutput(pubkey=bytes.fromhex(c.pubkey), amount=c.amount)
@@ -123,9 +130,6 @@ async def run(
     if outputs:
         await ledger._verify_outputs(outputs)
 
-    mint_quotes = [
-        await ledger.get_mint_quote(q.quote) for q in payload.mint_quote_inputs
-    ]
     units = (
         {ledger.keysets[p.id].unit.name for p in proofs}
         | {q.unit for q in mint_quotes}
@@ -137,9 +141,7 @@ async def run(
     unit = units.pop()
 
     now = int(time.time())
-    for q, mq in zip(payload.mint_quote_inputs, mint_quotes):
-        if not mq.pubkey:
-            raise TransactionError("quote inputs must be locked.")
+    for q, mq, k in zip(payload.mint_quote_inputs, mint_quotes, lock_keys):
         if mq.pending:
             raise QuotePendingError()
         if mq.issued:
@@ -155,7 +157,7 @@ async def run(
                 bolt11.decode(mq.request), Amount(Unit[mq.unit], mq.amount)
             )
         if not nut20.verify_quote_input_witness(
-            quote_contexts[q.quote].digest, mq.pubkey, q.witness
+            quote_contexts[q.quote].digest, k, q.witness
         ):
             raise QuoteSignatureInvalidError()
 

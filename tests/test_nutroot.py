@@ -517,7 +517,11 @@ def _tx_from_vector(tx: dict):
             for p in tx.get("proof_inputs", [])
         ],
         mint_quote_inputs=[
-            TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
+            TranscriptQuote(
+                amount=q["amount"],
+                quote_id=q["quote_id"],
+                pubkey=bytes.fromhex(q["lock_pubkey"]),
+            )
             for q in tx.get("mint_quote_inputs", [])
         ],
         blinded_outputs=[
@@ -745,6 +749,18 @@ def test_mint_verifies_nutroot_transaction_witnesses():
     proofs[0].secret = "not-a-point-secret"
     proofs[0].witness = "not-json"
     verify(proofs, outputs)
+
+
+def test_quote_witness_with_malformed_lock_key_is_invalid():
+    from cashu.core.nuts import nut20
+
+    privkey, _ = nut20.generate_keypair()
+    _, _, outputs = _swap_vector_proofs_and_outputs()
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
+    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig)
+    assert not nut20.verify_mint_quote_v3(
+        "qid", 8, outputs, "02" + "00" * 32, sig, batch_quotes=[("qid", 8, "")]
+    )
 
 
 def test_quote_key_path_witness_takes_exactly_one_signature():
