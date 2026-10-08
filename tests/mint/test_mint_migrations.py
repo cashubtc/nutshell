@@ -13,16 +13,103 @@ from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.db.write import DbWriteHelper
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("version", [39, 40])
-async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
-    db = Database("mint", str(tmp_path / "payment_migration"))
+def _migrations_through(version):
     previous = ModuleType(mint_migrations.__name__)
     for name, migration in vars(mint_migrations).items():
         if name.startswith("m") and name[1:4].isdigit() and int(name[1:4]) <= version:
             setattr(previous, name, migration)
+    return previous
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [36, 37, 38, 39, 40, 41])
+async def test_payment_migrations_backfill_existing_accounting(tmp_path, version):
+    db = Database("mint", str(tmp_path / "legacy_accounting"))
     try:
-        await migrate_databases(db, previous)
+        await migrate_databases(db, _migrations_through(version))
+        cases = [
+            ("unpaid", "UNPAID", None, None, None, 0, 0, "100"),
+            ("paid", "PAID", None, None, None, 8, 0, "200"),
+            ("pending", "PENDING", None, None, None, 8, 0, "200"),
+            ("issued", "ISSUED", None, None, None, 8, 8, "300"),
+            ("cumulative", "PAID", 24, 16, "400", 24, 16, "400"),
+            ("partial_null", "ISSUED", 24, None, "400", 24, 8, "400"),
+            ("zero", "UNPAID", 0, 0, "400", 0, 0, "400"),
+        ]
+        for quote, state, paid, issued, updated, *_ in cases:
+            await db.execute(
+                """INSERT INTO mint_quotes
+                   (quote, method, request, checking_id, unit, amount, state,
+                    created_time, paid_time, issued_time, amount_paid, amount_issued,
+                    updated_at)
+                   VALUES (:quote, 'bolt11', :quote, :quote, 'sat', 8, :state,
+                           '100', :paid_time, :issued_time, :paid, :issued, :updated)""",
+                {
+                    "quote": quote,
+                    "state": state,
+                    "paid": paid,
+                    "issued": issued,
+                    "updated": updated,
+                    "paid_time": "200" if state != "UNPAID" else None,
+                    "issued_time": "300" if state == "ISSUED" else None,
+                },
+            )
+        await migrate_databases(db, mint_migrations)
+        await migrate_databases(db, mint_migrations)
+        for quote, _, _, _, _, paid, issued, updated in cases:
+            row = await db.fetchone(
+                "SELECT * FROM mint_quotes WHERE quote = :quote", {"quote": quote}
+            )
+            assert row is not None
+            assert (
+                row["amount_paid"],
+                row["amount_issued"],
+                int(row["updated_at"]),
+            ) == (
+                paid,
+                issued,
+                int(updated),
+            )
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duplicate_field", ["request", "checking_id"])
+async def test_payment_identity_migration_preserves_conflicting_quotes(
+    tmp_path, duplicate_field
+):
+    db = Database("mint", str(tmp_path / "duplicate_quotes"))
+    try:
+        await migrate_databases(db, _migrations_through(42))
+        for i in range(2):
+            await db.execute(
+                """INSERT INTO mint_quotes
+                   (quote, method, request, checking_id, unit, amount, state)
+                   VALUES (:quote, 'bolt11', :request, :checking_id, 'sat', 8, 'PAID')""",
+                {
+                    "quote": f"quote-{i}",
+                    "request": "shared"
+                    if duplicate_field == "request"
+                    else f"request-{i}",
+                    "checking_id": "shared"
+                    if duplicate_field == "checking_id"
+                    else f"checking-{i}",
+                },
+            )
+        with pytest.raises(RuntimeError, match=rf"duplicate {duplicate_field}"):
+            await migrate_databases(db, mint_migrations)
+        assert len(await db.fetchall("SELECT quote FROM mint_quotes")) == 2
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [39, 40, 41, 42])
+async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
+    db = Database("mint", str(tmp_path / "payment_migration"))
+    try:
+        await migrate_databases(db, _migrations_through(version))
         await migrate_databases(db, mint_migrations)
         # Reopening an already upgraded database must also work.
         await migrate_databases(db, mint_migrations)
@@ -40,7 +127,7 @@ async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
             )
         assert {"method_data", "amount_paid_internal"} <= mint_columns
         assert {"attempt", "method_data", "amountless_msat"} <= melt_columns
-        assert row and row["version"] == 41
+        assert row and row["version"] == 43
     finally:
         await db.engine.dispose()
 
