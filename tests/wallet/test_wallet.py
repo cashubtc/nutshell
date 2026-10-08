@@ -777,3 +777,19 @@ async def test_request_mint_raises_no_active_keysets(wallet1: Wallet):
     with pytest.raises(KeysetNotFoundError) as excinfo:
         await wallet1.request_mint(64)
     assert "no active keysets found" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_mint_reconciles_unpolled_quote(wallet1: Wallet):
+    quote = await wallet1.request_mint(8)
+    await pay_if_regtest(quote.request)
+    stored = await get_bolt11_mint_quote(db=wallet1.db, quote=quote.quote)
+    assert stored and (stored.amount_paid or 0) == 0
+    await wallet1.mint(8, quote_id=quote.quote)
+    stored = await get_bolt11_mint_quote(db=wallet1.db, quote=quote.quote)
+    assert stored
+    assert (stored.amount_paid, stored.amount_issued, stored.state) == (
+        8,
+        8,
+        MintQuoteState.issued,
+    )

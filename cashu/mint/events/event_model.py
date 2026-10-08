@@ -17,5 +17,5 @@ class LedgerEvent(ABC, BaseModel):
 
     @property
     @abstractmethod
-    def kind(self) -> JSONRPCSubscriptionKinds:
+    def kind(self) -> JSONRPCSubscriptionKinds | str:
         pass

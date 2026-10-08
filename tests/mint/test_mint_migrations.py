@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -11,6 +11,38 @@ from cashu.mint import migrations as mint_migrations
 from cashu.mint.auth import migrations as auth_migrations
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.db.write import DbWriteHelper
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [39, 40])
+async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
+    db = Database("mint", str(tmp_path / "payment_migration"))
+    previous = ModuleType(mint_migrations.__name__)
+    for name, migration in vars(mint_migrations).items():
+        if name.startswith("m") and name[1:4].isdigit() and int(name[1:4]) <= version:
+            setattr(previous, name, migration)
+    try:
+        await migrate_databases(db, previous)
+        await migrate_databases(db, mint_migrations)
+        # Reopening an already upgraded database must also work.
+        await migrate_databases(db, mint_migrations)
+        async with db.connect() as conn:
+            mint_columns = {
+                row["name"]
+                for row in await conn.fetchall("PRAGMA table_info(mint_quotes)")
+            }
+            melt_columns = {
+                row["name"]
+                for row in await conn.fetchall("PRAGMA table_info(melt_quotes)")
+            }
+            row = await conn.fetchone(
+                "SELECT version FROM dbversions WHERE db = 'mint'"
+            )
+        assert {"method_data", "amount_paid_internal"} <= mint_columns
+        assert {"attempt", "method_data", "amountless_msat"} <= melt_columns
+        assert row and row["version"] == 41
+    finally:
+        await db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -144,7 +176,9 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
                     fee_paid INT,
                     proof TEXT,
                     state TEXT NOT NULL,
-                    expiry TIMESTAMP
+                    expiry TIMESTAMP,
+                    method_data TEXT,
+                    amountless_msat INT
                 )
                 """
             )
@@ -402,3 +436,57 @@ async def test_auth_m005_migration_preserves_existing_promises(tmp_path):
     assert signature.C_ == c_
     assert signature.amount == 1
     assert signature.id == "keyset_id"
+
+
+@pytest.mark.asyncio
+async def test_internal_credit_migration_backfills_only_matching_settlements(ledger):
+    from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState
+    from cashu.mint import migrations as mint_migrations
+
+    quote = MintQuote(
+        quote="receive",
+        method="testpay",
+        request="request",
+        checking_id="incoming",
+        unit="sat",
+        amount=8,
+        amount_paid=8,
+        state=MintQuoteState.paid,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    for name, changes in [
+        ("internal", {}),
+        ("pending", {"state": MeltQuoteState.pending}),
+        ("external", {"checking_id": "other"}),
+        ("unit", {"unit": "msat"}),
+        ("method", {"method": "otherpay"}),
+    ]:
+        fields = dict(
+            quote=name,
+            method="testpay",
+            request="request",
+            checking_id="incoming",
+            unit="sat",
+            amount=8,
+            fee_reserve=0,
+            fee_paid=0,
+            state=MeltQuoteState.paid,
+        )
+        await ledger.crud.store_melt_quote(
+            quote=MeltQuote(**{**fields, **changes}), db=ledger.db
+        )
+    # Restore the pre-migration schema around real stored quotes.
+    await ledger.db.execute(
+        f"ALTER TABLE {ledger.db.table_with_schema('mint_quotes')} DROP COLUMN amount_paid_internal"
+    )
+    await ledger.db.execute(
+        f"ALTER TABLE {ledger.db.table_with_schema('melt_quotes')} DROP COLUMN amountless_msat"
+    )
+    await mint_migrations.m041_separate_internal_credits_and_amountless_payments(
+        ledger.db
+    )
+    restored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert restored.amount_paid_internal == 8
+    assert restored.amount_paid == 8
+    outgoing = await ledger.crud.get_melt_quote(quote_id="internal", db=ledger.db)
+    assert outgoing.amountless_msat is None

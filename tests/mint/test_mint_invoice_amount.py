@@ -1,4 +1,5 @@
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -11,7 +12,7 @@ from cashu.core.base import Method, MintQuote, MintQuoteState, Unit
 from cashu.core.errors import LightningError
 from cashu.core.models import PostMintQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import InvoiceResponse
+from cashu.lightning.base import InvoiceResponse, PaymentStatus, PaymentStatusResult
 from cashu.lightning.fake import FakeWallet
 from cashu.mint.ledger import Ledger
 from tests.mint.invoice_amount_helpers import issue, make_outputs, unblind_promises
@@ -55,6 +56,61 @@ def invoice_response(amount_msat: int | None) -> InvoiceResponse:
         payment_request=bolt11.encode(invoice, "11" * 32),
         checking_id=payment_hash,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("amount", [1, 999, 1000, 1001, 1999, 65_537, 1_000_001])
+@pytest.mark.parametrize("batch", [False, True], ids=["single", "batch"])
+async def test_mint_observes_same_second_payment_without_rate_limit(
+    amount_ledger: Ledger, monkeypatch, amount, batch
+):
+    quote = await amount_ledger.mint_quote(
+        PostMintQuoteRequest(unit="msat", amount=amount)
+    )
+    now = int(time.time())
+    monkeypatch.setattr("cashu.mint.ledger.time", SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr(settings, "mint_quote_backend_check_rate_limit", 0)
+    status = AsyncMock(return_value=PaymentStatus(result=PaymentStatusResult.PENDING))
+    monkeypatch.setattr(
+        amount_ledger.backends[Method.bolt11][Unit.msat], "get_invoice_status", status
+    )
+    assert (await amount_ledger.get_mint_quote(quote.quote)).unpaid
+    status.return_value = PaymentStatus(result=PaymentStatusResult.SETTLED)
+    assert (await amount_ledger.get_mint_quote(quote.quote)).paid
+    assert status.await_count == 2
+
+    outputs, secrets = make_outputs(amount_ledger, amount, Unit.msat)
+    promises = await issue(amount_ledger, [quote], outputs, batch)
+    proofs = unblind_promises(amount_ledger, promises, secrets)
+    await amount_ledger._verify_inputs(proofs)
+    assert sum(proof.amount for proof in proofs) == amount
+    stored = await amount_ledger.get_mint_quote(quote.quote)
+    assert stored.issued and stored.amount_issued == amount
+
+
+@pytest.mark.asyncio
+async def test_mint_payment_polling_preserves_positive_rate_limit(
+    amount_ledger: Ledger, monkeypatch
+):
+    quote = await amount_ledger.mint_quote(
+        PostMintQuoteRequest(unit="msat", amount=1001)
+    )
+    checked_at = now = int(time.time())
+    monkeypatch.setattr("cashu.mint.ledger.time", SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr(settings, "mint_quote_backend_check_rate_limit", 10)
+    status = AsyncMock(return_value=PaymentStatus(result=PaymentStatusResult.PENDING))
+    monkeypatch.setattr(
+        amount_ledger.backends[Method.bolt11][Unit.msat], "get_invoice_status", status
+    )
+    assert (await amount_ledger.get_mint_quote(quote.quote)).unpaid
+    status.return_value = PaymentStatus(result=PaymentStatusResult.SETTLED)
+    for elapsed in (0, 1, 9):
+        now = checked_at + elapsed
+        assert (await amount_ledger.get_mint_quote(quote.quote)).unpaid
+    assert status.await_count == 1
+    now = checked_at + 11
+    assert (await amount_ledger.get_mint_quote(quote.quote)).paid
+    assert status.await_count == 2
 
 
 @pytest.mark.asyncio
