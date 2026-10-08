@@ -86,6 +86,12 @@ partial issuance can still accept amountless or repeated payments; each mint
 operation must consume its full available balance. These capabilities are
 independent and are never inferred from an unfamiliar method name.
 
+Each canonical incoming payment request and checking ID must belong to one
+mint quote per payment method, across all units and quote states. Reusable
+offers or addresses receive further payments on that quote; a backend must
+not assign them to another quote. Upgrades stop if legacy quotes already
+share either identity, leaving those records intact for operator review.
+
 Only BOLT11 uses the fixed-amount internal settlement shortcut. Other methods
 are quoted and paid through their processor even when the destination belongs
 to this mint. Onchain melt quotes require an `amount`. BOLT12 amountless melts
@@ -191,6 +197,10 @@ custom `melt_quote_request_model` to validate these fields, including rejecting
 unsupported options. The gRPC adapter forwards custom nested options under
 `extra_json.options` for the processor to validate. Standard `mpp` and
 `amountless` options retain their shared validation and dedicated protobuf fields.
+
+Wallet `method_options` add custom top-level fields. Standard request fields
+must be supplied through the wallet arguments or quote request model; colliding
+option keys raise `ValueError` before the quote or payment request is sent.
 
 ### Install and enable
 

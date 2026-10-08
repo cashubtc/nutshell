@@ -15,7 +15,12 @@ from cashu.core.base import (
 )
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.db import Database
-from cashu.core.errors import QuotePendingError, TransactionError
+from cashu.core.errors import (
+    LightningError,
+    QuoteAlreadyIssuedError,
+    QuotePendingError,
+    TransactionError,
+)
 from cashu.core.migrations import migrate_databases
 from cashu.core.models import (
     PostMeltQuoteRequest,
@@ -641,6 +646,197 @@ async def test_internal_credits_are_added_to_backend_receipts(
         "amount_paid_internal"
         not in PostMintQuoteResponse.from_mint_quote(refreshed).model_dump()
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("reported_amount", [None, 8])
+async def test_single_payment_quote_cannot_be_issued_again_after_internal_settlement(
+    fake_backend_settings, ledger, monkeypatch, batch, reported_amount
+):
+    plugin = payment_method_registry.get("bolt11")
+    quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=8))
+    melt = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=quote.request)
+    )
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=melt.quote, db=ledger.db)
+    melt_quote = await ledger.db_write._set_melt_quote_pending(melt_quote)
+    await ledger.melt_mint_settle_internally(melt_quote, [])
+
+    monkeypatch.setattr(
+        plugin,
+        "get_incoming_payment_status",
+        AsyncMock(
+            return_value=PaymentStatus(
+                result=PaymentStatusResult.SETTLED,
+                amount_paid=(
+                    Amount(Unit.sat, reported_amount)
+                    if reported_amount is not None
+                    else None
+                ),
+            )
+        ),
+    )
+    refreshed = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+    assert (refreshed.amount_paid, refreshed.amount_paid_internal) == (8, 8)
+
+    async def issue(secret):
+        outputs = [
+            BlindedMessage(
+                amount=8,
+                id=ledger.keyset.id,
+                B_=step1_alice(secret)[0].format().hex(),
+            )
+        ]
+        if batch:
+            return await ledger.mint_batch(
+                PostMintBatchRequest(quotes=[quote.quote], outputs=outputs)
+            )
+        return await ledger.mint(outputs=outputs, quote_id=quote.quote)
+
+    await issue("first-internal-issuance")
+    # Invoice listeners also force a backend check after a quote is issued.
+    await ledger.invoice_callback_dispatcher(
+        quote.checking_id, method="bolt11", unit=Unit.sat
+    )
+    refreshed = await ledger.get_mint_quote(quote.quote, force_backend_check=True)
+    assert (refreshed.amount_paid, refreshed.amount_issued, refreshed.state) == (
+        8,
+        8,
+        MintQuoteState.issued,
+    )
+    with pytest.raises(QuoteAlreadyIssuedError):
+        await issue("second-internal-issuance")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duplicate_field", ["payment_request", "checking_id"])
+@pytest.mark.parametrize("repeated_payments", [False, True])
+async def test_mint_quote_rejects_duplicate_backend_payment_identity(
+    fake_backend_settings, ledger, monkeypatch, duplicate_field, repeated_payments
+):
+    plugin = payment_method_registry.get("bolt11")
+    monkeypatch.setattr(plugin, "allows_repeated_payments", repeated_payments)
+    payload = PostMintQuoteRequest(unit="sat", amount=8)
+    backend = ledger._get_backend("bolt11", Unit.sat)
+    first = await plugin.create_incoming_payment(backend, payload)
+    second = await plugin.create_incoming_payment(backend, payload)
+    duplicate_value = getattr(first, duplicate_field)
+    if duplicate_field == "payment_request":
+        duplicate_value = duplicate_value.upper()
+    second = second.model_copy(update={duplicate_field: duplicate_value})
+    monkeypatch.setattr(
+        plugin, "create_incoming_payment", AsyncMock(side_effect=[first, second])
+    )
+    await ledger.mint_quote(payload)
+    with pytest.raises(LightningError, match="duplicate"):
+        await ledger.mint_quote(payload)
+    rows = await ledger.db.fetchall("SELECT quote FROM mint_quotes")
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("already_issued", [4, 8])
+async def test_single_payment_quote_cannot_use_legacy_excess_credit(
+    fake_backend_settings, ledger, monkeypatch, batch, already_issued
+):
+    plugin = payment_method_registry.get("bolt11")
+    monkeypatch.setattr(plugin, "allows_partial_mint", True)
+    quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=8))
+    quote.amount_paid = 16
+    quote.amount_issued = already_issued
+    quote.state_val = MintQuoteState.paid
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    async def issue(amount, secret):
+        outputs = [
+            BlindedMessage(
+                amount=amount,
+                id=ledger.keyset.id,
+                B_=step1_alice(secret)[0].format().hex(),
+            )
+        ]
+        if batch:
+            return await ledger.mint_batch(
+                PostMintBatchRequest(
+                    quotes=[quote.quote],
+                    quote_amounts=[amount],
+                    outputs=outputs,
+                )
+            )
+        return await ledger.mint(outputs=outputs, quote_id=quote.quote)
+
+    error = QuoteAlreadyIssuedError if already_issued == 8 else TransactionError
+    with pytest.raises(error):
+        await issue(8, "legacy-excess-issuance")
+    stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored.amount_issued == already_issued
+    if already_issued == 4:
+        await issue(4, "legacy-remaining-issuance")
+        stored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+        assert stored.amount_issued == 8
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duplicate_field", ["request", "checking_id"])
+@pytest.mark.parametrize("second_unit", ["sat", "usd"])
+async def test_concurrent_mint_quotes_cannot_share_payment_identity(
+    fake_backend_settings, ledger, duplicate_field, second_unit
+):
+    first = MintQuote(
+        quote="first-quote",
+        method="bolt11",
+        request="first-request",
+        checking_id="first-checking-id",
+        unit="sat",
+        amount=8,
+        state=MintQuoteState.unpaid,
+    )
+    second = first.model_copy(
+        update={
+            "quote": "second-quote",
+            "unit": second_unit,
+            "request": "second-request",
+            "checking_id": "second-checking-id",
+            duplicate_field: getattr(first, duplicate_field),
+        }
+    )
+    results = await asyncio.gather(
+        ledger.crud.store_mint_quote(quote=first, db=ledger.db),
+        ledger.crud.store_mint_quote(quote=second, db=ledger.db),
+        return_exceptions=True,
+    )
+    assert sum(isinstance(result, LightningError) for result in results) == 1
+    assert sum(result is None for result in results) == 1
+    assert len(await ledger.db.fetchall("SELECT quote FROM mint_quotes")) == 1
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_payment_identities_are_scoped_to_method(
+    fake_backend_settings, ledger
+):
+    first = MintQuote(
+        quote="issued-quote",
+        method="bolt11",
+        request="request",
+        checking_id="checking-id",
+        unit="sat",
+        amount=8,
+        state=MintQuoteState.issued,
+        amount_paid=8,
+        amount_issued=8,
+    )
+    await ledger.crud.store_mint_quote(quote=first, db=ledger.db)
+    with pytest.raises(LightningError, match="duplicate"):
+        await ledger.crud.store_mint_quote(
+            quote=first.model_copy(update={"quote": "new-quote"}), db=ledger.db
+        )
+    await ledger.crud.store_mint_quote(
+        quote=first.model_copy(update={"quote": "other-method", "method": "testpay"}),
+        db=ledger.db,
+    )
+    assert len(await ledger.db.fetchall("SELECT quote FROM mint_quotes")) == 2
 
 
 @pytest.mark.asyncio

@@ -1277,20 +1277,6 @@ async def m036_add_mint_quote_accounting_fields(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN updated_at TIMESTAMP DEFAULT NULL"
         )
-        await conn.execute(
-            f"""
-                UPDATE {db.table_with_schema('mint_quotes')}
-                SET amount_paid = CASE
-                        WHEN state IN ('PAID', 'ISSUED') THEN amount
-                        ELSE 0
-                    END,
-                    amount_issued = CASE
-                        WHEN state = 'ISSUED' THEN amount
-                        ELSE 0
-                    END,
-                    updated_at = COALESCE(issued_time, paid_time, created_time)
-            """
-        )
 
 
 async def m037_remove_paid_from_melt_quote(db: Database):
@@ -1410,3 +1396,39 @@ async def m041_separate_internal_credits_and_amountless_payments(db: Database):
         await conn.execute(
             f"ALTER TABLE {melt_quotes} ADD COLUMN amountless_msat {db.big_int}"
         )
+
+
+async def m042_backfill_mint_quote_accounting(db: Database):
+    """Initialize legacy NULL fields without overwriting cumulative accounting."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                UPDATE {db.table_with_schema('mint_quotes')}
+                SET amount_paid = COALESCE(amount_paid, CASE
+                        WHEN state IN ('PAID', 'PENDING', 'ISSUED') THEN amount
+                        ELSE 0
+                    END),
+                    amount_issued = COALESCE(amount_issued, CASE
+                        WHEN state = 'ISSUED' THEN amount
+                        ELSE 0
+                    END),
+                    updated_at = COALESCE(updated_at, issued_time, paid_time, created_time)
+                WHERE amount_paid IS NULL OR amount_issued IS NULL OR updated_at IS NULL
+            """
+        )
+
+
+async def m043_validate_mint_quote_payment_identities(db: Database):
+    """Refuse ambiguous legacy funding records without deleting any quotes."""
+    async with db.connect() as conn:
+        for field in ("request", "checking_id"):
+            duplicate = await conn.fetchone(
+                f"""SELECT method FROM {db.table_with_schema('mint_quotes')}
+                    GROUP BY method, {field} HAVING COUNT(*) > 1 LIMIT 1"""
+            )
+            if duplicate:
+                raise RuntimeError(
+                    f"Cannot upgrade mint database: duplicate {field} for payment "
+                    f"method '{duplicate['method']}'. Resolve conflicting mint "
+                    "quotes before retrying."
+                )

@@ -6,6 +6,7 @@ import bolt11
 import httpx
 from httpx import Response
 from loguru import logger
+from pydantic import BaseModel
 
 from ..core.base import (
     AuthProof,
@@ -51,6 +52,27 @@ from .protocols import SupportsAuth
 
 GET = "GET"
 POST = "POST"
+
+
+def _payload_with_method_options(
+    payload: BaseModel,
+    method_options: Optional[dict],
+    *,
+    include: Optional[dict] = None,
+) -> dict:
+    payload_dict = payload.model_dump(include=include)
+    if method_options:
+        # Reserve model fields even when serialization omits them, such as
+        # optional melt outputs or prefer_async.
+        reserved = type(payload).model_fields.keys() | payload_dict.keys()
+        collisions = reserved & method_options.keys()
+        if collisions:
+            raise ValueError(
+                "method_options cannot override request fields: "
+                + ", ".join(sorted(collisions))
+            )
+        payload_dict.update(method_options)
+    return payload_dict
 
 
 def async_set_httpx_client(func):
@@ -392,9 +414,7 @@ class LedgerAPI(SupportsAuth):
         payload = PostMintQuoteRequest(
             unit=unit.name, amount=amount, description=memo, pubkey=pubkey
         )
-        payload_dict = payload.model_dump()
-        if method_options:
-            payload_dict.update(method_options)
+        payload_dict = _payload_with_method_options(payload, method_options)
         resp = await self._request(
             POST,
             f"mint/quote/{method}",
@@ -531,9 +551,7 @@ class LedgerAPI(SupportsAuth):
         payload: PostMeltQuoteRequest,
         method_options: Optional[dict] = None,
     ) -> PostMeltQuoteResponse:
-        payload_dict = payload.model_dump()
-        if method_options:
-            payload_dict.update(method_options)
+        payload_dict = _payload_with_method_options(payload, method_options)
 
         resp = await self._request(
             POST,
@@ -632,11 +650,11 @@ class LedgerAPI(SupportsAuth):
                 include["outputs"] = {i: outputs_include for i in range(len(outputs))}
             return include
 
-        payload_dict = payload.model_dump(
-            include=_meltrequest_include_fields(proofs, outputs)
+        payload_dict = _payload_with_method_options(
+            payload,
+            method_options,
+            include=_meltrequest_include_fields(proofs, outputs),
         )
-        if method_options:
-            payload_dict.update(method_options)
         resp = await self._request(
             POST,
             f"melt/{method}",
