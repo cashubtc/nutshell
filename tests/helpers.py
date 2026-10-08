@@ -282,7 +282,7 @@ def get_real_invoice_fee_leaf(sats: int) -> str:
     return run_cmd_json([*cmd, "addinvoice", str(sats)])["payment_request"]
 
 
-# signing key of CDK's create_fake_invoice
+# Signing key for fake test invoices.
 FAKE_INVOICE_PRIVKEY = (
     "e126f68f7eafcc8b74f54d269fe206be715000f94dac067d1c04a8ca3b2db734"
 )
