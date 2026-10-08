@@ -378,6 +378,71 @@ async def test_internal_settlement_and_state_updates_advance_quote_timestamp(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("matching_mint_quote", [False, True])
+async def test_internal_settlement_lookups_are_scoped_to_method(
+    fake_backend_settings, ledger, monkeypatch, matching_mint_quote
+):
+    plugin = payment_method_registry.get("bolt11")
+    backend = ledger._get_backend("bolt11", Unit.sat)
+    invoice = await backend.create_invoice(Amount(Unit.sat, 8))
+    foreign_quote = MintQuote(
+        quote="other-method-quote",
+        method="testpay",
+        request=invoice.payment_request.lower(),
+        checking_id=invoice.checking_id,
+        unit="sat",
+        amount=8,
+        state=MintQuoteState.unpaid,
+    )
+    # Insert the other method first so an unscoped lookup selects it.
+    await ledger.crud.store_mint_quote(quote=foreign_quote, db=ledger.db)
+    if matching_mint_quote:
+        await ledger.crud.store_mint_quote(
+            quote=foreign_quote.model_copy(
+                update={"quote": "bolt11-quote", "method": "bolt11"}
+            ),
+            db=ledger.db,
+        )
+    quote_payment = AsyncMock(wraps=plugin.quote_outgoing_payment)
+    outgoing_status = AsyncMock(
+        return_value=PaymentStatus(result=PaymentStatusResult.PENDING)
+    )
+    monkeypatch.setattr(plugin, "quote_outgoing_payment", quote_payment)
+    monkeypatch.setattr(plugin, "get_outgoing_payment_status", outgoing_status)
+
+    response = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=invoice.payment_request)
+    )
+    if matching_mint_quote:
+        assert response.fee_reserve == 0
+        quote_payment.assert_not_awaited()
+    else:
+        quote_payment.assert_awaited_once()
+    melt_quote = await ledger.crud.get_melt_quote(
+        quote_id=response.quote, db=ledger.db
+    )
+    pending = await ledger.db_write._set_melt_quote_pending(melt_quote)
+
+    assert (await ledger.get_melt_quote(pending.quote)).pending
+    settled = await ledger.melt_mint_settle_internally(pending, [])
+    if matching_mint_quote:
+        outgoing_status.assert_not_awaited()
+        assert settled.paid
+        credited = await ledger.crud.get_mint_quote(
+            quote_id="bolt11-quote", db=ledger.db
+        )
+        assert credited.amount_paid == credited.amount_paid_internal == 8
+    else:
+        outgoing_status.assert_awaited_once()
+        assert settled.pending
+    untouched = await ledger.crud.get_mint_quote(
+        quote_id=foreign_quote.quote, db=ledger.db
+    )
+    assert untouched.unpaid
+    assert untouched.amount_paid == untouched.amount_paid_internal == 0
+
+
+@pytest.mark.asyncio
 async def test_non_reusable_mint_quote_stays_unpaid_after_partial_payment(
     fake_backend_settings, ledger: Ledger, monkeypatch: pytest.MonkeyPatch
 ):

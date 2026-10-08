@@ -1187,7 +1187,9 @@ class Ledger(
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
         # and therefore respond with internal transaction fees (0 for now)
-        mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
+        mint_quote = await self.crud.get_mint_quote(
+            request=request, method=method_name, db=self.db
+        )
         if (
             mint_quote
             and mint_quote.unit == melt_quote.unit
@@ -1342,7 +1344,7 @@ class Ledger(
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
         mint_quote = await self.crud.get_mint_quote(
-            request=melt_quote.request, db=self.db
+            request=melt_quote.request, method=melt_quote.method, db=self.db
         )
 
         plugin = payment_method_registry.get(melt_quote.method)
@@ -1388,7 +1390,7 @@ class Ledger(
         # first we check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without the backend
         mint_quote = await self.crud.get_mint_quote(
-            request=melt_quote_arg.request, db=self.db
+            request=melt_quote_arg.request, method=melt_quote_arg.method, db=self.db
         )
         if not mint_quote:
             return melt_quote_arg
