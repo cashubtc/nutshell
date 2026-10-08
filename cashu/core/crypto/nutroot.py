@@ -540,11 +540,20 @@ def verify_script_path_spend(
         if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
 
+    if leaf.type != "hashlock" and witness.preimage is not None:
+        raise ValueError("preimage on a leaf that is not a hashlock")
     signatures = witness.signatures
     # Bounded at the leaf's key count (NUT-10): thresholds count satisfied
     # keys, so extras beyond that can never verify and are rejected outright.
     if len(signatures) > len(leaf.keys):
         raise ValueError("more signatures than leaf keys")
+    for sig_hex in signatures:
+        try:
+            well_formed = len(bytes.fromhex(sig_hex)) == 64
+        except ValueError:
+            well_formed = False
+        if not well_formed:
+            raise ValueError("malformed signature entry")
     unique_sigs = list(dict.fromkeys(signatures))
     satisfied_keys = set()
     for key in leaf.keys:

@@ -1151,6 +1151,36 @@ def test_script_path_threshold_and_hashlock():
             }),
         )
 
+    # A signature entry that is not a 64-byte BIP-340 encoding invalidates the witness.
+    with pytest.raises(ValueError, match="malformed signature"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            nutroot_witness({
+                "leaf": leaf_threshold.hex(),
+                "control": {
+                    "K": internal_key.format().hex(),
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
+                },
+                "signatures": [_sign_digest(3, digest), _sign_digest(4, digest)[:-2]],
+            }),
+        )
+    # A preimage on a leaf that is not a hashlock invalidates the witness.
+    with pytest.raises(ValueError, match="not a hashlock"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            nutroot_witness({
+                "leaf": leaf_threshold.hex(),
+                "control": {
+                    "K": internal_key.format().hex(),
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
+                },
+                "signatures": [_sign_digest(3, digest), _sign_digest(4, digest)],
+                "preimage": preimage.hex(),
+            }),
+        )
+
     # Hashlock: preimage + signature passes; wrong preimage fails; missing preimage fails.
     hashlock_witness = nutroot_witness({
         "leaf": leaf_hashlock.hex(),
