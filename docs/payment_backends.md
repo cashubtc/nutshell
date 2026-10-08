@@ -201,6 +201,10 @@ unsupported options. The gRPC adapter forwards custom nested options under
 Wallet `method_options` add custom top-level fields. Standard request fields
 must be supplied through the wallet arguments or quote request model; colliding
 option keys raise `ValueError` before the quote or payment request is sent.
+`Wallet.melt_quote_for_method` accepts standard `amount` and typed `options` as
+keyword arguments. For example, use
+`wallet.melt_quote_for_method("onchain", address, amount=10)` or
+`cashu pay <address> 10 --method onchain` for an onchain payment quote.
 
 ### Install and enable
 
