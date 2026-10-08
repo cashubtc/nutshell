@@ -13,6 +13,7 @@ from cashu.core.base import (
     BlindedMessage,
     MeltQuote,
     MeltQuoteState,
+    Method,
     MintQuote,
     MintQuoteState,
     Proof,
@@ -246,6 +247,66 @@ def _invoice(amount_msat: int) -> str:
         ),
         private_key="01" * 32,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("incoming_uppercase", [False, True])
+@pytest.mark.parametrize("outgoing_uppercase", [False, True])
+async def test_grpc_bolt11_case_variants_settle_internally(
+    ledger, monkeypatch, incoming_uppercase, outgoing_uppercase
+):
+    invoice = _invoice(8000)
+    processor = GrpcPaymentProcessor("bolt11", Unit.sat, {})
+    processor._stub = stub = AsyncMock()
+    stub.CreatePayment.return_value = pb.CreatePaymentResponse(
+        request_identifier=pb.PaymentIdentifier(
+            type=pb.PAYMENT_IDENTIFIER_TYPE_PAYMENT_HASH, hash="22" * 32
+        ),
+        request=invoice.upper() if incoming_uppercase else invoice,
+    )
+    stub.GetPaymentQuote.return_value = pb.PaymentQuoteResponse(
+        request_identifier=pb.PaymentIdentifier(
+            type=pb.PAYMENT_IDENTIFIER_TYPE_PAYMENT_HASH, hash="22" * 32
+        ),
+        amount=pb.AmountMessage(value=8, unit="sat"),
+        fee=pb.AmountMessage(value=2, unit="sat"),
+    )
+    # Restore the legacy plugin before the ledger fixture shuts down its backends.
+    with monkeypatch.context() as patch:
+        patch.setitem(payment_method_registry._plugins, "bolt11", processor)
+        patch.setattr(ledger, "backends", {Method.bolt11: {Unit.sat: processor}})
+        mint_quote = await ledger.mint_quote(
+            PostMintQuoteRequest(unit="sat", amount=8)
+        )
+        response = await ledger.melt_quote(
+            PostMeltQuoteRequest(
+                unit="sat",
+                request=invoice.upper() if outgoing_uppercase else invoice,
+            )
+        )
+        assert mint_quote.request == response.request == invoice.lower()
+        assert response.fee_reserve == 0
+        stub.GetPaymentQuote.assert_not_awaited()
+        melt_quote = await ledger.crud.get_melt_quote(
+            quote_id=response.quote, db=ledger.db
+        )
+        pending = await ledger.db_write._set_melt_quote_pending(melt_quote)
+        assert (await ledger.get_melt_quote(pending.quote)).pending
+        assert (await ledger.melt_mint_settle_internally(pending, [])).paid
+        credited = await ledger.crud.get_mint_quote(
+            quote_id=mint_quote.quote, db=ledger.db
+        )
+        assert credited.amount_paid == credited.amount_paid_internal == 8
+        stub.CheckOutgoingPayment.assert_not_awaited()
+        stub.MakePayment.assert_not_awaited()
+
+
+@pytest.mark.parametrize("method", ["bolt12", "onchain", "testpay"])
+def test_grpc_other_methods_preserve_request_case(method):
+    request = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+    processor = GrpcPaymentProcessor(method, Unit.sat, {})
+
+    assert processor.canonicalize_request(request) == request
 
 
 @pytest.mark.asyncio
