@@ -111,9 +111,9 @@ async def test_transaction_rejects_reused_change_lock_key(
     await wallet1.mint(8, quote_id=mint_quote.quote)
     _, change_pubkey = nut20.generate_keypair()
 
-    repeated = [
+    repeated = [  # the same key in two hex spellings
         TransactionChangeOutput(pubkey=change_pubkey, amount=3),
-        TransactionChangeOutput(pubkey=change_pubkey),
+        TransactionChangeOutput(pubkey=change_pubkey.upper()),
     ]
     with pytest.raises(TransactionError, match="repeats a change quote lock key"):
         await ledger.transaction(

@@ -79,6 +79,7 @@ async def run(
         raise TransactionError("SIG_ALL inputs are not supported here.")
     for c in change_outputs:
         PublicKey(bytes.fromhex(c.pubkey))  # raises unless a valid compressed point
+        c.pubkey = c.pubkey.lower()  # one spelling, so key comparisons are byte-wise
     if len({c.pubkey for c in change_outputs}) != len(change_outputs):
         raise TransactionError("transaction repeats a change quote lock key.")
 
