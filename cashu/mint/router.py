@@ -2,11 +2,13 @@ import asyncio
 import html
 import os
 import time
+from typing import Annotated
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
+from pydantic import BeforeValidator
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
@@ -52,6 +54,7 @@ from ..core.settings import settings
 from ..mint.startup import ledger
 from .cache import RedisCache
 from .limit import limit_websocket, limiter
+from .validation import validate_input_secret_lengths
 
 router = APIRouter()
 redis = RedisCache()
@@ -585,7 +588,10 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @redis.cache()
-async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
+async def melt(
+    request: Request,
+    payload: Annotated[PostMeltRequest, BeforeValidator(validate_input_secret_lengths)],
+) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -615,7 +621,7 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
 @redis.cache()
 async def swap(
     request: Request,
-    payload: PostSwapRequest,
+    payload: Annotated[PostSwapRequest, BeforeValidator(validate_input_secret_lengths)],
 ) -> PostSwapResponse:
     """
     Requests a set of Proofs to be swapped for another set of BlindSignatures.

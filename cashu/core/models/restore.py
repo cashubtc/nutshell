@@ -13,5 +13,9 @@ class PostRestoreRequest(BaseModel):
 
 
 class PostRestoreResponse(BaseModel):
-    outputs: List[BlindedMessage] = []
-    signatures: List[BlindedSignature] = []
+    outputs: List[BlindedMessage] = Field(
+        default_factory=list, max_length=settings.mint_max_request_length
+    )
+    signatures: List[BlindedSignature] = Field(
+        default_factory=list, max_length=settings.mint_max_request_length
+    )

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -444,3 +445,106 @@ async def test_redis_cache_hit_and_miss(monkeypatch):
     assert cache.initialized is True
     await cache.disconnect()
     assert closed is True
+
+
+@pytest.mark.parametrize(
+    "path,fields",
+    [
+        ("/v1/mint/bolt11/batch", {"quotes": ["unpaid-quote"]}),
+        ("/v1/swap", {"inputs": []}),
+        ("/v1/mint/bolt11", {"quote": "unpaid-quote"}),
+        ("/v1/melt/bolt11", {"quote": "unpaid-quote", "inputs": []}),
+        ("/v1/restore", {}),
+    ],
+)
+def test_router_rejects_oversized_blinded_points_before_ledger(monkeypatch, path, fields):
+    monkeypatch.setattr(settings, "mint_rate_limit", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
+    client = TestClient(_build_router_app())
+
+    response = client.post(
+        path,
+        json={
+            **fields,
+            "outputs": [
+                {"id": "00deadbeefdeadbe", "amount": 1, "B_": "02" + "00" * 33}
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "outputs", 0, "B_"]
+
+
+@pytest.mark.parametrize(
+    "path,fields",
+    [
+        ("/v1/swap", {"inputs": []}),
+        ("/v1/mint/bolt11/batch", {"quotes": ["unpaid-quote"]}),
+    ],
+)
+def test_oversized_point_is_not_rendered_in_validation_errors(monkeypatch, path, fields):
+    monkeypatch.setattr(settings, "mint_rate_limit", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
+    captured = []
+    monkeypatch.setattr(middleware_module.logger, "error", captured.append)
+    point = "02" + "00" * 1_000_000
+    client = TestClient(_build_router_app())
+
+    response = client.post(
+        path,
+        json={
+            **fields,
+            "outputs": [{"id": "00deadbeefdeadbe", "amount": 1, "B_": point}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "string_too_long"
+    assert "input" not in response.json()["detail"][0]
+    assert len(response.content) < 1024
+    assert len(captured) == 1
+    assert "input" not in captured[0]["errors"][0]
+    assert len(str(captured[0])) < 1024
+
+
+@pytest.mark.parametrize(
+    "path,fields",
+    [("/v1/swap", {}), ("/v1/melt/bolt11", {"quote": "quote"})],
+)
+@pytest.mark.parametrize("length", [settings.mint_max_secret_length + 1, 2_000_000])
+@pytest.mark.parametrize("index", [0, 1])
+def test_router_rejects_long_secrets_before_hashing(
+    monkeypatch, path, fields, length, index
+):
+    monkeypatch.setattr(settings, "mint_rate_limit", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
+    hashed = Mock(side_effect=AssertionError("rejected secret must not be hashed"))
+    monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
+    client = TestClient(_build_router_app())
+
+    response = client.post(
+        path,
+        json={
+            **fields,
+            "inputs": [{"secret": "valid"}] * index + [
+                {
+                    "id": "00deadbeefdeadbe",
+                    "amount": 1,
+                    "C": "aa",
+                    "secret": "x" * length,
+                }
+            ],
+            "outputs": [],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "inputs", index, "secret"]
+    assert response.json()["detail"][0]["type"] == "string_too_long"
+    assert "input" not in response.json()["detail"][0]
+    assert len(response.content) < 1024
+    hashed.assert_not_called()

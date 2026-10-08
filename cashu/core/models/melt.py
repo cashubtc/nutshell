@@ -2,10 +2,7 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from cashu.core.base import (
-    BlindedMessage,
-    Proof,
-)
+from cashu.core.base import BlindedMessage, Proof
 from cashu.core.constants import MAX_QUOTE_ID_LEN
 from cashu.core.settings import settings
 
