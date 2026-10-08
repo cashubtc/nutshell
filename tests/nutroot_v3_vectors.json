@@ -140,7 +140,7 @@
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers: 01 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 02 mint quote input (01 amount issued, 02 quote id utf8), 03 blinded output (01 amount, 02 keyset id, 03 B_), 04 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 B_), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -175,7 +175,8 @@
         "mint_quote_inputs": [
           {
             "amount": 8,
-            "quote_id": "quote-mint-0001"
+            "quote_id": "quote-mint-0001",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812"
           }
         ],
         "blinded_outputs": [
@@ -186,10 +187,10 @@
           }
         ]
       },
-      "transcript": "1200160100010802000f71756f74652d6d696e742d3030303121005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
-      "digest": "0ddaf2d7b8060777c2a109e2e81c8dd86be9a098e1295f8e934e1a1fd81f8117",
-      "input_id": "e8b067b03a5bf2c7a283220722283657e95df38e4a50d593fbe8f4dd2472c652",
-      "input_digest": "d851748a1b2c45392c2fc780f4a3b5c12525823b24499fa36f6e92a39dd2593e"
+      "transcript": "12003a0100010802000f71756f74652d6d696e742d303030310300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d20981221005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "15322931ec8853ee9fee34cebefe0aba1ca04df7b14267d46a2d5d6361476b58",
+      "input_id": "36683e426305851b0c5bee1a8b9d567a5a0a3feba6252c4144aefde0ec852ef1",
+      "input_digest": "76fd9ab46843a003bff3b81e0875b30ddfe413b09d1e1cfad399972f498f106f"
     },
     "melt": {
       "tx": {
@@ -296,11 +297,13 @@
         "mint_quote_inputs": [
           {
             "amount": 5,
-            "quote_id": "quote-mint-0002"
+            "quote_id": "quote-mint-0002",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812"
           },
           {
             "amount": 3,
-            "quote_id": "quote-mint-0003"
+            "quote_id": "quote-mint-0003",
+            "lock_pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d"
           }
         ],
         "blinded_outputs": [
@@ -311,22 +314,22 @@
           }
         ]
       },
-      "transcript": "1200160100010502000f71756f74652d6d696e742d303030321200160100010302000f71756f74652d6d696e742d3030303321005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
-      "digest": "44a5f2217fdbfa927e03537c83eaebd250fae48c9e46bec53134610f71ecb0e2",
+      "transcript": "12003a0100010502000f71756f74652d6d696e742d303030320300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d20981212003a0100010302000f71756f74652d6d696e742d3030303303002102b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d21005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "1fcc843aeb8a087e0c348c9b6b9fb2cef155039deb3bd7d4d2610c5c9447cdaf",
       "inputs": [
         {
           "quote_id": "quote-mint-0002",
           "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
-          "input_id": "165487baab65329514e03e15352ac90f55b32189d4a68c640d25bd79cdc9da99",
-          "input_digest": "f5454c731da1a366e9c80cd9db8ab92dbc50ea6dae42709f91d540f854f7a0fc",
-          "signature": "44ea0145d2087fe83b83854c8e1654c5328c322e2ac9638fee3dcd9ca5fe8bc022fd9d63861b486f76f7442f29b6f6fa50f8e89bdb76484d76922b5aa2a6fc4d"
+          "input_id": "dd1472cce2ae89c5134d54a9fba5f99f26c212cda68cf6d0bba7f8f2e253f425",
+          "input_digest": "344ae975bbecbb734a663e756cc0413bfa50a5bf4f1577fd5e86fac3064fc86c",
+          "signature": "46bf2b2ac046694ef33037ca8d3e1ca5e8119fb837887d41ac631059059436a163a9a5f43594bef92e162e7b16f7d490293591789e69074fe5d4a5fcd5eccafb"
         },
         {
           "quote_id": "quote-mint-0003",
           "lock_pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
-          "input_id": "48b34f223c300eeb992c9443aeb6e49d4b566ec9eb19fda6ac4de3721996c811",
-          "input_digest": "45be9b7f7f48eef1d6e03a5f9ca6017ac3a2eb728fa85a2c81982626f43a873d",
-          "signature": "b2530aadc2f9c879a5f505aba51217b094a752227be327df421ea13e91585d22360db14c701c3d5b5eeda269b651ef55c05c1e60b9cf29f757dde653161ac76b"
+          "input_id": "78bd15ebfccf1774d313df80acf0ac276aaac32bb581c8555870d1f36a728248",
+          "input_digest": "b6cc535347c07bea1cc167796a6f6febce4daaf60df9c2275229d5f52297ce7e",
+          "signature": "2be4e6dbaaf205e433894c289496236079a537e37552a037437efe19430d3938c6630d71eced65cb60e9a52f730a25200403fdf3c4d738edc99b51004bebd838"
         }
       ]
     },
@@ -336,7 +339,8 @@
         "mint_quote_inputs": [
           {
             "amount": 4,
-            "quote_id": "quote-mint-0004"
+            "quote_id": "quote-mint-0004",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812"
           }
         ],
         "blinded_outputs": [
@@ -347,12 +351,12 @@
           }
         ]
       },
-      "transcript": "1200160100010402000f71756f74652d6d696e742d3030303421005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
-      "digest": "f8584f27ad5c0c4823899c2f47fba5928a2fcda2cb016d7ca269be3e36dbcd85",
+      "transcript": "12003a0100010402000f71756f74652d6d696e742d303030340300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d20981221005b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55",
+      "digest": "7db5f2b9b50d7a4883b80f96885d21675e3c841945d70994649d147e8744f2a2",
       "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
-      "input_id": "42be43dc79f7a9f1d52c1462ceb32680d4192d268d0fdcbad280e5e6a29f8974",
-      "input_digest": "1176da321d81c97ef5d3f386a9fcff123f03b927446f3f8ce81699ccb73065c6",
-      "signature": "2ef6bcf5de91e77f051eafcd23e2f9eee51339aed41490e1dcaf3ac2b9cbee0c06ca6da1498d75bfea2cdde08e3c74f59e317a0bd09fe7dcc905188249102694"
+      "input_id": "b2b5f1be66f3ac7a12fec7f3f063d0399793a70fbcbee81d39a9a279a908d9bd",
+      "input_digest": "7c8e461d87bdcb275810c2bc00a5b33f87c1d2789ffac120262f7a2b04177564",
+      "signature": "37ce63cb54e3e6cb9fd075abb754c1e098305ccb73fcdedd4981262c4e03957561569b3604bf5932aaec54b911647756222fa1a88f951eed0ed9bdd6a6a05105"
     }
   },
   "tokens_v4": {
@@ -523,5 +527,11 @@
       "witness_hash": "f3de76772ca0d0f2dff1d0962c6ba8ecf3b836c8fceae72b6173de0b98364cca",
       "commitment": "c16eff5d1be84d29edf8653880995dcf159dc593323b3d5171f8568b90c57891"
     }
+  },
+  "transport_strings": {
+    "comment": "Prefix plus base64url of the JSON. The signing package is the auditable lock spent in the pinned swap; the spend receipt is the swap bearer input.",
+    "signing_package": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWFiYTQ2YTQ2M2QzZDEwYjU5ZmExNTMyYTMyZDlhNWU4ZmE4ZTk5NjJhOGM2NTcxOTE3OTgxYTZmYTRkNWZhZmIwOGMyMWJiZmY5NDE4OWUyNGU1YzI1NmZjMGE3ZmU3MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDViMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMzBiNDJhMGJjYzM5NTk4ZGIxZGNhNjE3YWVlYTZiYzM2N2YyNTY2NjM2ODI2ZGM5NjFhNTRmYWFlMTViM2I4ZDEwYWZjMWNiMDIwNmU3MGFiM2IwZTEyYzJiOTQ3OGNkNTUyMTAwNWIwMTAwMDEwNDAyMDAyMTAyYjdlMDc3ZDAyMGZhYmVkNDU2YTZiZTEzOGE4ZTIwZTllZjQwYjQ0ZDg3M2ZhMTJjMDA1YjY1NmViMGNmOTlmNjAzMDAzMGI0MmEwYmNjMzk1OThkYjFkY2E2MTdhZWVhNmJjMzY3ZjI1NjY2MzY4MjZkYzk2MWE1NGZhYWUxNWIzYjhkMTBhZmMxY2IwMjA2ZTcwYWIzYjBlMTJjMmI5NDc4Y2Q1NSIsInNwZW5kcyI6W3siaW5wdXQiOjAsInNlY3JldCI6IjAyZmMxMWJmNGY5MzlmMmJmZDQ3ZTRjZWU3OTljODI1NGZjNGFjYzI3YTEzNGM3MjllZGZjM2M2YTNjMTNhMDUzYiIsImxlYWYiOiIwMDAxMDIwMDAxMDEwNDAwMjEwMmY5MzA4YTAxOTI1OGMzMTA0OTM0NGY4NWY4OWQ1MjI5YjUzMWM4NDU4MzZmOTliMDg2MDFmMTEzYmNlMDM2ZjkwYTAwMDEwMSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6W119XX0",
+    "signing_package_signed": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWFiYTQ2YTQ2M2QzZDEwYjU5ZmExNTMyYTMyZDlhNWU4ZmE4ZTk5NjJhOGM2NTcxOTE3OTgxYTZmYTRkNWZhZmIwOGMyMWJiZmY5NDE4OWUyNGU1YzI1NmZjMGE3ZmU3MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDViMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMzBiNDJhMGJjYzM5NTk4ZGIxZGNhNjE3YWVlYTZiYzM2N2YyNTY2NjM2ODI2ZGM5NjFhNTRmYWFlMTViM2I4ZDEwYWZjMWNiMDIwNmU3MGFiM2IwZTEyYzJiOTQ3OGNkNTUyMTAwNWIwMTAwMDEwNDAyMDAyMTAyYjdlMDc3ZDAyMGZhYmVkNDU2YTZiZTEzOGE4ZTIwZTllZjQwYjQ0ZDg3M2ZhMTJjMDA1YjY1NmViMGNmOTlmNjAzMDAzMGI0MmEwYmNjMzk1OThkYjFkY2E2MTdhZWVhNmJjMzY3ZjI1NjY2MzY4MjZkYzk2MWE1NGZhYWUxNWIzYjhkMTBhZmMxY2IwMjA2ZTcwYWIzYjBlMTJjMmI5NDc4Y2Q1NSIsInNwZW5kcyI6W3siaW5wdXQiOjAsInNlY3JldCI6IjAyZmMxMWJmNGY5MzlmMmJmZDQ3ZTRjZWU3OTljODI1NGZjNGFjYzI3YTEzNGM3MjllZGZjM2M2YTNjMTNhMDUzYiIsImxlYWYiOiIwMDAxMDIwMDAxMDEwNDAwMjEwMmY5MzA4YTAxOTI1OGMzMTA0OTM0NGY4NWY4OWQ1MjI5YjUzMWM4NDU4MzZmOTliMDg2MDFmMTEzYmNlMDM2ZjkwYTAwMDEwMSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyJlOGRjMzgzOWQ2NDQ4NWY3NTU1NWQ5YjQ1OWFiMGYwY2FiNDZkNWEwNDIwYmI4MGY2NjFiMjUzZTk0MzFkMGU0MjUyNmY5NzRmNDExOGM1MmY5NWIxMjQyN2Y5Y2ZkMmFkMjRmYTdkM2MyYzkzNTYwYTA4MDYzZjg0OTAyNjEwMCJdfV19",
+    "spend_receipt": "nutrcAeyJ0b2tlbiI6ImNhc2h1Qm8yRnRjV2gwZEhCek9pOHZiV2x1ZEM1MFpYTjBZWFZqYzJGMFlYU0JvbUZwU0FLMzRIZlFJUHEtWVhDQnBHRmhDR0Z6ZUVJd01tVTJaVGRqWm1FM1lqZ3laRFJpTTJJME5EbG1ZVFkwTmpaak9Ea3pORFk1WVRjeU4yUXdNakUwWkRRNFpHSTBPVFUyWVRZd05UUmlPREF5TW1FeU9XSmhZMWd3aE5HM0tScmxjMzg4aFJxalBLX2c5Nl9yWE10Tm9JYkVncnVGdDFKZVlWUl9HMXB0R2dHeF90SDVZTkdwMERNblluTnBvV0ZyV0NCSEdXM0FnUlVNNFRfUTVIaTR0eGd4dUNXLU9KSVJ5Y1ZxZ0dLbUd2Y0RSdyIsInJlY2VpcHRzIjpbeyJZIjoiYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczIiwia2V5c2V0SWQiOiIwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYiLCJpbnB1dERpZ2VzdCI6ImNiNDY0NDEzZDA4OGFlNzM4YjlmNzgxNDFhMDJkNDlmNTFjNmFkODUwMjliNmU0M2NiM2FjODZlZjMyNzk5MGUiLCJ3aXRuZXNzIjoie1wic2lnbmF0dXJlc1wiOltcIjQ1ZmE0ODI0MGY3NzkzYjc0OWFhNWE1YjdjNGE5YWJhZjgzNmE4MWRmYWE2OTBkZjIwYTYxZDY5MTZiODEyMTMwZmViZGIwMmUzODA2YmU1OWExZGQwMWEwM2JmOGVlNTEyNTJlNDJjZmY4N2E2ZTA2NWFhMWRhYTJjNWU5YzBhXCJdfSIsImNvbW1pdG1lbnQiOiI5MGQ1ZTBiZGZkOWY4OTNjNjY2Y2I0NWUzOTdhMWU1ODIxNjU5ZTJjYmJhYzdjOWU1MzA2NjcwNDQwZjFlNDE1IiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczMDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDViMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMzBiNDJhMGJjYzM5NTk4ZGIxZGNhNjE3YWVlYTZiYzM2N2YyNTY2NjM2ODI2ZGM5NjFhNTRmYWFlMTViM2I4ZDEwYWZjMWNiMDIwNmU3MGFiM2IwZTEyYzJiOTQ3OGNkNTUyMTAwNWIwMTAwMDEwNDAyMDAyMTAyYjdlMDc3ZDAyMGZhYmVkNDU2YTZiZTEzOGE4ZTIwZTllZjQwYjQ0ZDg3M2ZhMTJjMDA1YjY1NmViMGNmOTlmNjAzMDAzMGI0MmEwYmNjMzk1OThkYjFkY2E2MTdhZWVhNmJjMzY3ZjI1NjY2MzY4MjZkYzk2MWE1NGZhYWUxNWIzYjhkMTBhZmMxY2IwMjA2ZTcwYWIzYjBlMTJjMmI5NDc4Y2Q1NSJ9XX0"
   }
 }

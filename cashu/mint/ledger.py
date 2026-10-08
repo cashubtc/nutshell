@@ -893,6 +893,9 @@ class Ledger(
         v3 = is_bls_keyset(payload.outputs[0].id)
         if v3 and not payload.quote_amounts:
             raise TransactionError("a v3 batch must carry quote_amounts")
+        # Every quote input commits its lock key, so one unlocked quote breaks the whole transcript.
+        if v3 and not all(q.pubkey for q in quotes):
+            raise TransactionError("minting on a v3 keyset requires a locked quote.")
 
         # Check amount balance
         if payload.quote_amounts:
@@ -936,7 +939,9 @@ class Ledger(
                 quote,
                 payload.outputs,
                 sig,
-                batch_quotes=list(zip(payload.quotes, quote_amounts)),
+                batch_quotes=[
+                    (q.quote, a, q.pubkey) for q, a in zip(quotes, quote_amounts)
+                ],
             ):
                 raise QuoteSignatureInvalidError()
 

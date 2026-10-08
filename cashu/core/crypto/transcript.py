@@ -4,9 +4,9 @@ One shared digest, one derived message per input:
 transaction_digest = SHA256(TLV stream); each input carries
 one BIP-340 signature over its input digest,
 tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
-container record)). Containers: 0x01 proof input, 0x02 mint quote input,
-0x03 blinded message output, 0x04 melt quote output. Container types
-ascend (inputs before outputs by construction); elements keep request
+container record)). Containers: 0x11 proof input, 0x12 mint quote input
+(which commits the quote's lock key), 0x21 blinded message output, 0x22 melt
+quote output. Container types ascend (inputs before outputs by construction); elements keep request
 order within their type; field streams inside are ascending unique.
 Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the
 shared vectors.
@@ -40,6 +40,7 @@ class TranscriptProofInput:
 class TranscriptQuote:
     amount: int
     quote_id: str
+    pubkey: Optional[bytes] = None  # 33-byte lock key; required on a mint quote input
 
 
 @dataclass
@@ -77,12 +78,23 @@ def _proof_input_container(p: TranscriptProofInput) -> bytes:
     )
 
 
-def _quote_container(container_type: int, q: TranscriptQuote) -> bytes:
+def _quote_container(
+    container_type: int, q: TranscriptQuote, fields: bytes = b""
+) -> bytes:
     if not q.quote_id:
         raise ValueError("Transcript quote id must be non-empty")
     return tlv_record(
         container_type,
-        _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8")),
+        _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8")) + fields,
+    )
+
+
+def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
+    # The container commits the lock key, so an offline co-signer can tell which key the input needs.
+    if q.pubkey is None or len(q.pubkey) != 33:
+        raise ValueError("Transcript mint quote input needs its 33-byte lock key")
+    return _quote_container(
+        _CONTAINER_MINT_QUOTE_INPUT, q, tlv_record(0x03, q.pubkey)
     )
 
 
@@ -112,7 +124,7 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
         raise ValueError("Transaction repeats a mint quote input")
     return (
         b"".join(_proof_input_container(p) for p in proofs)
-        + b"".join(_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q) for q in mint_quotes)
+        + b"".join(_mint_quote_input_container(q) for q in mint_quotes)
         + b"".join(_blinded_output_container(o) for o in blinded)
         + b"".join(_quote_container(_CONTAINER_MELT_QUOTE_OUTPUT, q) for q in melt_quotes)
     )
@@ -156,7 +168,7 @@ def transaction_inputs(
     quotes = {
         q.quote_id: InputContext(container=c, digest=input_digest(digest, c))
         for q in (tx.mint_quote_inputs or [])
-        for c in [_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q)]
+        for c in [_mint_quote_input_container(q)]
     }
     return digest, proofs, quotes
 
