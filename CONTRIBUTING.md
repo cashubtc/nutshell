@@ -142,6 +142,16 @@ A test can also choose the outcome of a single melt. If the description of the i
 
 All four fields are required. States are `PAID` (or `SETTLED`), `PENDING`, `FAILED` (or `UNPAID`) and `UNKNOWN`. `pay_err` makes the payment raise and `check_err` makes the status check raise. The format matches the CDK fake wallet, and `get_fake_invoice` in `tests/helpers.py` builds such an invoice.
 
+### Released mint compatibility
+
+CI also runs the wallet tests against the latest patch of the three most recent releases, using the `cashubtc/nutshell` Docker images. To run them against one release:
+
+```bash
+CASHU_TEST_MINT_IMAGE=cashubtc/nutshell:0.20.3 make test-wallet-compatibility
+```
+
+The mint must use `FakeWallet` (a local `.env` overrides this) and logs to `test_data/released-mint.log`. `make compatibility-targets` lists the current targets. Against mints older than `MINIMUM_MINT_VERSION` in [tests/compatibility.py](tests/compatibility.py), failures caused by the known incompatibility are reported as expected.
+
 ### Lightning regtest
 
 There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest-enviroment) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.
