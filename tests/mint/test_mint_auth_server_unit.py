@@ -5,6 +5,7 @@ import jwt
 import pytest
 
 from cashu.core.base import AuthProof, BlindedMessage, BlindedSignature, Proof
+from cashu.core.db import Database
 from cashu.core.errors import (
     BlindAuthAmountExceededError,
     BlindAuthFailedError,
@@ -16,6 +17,7 @@ from cashu.core.errors import (
 from cashu.core.secret import Secret, Tags
 from cashu.core.settings import settings
 from cashu.mint.auth.base import User
+from cashu.mint.auth.crud import AuthLedgerCrudSqlite
 from cashu.mint.auth.server import AuthLedger
 
 
@@ -28,6 +30,18 @@ def _ledger() -> AuthLedger:
 def _auth_token(secret: str = "secret", proof_id: str = "kid") -> str:
     proof = Proof(id=proof_id, amount=1, C="00", secret=secret)
     return AuthProof.from_proof(proof).to_base64()
+
+
+def test_auth_ledger_uses_auth_crud(tmp_path):
+    ledger = AuthLedger(
+        db=Database("auth", str(tmp_path / "auth_crud")),
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+
+    assert isinstance(ledger.crud, AuthLedgerCrudSqlite)
+    assert ledger.auth_crud is ledger.crud
 
 
 @pytest.mark.parametrize(

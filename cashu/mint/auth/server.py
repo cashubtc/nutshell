@@ -15,7 +15,6 @@ from ...core.errors import (
 )
 from ...core.nuts import nut10
 from ...core.settings import settings
-from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
 from ..limit import assert_limit
 from .base import User
@@ -36,7 +35,7 @@ class AuthLedger(Ledger):
         seed_decryption_key: Optional[str] = None,
         derivation_path="",
         amounts: Optional[List[int]] = None,
-        crud=LedgerCrudSqlite(),
+        crud=AuthLedgerCrudSqlite(),
     ):
         super().__init__(
             db=db,
@@ -47,6 +46,7 @@ class AuthLedger(Ledger):
             crud=crud,
             amounts=amounts,
         )
+        self.auth_crud = crud
         self.oicd_discovery_url = settings.mint_auth_oicd_discovery_url or ""
 
     async def init_auth(self):
@@ -57,7 +57,6 @@ class AuthLedger(Ledger):
         self.jwks_url = self.oicd_discovery_json["jwks_uri"]
         self.jwks_client = jwt.PyJWKClient(self.jwks_url)
         logger.info(f"Getting JWKS from: {self.jwks_url}")
-        self.auth_crud = AuthLedgerCrudSqlite()
         self.issuer: str = self.oicd_discovery_json["issuer"]
         logger.info(f"Initialized OpenID Connect: {self.issuer}")
 
