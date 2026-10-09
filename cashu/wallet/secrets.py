@@ -229,6 +229,9 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         if self.seed is None:
             raise RuntimeError("Seed not initialized yet.")
         scope_bytes = bytes.fromhex(scope)
+        # NUT-13: the full keyset id or the mint identity key, never a short id.
+        if len(scope_bytes) != 33:
+            raise ValueError("V3 derivation scope must be 33 bytes")
         base = (
             b"Cashu_KDF_HMAC_SHA256"
             + len(scope_bytes).to_bytes(4, byteorder="big", signed=False)

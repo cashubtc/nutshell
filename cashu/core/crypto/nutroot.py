@@ -514,7 +514,6 @@ def verify_script_path_spend(
     digest: bytes,
     witness: NutrootWitness,
     now: Optional[float] = None,
-    preimage_max_len: int = 32,
     outputs: Optional[bytes] = None,
 ) -> NutrootLeaf:
     """Verify a script-path witness: commitment, then evaluate the revealed leaf.
@@ -549,8 +548,8 @@ def verify_script_path_spend(
         if preimage_hex is None:
             raise ValueError("hashlock leaf requires a preimage")
         preimage = bytes.fromhex(preimage_hex)
-        if len(preimage) > preimage_max_len:
-            raise ValueError("hashlock preimage too long")
+        if len(preimage) != 32:
+            raise ValueError("hashlock preimage is not 32 bytes")
         if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
 
@@ -561,11 +560,20 @@ def verify_script_path_spend(
         if hashlib.sha256(outputs).digest() != leaf.hash:
             raise ValueError("template leaf does not match the transaction outputs")
 
+    if leaf.type != "hashlock" and witness.preimage is not None:
+        raise ValueError("preimage on a leaf that is not a hashlock")
     signatures = witness.signatures
     # Bounded at the leaf's key count (NUT-10): thresholds count satisfied
     # keys, so extras beyond that can never verify and are rejected outright.
     if len(signatures) > len(leaf.keys):
         raise ValueError("more signatures than leaf keys")
+    for sig_hex in signatures:
+        try:
+            well_formed = len(bytes.fromhex(sig_hex)) == 64
+        except ValueError:
+            well_formed = False
+        if not well_formed:
+            raise ValueError("malformed signature entry")
     unique_sigs = list(dict.fromkeys(signatures))
     satisfied_keys = set()
     for key in leaf.keys:
