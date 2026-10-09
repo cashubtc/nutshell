@@ -832,7 +832,9 @@ class Ledger(
                 raise QuoteExpiredError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
-            async with self.db.get_connection() as conn:
+            async with self.db.get_connection(
+                locks=[self.db_write._mint_quotes_lock([quote_id])]
+            ) as conn:
                 issued_quotes = await self.db_write._issue_mint_quotes(
                     quote_ids=[quote_id],
                     amounts=[quote.amount],
@@ -974,7 +976,11 @@ class Ledger(
             # Validate amounts under the quote locks before signing, and commit
             # signatures and quote accounting together so restore cannot expose
             # signatures from a failed mint.
-            async with self.db.get_connection() as conn:
+            # Acquire locks before yielding the connection so transient
+            # contention uses Database.connect's retry loop.
+            async with self.db.get_connection(
+                locks=[self.db_write._mint_quotes_lock(payload.quotes)]
+            ) as conn:
                 issued_quotes = await self.db_write._issue_mint_quotes(
                     quote_ids=payload.quotes,
                     amounts=quote_amounts,

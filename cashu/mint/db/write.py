@@ -396,6 +396,22 @@ class DbWriteHelper:
             await self.events.submit(quote)
         return quotes
 
+    @staticmethod
+    def _mint_quotes_lock(quote_ids: List[str]) -> LockOptions:
+        """Describe the quote row locks required by mint issuance."""
+        lock_parameters = {
+            f"quote_{i}": quote_id for i, quote_id in enumerate(sorted(quote_ids))
+        }
+        return LockOptions(
+            table="mint_quotes",
+            select_statement=(
+                "quote IN ("
+                + ", ".join(f":{parameter}" for parameter in lock_parameters)
+                + ")"
+            ),
+            parameters=lock_parameters,
+        )
+
     async def _issue_mint_quotes(
         self,
         quote_ids: List[str],
@@ -423,22 +439,9 @@ class DbWriteHelper:
             return []
 
         quotes: List[MintQuote] = []
-        lock_parameters = {f"quote_{i}": q for i, q in enumerate(quote_ids)}
-        lock_select_statement = (
-            "quote IN ("
-            + ", ".join([f":quote_{i}" for i in range(len(quote_ids))])
-            + ")"
-        )
-
         async with self.db.get_connection(
             conn=conn,
-            locks=[
-                LockOptions(
-                    table="mint_quotes",
-                    select_statement=lock_select_statement,
-                    parameters=lock_parameters,
-                )
-            ],
+            locks=[self._mint_quotes_lock(quote_ids)],
         ) as conn:
             for quote_id, amount in zip(quote_ids, amounts):
                 quote = await self.crud.get_mint_quote(

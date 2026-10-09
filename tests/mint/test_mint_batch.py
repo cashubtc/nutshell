@@ -7,13 +7,14 @@ import pytest_asyncio
 
 from cashu.core.base import MintQuoteState
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.db import LockOptions
 from cashu.core.errors import BatchDuplicateQuotesError, BatchSizeExceededError
 from cashu.core.models import PostMintBatchRequest, PostMintQuoteCheckRequest
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import pay_if_regtest
+from tests.helpers import is_postgres, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 
@@ -1192,3 +1193,86 @@ async def test_mint_signing_failure_rolls_back_signatures_and_accounting(
     quote = await ledger.get_mint_quote(mint_quote.quote)
     assert quote.issued
     assert quote.amount_issued == 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_postgres, reason="Requires PostgreSQL row locks")
+@pytest.mark.parametrize("batch", [True, False])
+async def test_mint_retries_contended_issuance_lock(
+    ledger: Ledger, wallet: Wallet, monkeypatch, batch
+):
+    """Contention after PENDING must retry before the issuance transaction starts."""
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    assert (await ledger.get_mint_quote(mint_quote.quote)).paid
+
+    secrets, rs, _ = await wallet.generate_secrets_from_to(50000, 50000)
+    outputs, _ = wallet._construct_outputs([64], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+    contention_seen = asyncio.Event()
+    lock_task = None
+
+    async def hold_quote_lock():
+        async with ledger.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": mint_quote.quote},
+                )
+            ]
+        ):
+            lock_held.set()
+            await release_lock.wait()
+
+    pending_method = "_set_mint_quotes_pending" if batch else "_set_mint_quote_pending"
+    original_set_pending = getattr(ledger.db_write, pending_method)
+    original_acquire_lock = ledger.db._acquire_lock
+
+    async def set_pending_then_hold_lock(*args, **kwargs):
+        nonlocal lock_task
+        result = await original_set_pending(*args, **kwargs)
+        lock_task = asyncio.create_task(hold_quote_lock())
+        await asyncio.wait_for(lock_held.wait(), timeout=5)
+        return result
+
+    async def observe_lock_contention(conn, lock):
+        try:
+            await original_acquire_lock(conn, lock)
+        except Exception:
+            if lock_held.is_set():
+                contention_seen.set()
+                release_lock.set()
+            raise
+
+    monkeypatch.setattr(ledger.db_write, pending_method, set_pending_then_hold_lock)
+    monkeypatch.setattr(ledger.db, "_acquire_lock", observe_lock_contention)
+
+    try:
+        if batch:
+            promises = await ledger.mint_batch(
+                PostMintBatchRequest(
+                    quotes=[mint_quote.quote],
+                    outputs=outputs,
+                    signatures=[signature],
+                )
+            )
+        else:
+            promises = await ledger.mint(
+                quote_id=mint_quote.quote, outputs=outputs, signature=signature
+            )
+    finally:
+        release_lock.set()
+        if lock_task is not None:
+            await lock_task
+
+    assert contention_seen.is_set()
+    assert sum(p.amount for p in promises) == 64
+    assert (await ledger.restore(outputs))[1] == promises
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.issued
+    assert quote.amount_issued == quote.amount_paid == 64
