@@ -16,8 +16,18 @@ runs:
         BACKEND: ${{ inputs.backend-wallet-class }}
       run: |
         chmod -R 777 .
+        startup_args=()
         if [ "$BACKEND" = "SparkL2Wallet" ]; then
-          bash ./start.sh --spark
-        else
-          bash ./start.sh
+          startup_args+=(--spark)
         fi
+        # start.sh resets the environment before each attempt. Channel graph
+        # announcements can race the first fee-policy update during startup.
+        for attempt in 1 2; do
+          if bash ./start.sh "${startup_args[@]}"; then
+            exit 0
+          fi
+          if [ "$attempt" -eq 1 ]; then
+            echo "::warning::Regtest startup failed; resetting and retrying once."
+          fi
+        done
+        exit 1
