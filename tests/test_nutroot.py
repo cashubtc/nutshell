@@ -399,6 +399,20 @@ async def test_nut13_v3_secret_derivation_vectors():
         assert expected_pub and expected_pub.format() == secret
 
 
+def test_nut13_v3_scope_must_be_33_bytes():
+    """A short keyset id, an empty scope or a bare x-only key is not a derivation scope."""
+    from cashu.wallet.secrets import WalletSecrets
+
+    nut13 = VECTORS["nut13_v3"]
+    secrets = WalletSecrets()
+    secrets.seed = bytes(64)
+    for scope in (nut13["keyset_id"][:16], "", nut13["mint_identity"][2:]):
+        with pytest.raises(ValueError, match="33 bytes"):
+            secrets.derive_v3_secret_key(0, scope)
+        with pytest.raises(ValueError, match="33 bytes"):
+            secrets.derive_v3_quote_lock_key(0, scope)
+
+
 @pytest.mark.asyncio
 async def test_nut13_v3_derivation_type_vectors():
     """Each purpose gets its own derivation type over the framed V3 message.
