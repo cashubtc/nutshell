@@ -85,6 +85,26 @@ async def test_mint(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_mint_quote_witness_commits_amount_issued(ledger: Ledger):
+    # A partial draw: the quote input commits the amount issued, not the quote amount.
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
+    outputs = [
+        BlindedMessage(
+            amount=4,
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
+            id=ledger.keyset.id,
+        )
+    ]
+    issued = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey)
+    face = nut20.sign_mint_quote_v3(quote.quote, 8, outputs, privkey)
+    assert ledger._verify_mint_quote_witness(quote, outputs, issued)
+    assert not ledger._verify_mint_quote_witness(quote, outputs, face)
+
+
+@pytest.mark.asyncio
 async def test_mint_invalid_quote(ledger: Ledger):
     await assert_err(
         ledger.get_mint_quote(quote_id="invalid_quote_id"),

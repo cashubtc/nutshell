@@ -31,7 +31,7 @@ def sign_batch_v3(quote_list, outputs, privkey, for_quote=None):
     """Sign one quote's v3 input digest over the batch transcript (all quote
     inputs + outputs). Defaults to the first quote."""
     return nut20.sign_mint_quote_batch_v3(
-        [(q.quote, q.amount) for q in quote_list],
+        [(q.quote, q.amount, q.pubkey) for q in quote_list],
         outputs,
         privkey,
         (for_quote or quote_list[0]).quote,
@@ -106,16 +106,39 @@ async def test_ledger_mint_batch_unlocked_quote_rejected_on_v3(
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10200, 10201)
     outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
     assert is_bls_keyset(outputs[0].id), "wallet should be on the v3 keyset"
-    assert mint_quote1.privkey
-    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey, mint_quote1)
-
+    # No witness can be built: the transcript needs every quote's lock key.
     with pytest.raises(Exception, match="requires a locked quote"):
         await ledger.mint_batch(
             PostMintBatchRequest(
                 quotes=[mint_quote1.quote, mint_quote2.quote],
                 quote_amounts=[64, 32],
                 outputs=outputs,
-                signatures=[sig1, None],
+                signatures=["00" * 64, None],
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_v3_requires_quote_amounts(
+    ledger: Ledger, wallet: Wallet
+):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, _ = await wallet.generate_secrets_from_to(10300, 10301)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+    assert is_bls_keyset(outputs[0].id), "wallet should be on the v3 keyset"
+    assert mint_quote1.privkey and mint_quote2.privkey
+    quotes = [mint_quote1, mint_quote2]
+    sigs = [sign_batch_v3(quotes, outputs, q.privkey, q) for q in quotes]
+
+    with pytest.raises(Exception, match="must carry quote_amounts"):
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[q.quote for q in quotes], outputs=outputs, signatures=sigs
             )
         )
 
