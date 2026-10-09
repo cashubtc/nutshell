@@ -1360,3 +1360,23 @@ async def m040_add_digest_to_proofs(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('proofs_pending')} ADD COLUMN digest TEXT DEFAULT NULL"
         )
+
+
+async def m041_add_transactions(db: Database):
+    """NUT-XX transaction records, keyed by transaction digest."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("transactions")} (
+                digest TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                melt_quote TEXT,
+                mint_quotes TEXT NOT NULL,
+                change_outputs TEXT NOT NULL,
+                excess {db.big_int} NOT NULL,
+                change_quotes TEXT,
+                created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}
+            );
+            """
+        )

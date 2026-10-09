@@ -35,6 +35,13 @@ from .mint_quote import (
 )
 from .restore import PostRestoreRequest, PostRestoreResponse
 from .swap import PostSwapRequest, PostSwapResponse
+from .transaction import (
+    PostTransactionRequest,
+    PostTransactionResponse,
+    TransactionChangeOutput,
+    TransactionMeltOutput,
+    TransactionQuoteInput,
+)
 
 __all__ = [
     "PostAuthBlindMintRequest",
@@ -68,4 +75,9 @@ __all__ = [
     "PostRestoreResponse",
     "PostSwapRequest",
     "PostSwapResponse",
+    "PostTransactionRequest",
+    "PostTransactionResponse",
+    "TransactionChangeOutput",
+    "TransactionMeltOutput",
+    "TransactionQuoteInput",
 ]

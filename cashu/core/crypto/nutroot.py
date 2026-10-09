@@ -105,6 +105,14 @@ class NutrootWitness(BaseModel):
         return self.leaf is not None
 
 
+QUOTE_ID_TAG = "Cashu_QuoteId"
+
+
+def change_quote_id(pubkey: bytes) -> str:
+    """The id of the change quote locked to a 33-byte key: one key, one quote."""
+    return tagged_hash(QUOTE_ID_TAG, pubkey).hex()
+
+
 def tagged_hash(tag: str, *messages: bytes) -> bytes:
     """BIP340-style tagged hash: SHA256(SHA256(tag) || SHA256(tag) || messages)."""
     tag_hash = hashlib.sha256(tag.encode()).digest()

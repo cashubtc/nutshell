@@ -20,6 +20,7 @@ from cashu.core.crypto.nutroot import (
     NUTROOT_TWEAK_TAG,
     NutrootLeaf,
     NutrootWitness,
+    change_quote_id,
     nutroot_branch_hash,
     nutroot_leaf_hash,
     nutroot_merkle_path,
@@ -515,6 +516,7 @@ def _tx_from_vector(tx: dict):
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
+        TranscriptChangeOutput,
         TranscriptProofInput,
         TranscriptQuote,
     )
@@ -530,7 +532,11 @@ def _tx_from_vector(tx: dict):
             for p in tx.get("proof_inputs", [])
         ],
         mint_quote_inputs=[
-            TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
+            TranscriptQuote(
+                amount=q["amount"],
+                quote_id=q["quote_id"],
+                pubkey=bytes.fromhex(q["lock_pubkey"]),
+            )
             for q in tx.get("mint_quote_inputs", [])
         ],
         blinded_outputs=[
@@ -545,6 +551,12 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
+        change_quote_outputs=[
+            TranscriptChangeOutput(
+                pubkey=bytes.fromhex(c["pubkey"]), amount=c.get("amount")
+            )
+            for c in tx.get("change_quote_outputs", [])
+        ],
     )
 
 
@@ -555,11 +567,48 @@ def test_transaction_transcript_vectors():
     )
 
     tv = VECTORS["transcript"]
-    for name in ("swap", "mint", "melt", "melt_with_change"):
+    for name in (
+        "swap",
+        "mint",
+        "melt",
+        "melt_with_change",
+        "mint_quote_to_melt",
+        "proof_to_change",
+        "proof_to_two_changes",
+    ):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
         assert build_transaction_transcript(tx).hex() == example["transcript"]
         assert transaction_digest(tx).hex() == example["digest"]
+
+
+def test_transaction_vectors_input_digests():
+    from cashu.core.crypto.transcript import transaction_inputs
+
+    tv = VECTORS["transcript"]
+    quote_tx = tv["mint_quote_to_melt"]
+    _, _, quotes = transaction_inputs(_tx_from_vector(quote_tx["tx"]))
+    context = quotes["quote-mint-0001"]
+    assert hashlib.sha256(context.container).hexdigest() == quote_tx["input_id"]
+    assert context.digest.hex() == quote_tx["input_digest"]
+
+    change_tx = tv["proof_to_change"]
+    assert change_tx["transcript"].endswith(change_tx["change_container"])
+    _, proofs, _ = transaction_inputs(_tx_from_vector(change_tx["tx"]))
+    (context,) = proofs.values()
+    assert context.digest.hex() == change_tx["input_digest"]
+    (change_out,) = change_tx["tx"]["change_quote_outputs"]
+    assert change_quote_id(bytes.fromhex(change_out["pubkey"])) == change_tx["quote_id"]
+
+    two_tx = tv["proof_to_two_changes"]
+    assert two_tx["transcript"].endswith("".join(two_tx["change_containers"]))
+    _, proofs, _ = transaction_inputs(_tx_from_vector(two_tx["tx"]))
+    (context,) = proofs.values()
+    assert context.digest.hex() == two_tx["input_digest"]
+    assert [
+        change_quote_id(bytes.fromhex(c["pubkey"]))
+        for c in two_tx["tx"]["change_quote_outputs"]
+    ] == two_tx["quote_ids"]
 
 
 def test_transcript_swap_signature_is_keypath_witness():
@@ -636,15 +685,15 @@ def test_transcript_mixed_keyset_vector_names_inputs_by_y():
         ],
     )
     transcript = build_transaction_transcript(tx)
-    assert transcript.hex() == "01008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba203005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+    assert transcript.hex() == "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033271100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba221005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5521005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
     assert inputs[0]["secret"] not in transcript.hex()
     assert inputs[1]["secret"].encode().hex() not in transcript.hex()
     digest, proof_contexts, _ = transaction_inputs(tx)
-    assert digest.hex() == "e8eb75f3f209bbf592e7cc7ed727dcd33fe118add5ab7a992a3a2d7a9392d893"
+    assert digest.hex() == "f3eda61cef37e0ea952968fecf7a54fa2ee31fd5b9b62a3ec0e6cbcab5675f0e"
     v3 = proof_contexts[bytes.fromhex("a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73")]
-    assert v3.digest.hex() == "3f48aab72fb7ec0e29d1fa49e4e194f09110068fe94a95e8553f53755af55837"
+    assert v3.digest.hex() == "a01808ebee8586577034824a151a2558910496144b5fa020dbfd431f3b421021"
     legacy = proof_contexts[bytes.fromhex("029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae")]
-    assert hashlib.sha256(legacy.container).hexdigest() == "22df4d688b7337f49aa47dd5d0dc6578506229c36908d79608c50d7814d1bd04"
+    assert hashlib.sha256(legacy.container).hexdigest() == "efbdd5d14874cb021fc962d93a9848553ca65ae101e9b57f6678aa37ffe1ebd9"
 
 
 def test_transcript_rejects_empty_sections():
@@ -721,6 +770,18 @@ def test_mint_verifies_nutroot_transaction_witnesses():
     proofs[0].secret = "not-a-point-secret"
     proofs[0].witness = "not-json"
     verify(proofs, outputs)
+
+
+def test_quote_witness_with_malformed_lock_key_is_invalid():
+    from cashu.core.nuts import nut20
+
+    privkey, _ = nut20.generate_keypair()
+    _, _, outputs = _swap_vector_proofs_and_outputs()
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
+    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig)
+    assert not nut20.verify_mint_quote_v3(
+        "qid", 8, outputs, "02" + "00" * 32, sig, batch_quotes=[("qid", 8, "")]
+    )
 
 
 def test_quote_key_path_witness_takes_exactly_one_signature():
