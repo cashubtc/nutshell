@@ -1414,7 +1414,7 @@ class Ledger(
         if melt_quote.pending:
             raise QuotePendingError(f"melt quote is not unpaid: {melt_quote.state}")
 
-        unit, _ = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
+        unit, method = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
 
         # make sure that the proofs are in the same unit as the quote
         self._verify_proofs_unit(proofs, expected_unit=unit)
@@ -1442,6 +1442,10 @@ class Ledger(
             raise TransactionError(
                 f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
+
+        if melt_quote.expiry is not None and melt_quote.expiry < time.time():
+            raise QuoteExpiredError("quote expired")
+        self.backends[method][unit].validate_payment_request(melt_quote.request)
 
         # set quote and proofs to pending to avoid race conditions
         melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
@@ -1486,6 +1490,8 @@ class Ledger(
                     preimage=melt_quote.payment_preimage,
                 )
                 return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+            # Revalidate after preparation, before any backend payment is submitted.
+            self.backends[method][unit].validate_payment_request(melt_quote.request)
         except Exception as e:
             logger.debug(f"Melt failed before backend payment: {e}")
             await self._finalize_melt_failed(
