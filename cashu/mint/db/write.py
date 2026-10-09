@@ -397,7 +397,11 @@ class DbWriteHelper:
         return quotes
 
     async def _issue_mint_quotes(
-        self, quote_ids: List[str], amounts: List[int]
+        self,
+        quote_ids: List[str],
+        amounts: List[int],
+        conn: Optional[Connection] = None,
+        emit_events: bool = True,
     ) -> List[MintQuote]:
         """Issues multiple pending mint quotes (NUT-29 batch mint).
 
@@ -410,6 +414,10 @@ class DbWriteHelper:
             quote_ids (List[str]): List of mint quote IDs to issue.
             amounts (List[int]): Amount issued per quote, in the same order as
                 quote_ids.
+            conn (Optional[Connection]): Connection to reuse for atomic signature
+                storage and quote accounting.
+            emit_events (bool): Submit quote events. Disable when the caller
+                submits them after committing its transaction.
         """
         if not quote_ids:
             return []
@@ -423,6 +431,7 @@ class DbWriteHelper:
         )
 
         async with self.db.get_connection(
+            conn=conn,
             locks=[
                 LockOptions(
                     table="mint_quotes",
@@ -467,8 +476,9 @@ class DbWriteHelper:
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
 
-        for quote in quotes:
-            await self.events.submit(quote)
+        if emit_events:
+            for quote in quotes:
+                await self.events.submit(quote)
         return quotes
 
     async def _set_melt_quote_pending(

@@ -762,8 +762,8 @@ class Ledger(
 
         quotes: List[Optional[MintQuote]] = []
         for quote_id in payload.quotes:
-            # overlong IDs are definitionally unknown; never hit the db with them
-            if len(quote_id) > MAX_QUOTE_ID_LEN:
+            # Empty and overlong IDs are unknown; never hit the db with them.
+            if not quote_id or len(quote_id) > MAX_QUOTE_ID_LEN:
                 quotes.append(None)
                 continue
             stored_quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
@@ -832,19 +832,23 @@ class Ledger(
                 raise QuoteExpiredError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
-            await self._store_blinded_messages(outputs, mint_id=quote_id)
-            promises = await self._sign_blinded_messages(outputs)
-            # Issue the quote: atomically increase amount_issued under the row
-            # lock instead of overwriting the accounting fields
-            await self.db_write._issue_mint_quotes(
-                quote_ids=[quote_id], amounts=[quote.amount]
-            )
+            async with self.db.get_connection() as conn:
+                issued_quotes = await self.db_write._issue_mint_quotes(
+                    quote_ids=[quote_id],
+                    amounts=[quote.amount],
+                    conn=conn,
+                    emit_events=False,
+                )
+                await self._store_blinded_messages(outputs, mint_id=quote_id, conn=conn)
+                promises = await self._sign_blinded_messages(outputs, conn)
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(
                 quote_id=quote_id, state=previous_state
             )
             raise e
 
+        for issued_quote in issued_quotes:
+            await self.events.submit(issued_quote)
         return promises
 
     @staticmethod
@@ -967,17 +971,20 @@ class Ledger(
         await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
-            # Store all blinded messages
-            await self._store_blinded_messages(
-                payload.outputs, mint_id=payload.quotes[0]
-            )
-            promises = await self._sign_blinded_messages(payload.outputs)
-
-            # Issue the quotes: atomically increase each quote's amount_issued
-            # (re-validated under the row lock against concurrent batches)
-            await self.db_write._issue_mint_quotes(
-                quote_ids=payload.quotes, amounts=quote_amounts
-            )
+            # Validate amounts under the quote locks before signing, and commit
+            # signatures and quote accounting together so restore cannot expose
+            # signatures from a failed mint.
+            async with self.db.get_connection() as conn:
+                issued_quotes = await self.db_write._issue_mint_quotes(
+                    quote_ids=payload.quotes,
+                    amounts=quote_amounts,
+                    conn=conn,
+                    emit_events=False,
+                )
+                await self._store_blinded_messages(
+                    payload.outputs, mint_id=payload.quotes[0], conn=conn
+                )
+                promises = await self._sign_blinded_messages(payload.outputs, conn)
         except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
@@ -985,6 +992,8 @@ class Ledger(
             )
             raise e
 
+        for issued_quote in issued_quotes:
+            await self.events.submit(issued_quote)
         return promises
 
     def create_internal_melt_quote(

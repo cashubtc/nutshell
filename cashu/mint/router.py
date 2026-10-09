@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 from pydantic import BeforeValidator
 
+from ..core.base import MintQuoteState
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
     GetInfoResponse,
@@ -113,9 +114,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -436,8 +435,34 @@ async def mint_quote_check(
 ) -> list[Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]]:
     logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
     quotes = await ledger.mint_quote_check(payload)
-    resp = [
-        (
+    resp: list[
+        Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]
+    ] = []
+    for quote_id, quote in zip(payload.quotes, quotes):
+        if quote is None:
+            resp.append(PostMintQuoteCheckUnknownResponse(quote=quote_id))
+            continue
+
+        # Migration m036 leaves legacy accounting NULL. Derive missing values
+        # before omitting state from the response, preserving explicit accounting.
+        state = quote.state
+        amount_paid = quote.amount_paid
+        amount_issued = quote.amount_issued
+        if amount_paid is None:
+            amount_paid = (
+                quote.amount
+                if state
+                in (
+                    MintQuoteState.paid,
+                    MintQuoteState.pending,
+                    MintQuoteState.issued,
+                )
+                else 0
+            )
+        if amount_issued is None:
+            amount_issued = quote.amount if state == MintQuoteState.issued else 0
+
+        resp.append(
             PostMintQuoteCheckResponse(
                 quote=quote.quote,
                 request=quote.request,
@@ -446,15 +471,11 @@ async def mint_quote_check(
                 method=quote.method,
                 expiry=quote.expiry,
                 pubkey=quote.pubkey,
-                amount_paid=quote.amount_paid or 0,
-                amount_issued=quote.amount_issued or 0,
+                amount_paid=amount_paid,
+                amount_issued=amount_issued,
                 updated_at=quote.updated_at or quote.created_time or int(time.time()),
             )
-            if quote
-            else PostMintQuoteCheckUnknownResponse(quote=quote_id)
         )
-        for quote_id, quote in zip(payload.quotes, quotes)
-    ]
     logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")
     return resp
 

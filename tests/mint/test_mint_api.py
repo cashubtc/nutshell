@@ -1,3 +1,5 @@
+import time
+
 import bolt11
 import httpx
 import pytest
@@ -739,6 +741,7 @@ async def test_mint_quote_check_returns_positional_unknown_quotes(
                 mint_quote1.quote,
                 "not-a-valid-quote-id",
                 "01989999-9999-7999-8999-999999999999",
+                "",
                 mint_quote2.quote,
             ]
         },
@@ -746,14 +749,56 @@ async def test_mint_quote_check_returns_positional_unknown_quotes(
 
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
-    assert len(result) == 4
+    assert len(result) == 5
     assert result[0]["quote"] == mint_quote1.quote
     assert result[1] == {"quote": "not-a-valid-quote-id", "unknown": True}
     assert result[2] == {
         "quote": "01989999-9999-7999-8999-999999999999",
         "unknown": True,
     }
-    assert result[3]["quote"] == mint_quote2.quote
+    assert result[3] == {"quote": "", "unknown": True}
+    assert result[4]["quote"] == mint_quote2.quote
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state, amount_paid, amount_issued, expected_paid, expected_issued",
+    [
+        (MintQuoteState.unpaid, None, None, 0, 0),
+        (MintQuoteState.paid, None, None, 64, 0),
+        (MintQuoteState.pending, None, None, 64, 0),
+        (MintQuoteState.issued, None, None, 64, 64),
+        (MintQuoteState.paid, 64, 32, 64, 32),
+    ],
+)
+async def test_mint_quote_check_derives_legacy_accounting(
+    ledger: Ledger,
+    wallet: Wallet,
+    state,
+    amount_paid,
+    amount_issued,
+    expected_paid,
+    expected_issued,
+):
+    mint_quote = await wallet.request_mint(64)
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    quote.state_val = state
+    quote.amount_paid = amount_paid
+    quote.amount_issued = amount_issued
+    # Keep the unpaid legacy quote from triggering a backend status update.
+    quote.last_checked = int(time.time()) + 60
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": [mint_quote.quote]},
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()[0]
+    assert result["amount_paid"] == expected_paid
+    assert result["amount_issued"] == expected_issued
+    assert "state" not in result
 
 
 @pytest.mark.asyncio
