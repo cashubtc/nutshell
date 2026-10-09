@@ -31,7 +31,10 @@ def ecdh_shared_secret(point: PublicKey, scalar: PrivateKey) -> bytes:
 
 def derive_blinding_scalar(zx: bytes, slot_index: int) -> int:
     """Derive a deterministic blinding scalar r_i from ECDH shared secret and slot index."""
-    i_byte = bytes([slot_index & 0xFF])
+    # One index byte: refuse anything that does not fit rather than wrap it onto another slot.
+    if not 0 <= slot_index <= 0xFF:
+        raise ValueError("P2BK: slot index out of range")
+    i_byte = bytes([slot_index])
     data = P2BK_DOMAIN_SEPARATOR + zx + i_byte
     r = int.from_bytes(hashlib.sha256(data).digest(), "big")
     if r == 0 or r >= SECP256K1_ORDER:

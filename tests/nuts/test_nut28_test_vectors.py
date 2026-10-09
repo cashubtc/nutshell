@@ -161,3 +161,9 @@ def test_example_proof_slot_0_round_trips():
     )
     assert derived is not None
     assert derived.to_hex() == DERIVED_PRIVKEY_HEX[0]
+
+
+@pytest.mark.parametrize("slot", [-1, 256])
+def test_blinding_scalar_refuses_slot_outside_one_byte(slot):
+    with pytest.raises(ValueError, match="slot index"):
+        derive_blinding_scalar(bytes(32), slot)
