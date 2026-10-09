@@ -206,6 +206,49 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_m040_seed_cleanup(tmp_path):
+    db = Database("mint", str(tmp_path / "mig_seed_cleanup"))
+
+    # Ensure schema is at latest so tables exist
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # Insert a keyset with both a plaintext and an encrypted seed
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("keysets")} (id, seed, encrypted_seed)
+            VALUES ('ks_encrypted', :seed, :encrypted_seed)
+            """,
+            {"seed": "plaintext", "encrypted_seed": "ciphertext"},
+        )
+        # Insert a keyset with only a plaintext seed
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("keysets")} (id, seed, encrypted_seed)
+            VALUES ('ks_plaintext', :seed, NULL)
+            """,
+            {"seed": "plaintext"},
+        )
+
+    # Run the migration under test directly
+    await mint_migrations.m040_remove_plaintext_seeds_with_encrypted_seed(db)
+
+    # Validate cleanup
+    async with db.connect() as conn:
+        row = await conn.fetchone(
+            f"SELECT seed, encrypted_seed FROM {db.table_with_schema('keysets')} WHERE id = 'ks_encrypted'"
+        )
+        assert row["seed"] == ""
+        assert row["encrypted_seed"] == "ciphertext"
+
+        row = await conn.fetchone(
+            f"SELECT seed, encrypted_seed FROM {db.table_with_schema('keysets')} WHERE id = 'ks_plaintext'"
+        )
+        assert row["seed"] == "plaintext"
+        assert row["encrypted_seed"] is None
+
+
+@pytest.mark.asyncio
 async def test_m029_witness_cleanup(tmp_path):
     db = Database("mint", str(tmp_path / "mig_witness_cleanup"))
 
