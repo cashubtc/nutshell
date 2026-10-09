@@ -2,7 +2,7 @@ import asyncio
 import html
 import os
 import time
-from typing import Annotated
+from typing import Annotated, Union
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from loguru import logger
 from pydantic import BeforeValidator
 
+from ..core.base import MintQuoteState
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
     GetInfoResponse,
@@ -25,6 +26,8 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintBatchResponse,
     PostMintQuoteCheckRequest,
+    PostMintQuoteCheckResponse,
+    PostMintQuoteCheckUnknownResponse,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -111,9 +114,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -423,31 +424,58 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     "/v1/mint/quote/bolt11/check",
     name="Batch check mint quotes",
     summary="Batch check mint quotes",
-    response_model=list[PostMintQuoteResponse],
+    response_model=list[
+        Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]
+    ],
     response_description="A list of mint quotes",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_quote_check(
     request: Request, payload: PostMintQuoteCheckRequest
-) -> list[PostMintQuoteResponse]:
+) -> list[Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]]:
     logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
     quotes = await ledger.mint_quote_check(payload)
-    resp = [
-        PostMintQuoteResponse(
-            quote=quote.quote,
-            request=quote.request,
-            amount=quote.amount,
-            unit=quote.unit,
-            method=quote.method,
-            state=str(quote.state.value),
-            expiry=quote.expiry,
-            pubkey=quote.pubkey,
-            amount_paid=quote.amount_paid,
-            amount_issued=quote.amount_issued,
-            updated_at=quote.updated_at,
+    resp: list[
+        Union[PostMintQuoteCheckResponse, PostMintQuoteCheckUnknownResponse]
+    ] = []
+    for quote_id, quote in zip(payload.quotes, quotes):
+        if quote is None:
+            resp.append(PostMintQuoteCheckUnknownResponse(quote=quote_id))
+            continue
+
+        # Migration m036 leaves legacy accounting NULL. Derive missing values
+        # before omitting state from the response, preserving explicit accounting.
+        state = quote.state
+        amount_paid = quote.amount_paid
+        amount_issued = quote.amount_issued
+        if amount_paid is None:
+            amount_paid = (
+                quote.amount
+                if state
+                in (
+                    MintQuoteState.paid,
+                    MintQuoteState.pending,
+                    MintQuoteState.issued,
+                )
+                else 0
+            )
+        if amount_issued is None:
+            amount_issued = quote.amount if state == MintQuoteState.issued else 0
+
+        resp.append(
+            PostMintQuoteCheckResponse(
+                quote=quote.quote,
+                request=quote.request,
+                amount=quote.amount,
+                unit=quote.unit,
+                method=quote.method,
+                expiry=quote.expiry,
+                pubkey=quote.pubkey,
+                amount_paid=amount_paid,
+                amount_issued=amount_issued,
+                updated_at=quote.updated_at or quote.created_time or int(time.time()),
+            )
         )
-        for quote in quotes
-    ]
     logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")
     return resp
 

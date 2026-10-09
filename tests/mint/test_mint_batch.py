@@ -1,16 +1,20 @@
 import asyncio
 import os
+import time
 
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import MintQuoteState
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.db import LockOptions
+from cashu.core.errors import BatchDuplicateQuotesError, BatchSizeExceededError
 from cashu.core.models import PostMintBatchRequest, PostMintQuoteCheckRequest
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import pay_if_regtest
+from tests.helpers import is_postgres, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 
@@ -42,6 +46,49 @@ async def test_ledger_mint_quote_check(ledger: Ledger, wallet: Wallet):
     assert quotes[1].quote == mint_quote2.quote
     assert quotes[1].amount == 32
     assert quotes[1].state.value in ["UNPAID", "PAID"]
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_quote_check_returns_positional_unknown_quotes(
+    ledger: Ledger, wallet: Wallet
+):
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    quotes = await ledger.mint_quote_check(
+        PostMintQuoteCheckRequest(
+            quotes=[
+                mint_quote1.quote,
+                "not-a-valid-quote-id",
+                "01989999-9999-7999-8999-999999999999",
+                "",
+                mint_quote2.quote,
+            ]
+        )
+    )
+
+    assert quotes[0] and quotes[0].quote == mint_quote1.quote
+    assert quotes[1] is None
+    assert quotes[2] is None
+    assert quotes[3] is None
+    assert quotes[4] and quotes[4].quote == mint_quote2.quote
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_quote_check_returns_none_for_unknown_quotes(
+    ledger: Ledger,
+):
+    quotes = await ledger.mint_quote_check(
+        PostMintQuoteCheckRequest(
+            quotes=[
+                "not-a-valid-quote-id",
+                "01989999-9999-7999-8999-999999999999",
+            ]
+        )
+    )
+
+    assert quotes == [None, None]
 
 
 @pytest.mark.asyncio
@@ -284,26 +331,24 @@ def test_mint_batch_and_check_validation():
     assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
 
     # 3. Check PostMintQuoteCheckRequest with too long quote ID
+    # (overlong IDs are rejected with a validation error as DoS protection)
     with pytest.raises(ValidationError) as excinfo:
         PostMintQuoteCheckRequest(
             quotes=[long_quote],
         )
     assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
 
-    # 4. Check PostMintQuoteCheckRequest with too many quotes
-    with pytest.raises(ValidationError) as excinfo:
-        PostMintQuoteCheckRequest(
-            quotes=too_many_quotes,
-        )
-    assert "at most" in str(excinfo.value) or "max_length" in str(excinfo.value)
+    # 4. PostMintQuoteCheckRequest accepts any number of quotes: oversized
+    # batches are rejected by the mint with error 11017 (see
+    # test_ledger_mint_quote_check_rejects_oversized_batch)
+    check_req = PostMintQuoteCheckRequest(quotes=too_many_quotes)
+    assert len(check_req.quotes) == settings.mint_max_request_length + 1
 
 
 @pytest.mark.asyncio
-async def test_ledger_mint_batch_post_sign_failure_leaves_pending(
+async def test_ledger_mint_batch_issue_failure_reverts_to_paid(
     ledger: Ledger, wallet: Wallet, monkeypatch
 ):
-    from cashu.core.base import MintQuoteState
-
     await wallet.load_mint()
     mint_quote1 = await wallet.request_mint(64)
     mint_quote2 = await wallet.request_mint(32)
@@ -320,17 +365,13 @@ async def test_ledger_mint_batch_post_sign_failure_leaves_pending(
     sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
     sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
 
-    original_unset_mint_quotes_pending = ledger.db_write._unset_mint_quotes_pending
-
-    async def mock_unset_mint_quotes_pending(quote_ids, state):
-        if state == MintQuoteState.issued:
-            raise Exception("failed to acquire database lock on mint_quotes")
-        return await original_unset_mint_quotes_pending(quote_ids, state)
+    async def mock_issue_mint_quotes(quote_ids, amounts, conn=None, emit_events=True):
+        raise Exception("failed to acquire database lock on mint_quotes")
 
     monkeypatch.setattr(
         ledger.db_write,
-        "_unset_mint_quotes_pending",
-        mock_unset_mint_quotes_pending,
+        "_issue_mint_quotes",
+        mock_issue_mint_quotes,
     )
 
     req = PostMintBatchRequest(
@@ -345,34 +386,28 @@ async def test_ledger_mint_batch_post_sign_failure_leaves_pending(
         await ledger.mint_batch(req)
     assert "failed to acquire database lock on mint_quotes" in str(exc.value)
 
-    # Verify that the quotes are left in PENDING state (not reverted to PAID)
+    # Verify that the quotes are reverted to PAID with their accounting
+    # untouched and no signatures are recoverable through restore.
+    assert await ledger.restore(outputs) == ([], [])
     q1 = await ledger.get_mint_quote(mint_quote1.quote)
     q2 = await ledger.get_mint_quote(mint_quote2.quote)
     assert q1 is not None
     assert q2 is not None
-    assert q1.state == MintQuoteState.pending
-    assert q2.state == MintQuoteState.pending
+    assert q1.state == MintQuoteState.paid
+    assert q2.state == MintQuoteState.paid
+    assert q1.amount_issued == 0
+    assert q2.amount_issued == 0
 
-    # Re-minting with the same quotes should fail because they are PENDING (which prevents double-issuance)
-    monkeypatch.undo()  # restore original unset_mint_quotes_pending so we can attempt a normal mint, but it should fail on pending check
+    # Re-minting with the same quotes succeeds since nothing was issued
+    monkeypatch.undo()  # restore the original _issue_mint_quotes
 
-    secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
-        10002, 10003
-    )
-    outputs2, rs2 = wallet._construct_outputs([64, 32], secrets2, rs2)
-    sig1_2 = nut20.sign_mint_quote(mint_quote1.quote, outputs2, mint_quote1.privkey)
-    sig2_2 = nut20.sign_mint_quote(mint_quote2.quote, outputs2, mint_quote2.privkey)
+    promises = await ledger.mint_batch(req)
+    assert len(promises) == 2
 
-    req2 = PostMintBatchRequest(
-        quotes=[mint_quote1.quote, mint_quote2.quote],
-        quote_amounts=[64, 32],
-        outputs=outputs2,
-        signatures=[sig1_2, sig2_2],
-    )
-
-    with pytest.raises(Exception) as exc:
-        await ledger.mint_batch(req2)
-    assert "mint quote already pending" in str(exc.value)
+    q1 = await ledger.get_mint_quote(mint_quote1.quote)
+    q2 = await ledger.get_mint_quote(mint_quote2.quote)
+    assert q1 is not None and q1.state == MintQuoteState.issued
+    assert q2 is not None and q2.state == MintQuoteState.issued
 
 
 @pytest.mark.asyncio
@@ -577,16 +612,14 @@ async def test_ledger_mint_batch_single_quote(ledger: Ledger, wallet: Wallet):
 async def test_ledger_mint_quote_check_nonexistent_quote(
     ledger: Ledger, wallet: Wallet
 ):
-    """Checking nonexistent quote should fail."""
+    """Checking nonexistent quotes should return positional unknowns."""
     await wallet.load_mint()
 
-    try:
-        await ledger.mint_quote_check(
-            PostMintQuoteCheckRequest(quotes=["nonexistent_quote_id"])
-        )
-        assert False, "Expected Exception"
-    except Exception as e:
-        assert "not found" in str(e)
+    quotes = await ledger.mint_quote_check(
+        PostMintQuoteCheckRequest(quotes=["nonexistent_quote_id"])
+    )
+
+    assert quotes == [None]
 
 
 @pytest.mark.asyncio
@@ -626,9 +659,9 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     q1_after = await ledger.crud.get_mint_quote(
         quote_id=mint_quote1.quote, db=ledger.db
     )
-    assert q1_after.state.value == "PAID", (
-        f"Quote1 should still be PAID, got {q1_after.state.value}"
-    )
+    assert (
+        q1_after.state.value == "PAID"
+    ), f"Quote1 should still be PAID, got {q1_after.state.value}"
 
     secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
         10002, 10002
@@ -643,3 +676,603 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     )
     assert len(promises) == 1
     assert promises[0].amount == 64
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_quote_check_rejects_duplicate_quotes(
+    ledger: Ledger, wallet: Wallet
+):
+    """Duplicate quote IDs must be rejected with error 11016."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+
+    with pytest.raises(BatchDuplicateQuotesError):
+        await ledger.mint_quote_check(
+            PostMintQuoteCheckRequest(quotes=[mint_quote.quote, mint_quote.quote])
+        )
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_quote_check_rejects_oversized_batch(ledger: Ledger):
+    """Batches larger than max_batch_size must be rejected with error 11017."""
+    too_many_quotes = ["quote"] * (settings.mint_max_request_length + 1)
+
+    with pytest.raises(BatchSizeExceededError):
+        await ledger.mint_quote_check(PostMintQuoteCheckRequest(quotes=too_many_quotes))
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_quote_check_empty_quotes(ledger: Ledger):
+    """An empty quotes array is valid and returns an empty list."""
+    quotes = await ledger.mint_quote_check(PostMintQuoteCheckRequest(quotes=[]))
+    assert quotes == []
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_without_quote_amounts(ledger: Ledger, wallet: Wallet):
+    """Omitted quote_amounts mint each quote's full currently mintable amount."""
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+
+    assert mint_quote1.privkey
+    assert mint_quote2.privkey
+
+    sig1 = nut20.sign_mint_quote(mint_quote1.quote, outputs, mint_quote1.privkey)
+    sig2 = nut20.sign_mint_quote(mint_quote2.quote, outputs, mint_quote2.privkey)
+
+    promises = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote1.quote, mint_quote2.quote],
+            outputs=outputs,
+            signatures=[sig1, sig2],
+        )
+    )
+
+    assert len(promises) == 2
+
+    quote1 = await ledger.crud.get_mint_quote(quote_id=mint_quote1.quote, db=ledger.db)
+    quote2 = await ledger.crud.get_mint_quote(quote_id=mint_quote2.quote, db=ledger.db)
+    assert quote1 and quote1.amount_issued == 64
+    assert quote1.state == MintQuoteState.issued
+    assert quote2 and quote2.amount_issued == 32
+    assert quote2.state == MintQuoteState.issued
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_expired_quote(ledger: Ledger, wallet: Wallet):
+    """A quote with a positive mintable amount remains mintable after expiry."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+
+    await pay_if_regtest(mint_quote.request)
+
+    # expire the quote
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.paid
+    quote.expiry = int(time.time()) - 100
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10000)
+    outputs, rs = wallet._construct_outputs([64], secrets, rs)
+
+    assert mint_quote.privkey
+    sig = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    promises = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[64],
+            outputs=outputs,
+            signatures=[sig],
+        )
+    )
+
+    assert len(promises) == 1
+    assert promises[0].amount == 64
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_amount_exceeds_mintable(
+    ledger: Ledger, wallet: Wallet
+):
+    """Allocating more than a quote's mintable amount must fail atomically."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+
+    await pay_if_regtest(mint_quote.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([64, 64], secrets, rs)
+
+    assert mint_quote.privkey
+    sig = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    with pytest.raises(Exception) as exc:
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[mint_quote.quote],
+                quote_amounts=[128],
+                outputs=outputs,
+                signatures=[sig],
+            )
+        )
+    assert "exceeds mintable amount" in str(exc.value)
+
+    # nothing was issued
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 0
+    assert quote.state == MintQuoteState.paid
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_non_positive_amount(ledger: Ledger, wallet: Wallet):
+    """Non-positive quote amounts must be rejected."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+
+    await pay_if_regtest(mint_quote.request)
+
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10000)
+    outputs, rs = wallet._construct_outputs([64], secrets, rs)
+
+    assert mint_quote.privkey
+    sig = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    with pytest.raises(Exception) as exc:
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[mint_quote.quote],
+                quote_amounts=[0],
+                outputs=outputs,
+                signatures=[sig],
+            )
+        )
+    assert "must be positive" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_partial_amounts(ledger: Ledger, wallet: Wallet):
+    """Partial batch minting increases amount_issued step by step."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+
+    await pay_if_regtest(mint_quote.request)
+
+    assert mint_quote.privkey
+
+    # mint half of the quote
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10000)
+    outputs, rs = wallet._construct_outputs([32], secrets, rs)
+    sig = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    promises = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs,
+            signatures=[sig],
+        )
+    )
+    assert len(promises) == 1
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 32
+    assert quote.amount_paid == 64
+    assert quote.state == MintQuoteState.paid
+
+    # mint the remaining amount
+    secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
+        10001, 10001
+    )
+    outputs2, rs2 = wallet._construct_outputs([32], secrets2, rs2)
+    sig2 = nut20.sign_mint_quote(mint_quote.quote, outputs2, mint_quote.privkey)
+
+    promises2 = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs2,
+            signatures=[sig2],
+        )
+    )
+    assert len(promises2) == 1
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 64
+    assert quote.state == MintQuoteState.issued
+    assert quote.issued_time is not None
+
+    # nothing left to mint
+    secrets3, rs3, derivation_paths3 = await wallet.generate_secrets_from_to(
+        10002, 10002
+    )
+    outputs3, rs3 = wallet._construct_outputs([32], secrets3, rs3)
+    sig3 = nut20.sign_mint_quote(mint_quote.quote, outputs3, mint_quote.privkey)
+
+    with pytest.raises(Exception) as exc:
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[mint_quote.quote],
+                quote_amounts=[32],
+                outputs=outputs3,
+                signatures=[sig3],
+            )
+        )
+    assert "already issued" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_partially_issued_quote_rejected(
+    ledger: Ledger, wallet: Wallet
+):
+    """A quote partially issued via batch mint must not be minted again via the
+    single-quote endpoint (which would issue more than was paid)."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+
+    await pay_if_regtest(mint_quote.request)
+
+    assert mint_quote.privkey
+
+    # partially mint via batch
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10000)
+    outputs, rs = wallet._construct_outputs([32], secrets, rs)
+    sig = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs,
+            signatures=[sig],
+        )
+    )
+
+    # single mint of the full quote amount must be rejected
+    secrets2, rs2, derivation_paths2 = await wallet.generate_secrets_from_to(
+        10001, 10001
+    )
+    outputs2, rs2 = wallet._construct_outputs([64], secrets2, rs2)
+    sig2 = nut20.sign_mint_quote(mint_quote.quote, outputs2, mint_quote.privkey)
+
+    with pytest.raises(Exception) as exc:
+        await ledger.mint(outputs=outputs2, quote_id=mint_quote.quote, signature=sig2)
+    assert "partially issued" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_stale_single_mint_cannot_reset_partial_issuance(
+    ledger: Ledger, wallet: Wallet, monkeypatch
+):
+    """Regression test: a concurrent batch mint between the unlocked quote read
+    and the row lock in mint() must not let a single mint reset or bypass the
+    partial-issuance accounting (double-mint via stale amount_issued guard)."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.paid
+
+    # a concurrent worker reads the quote here (unlocked); keep a stale copy
+    stale_quote = quote.model_copy()
+    assert stale_quote.amount_issued == 0
+
+    # another worker partially mints 32 of 64 via batch mint
+    assert mint_quote.privkey
+    secrets, rs, _ = await wallet.generate_secrets_from_to(20000, 20000)
+    outputs_b, _ = wallet._construct_outputs([32], secrets, rs)
+    sig_b = nut20.sign_mint_quote(mint_quote.quote, outputs_b, mint_quote.privkey)
+    promises_b = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs_b,
+            signatures=[sig_b],
+        )
+    )
+    assert sum(p.amount for p in promises_b) == 32
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 32
+    assert quote.state == MintQuoteState.paid
+
+    # the stale worker resumes with its outdated quote object
+    async def stale_get_mint_quote(quote_id: str):
+        return stale_quote
+
+    monkeypatch.setattr(ledger, "get_mint_quote", stale_get_mint_quote)
+
+    secrets2, rs2, _ = await wallet.generate_secrets_from_to(20001, 20001)
+    outputs_a, _ = wallet._construct_outputs([64], secrets2, rs2)
+    sig_a = nut20.sign_mint_quote(mint_quote.quote, outputs_a, mint_quote.privkey)
+    with pytest.raises(Exception) as exc:
+        await ledger.mint(outputs=outputs_a, quote_id=mint_quote.quote, signature=sig_a)
+    assert "partially issued" in str(exc.value)
+
+    # the failed single mint must not have touched the accounting
+    monkeypatch.undo()
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 32
+    assert quote.amount_paid == 64
+    assert quote.state == MintQuoteState.paid
+
+    # only the remaining 32 can still be minted
+    secrets3, rs3, _ = await wallet.generate_secrets_from_to(20002, 20002)
+    outputs_c, _ = wallet._construct_outputs([32], secrets3, rs3)
+    sig_c = nut20.sign_mint_quote(mint_quote.quote, outputs_c, mint_quote.privkey)
+    promises_c = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs_c,
+            signatures=[sig_c],
+        )
+    )
+    assert sum(p.amount for p in promises_c) == 32
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 64
+    assert quote.state == MintQuoteState.issued
+    assert sum(p.amount for p in promises_b + promises_c) == 64
+
+
+@pytest.mark.asyncio
+async def test_ledger_unset_mint_quote_pending_preserves_accounting(
+    ledger: Ledger, wallet: Wallet
+):
+    """Reverting a pending partially-issued quote must not reset amount_issued."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+
+    assert mint_quote.privkey
+    secrets, rs, _ = await wallet.generate_secrets_from_to(20000, 20000)
+    outputs, _ = wallet._construct_outputs([32], secrets, rs)
+    sig = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs,
+            signatures=[sig],
+        )
+    )
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 32
+
+    await ledger.db_write._set_mint_quotes_pending(quote_ids=[mint_quote.quote])
+    await ledger.db_write._unset_mint_quote_pending(
+        mint_quote.quote, MintQuoteState.paid
+    )
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 32
+    assert quote.amount_paid == 64
+    assert quote.state == MintQuoteState.paid
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit_amounts", [True, False])
+async def test_ledger_mint_batch_stale_mintable_amount_rejected_under_lock(
+    ledger: Ledger, wallet: Wallet, monkeypatch, explicit_amounts
+):
+    """Regression test: a batch mint validated against a stale mintable amount
+    must fail without leaving signatures recoverable through restore."""
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.paid
+
+    # a concurrent worker reads the quote here (unlocked); keep a stale copy
+    stale_quote = quote.model_copy()
+
+    # another worker batch-mints 32 of 64 and commits
+    assert mint_quote.privkey
+    secrets, rs, _ = await wallet.generate_secrets_from_to(30000, 30000)
+    outputs_a, _ = wallet._construct_outputs([32], secrets, rs)
+    sig_a = nut20.sign_mint_quote(mint_quote.quote, outputs_a, mint_quote.privkey)
+    promises_a = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs_a,
+            signatures=[sig_a],
+        )
+    )
+    assert sum(p.amount for p in promises_a) == 32
+
+    # the stale worker resumes: its validation of quote_amounts=[64] against
+    # the stale mintable amount (64) passes, but issuance must fail under lock
+    async def stale_get_mint_quote(quote_id: str):
+        return stale_quote
+
+    monkeypatch.setattr(ledger, "get_mint_quote", stale_get_mint_quote)
+
+    secrets2, rs2, _ = await wallet.generate_secrets_from_to(30001, 30001)
+    outputs_b, _ = wallet._construct_outputs([64], secrets2, rs2)
+    sig_b = nut20.sign_mint_quote(mint_quote.quote, outputs_b, mint_quote.privkey)
+    with pytest.raises(Exception) as exc:
+        await ledger.mint_batch(
+            PostMintBatchRequest(
+                quotes=[mint_quote.quote],
+                quote_amounts=[64] if explicit_amounts else None,
+                outputs=outputs_b,
+                signatures=[sig_b],
+            )
+        )
+    assert "exceeds mintable amount" in str(exc.value)
+    assert await ledger.restore(outputs_b) == ([], [])
+
+    # accounting is intact and the quote is mintable again (not stuck pending)
+    monkeypatch.undo()
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 32
+    assert quote.amount_paid == 64
+    assert quote.state == MintQuoteState.paid
+
+    # the remaining 32 can still be minted
+    secrets3, rs3, _ = await wallet.generate_secrets_from_to(30002, 30002)
+    outputs_c, _ = wallet._construct_outputs([32], secrets3, rs3)
+    sig_c = nut20.sign_mint_quote(mint_quote.quote, outputs_c, mint_quote.privkey)
+    promises_c = await ledger.mint_batch(
+        PostMintBatchRequest(
+            quotes=[mint_quote.quote],
+            quote_amounts=[32],
+            outputs=outputs_c,
+            signatures=[sig_c],
+        )
+    )
+    assert sum(p.amount for p in promises_c) == 32
+    assert sum(p.amount for p in promises_a + promises_c) == 64
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote and quote.amount_issued == 64
+    assert quote.state == MintQuoteState.issued
+    _, restored = await ledger.restore(outputs_a + outputs_b + outputs_c)
+    assert sum(p.amount for p in restored) == 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [True, False])
+async def test_mint_signing_failure_rolls_back_signatures_and_accounting(
+    ledger: Ledger, wallet: Wallet, monkeypatch, batch
+):
+    """A failure after storing signatures rolls back issuance and permits retry."""
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await ledger.get_mint_quote(mint_quote.quote)
+
+    secrets, rs, _ = await wallet.generate_secrets_from_to(40000, 40000)
+    outputs, _ = wallet._construct_outputs([64], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    async def mint():
+        if batch:
+            return await ledger.mint_batch(
+                PostMintBatchRequest(
+                    quotes=[mint_quote.quote],
+                    quote_amounts=[64],
+                    outputs=outputs,
+                    signatures=[signature],
+                )
+            )
+        return await ledger.mint(
+            quote_id=mint_quote.quote, outputs=outputs, signature=signature
+        )
+
+    original_sign = ledger._sign_blinded_messages
+
+    async def fail_after_signing(outputs, conn=None):
+        await original_sign(outputs, conn)
+        raise RuntimeError("failure after signing")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(ledger, "_sign_blinded_messages", fail_after_signing)
+        with pytest.raises(RuntimeError, match="failure after signing"):
+            await mint()
+
+    assert await ledger.restore(outputs) == ([], [])
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.paid
+    assert quote.amount_paid == 64
+    assert quote.amount_issued == 0
+
+    promises = await mint()
+    assert sum(p.amount for p in promises) == 64
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.issued
+    assert quote.amount_issued == 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_postgres, reason="Requires PostgreSQL row locks")
+@pytest.mark.parametrize("batch", [True, False])
+async def test_mint_retries_contended_issuance_lock(
+    ledger: Ledger, wallet: Wallet, monkeypatch, batch
+):
+    """Contention after PENDING must retry before the issuance transaction starts."""
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    assert (await ledger.get_mint_quote(mint_quote.quote)).paid
+
+    secrets, rs, _ = await wallet.generate_secrets_from_to(50000, 50000)
+    outputs, _ = wallet._construct_outputs([64], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+    contention_seen = asyncio.Event()
+    lock_task = None
+
+    async def hold_quote_lock():
+        async with ledger.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": mint_quote.quote},
+                )
+            ]
+        ):
+            lock_held.set()
+            await release_lock.wait()
+
+    pending_method = "_set_mint_quotes_pending" if batch else "_set_mint_quote_pending"
+    original_set_pending = getattr(ledger.db_write, pending_method)
+    original_acquire_lock = ledger.db._acquire_lock
+
+    async def set_pending_then_hold_lock(*args, **kwargs):
+        nonlocal lock_task
+        result = await original_set_pending(*args, **kwargs)
+        lock_task = asyncio.create_task(hold_quote_lock())
+        await asyncio.wait_for(lock_held.wait(), timeout=5)
+        return result
+
+    async def observe_lock_contention(conn, lock):
+        try:
+            await original_acquire_lock(conn, lock)
+        except Exception:
+            if lock_held.is_set():
+                contention_seen.set()
+                release_lock.set()
+            raise
+
+    monkeypatch.setattr(ledger.db_write, pending_method, set_pending_then_hold_lock)
+    monkeypatch.setattr(ledger.db, "_acquire_lock", observe_lock_contention)
+
+    try:
+        if batch:
+            promises = await ledger.mint_batch(
+                PostMintBatchRequest(
+                    quotes=[mint_quote.quote],
+                    outputs=outputs,
+                    signatures=[signature],
+                )
+            )
+        else:
+            promises = await ledger.mint(
+                quote_id=mint_quote.quote, outputs=outputs, signature=signature
+            )
+    finally:
+        release_lock.set()
+        if lock_task is not None:
+            await lock_task
+
+    assert contention_seen.is_set()
+    assert sum(p.amount for p in promises) == 64
+    assert (await ledger.restore(outputs))[1] == promises
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    assert quote.issued
+    assert quote.amount_issued == quote.amount_paid == 64
