@@ -205,9 +205,9 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
     fields = tlv_record(_FIELD_N, bytes([leaf.n])) + tlv_record(
         _FIELD_KEYS, b"".join(serialized_keys)
     )
-    if leaf.type == "after":
+    if leaf.type in ("after", "template"):
         if leaf.time is None or leaf.time < 0:
-            raise ValueError("after leaf requires a unix time")
+            raise ValueError(f"{leaf.type} leaf requires a unix time")
         if leaf.time > NUTROOT_MAX_LEAF_TIME:
             raise ValueError("time out of range")
         fields += tlv_record(_FIELD_TIME, minimal_be(leaf.time))
@@ -302,12 +302,13 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
         raise ValueError("Leaf missing required n or keys field")
     if n > len(keys):
         raise ValueError("Threshold exceeds leaf key count")
-    if type_name == "after" and time is None:
-        raise ValueError("after leaf missing time field")
+    timed = type_name in ("after", "template")
+    if timed and time is None:
+        raise ValueError(f"{type_name} leaf missing time field")
     hashed = type_name in ("hashlock", "template")
     if hashed and hash_ is None:
         raise ValueError(f"{type_name} leaf missing hash field")
-    if type_name != "after" and time is not None:
+    if not timed and time is not None:
         raise ValueError(f"{type_name} leaf must not carry a time field")
     if not hashed and hash_ is not None:
         raise ValueError(f"{type_name} leaf must not carry a hash field")
@@ -553,7 +554,8 @@ def verify_script_path_spend(
         if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
 
-    if leaf.type == "template":
+    # Before its time a template is a covenant; from then on a threshold over its keys.
+    if leaf.type == "template" and (now if now is not None else time.time()) < (leaf.time or 0):
         if outputs is None:
             raise ValueError("template leaf needs the transaction outputs")
         if hashlib.sha256(outputs).digest() != leaf.hash:
