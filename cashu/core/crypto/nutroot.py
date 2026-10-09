@@ -502,7 +502,6 @@ def verify_script_path_spend(
     digest: bytes,
     witness: NutrootWitness,
     now: Optional[float] = None,
-    preimage_max_len: int = 32,
 ) -> NutrootLeaf:
     """Verify a script-path witness: commitment, then evaluate the revealed leaf.
 
@@ -535,8 +534,8 @@ def verify_script_path_spend(
         if preimage_hex is None:
             raise ValueError("hashlock leaf requires a preimage")
         preimage = bytes.fromhex(preimage_hex)
-        if len(preimage) > preimage_max_len:
-            raise ValueError("hashlock preimage too long")
+        if len(preimage) != 32:
+            raise ValueError("hashlock preimage is not 32 bytes")
         if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
 

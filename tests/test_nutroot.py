@@ -1204,6 +1204,12 @@ def test_script_path_threshold_and_hashlock():
             digest,
             hashlock_witness.model_copy(update={"preimage": None}),
         )
+    with pytest.raises(ValueError, match="32 bytes"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            hashlock_witness.model_copy(update={"preimage": "07" * 31}),
+        )
 
 
 def test_mint_accepts_script_path_witness_on_swap():
