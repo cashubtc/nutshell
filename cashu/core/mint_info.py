@@ -12,6 +12,7 @@ from .nuts.nuts import (
     CLEAR_AUTH_NUT,
     MPP_NUT,
     WEBSOCKETS_NUT,
+    NutKey,
 )
 
 
@@ -47,7 +48,7 @@ class MintInfo(BaseModel):
     tos_url: Optional[str]
     time: Optional[int]
     max_array_length: Optional[int] = None
-    nuts: Dict[int, Any]
+    nuts: Dict[NutKey, Any]
 
     def __str__(self):
         return f"{self.name} ({self.description})"

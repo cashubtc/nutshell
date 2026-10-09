@@ -828,7 +828,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote2.privkey
 
     # Each quote signs its own input digest over the shared batch transcript
-    batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
+    batch = [
+        (mint_quote1.quote, 64, mint_quote1.pubkey),
+        (mint_quote2.quote, 32, mint_quote2.pubkey),
+    ]
     sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey, mint_quote1.quote)
     sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey, mint_quote2.quote)
 

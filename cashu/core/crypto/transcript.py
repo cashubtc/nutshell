@@ -1,15 +1,6 @@
-"""Transaction transcript (NUT-10).
+"""Transaction transcript (NUT-10): one shared digest, one derived message per input.
 
-One shared digest, one derived message per input:
-transaction_digest = SHA256(TLV stream); each input carries
-one BIP-340 signature over its input digest,
-tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
-container record)). Containers: 0x01 proof input, 0x02 mint quote input,
-0x03 blinded message output, 0x04 melt quote output. Container types
-ascend (inputs before outputs by construction); elements keep request
-order within their type; field streams inside are ascending unique.
-Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the
-shared vectors.
+Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the shared vectors.
 """
 
 import hashlib
@@ -21,10 +12,12 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
 
-_CONTAINER_PROOF_INPUT = 0x01
-_CONTAINER_MINT_QUOTE_INPUT = 0x02
-_CONTAINER_BLINDED_OUTPUT = 0x03
-_CONTAINER_MELT_QUOTE_OUTPUT = 0x04
+# The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+_CONTAINER_PROOF_INPUT = 0x11
+_CONTAINER_MINT_QUOTE_INPUT = 0x12
+_CONTAINER_BLINDED_OUTPUT = 0x21
+_CONTAINER_MELT_QUOTE_OUTPUT = 0x22
+_CONTAINER_CHANGE_QUOTE_OUTPUT = 0x23
 
 
 @dataclass
@@ -39,6 +32,7 @@ class TranscriptProofInput:
 class TranscriptQuote:
     amount: int
     quote_id: str
+    pubkey: Optional[bytes] = None  # 33-byte lock key; required on a mint quote input
 
 
 @dataclass
@@ -49,17 +43,34 @@ class TranscriptBlindedOutput:
 
 
 @dataclass
+class TranscriptChangeOutput:
+    pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
+    amount: Optional[int] = None  # None on the remainder quote
+
+
+@dataclass
 class TransactionShape:
     proof_inputs: Optional[List[TranscriptProofInput]] = None
     mint_quote_inputs: Optional[List[TranscriptQuote]] = None
     blinded_outputs: Optional[List[TranscriptBlindedOutput]] = None
     melt_quote_outputs: Optional[List[TranscriptQuote]] = None
+    change_quote_outputs: Optional[List[TranscriptChangeOutput]] = None
 
 
 def _amount_record(amount: int) -> bytes:
     if amount < 0:
         raise ValueError("Transcript amount must be non-negative")
     return tlv_record(0x01, minimal_be(amount))
+
+
+def _change_output_container(c: TranscriptChangeOutput) -> bytes:
+    if len(c.pubkey) != 33:
+        raise ValueError("Transcript change lock key must be 33 bytes")
+    return tlv_record(
+        _CONTAINER_CHANGE_QUOTE_OUTPUT,
+        (_amount_record(c.amount) if c.amount is not None else b"")
+        + tlv_record(0x02, c.pubkey),
+    )
 
 
 def _proof_input_container(p: TranscriptProofInput) -> bytes:
@@ -76,13 +87,24 @@ def _proof_input_container(p: TranscriptProofInput) -> bytes:
     )
 
 
-def _quote_container(container_type: int, q: TranscriptQuote) -> bytes:
+def _quote_fields(q: TranscriptQuote) -> bytes:
+    """Fields 01 amount and 02 quote id, shared by the mint quote input and melt quote output."""
     if not q.quote_id:
         raise ValueError("Transcript quote id must be non-empty")
+    return _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8"))
+
+
+def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
+    # The container commits the lock key, so an offline co-signer can tell which key the input needs.
+    if q.pubkey is None or len(q.pubkey) != 33:
+        raise ValueError("Transcript mint quote input needs its 33-byte lock key")
     return tlv_record(
-        container_type,
-        _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8")),
+        _CONTAINER_MINT_QUOTE_INPUT, _quote_fields(q) + tlv_record(0x03, q.pubkey)
     )
+
+
+def _melt_quote_output_container(q: TranscriptQuote) -> bytes:
+    return tlv_record(_CONTAINER_MELT_QUOTE_OUTPUT, _quote_fields(q))
 
 
 def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
@@ -100,9 +122,10 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
     mint_quotes = tx.mint_quote_inputs or []
     blinded = tx.blinded_outputs or []
     melt_quotes = tx.melt_quote_outputs or []
+    change = tx.change_quote_outputs or []
     if not proofs and not mint_quotes:
         raise ValueError("Transaction requires at least one input")
-    if not blinded and not melt_quotes:
+    if not blinded and not melt_quotes and not change:
         raise ValueError("Transaction requires at least one output")
     # NUT-10: the same proof or quote twice would sign one input digest for two inputs.
     if len({p.Y for p in proofs}) != len(proofs):
@@ -111,9 +134,19 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
         raise ValueError("Transaction repeats a mint quote input")
     return (
         b"".join(_proof_input_container(p) for p in proofs)
-        + b"".join(_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q) for q in mint_quotes)
-        + b"".join(_blinded_output_container(o) for o in blinded)
-        + b"".join(_quote_container(_CONTAINER_MELT_QUOTE_OUTPUT, q) for q in melt_quotes)
+        + b"".join(_mint_quote_input_container(q) for q in mint_quotes)
+        + output_section(tx)
+    )
+
+
+def output_section(tx: TransactionShape) -> bytes:
+    """The transcript's output section (its 0x2n containers), which a template leaf hashes."""
+    return (
+        b"".join(_blinded_output_container(o) for o in (tx.blinded_outputs or []))
+        + b"".join(
+            _melt_quote_output_container(q) for q in (tx.melt_quote_outputs or [])
+        )
+        + b"".join(_change_output_container(c) for c in (tx.change_quote_outputs or []))
     )
 
 
@@ -133,10 +166,12 @@ def input_digest(transaction_digest_: bytes, container: bytes) -> bytes:
 
 @dataclass
 class InputContext:
-    """One input's signing context: its container record and the digest it signs."""
+    """One input's signing context: its container record, the digest it signs,
+    and the transaction's output section (what a template leaf commits to)."""
 
     container: bytes
     digest: bytes
+    outputs: bytes = b""
 
 
 def transaction_inputs(
@@ -147,15 +182,18 @@ def transaction_inputs(
     The transcript builder has already refused duplicates, so the keys are unique.
     """
     digest = transaction_digest(tx)
+    outputs = output_section(tx)
     proofs = {
-        p.Y: InputContext(container=c, digest=input_digest(digest, c))
+        p.Y: InputContext(container=c, digest=input_digest(digest, c), outputs=outputs)
         for p in (tx.proof_inputs or [])
         for c in [_proof_input_container(p)]
     }
     quotes = {
-        q.quote_id: InputContext(container=c, digest=input_digest(digest, c))
+        q.quote_id: InputContext(
+            container=c, digest=input_digest(digest, c), outputs=outputs
+        )
         for q in (tx.mint_quote_inputs or [])
-        for c in [_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q)]
+        for c in [_mint_quote_input_container(q)]
     }
     return digest, proofs, quotes
 

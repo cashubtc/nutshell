@@ -30,6 +30,7 @@ NUTROOT_LEAF_TYPE: Dict[str, int] = {
     "after": 0x02,
     "hashlock": 0x03,
     "commit": 0x04,
+    "template": 0x05,
 }
 _LEAF_TYPE_NAME = {v: k for k, v in NUTROOT_LEAF_TYPE.items()}
 
@@ -58,9 +59,10 @@ SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 class NutrootLeaf:
     """A parsed declarative leaf (version 0x00).
 
-    Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes.
-    A `commit` leaf carries only `hash`: it names no signer and is never a
-    spend path (NUT-10).
+    Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes:
+    a hashlock's preimage digest, or a template's digest of the transaction's
+    output section. A `commit` leaf carries only `hash`: it names no signer and
+    is never a spend path (NUT-10).
     """
 
     type: str
@@ -103,6 +105,14 @@ class NutrootWitness(BaseModel):
     @property
     def is_script_path(self) -> bool:
         return self.leaf is not None
+
+
+QUOTE_ID_TAG = "Cashu_QuoteId"
+
+
+def change_quote_id(pubkey: bytes) -> str:
+    """The id of the change quote locked to a 33-byte key: one key, one quote."""
+    return tagged_hash(QUOTE_ID_TAG, pubkey).hex()
 
 
 def tagged_hash(tag: str, *messages: bytes) -> bytes:
@@ -195,17 +205,17 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
     fields = tlv_record(_FIELD_N, bytes([leaf.n])) + tlv_record(
         _FIELD_KEYS, b"".join(serialized_keys)
     )
-    if leaf.type == "after":
+    if leaf.type in ("after", "template"):
         if leaf.time is None or leaf.time < 0:
-            raise ValueError("after leaf requires a unix time")
+            raise ValueError(f"{leaf.type} leaf requires a unix time")
         if leaf.time > NUTROOT_MAX_LEAF_TIME:
             raise ValueError("time out of range")
         fields += tlv_record(_FIELD_TIME, minimal_be(leaf.time))
     elif leaf.time is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a time field")
-    if leaf.type == "hashlock":
+    if leaf.type in ("hashlock", "template"):
         if leaf.hash is None or len(leaf.hash) != 32:
-            raise ValueError("hashlock leaf requires a 32-byte hash")
+            raise ValueError(f"{leaf.type} leaf requires a 32-byte hash")
         fields += tlv_record(_FIELD_HASH, leaf.hash)
     elif leaf.hash is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a hash field")
@@ -292,13 +302,15 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
         raise ValueError("Leaf missing required n or keys field")
     if n > len(keys):
         raise ValueError("Threshold exceeds leaf key count")
-    if type_name == "after" and time is None:
-        raise ValueError("after leaf missing time field")
-    if type_name == "hashlock" and hash_ is None:
-        raise ValueError("hashlock leaf missing hash field")
-    if type_name != "after" and time is not None:
+    timed = type_name in ("after", "template")
+    if timed and time is None:
+        raise ValueError(f"{type_name} leaf missing time field")
+    hashed = type_name in ("hashlock", "template")
+    if hashed and hash_ is None:
+        raise ValueError(f"{type_name} leaf missing hash field")
+    if not timed and time is not None:
         raise ValueError(f"{type_name} leaf must not carry a time field")
-    if type_name != "hashlock" and hash_ is not None:
+    if not hashed and hash_ is not None:
         raise ValueError(f"{type_name} leaf must not carry a hash field")
     return NutrootLeaf(
         type=type_name, n=n, keys=keys, time=time, hash=hash_, disclosure=disclosure
@@ -502,13 +514,15 @@ def verify_script_path_spend(
     digest: bytes,
     witness: NutrootWitness,
     now: Optional[float] = None,
+    outputs: Optional[bytes] = None,
 ) -> NutrootLeaf:
     """Verify a script-path witness: commitment, then evaluate the revealed leaf.
 
     Witness shape (NUT-10): {"leaf": hex, "control": {"K": hex, "path": [hex]},
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
-    input digest. Raises ValueError on any failure (fail closed); returns the
-    parsed leaf so callers can act on its disclosure mode.
+    input digest; `outputs` is the transcript's output section, which a
+    template leaf must hash to. Raises ValueError on any failure (fail closed);
+    returns the parsed leaf so callers can act on its disclosure mode.
     """
     if witness.leaf is None or witness.control is None:
         raise ValueError("script path witness requires leaf and control")
@@ -538,6 +552,13 @@ def verify_script_path_spend(
             raise ValueError("hashlock preimage is not 32 bytes")
         if hashlib.sha256(preimage).digest() != leaf.hash:
             raise ValueError("hashlock preimage does not match")
+
+    # Before its time a template is a covenant; from then on a threshold over its keys.
+    if leaf.type == "template" and (now if now is not None else time.time()) < (leaf.time or 0):
+        if outputs is None:
+            raise ValueError("template leaf needs the transaction outputs")
+        if hashlib.sha256(outputs).digest() != leaf.hash:
+            raise ValueError("template leaf does not match the transaction outputs")
 
     if leaf.type != "hashlock" and witness.preimage is not None:
         raise ValueError("preimage on a leaf that is not a hashlock")
