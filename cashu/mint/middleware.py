@@ -16,6 +16,8 @@ from starlette.middleware.base import (
 )
 from starlette.middleware.cors import CORSMiddleware
 
+from ..core.base import AuthProof
+from ..core.crypto.keys import is_bls_keyset
 from ..core.settings import settings
 from .limit import _rate_limit_exceeded_handler, limiter_global
 
@@ -88,7 +90,32 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
             blind_auth_token = request.headers.get("blind-auth")
             if not blind_auth_token:
                 raise Exception("Missing blind auth token.")
-            async with auth_ledger.verify_blind_auth(blind_auth_token):
+            # NUT-22: a version 02 BAT signs the request it authorizes, so the
+            # verifier rebuilds the request transcript from these. The body is
+            # read only for version 02 tokens; Starlette caches the read for
+            # the downstream app.
+            raw_path = request.scope.get("raw_path")
+            # Some ASGI transports include the query in raw_path.
+            target = (
+                raw_path.split(b"?", 1)[0].decode("ascii")
+                if raw_path is not None
+                else request.url.path
+            )
+            query_string = request.scope["query_string"]
+            if query_string:
+                target += "?" + query_string.decode("ascii")
+            body = b""
+            try:
+                if is_bls_keyset(AuthProof.from_base64(blind_auth_token).id):
+                    body = await request.body()
+            except Exception:
+                pass
+            async with auth_ledger.verify_blind_auth(
+                blind_auth_token,
+                method=request.method,
+                target=target,
+                body=body,
+            ):
                 return await call_next(request)
         else:
             return await call_next(request)

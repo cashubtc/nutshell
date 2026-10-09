@@ -203,7 +203,7 @@ async def test_wallet_auth_invoice_invalid_bat(wallet: Wallet):
     await auth_wallet.load_proofs()
     assert len(auth_wallet.proofs) == auth_wallet.mint_info.bat_max_mint
 
-    # invalidate blind auth proofs
+    # invalidate blind auth proofs with unsigned point secrets
     for p in auth_wallet.proofs:
         tampered_secret = PrivateKey().public_key.format().hex()
         await auth_wallet.db.execute(

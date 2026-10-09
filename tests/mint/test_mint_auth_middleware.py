@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import FastAPI, Request, Response
 
+from cashu.core.base import AuthProof
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import ClearAuthFailedError
+from cashu.core.nuts import nut22
 from cashu.core.settings import settings
 from cashu.mint.auth.base import User
 from cashu.mint.middleware import BlindAuthMiddleware, ClearAuthMiddleware
@@ -162,8 +166,12 @@ async def test_blind_auth_middleware_wraps_protected_paths(monkeypatch):
         )
 
         @asynccontextmanager
-        async def verify_blind_auth(self, blind_auth_token: str):
+        async def verify_blind_auth(
+            self, blind_auth_token: str, *, method: str, target: str, body: bytes
+        ):
             assert blind_auth_token == "bat"
+            assert method == "GET"
+            assert target.startswith("/")
             entered["value"] = True
             yield
 
@@ -178,6 +186,59 @@ async def test_blind_auth_middleware_wraps_protected_paths(monkeypatch):
     )
     assert entered["value"] is True
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "target",
+    [
+        "/v1/s%77ap",
+        "/v1/s%77ap?b=2&a=1&q=a%20b&slash=%2f&slash=%2F",
+        "/v1/swap?b=2&a=1&q=a+b",
+    ],
+)
+async def test_blind_auth_middleware_verifies_raw_http_target(monkeypatch, target):
+    monkeypatch.setattr(settings, "mint_require_auth", True)
+    body = b'{"request":"body"}'
+    key = PrivateKey()
+    auth_proof = AuthProof(
+        id="02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+        secret=key.public_key.format().hex(),
+        C="00" * 48,
+        witness=nut22.sign_request(key, "POST", target, body),
+    )
+    verified = []
+
+    class AuthLedger:
+        mint_info = SimpleNamespace(
+            requires_blind_auth_path=lambda method, path: path == "/v1/swap",
+        )
+
+        @asynccontextmanager
+        async def verify_blind_auth(self, token, *, method, target, body):
+            assert nut22.verify_bat_request_witness(
+                AuthProof.from_base64(token), method, target, body
+            )
+            verified.append(target)
+            yield
+
+    monkeypatch.setattr("cashu.mint.middleware.auth_ledger", AuthLedger())
+    app = FastAPI()
+    app.add_middleware(BlindAuthMiddleware)
+
+    @app.post("/v1/swap")
+    async def swap(request: Request):
+        assert await request.body() == body
+        return {"ok": True}
+
+    async with httpx.AsyncClient(
+        base_url="http://mint.test", transport=httpx.ASGITransport(app=app)
+    ) as client:
+        response = await client.post(
+            target, content=body, headers={"Blind-auth": auth_proof.to_base64()}
+        )
+    assert response.status_code == 200
+    assert verified == [target]
 
 
 def test_mint_require_blind_auth_paths_includes_batch_mint():

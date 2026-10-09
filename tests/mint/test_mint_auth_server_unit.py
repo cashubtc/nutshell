@@ -105,6 +105,22 @@ async def test_get_user_creates_missing_user():
 
 
 @pytest.mark.asyncio
+async def test_get_user_falls_back_when_sub_is_missing():
+    ledger = _ledger()
+
+    class Crud:
+        async def get_user(self, user_id, db):
+            return User(id=user_id)
+
+    cast(Any, ledger).auth_crud = Crud()
+    user = await ledger._get_user({"preferred_username": "carol", "azp": "client"})
+    assert user.id == "carol"
+    # the client id is shared by every user, so it never names one
+    with pytest.raises(Exception, match="no usable subject claim"):
+        await ledger._get_user({"azp": "client"})
+
+
+@pytest.mark.asyncio
 async def test_verify_clear_auth_maps_verification_errors(monkeypatch):
     ledger = _ledger()
 
@@ -477,3 +493,60 @@ async def test_verify_clear_auth_uses_correct_rate_limit(monkeypatch):
     await ledger.verify_clear_auth("token")
     assert len(captured_limit) == 1
     assert captured_limit[0] == 42
+
+
+@pytest.mark.asyncio
+async def test_verify_blind_auth_v3_requires_a_valid_request_witness():
+    """NUT-22: a version 02 BAT is a point secret whose witness signs the request."""
+    from cashu.core.crypto.secp import PrivateKey
+    from cashu.core.nuts import nut22
+
+    v3_keyset_id = "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6"
+    key = PrivateKey()
+    secret = key.public_key.format().hex()
+    method, target, body = "POST", "/v1/swap", b'{"inputs":[]}'
+
+    def token(witness=None) -> str:
+        proof = Proof(id=v3_keyset_id, amount=1, C="00", secret=secret)
+        proof.witness = witness
+        return AuthProof.from_proof(proof).to_base64()
+
+    ledger = _ledger()
+    calls = {"verified": None}
+
+    async def verify_inputs_and_outputs(*, proofs):
+        calls["verified"] = proofs[0].secret
+
+    class DbWrite:
+        async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
+            pass
+
+        async def _unset_proofs_pending(self, proofs, keysets):
+            pass
+
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
+            pass
+
+    cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
+    cast(Any, ledger).db_write = DbWrite()
+    cast(Any, ledger).keysets = {v3_keyset_id: object()}
+
+    # A valid witness over this request passes.
+    good = token(witness=nut22.sign_request(key, method, target, body))
+    async with ledger.verify_blind_auth(
+        good, method=method, target=target, body=body
+    ):
+        pass
+    assert calls["verified"] == secret
+
+    # Missing witness, and a witness over a different request, both fail.
+    with pytest.raises(BlindAuthFailedError):
+        async with ledger.verify_blind_auth(
+            token(witness=None), method=method, target=target, body=body
+        ):
+            pass
+    with pytest.raises(BlindAuthFailedError):
+        async with ledger.verify_blind_auth(
+            good, method=method, target=target, body=b'{"inputs":["swapped"]}'
+        ):
+            pass

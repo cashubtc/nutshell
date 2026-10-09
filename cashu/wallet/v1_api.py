@@ -41,6 +41,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts import nut22
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .crud import (
@@ -159,6 +160,7 @@ class LedgerAPI(SupportsAuth):
     async def _request(self, method: str, path: str, noprefix=False, **kwargs):
         if not noprefix:
             path = join(self.api_prefix, path)
+        blind_auth: Optional[Tuple[Proof, Database]] = None
         if self.mint_info and self.mint_info.requires_blind_auth_path(method, path):
             if not self.auth_db:
                 raise Exception(
@@ -174,14 +176,7 @@ class LedgerAPI(SupportsAuth):
                     "Mint requires blind auth, but no blind auth tokens were found."
                 )
             # select one auth proof
-            proof = proofs[0]
-            auth_token = AuthProof.from_proof(proof).to_base64()
-            kwargs.setdefault("headers", {}).update(
-                {
-                    "Blind-auth": f"{auth_token}",
-                }
-            )
-            await invalidate_proof(proof=proof, db=self.auth_db)
+            blind_auth = (proofs[0], self.auth_db)
         if self.mint_info and self.mint_info.requires_clear_auth_path(method, path):
             logger.debug(f"Using clear auth token for {path}")
             clear_auth_token = kwargs.pop("clear_auth_token")
@@ -202,7 +197,26 @@ class LedgerAPI(SupportsAuth):
                 request_info += f"\nPayload: {json.dumps(kwargs['json'], indent=2)}"
             print(f"Request: {request_info}")
 
-        resp = await self.httpx.request(method, path, **kwargs)
+        # These options belong to send(), while timeout and encoding options
+        # belong to build_request(). Omitted options keep the client defaults.
+        send_kwargs = {
+            option: kwargs.pop(option)
+            for option in ("auth", "follow_redirects")
+            if option in kwargs
+        }
+        request = self.httpx.build_request(method, path, **kwargs)
+        if blind_auth is not None:
+            proof, auth_db = blind_auth
+            bat_key = nut22.bat_private_key(proof.derivation_path)
+            if bat_key is not None:
+                # NUT-22 binds the exact encoded target and body HTTPX sends.
+                body = await request.aread()
+                proof.witness = nut22.sign_request(
+                    bat_key, request.method, request.url.raw_path.decode("ascii"), body
+                )
+            request.headers["Blind-auth"] = AuthProof.from_proof(proof).to_base64()
+            await invalidate_proof(proof=proof, db=auth_db)
+        resp = await self.httpx.send(request, **send_kwargs)
 
         # Verbose logging of responses when enabled
         if settings.wallet_verbose_requests:
