@@ -1229,7 +1229,7 @@ def test_script_path_template_leaf():
 
 
 def test_script_path_unknown_leaf_type_fails_closed():
-    """An unallocated leaf type (0x06) is unsatisfiable even when it commits."""
+    """An unallocated leaf type is unsatisfiable even when it commits."""
     from cashu.core.crypto.nutroot import verify_script_path_spend
 
     v62 = VECTORS["two_leaf_covenant"]
