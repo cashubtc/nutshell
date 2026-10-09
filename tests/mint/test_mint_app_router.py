@@ -355,6 +355,7 @@ def test_router_quote_routes_and_swap(monkeypatch):
     assert mint_quote.status_code == 200
     assert mint_quote.json()["quote"] == "quote-1"
     assert mint_quote.json()["method"] == "bolt11"
+    assert "pubkey" not in mint_quote.json()
 
     melt_quote = client.post(
         "/v1/melt/quote/bolt11",
