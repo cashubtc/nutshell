@@ -106,6 +106,41 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_melt_stores_spent_proofs_with_C(wallet1: Wallet, ledger: Ledger):
+    mint_quote = await wallet1.request_mint(128)
+    await ledger.get_mint_quote(mint_quote.quote)
+    await wallet1.mint(128, quote_id=mint_quote.quote)
+
+    mint_quote_to_pay = await wallet1.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_to_pay.request, unit="sat")
+    )
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
+    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+
+    Ys = [p.Y for p in send_proofs]
+    rows = await ledger.db.fetchall(
+        f"SELECT y, c FROM {ledger.db.table_with_schema('proofs_used')} "
+        f"WHERE y IN ({','.join(f':y_{i}' for i in range(len(Ys)))})",
+        {f"y_{i}": y for i, y in enumerate(Ys)},
+    )
+    assert {r["y"]: r["c"] for r in rows} == {p.Y: p.C for p in send_proofs}
+
+    used = await ledger.crud.get_proofs_used(Ys=Ys, db=ledger.db)
+    assert {p.Y: p.C for p in used} == {p.Y: p.C for p in send_proofs}
+
+
+@pytest.mark.asyncio
+async def test_pending_proofs_are_read_with_C(ledger: Ledger):
+    proof = _unissued_proof(ledger, 8, "pending-proof-with-C")
+    await ledger.crud.set_proof_pending(db=ledger.db, proof=proof)
+
+    pending = await ledger.crud.get_proofs_pending(Ys=[proof.Y], db=ledger.db)
+    assert [p.C for p in pending] == [proof.C]
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
