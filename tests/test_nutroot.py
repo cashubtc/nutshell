@@ -388,7 +388,7 @@ async def test_nut13_v3_secret_derivation_vectors():
 
     nut13 = VECTORS["nut13_v3"]
     secrets = WalletSecrets()
-    secrets.seed = nut13["seed_utf8"].encode()
+    secrets.seed = bytes.fromhex(nut13["seed_hex"])
     secrets.keyset_id = nut13["keyset_id"]
     for output in nut13["outputs"]:
         secret, r, path = await secrets.generate_determinstic_secret(output["counter"])
@@ -397,6 +397,20 @@ async def test_nut13_v3_secret_derivation_vectors():
         assert r.hex() == output["blinding_factor"]
         expected_pub = PrivateKey(bytes.fromhex(output["secret_key"])).public_key
         assert expected_pub and expected_pub.format() == secret
+
+
+def test_nut13_v3_scope_must_be_33_bytes():
+    """A short keyset id, an empty scope or a bare x-only key is not a derivation scope."""
+    from cashu.wallet.secrets import WalletSecrets
+
+    nut13 = VECTORS["nut13_v3"]
+    secrets = WalletSecrets()
+    secrets.seed = bytes(64)
+    for scope in (nut13["keyset_id"][:16], "", nut13["mint_identity"][2:]):
+        with pytest.raises(ValueError, match="33 bytes"):
+            secrets.derive_v3_secret_key(0, scope)
+        with pytest.raises(ValueError, match="33 bytes"):
+            secrets.derive_v3_quote_lock_key(0, scope)
 
 
 @pytest.mark.asyncio
@@ -410,7 +424,7 @@ async def test_nut13_v3_derivation_type_vectors():
 
     nut13 = VECTORS["nut13_v3"]
     secrets = WalletSecrets()
-    secrets.seed = nut13["seed_utf8"].encode()
+    secrets.seed = bytes.fromhex(nut13["seed_hex"])
     keyset_id = nut13["keyset_id"]
     for output in nut13["outputs"]:
         offset = secrets.derive_v3_nums_offset(output["counter"], keyset_id)
@@ -766,7 +780,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     tv = VECTORS["transcript"]["swap"]
     n13 = VECTORS["nut13_v3"]
     wallet = Wallet.__new__(Wallet)
-    wallet.seed = n13["seed_utf8"].encode()
+    wallet.seed = bytes.fromhex(n13["seed_hex"])
     proofs = [
         Proof(
             amount=8,
@@ -1184,6 +1198,36 @@ def test_script_path_threshold_and_hashlock():
             }),
         )
 
+    # A signature entry that is not a 64-byte BIP-340 encoding invalidates the witness.
+    with pytest.raises(ValueError, match="malformed signature"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            nutroot_witness({
+                "leaf": leaf_threshold.hex(),
+                "control": {
+                    "K": internal_key.format().hex(),
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
+                },
+                "signatures": [_sign_digest(3, digest), _sign_digest(4, digest)[:-2]],
+            }),
+        )
+    # A preimage on a leaf that is not a hashlock invalidates the witness.
+    with pytest.raises(ValueError, match="not a hashlock"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            nutroot_witness({
+                "leaf": leaf_threshold.hex(),
+                "control": {
+                    "K": internal_key.format().hex(),
+                    "path": [h.hex() for h in nutroot_merkle_path(hashes, 0)],
+                },
+                "signatures": [_sign_digest(3, digest), _sign_digest(4, digest)],
+                "preimage": preimage.hex(),
+            }),
+        )
+
     # Hashlock: preimage + signature passes; wrong preimage fails; missing preimage fails.
     hashlock_witness = nutroot_witness({
         "leaf": leaf_hashlock.hex(),
@@ -1206,6 +1250,12 @@ def test_script_path_threshold_and_hashlock():
             secret,
             digest,
             hashlock_witness.model_copy(update={"preimage": None}),
+        )
+    with pytest.raises(ValueError, match="32 bytes"):
+        verify_script_path_spend(
+            secret,
+            digest,
+            hashlock_witness.model_copy(update={"preimage": "07" * 31}),
         )
 
 

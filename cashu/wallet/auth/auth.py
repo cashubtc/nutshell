@@ -8,7 +8,7 @@ from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
 from ...core.base import Proof
-from ...core.crypto.keys import PrivateKey
+from ...core.crypto.keys import is_bls_keyset
 from ...core.crypto.secp import PrivateKey as SecpPrivateKey
 from ...core.db import Database
 from ..crud import get_mint_by_url, update_mint
@@ -227,10 +227,13 @@ class WalletAuth(Wallet):
             raise Exception("No clear auth token available.")
 
         amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
-        secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-        rs: List[PrivateKey] = [SecpPrivateKey(os.urandom(32)) for _ in amounts] # type: ignore[misc]
+        if is_bls_keyset(self.keyset_id):
+            secrets = [SecpPrivateKey().public_key.format().hex() for _ in amounts]
+        else:
+            secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
         derivation_paths = ["" for _ in amounts]
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+        # The selected keyset determines whether blinding factors use secp or BLS.
+        outputs, rs = self._construct_outputs(amounts, secrets)
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
         new_proofs = await self._construct_proofs(
             promises, secrets, rs, derivation_paths
