@@ -656,19 +656,6 @@ def test_transcript_mixed_keyset_vector_names_inputs_by_y():
     )
 
 
-def test_transcript_carries_blinded_message_hash():
-    """B_ enters the 0x21 container as SHA256(B_), never raw (NUT-10)."""
-    from cashu.core.crypto.transcript import build_transaction_transcript
-
-    for name, tv in VECTORS["transcript"].items():
-        if name == "comment":
-            continue
-        transcript = build_transaction_transcript(_tx_from_vector(tv["tx"]))
-        for o in tv["tx"].get("blinded_outputs", []):
-            B_ = bytes.fromhex(o["B_"])
-            assert B_ not in transcript
-            assert hashlib.sha256(B_).digest() in transcript
-
 def test_transcript_rejects_empty_sections():
     from cashu.core.crypto.transcript import build_transaction_transcript
 

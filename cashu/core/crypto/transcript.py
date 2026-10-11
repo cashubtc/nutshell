@@ -100,7 +100,6 @@ def _melt_quote_output_container(q: TranscriptQuote) -> bytes:
 
 
 def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
-    # B_ enters as its hash (NUT-10); the request still carries B_ itself.
     return tlv_record(
         _CONTAINER_BLINDED_OUTPUT,
         _amount_record(o.amount)
