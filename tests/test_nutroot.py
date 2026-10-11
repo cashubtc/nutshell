@@ -451,6 +451,24 @@ async def test_nut13_v3_derivation_type_vectors():
     assert len(derived) == 4
 
 
+def test_nut13_v3_quote_id_preimage_vectors():
+    """Type 0x05 shares the quote lock's counter and scope; its NUT-04 derived id matches."""
+    from cashu.core.crypto.transcript import derived_quote_id
+    from cashu.wallet.secrets import WalletSecrets
+
+    nut13 = VECTORS["nut13_v3"]
+    secrets = WalletSecrets()
+    secrets.seed = bytes.fromhex(nut13["seed_hex"])
+    for lock in nut13["quote_locks"]:
+        preimage = secrets.derive_v3_quote_id_preimage(
+            lock["counter"], nut13["mint_identity"]
+        )
+        assert preimage.hex() == lock["id_preimage"]
+        assert derived_quote_id(preimage) == lock["quote_id"]
+    with pytest.raises(ValueError, match="32 bytes"):
+        derived_quote_id(b"\x00" * 31)
+
+
 def test_v3_secret_must_be_lowercase_hex():
     """One spelling per secret: upper-case hex names the same point but the two
     sides hash it differently, so it is refused rather than accepted twice."""
@@ -609,47 +627,47 @@ def test_transcript_multi_input_vector_uses_per_input_digests():
 def test_transcript_mixed_keyset_vector_names_inputs_by_y():
     """NUT-10 tests, "Mixed keysets": a pre-v3 input beside a v3 one, each
     named by the Y its own keyset's curve gives; neither secret appears."""
-    from cashu.core.crypto.nutroot import proof_transcript_y
     from cashu.core.crypto.transcript import (
-        TransactionShape,
-        TranscriptBlindedOutput,
-        TranscriptProofInput,
         build_transaction_transcript,
         transaction_inputs,
     )
 
-    inputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b", "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"}, {"amount": 2, "id": "00456a94ab4e1c46", "secret": "d341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6", "C": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"}]
-    outputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}, {"amount": 2, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}]
-    tx = TransactionShape(
-        proof_inputs=[
-            TranscriptProofInput(
-                amount=p["amount"],
-                keyset_id=bytes.fromhex(p["id"]),
-                Y=proof_transcript_y(p["secret"], p["id"]),
-                C=bytes.fromhex(p["C"]),
-            )
-            for p in inputs
-        ],
-        blinded_outputs=[
-            TranscriptBlindedOutput(
-                amount=o["amount"],
-                keyset_id=bytes.fromhex(o["id"]),
-                B_=bytes.fromhex(o["B_"]),
-            )
-            for o in outputs
-        ],
-    )
-    transcript = build_transaction_transcript(tx)
-    assert transcript.hex() == "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033271100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba221005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5521005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
-    assert inputs[0]["secret"] not in transcript.hex()
-    assert inputs[1]["secret"].encode().hex() not in transcript.hex()
+    vector = VECTORS["transcript"]["mixed_keysets"]
+    tx = _tx_from_vector(vector["tx"])
+    transcript = build_transaction_transcript(tx).hex()
+    assert transcript == vector["transcript"]
+    for p in vector["tx"]["proof_inputs"]:
+        assert p["secret"] not in transcript
+        assert p["secret"].encode().hex() not in transcript
     digest, proof_contexts, _ = transaction_inputs(tx)
-    assert digest.hex() == "f3eda61cef37e0ea952968fecf7a54fa2ee31fd5b9b62a3ec0e6cbcab5675f0e"
-    v3 = proof_contexts[bytes.fromhex("a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73")]
-    assert v3.digest.hex() == "a01808ebee8586577034824a151a2558910496144b5fa020dbfd431f3b421021"
-    legacy = proof_contexts[bytes.fromhex("029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae")]
-    assert hashlib.sha256(legacy.container).hexdigest() == "efbdd5d14874cb021fc962d93a9848553ca65ae101e9b57f6678aa37ffe1ebd9"
+    assert digest.hex() == vector["digest"]
+    for expected in vector["inputs"]:
+        context = proof_contexts[bytes.fromhex(expected["Y"])]
+        assert context.container.hex() == expected["container"]
+        assert hashlib.sha256(context.container).hexdigest() == expected["input_id"]
+    # Only the v3 input signs its input digest.
+    v3_expected = vector["inputs"][0]
+    v3 = proof_contexts[bytes.fromhex(v3_expected["Y"])]
+    assert v3.digest.hex() == v3_expected["input_digest"]
+    assert verify_schnorr_digest(
+        bytes.fromhex(v3_expected["signature"]),
+        v3.digest,
+        bytes.fromhex(vector["tx"]["proof_inputs"][0]["secret"]),
+    )
 
+
+def test_transcript_carries_blinded_message_hash():
+    """B_ enters the 0x21 container as SHA256(B_), never raw (NUT-10)."""
+    from cashu.core.crypto.transcript import build_transaction_transcript
+
+    for name, tv in VECTORS["transcript"].items():
+        if name == "comment":
+            continue
+        transcript = build_transaction_transcript(_tx_from_vector(tv["tx"]))
+        for o in tv["tx"].get("blinded_outputs", []):
+            B_ = bytes.fromhex(o["B_"])
+            assert B_ not in transcript
+            assert hashlib.sha256(B_).digest() in transcript
 
 def test_transcript_rejects_empty_sections():
     from cashu.core.crypto.transcript import build_transaction_transcript
