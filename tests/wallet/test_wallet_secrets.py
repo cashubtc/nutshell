@@ -27,7 +27,7 @@ async def test_nut13_v3_secret_derivation():
     with open(vectors_path) as f:
         nut13 = json.load(f)["nut13_v3"]
 
-    ms = MockWalletSecrets(nut13["seed_utf8"].encode())
+    ms = MockWalletSecrets(bytes.fromhex(nut13["seed_hex"]))
     keyset_id = nut13["keyset_id"]
 
     # Nutroot secrets (NUT-13): type 0x00 derives the internal key k with the attempt-counter
