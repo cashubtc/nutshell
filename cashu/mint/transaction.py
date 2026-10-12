@@ -178,7 +178,7 @@ async def run(
 
     # A quote input prices as its minimal split, inside NUT-02's single rounding.
     ppk = sum(ledger.keysets[p.id].input_fee_ppk for p in proofs) + sum(
-        q.amount.bit_count() * settings.mint_quote_input_fee_ppk
+        q.amount.bit_count() * settings.quote_input_fee_ppk
         for q in payload.mint_quote_inputs
     )
     fee = (ppk + 999) // 1000

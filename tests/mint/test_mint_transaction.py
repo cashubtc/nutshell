@@ -58,6 +58,14 @@ def transcript_change(c: TransactionChangeOutput) -> TranscriptChangeOutput:
     return TranscriptChangeOutput(bytes.fromhex(c.pubkey), c.quote_id, c.amount)
 
 
+def test_quote_input_fee_defaults_to_the_keyset_fee(monkeypatch):
+    monkeypatch.setattr(settings, "mint_input_fee_ppk", 100)
+    monkeypatch.setattr(settings, "mint_quote_input_fee_ppk", None)
+    assert settings.quote_input_fee_ppk == 100
+    monkeypatch.setattr(settings, "mint_quote_input_fee_ppk", 0)
+    assert settings.quote_input_fee_ppk == 0
+
+
 async def locked_quote(ledger: Ledger, amount: int):
     privkey, pubkey = nut20.generate_keypair()
     quote = await ledger.mint_quote(

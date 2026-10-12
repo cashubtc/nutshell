@@ -78,7 +78,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features = self.add_batch_features(mint_features)
         mint_features[TRANSACTION_NUT] = {
             "supported": True,
-            "quote_input_fee_ppk": settings.mint_quote_input_fee_ppk,
+            "quote_input_fee_ppk": settings.quote_input_fee_ppk,
         }
 
         return mint_features
