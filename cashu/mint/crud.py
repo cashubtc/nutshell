@@ -545,8 +545,7 @@ class LedgerCrudSqlite(LedgerCrud):
             SELECT * from {db.table_with_schema("melt_quotes")} WHERE quote IN (
                 SELECT DISTINCT melt_quote FROM {db.table_with_schema("proofs_pending")}
                 UNION
-                SELECT melt_quote FROM {db.table_with_schema("transactions")}
-                WHERE state = 'PENDING' AND melt_quote IS NOT NULL
+                SELECT melt_quote FROM {db.table_with_schema("melt_transactions")}
             )
             """
         )

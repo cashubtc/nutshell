@@ -707,7 +707,7 @@ class Wallet(
             if is_bls_keyset(outputs[0].id):
                 # V3: sign the quote input digest (quote input + outputs).
                 signature = nut20.sign_mint_quote_v3(
-                    quote_id, quote.amount, outputs, quote.privkey
+                    quote_id, sum(o.amount for o in outputs), outputs, quote.privkey
                 )
             else:
                 signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
@@ -802,7 +802,9 @@ class Wallet(
                     ),
                     change_quote_outputs=[
                         TranscriptChangeOutput(
-                            pubkey=bytes.fromhex(c.pubkey), amount=c.amount
+                            pubkey=bytes.fromhex(c.pubkey),
+                            quote_id=c.quote_id,
+                            amount=c.amount,
                         )
                         for c in change_quote_outputs or []
                     ],

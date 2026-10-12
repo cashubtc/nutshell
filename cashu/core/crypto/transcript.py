@@ -11,6 +11,7 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
+QUOTE_ID_TAG = "Cashu_QuoteId"
 
 # The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 _CONTAINER_PROOF_INPUT = 0x11
@@ -45,6 +46,7 @@ class TranscriptBlindedOutput:
 @dataclass
 class TranscriptChangeOutput:
     pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
+    quote_id: str  # derived from the output's id_preimage (NUT-04)
     amount: Optional[int] = None  # None on the remainder quote
 
 
@@ -66,10 +68,13 @@ def _amount_record(amount: int) -> bytes:
 def _change_output_container(c: TranscriptChangeOutput) -> bytes:
     if len(c.pubkey) != 33:
         raise ValueError("Transcript change lock key must be 33 bytes")
+    if not c.quote_id:
+        raise ValueError("Transcript quote id must be non-empty")
     return tlv_record(
         _CONTAINER_CHANGE_QUOTE_OUTPUT,
         (_amount_record(c.amount) if c.amount is not None else b"")
-        + tlv_record(0x02, c.pubkey),
+        + tlv_record(0x02, c.pubkey)
+        + tlv_record(0x03, c.quote_id.encode("utf-8")),
     )
 
 
@@ -112,7 +117,7 @@ def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
         _CONTAINER_BLINDED_OUTPUT,
         _amount_record(o.amount)
         + tlv_record(0x02, o.keyset_id)
-        + tlv_record(0x03, o.B_),
+        + tlv_record(0x03, hashlib.sha256(o.B_).digest()),
     )
 
 
@@ -209,3 +214,10 @@ def spend_commitment(Y: bytes, input_digest_: bytes, witness: str) -> bytes:
         input_digest_,
         hashlib.sha256(witness.encode("utf-8")).digest(),
     )
+
+
+def derived_quote_id(id_preimage: bytes) -> str:
+    """A derived quote id (NUT-04): hex(tagged_hash("Cashu_QuoteId", id_preimage))."""
+    if len(id_preimage) != 32:
+        raise ValueError("Quote id preimage must be 32 bytes")
+    return tagged_hash(QUOTE_ID_TAG, id_preimage).hex()

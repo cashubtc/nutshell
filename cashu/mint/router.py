@@ -611,22 +611,15 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     response_model=PostTransactionResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
 async def transaction(
     request: Request, payload: PostTransactionRequest
 ) -> PostTransactionResponse:
-    logger.trace(f"> POST /v1/transaction: {payload}")
+    traced = payload.model_dump(
+        exclude={"change_quote_outputs": {"__all__": {"id_preimage"}}}
+    )
+    logger.trace(f"> POST /v1/transaction: {traced}")
     return await ledger.transaction(payload)
-
-
-@router.get(
-    "/v1/transaction/{digest}",
-    name="Get transaction",
-    summary="Get a transaction record by its digest",
-    response_model=PostTransactionResponse,
-)
-@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def get_transaction(request: Request, digest: str) -> PostTransactionResponse:
-    return await ledger.get_transaction(digest)
 
 
 @router.get(

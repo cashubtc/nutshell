@@ -1,13 +1,14 @@
 """NUT-XX transactions: proofs and paid quotes in; blinded messages, one melt
-and change quotes out. The record is keyed by transaction digest."""
+and change quotes out. A transaction with a melt is recorded by its melt quote."""
 
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import bolt11
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from ..core.base import (
     Amount,
@@ -17,14 +18,15 @@ from ..core.base import (
     Method,
     MintQuote,
     MintQuoteState,
+    ProofSpentState,
+    ProofState,
     Unit,
 )
-from ..core.crypto.keys import is_bls_keyset
-from ..core.crypto.nutroot import change_quote_id
 from ..core.crypto.secp import PublicKey
 from ..core.crypto.transcript import TranscriptChangeOutput, TranscriptQuote
 from ..core.db import Connection, LockOptions
 from ..core.errors import (
+    KeysetInactiveError,
     NotAllowedError,
     QuoteAlreadyIssuedError,
     QuoteExpiredError,
@@ -41,6 +43,7 @@ from ..core.models import (
 )
 from ..core.nuts import nut20
 from ..core.settings import settings
+from .db.read import _spent_proof_state
 
 if TYPE_CHECKING:
     from .ledger import Ledger
@@ -52,7 +55,7 @@ CHANGE_METHOD = "change"
 async def run(
     ledger: "Ledger", payload: PostTransactionRequest
 ) -> PostTransactionResponse:
-    """Validate, record and run one transaction (NUT-XX)."""
+    """Validate and run one transaction (NUT-XX)."""
     proofs, outputs = payload.proof_inputs, payload.blinded_outputs
     change_outputs = payload.change_quote_outputs
     if not (proofs or payload.mint_quote_inputs):
@@ -80,9 +83,10 @@ async def run(
     for c in change_outputs:
         key = bytes.fromhex(c.pubkey)
         PublicKey(key)  # raises unless a valid compressed point
-        c.pubkey = key.hex()  # canonical spelling, so key comparisons are byte-wise
-    if len({c.pubkey for c in change_outputs}) != len(change_outputs):
-        raise TransactionError("transaction repeats a change quote lock key.")
+        c.pubkey = key.hex()
+    change_ids = [c.quote_id for c in change_outputs]
+    if len(set(change_ids)) != len(change_ids):
+        raise TransactionError("transaction repeats a change quote id.")
 
     if any(m.fee_index is not None for m in payload.melt_quote_outputs):
         raise TransactionError("fee_index applies only to quotes offering fee_options.")
@@ -113,19 +117,26 @@ async def run(
             for q, k in zip(payload.mint_quote_inputs, lock_keys)
         ],
         change_quote_outputs=[
-            TranscriptChangeOutput(pubkey=bytes.fromhex(c.pubkey), amount=c.amount)
-            for c in change_outputs
+            TranscriptChangeOutput(
+                pubkey=bytes.fromhex(c.pubkey), quote_id=i, amount=c.amount
+            )
+            for c, i in zip(change_outputs, change_ids)
         ],
     )
-    assert verified is not None
+    if verified is None:
+        raise TransactionError("transaction has no v3 transcript.")
     digest_bytes, quote_contexts = verified
     digest = digest_bytes.hex()
+    for q, k in zip(payload.mint_quote_inputs, lock_keys):
+        if not nut20.verify_quote_input_witness(
+            quote_contexts[q.quote].digest,
+            k,
+            q.witness,
+            quote_contexts[q.quote].outputs,
+        ):
+            raise QuoteSignatureInvalidError()
 
-    # A resend returns the record; a FAILED one is replaced (NUT-XX).
-    record = await _get_row(ledger, digest)
-    if record and record["state"] != FAILED:
-        return await get(ledger, digest)
-
+    melt_id = melt.quote if melt else None
     if proofs:
         proof_digests = [p.digest for p in proofs]
         await ledger._verify_inputs(proofs)  # clears p.digest
@@ -146,7 +157,7 @@ async def run(
     unit = units.pop()
 
     now = int(time.time())
-    for q, mq, k in zip(payload.mint_quote_inputs, mint_quotes, lock_keys):
+    for q, mq in zip(payload.mint_quote_inputs, mint_quotes):
         if mq.pending:
             raise QuotePendingError()
         if mq.issued:
@@ -161,13 +172,6 @@ async def run(
             ledger._verify_mint_quote_invoice_amount(
                 bolt11.decode(mq.request), Amount(Unit[mq.unit], mq.amount)
             )
-        if not nut20.verify_quote_input_witness(
-            quote_contexts[q.quote].digest,
-            k,
-            q.witness,
-            quote_contexts[q.quote].outputs,
-        ):
-            raise QuoteSignatureInvalidError()
 
     if melt:
         if ledger.disable_melt and settings.mint_disable_melt_on_error:
@@ -195,7 +199,21 @@ async def run(
             f"inputs ({inputs}) do not balance outputs, melt and fee ({required})."
         )
 
-    quote_ids = [q.quote for q in payload.mint_quote_inputs]
+    record: Dict[str, Any] = {
+        "melt_quote": melt_id,
+        "unit": unit,
+        "mint_quotes": json.dumps(
+            [[q.quote, q.amount] for q in payload.mint_quote_inputs]
+        ),
+        "change_outputs": json.dumps(
+            [[i, c.pubkey, c.amount] for c, i in zip(change_outputs, change_ids)]
+        ),
+        "excess": inputs - fee - sum_outputs - melt_amount,
+    }
+    # Read-only, so a claimed id fails before any input is reserved; the insert below decides.
+    await _refuse_claimed_ids(ledger, change_ids)
+    signatures: List[BlindedSignature] = []
+    touched: List[MintQuote] = []
     # Acquire melt locks before mint/proof locks, including every invoice alias.
     locks = (
         [
@@ -208,9 +226,9 @@ async def run(
         if melt
         else []
     )
-    # Reservations, outputs and the recovery record commit or roll back together.
+    # Id reservations, input reservations and outputs commit or roll back together.
     async with ledger.db.get_connection(locks=locks) as conn:
-        await _verify_change_keys_unused(ledger, change_outputs, conn)
+        quote_ids = [q.quote for q in payload.mint_quote_inputs]
         locked = await ledger.db_write._set_mint_quotes_pending(quote_ids, conn=conn)
         for q, mq in zip(payload.mint_quote_inputs, locked):
             if q.amount > mq.mintable:
@@ -219,40 +237,47 @@ async def run(
                 )
         if melt:
             melt = await ledger.db_write.verify_and_set_melt_quote_pending(
-                quote=melt, proofs=proofs, keysets=ledger.keysets, conn=conn
+                quote=melt,
+                proofs=proofs,
+                keysets=ledger.keysets,
+                conn=conn,
+                emit_events=False,
             )
+            if melt.paid_time:  # paid_time marks this attempt's internal payment
+                melt.paid_time = None
+                await ledger.crud.update_melt_quote(quote=melt, db=ledger.db, conn=conn)
         elif proofs:
             await ledger.db_write._verify_spent_proofs_and_set_pending(
-                proofs, keysets=ledger.keysets, conn=conn
+                proofs, keysets=ledger.keysets, conn=conn, emit_events=False
             )
-        await conn.execute(
-            f"DELETE FROM {ledger.db.table_with_schema('transactions')} WHERE digest = :digest AND state = :state",
-            {"digest": digest, "state": FAILED},
-        )
-        await ledger._store_blinded_messages(outputs, swap_id=digest, conn=conn)
-        await conn.execute(
-            f"""
-            INSERT INTO {ledger.db.table_with_schema("transactions")}
-            (digest, state, unit, melt_quote, mint_quotes, change_outputs, excess)
-            VALUES (:digest, :state, :unit, :melt_quote, :mint_quotes, :change_outputs, :excess)
-            """,
-            {
-                "digest": digest,
-                "state": PENDING,
-                "unit": unit,
-                "melt_quote": melt.quote if melt else None,
-                "mint_quotes": json.dumps(
-                    [[q.quote, q.amount] for q in payload.mint_quote_inputs]
-                ),
-                "change_outputs": json.dumps(
-                    [[c.pubkey, c.amount] for c in change_outputs]
-                ),
-                "excess": inputs - fee - sum_outputs - melt_amount,
-            },
-        )
-        if not melt:
+        await _claim_mint_quote_ids(ledger, change_ids, melt_id, conn)
+        # Tagged with the melt quote, so its NUT-08 `change` carries the signatures.
+        await ledger._store_blinded_messages(outputs, melt_id=melt_id, conn=conn)
+        if melt:
+            await conn.execute(
+                f"""
+                INSERT INTO {ledger.db.table_with_schema("melt_transactions")}
+                (melt_quote, unit, mint_quotes, change_outputs, excess)
+                VALUES (:melt_quote, :unit, :mint_quotes, :change_outputs, :excess)
+                """,
+                record,
+            )
+        else:
             await _finalize_proofs(ledger, proofs, conn)
-            await settle(ledger, digest, 0, conn)
+            signatures, touched = await settle(ledger, record, outputs, 0, conn)
+    # Events wait for the commit, so a rolled-back acceptance emits none.
+    if melt:
+        await ledger.events.submit(melt)
+        for quote in locked:
+            await ledger.events.submit(quote)
+    for p in proofs:
+        await ledger.events.submit(
+            ProofState(Y=p.Y, state=ProofSpentState.pending)
+            if melt
+            else _spent_proof_state(p.Y, p)
+        )
+    for quote in touched:
+        await ledger.events.submit(quote)
     if melt:
         pending_melt: MeltQuote = melt
 
@@ -266,103 +291,106 @@ async def run(
             asyncio.create_task(pay())
         else:
             await pay()
-    return await get(ledger, digest)
+    return await _response(ledger, melt_id, change_ids, signatures)
 
 
-async def get(ledger: "Ledger", digest: str) -> PostTransactionResponse:
-    """The record for `digest`; a pending melt is checked with the backend first."""
-    record = await _get_row(ledger, digest)
-    if not record:
-        raise TransactionError("transaction not found.")
-    if record["state"] == PENDING and record["melt_quote"]:
-        await ledger.get_melt_quote(record["melt_quote"])  # settles or fails it
-        record = await _get_row(ledger, digest)
-        assert record is not None
-    signatures: List[BlindedSignature] = []
-    if record["state"] == PAID:
-        rows = await ledger.db.fetchall(
-            f"""
-            SELECT * FROM {ledger.db.table_with_schema("promises")}
-            WHERE swap_id = :digest AND c_ IS NOT NULL ORDER BY order_index ASC
-            """,
-            {"digest": digest},
-        )
-        for row in rows:
-            promise = BlindedSignature.from_row(row)  # type: ignore
-            if not is_bls_keyset(promise.id):  # v3 carries no DLEQ
-                promise.dleq = ledger._generate_dleq(
-                    BlindedMessage.from_row(row), promise
-                )
-            signatures.append(promise)
+async def _response(
+    ledger: "Ledger",
+    melt_id: Optional[str],
+    change_ids: List[str],
+    signatures: List[BlindedSignature],
+) -> PostTransactionResponse:
+    """The outcome as it stands; a melt's signatures are its NUT-08 `change`."""
+    state = PAID
     melts = []
-    if record["melt_quote"]:
-        melt = await ledger.crud.get_melt_quote(
-            quote_id=record["melt_quote"], db=ledger.db
-        )
-        assert melt is not None
+    if melt_id:
+        melt = await ledger.get_melt_quote(melt_id)
+        state = PAID if melt.paid else PENDING if melt.pending else FAILED
+        signatures = melt.change or []
         melts.append(PostMeltQuoteResponse.from_melt_quote(melt))
-    # One entry per request entry, in order; null until the quote exists (NUT-XX).
-    quote_ids: List[Optional[str]] = (
-        json.loads(record["change_quotes"])
-        if record["change_quotes"]
-        else [None] * len(json.loads(record["change_outputs"]))
-    )
-    change: List[Optional[PostMintQuoteResponse]] = []
-    for quote_id in quote_ids:
-        quote = (
-            await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db)
-            if quote_id
-            else None
+    if state != PAID:
+        return PostTransactionResponse(
+            state=state, melt_quotes=melts, change_quotes=[None] * len(change_ids)
         )
+    # One entry per request entry, in order; null for a remainder with zero change.
+    change: List[Optional[PostMintQuoteResponse]] = []
+    for quote_id in change_ids:
+        quote = await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db)
         change.append(PostMintQuoteResponse.from_mint_quote(quote) if quote else None)
     return PostTransactionResponse(
-        digest=digest,
-        state=record["state"],
+        state=state,
         signatures=signatures,
         melt_quotes=melts,
         change_quotes=change,
     )
 
 
-async def _get_row(ledger: "Ledger", digest: str, conn: Optional[Connection] = None):
-    return await (conn or ledger.db).fetchone(
-        f"SELECT * FROM {ledger.db.table_with_schema('transactions')} WHERE digest = :digest",
-        {"digest": digest},
-    )
-
-
 async def pending_for_melt(
     ledger: "Ledger", melt_quote: str, conn: Optional[Connection] = None
-) -> Optional[str]:
-    """Digest of the pending transaction paying this melt quote, if any."""
-    row = await (conn or ledger.db).fetchone(
+) -> Optional[Any]:
+    """The pending transaction paying this melt quote, if any."""
+    return await (conn or ledger.db).fetchone(
         f"""
-        SELECT digest FROM {ledger.db.table_with_schema("transactions")}
-        WHERE melt_quote = :melt_quote AND state = :state
+        SELECT * FROM {ledger.db.table_with_schema("melt_transactions")}
+        WHERE melt_quote = :melt_quote
         """,
-        {"melt_quote": melt_quote, "state": PENDING},
+        {"melt_quote": melt_quote},
     )
-    return row["digest"] if row else None
 
 
-async def _verify_change_keys_unused(
-    ledger: "Ledger", change_outputs, conn: Connection
+async def paid_internally(
+    ledger: "Ledger", melt: MeltQuote, conn: Optional[Connection] = None
+) -> bool:
+    """A transaction's melt paid by internal settlement, its transaction still to settle.
+
+    Internal settlement sets `paid_time` and leaves the quote PENDING; acceptance clears it.
+    """
+    return bool(
+        melt.pending
+        and melt.paid_time
+        and await pending_for_melt(ledger, melt.quote, conn)
+    )
+
+
+async def _refuse_claimed_ids(
+    ledger: "Ledger", ids: List[str], conn: Optional[Connection] = None
 ) -> None:
-    """A lock key names one change quote: refuse one already created or pending."""
-    for c in change_outputs:
-        quote_id = change_quote_id(bytes.fromhex(c.pubkey))
-        if await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db, conn=conn):
-            raise TransactionError("change quote lock key already used.")
-        # Pending transactions hold their keys in the record, not as quotes yet.
-        row = await conn.fetchone(
-            f"""
-            SELECT 1 FROM {ledger.db.table_with_schema("transactions")}
-            WHERE state = :state AND change_outputs LIKE :key
-            """,
-            {"state": PENDING, "key": f'%"{c.pubkey}"%'},
-        )
-        if row:
-            raise TransactionError("change quote lock key already used.")
+    """Refuse an id claimed by a transaction or held by any mint quote (NUT-04)."""
+    if not ids:
+        return
+    names = ",".join(f":id_{i}" for i in range(len(ids)))
+    if await (conn or ledger.db).fetchall(
+        f"""
+        SELECT quote_id FROM {ledger.db.table_with_schema("mint_quote_id_claims")}
+        WHERE quote_id IN ({names})
+        UNION
+        SELECT quote FROM {ledger.db.table_with_schema("mint_quotes")}
+        WHERE quote IN ({names})
+        """,
+        {f"id_{i}": quote_id for i, quote_id in enumerate(ids)},
+    ):
+        raise TransactionError("change quote id already claimed.")
+
+
+async def _claim_mint_quote_ids(
+    ledger: "Ledger", ids: List[str], melt_id: Optional[str], conn: Connection
+) -> None:
+    """Claim the change quote ids at acceptance (NUT-XX).
+
+    The primary key refuses a claimed id, including one a concurrent transaction is claiming.
+    """
+    await _refuse_claimed_ids(ledger, ids, conn)
+    for quote_id in ids:
+        try:
+            await conn.execute(
+                f"""
+                INSERT INTO {ledger.db.table_with_schema("mint_quote_id_claims")}
+                (quote_id, melt_quote) VALUES (:quote_id, :melt_quote)
+                """,
+                {"quote_id": quote_id, "melt_quote": melt_id},
+            )
+        except IntegrityError:
+            raise TransactionError("change quote id already claimed.")
 
 
 async def _finalize_proofs(ledger: "Ledger", proofs, conn: Connection) -> None:
@@ -373,65 +401,66 @@ async def _finalize_proofs(ledger: "Ledger", proofs, conn: Connection) -> None:
         for keyset_id in {p.id for p in proofs}
     }
     await ledger.db_write.finalize_pending_proofs(
-        proofs=proofs, keysets=ledger.keysets, keyset_fees=keyset_fees, conn=conn
+        proofs=proofs,
+        keysets=ledger.keysets,
+        keyset_fees=keyset_fees,
+        conn=conn,
+        emit_events=False,
     )
 
 
 async def settle(
-    ledger: "Ledger", digest: str, fee_paid: int, conn: Connection
-) -> None:
-    """Sign the outputs, issue the quote inputs and create the change quotes."""
-    record = await _get_row(ledger, digest, conn=conn)
-    assert record is not None and record["state"] == PENDING
-    rows = await conn.fetchall(
-        f"""
-        SELECT * FROM {ledger.db.table_with_schema("promises")}
-        WHERE swap_id = :digest AND c_ IS NULL ORDER BY order_index ASC
-        """,
-        {"digest": digest},
-    )
+    ledger: "Ledger",
+    record,
+    outputs: List[BlindedMessage],
+    fee_paid: int,
+    conn: Connection,
+) -> Tuple[List[BlindedSignature], List[MintQuote]]:
+    """Sign the outputs, issue the quote inputs and create the change quotes.
+
+    Returns the signatures and every quote touched, for the caller to emit once committed.
+    """
+    signatures: List[BlindedSignature] = []
     unsigned = 0
-    if rows:
-        messages = [BlindedMessage.from_row(r) for r in rows]
-        if ledger.keysets[messages[0].id].active:
-            await ledger._sign_blinded_messages(messages, conn)
+    if outputs:
+        if ledger.keysets[outputs[0].id].active:
+            signatures = await ledger._sign_blinded_messages(outputs, conn)
+        elif not record["melt_quote"]:
+            raise KeysetInactiveError()
         else:
-            # The keyset rotated during the payment: nothing is signed (NUT-02),
-            # the outputs' value returns through the remainder quote.
-            unsigned = sum(m.amount for m in messages)
-            await conn.execute(
-                f"""
-                DELETE FROM {ledger.db.table_with_schema("promises")}
-                WHERE swap_id = :digest AND c_ IS NULL
-                """,
-                {"digest": digest},
+            # The keyset was inactivated during the payment: nothing is signed
+            # (NUT-02) and the outputs' value returns through the remainder quote.
+            unsigned = sum(o.amount for o in outputs)
+            await ledger.crud.delete_blinded_messages_melt_id(
+                melt_id=record["melt_quote"], db=ledger.db, conn=conn
             )
+    touched: List[MintQuote] = []
     for quote_id, amount in json.loads(record["mint_quotes"]):
         quote = await ledger.crud.get_mint_quote(
             quote_id=quote_id, db=ledger.db, conn=conn
         )
-        assert quote is not None
+        if quote is None:
+            raise TransactionError("stored quote input not found.")
         quote.amount_issued = (quote.amount_issued or 0) + amount
         drawn = quote.amount_issued >= (quote.amount_paid or quote.amount)
         state = MintQuoteState.issued if drawn else MintQuoteState.paid
         ledger.db_write._set_mint_quote_state(quote, state)
         await ledger.crud.update_mint_quote(quote=quote, db=ledger.db, conn=conn)
+        touched.append(quote)
     change = record["excess"] + unsigned - fee_paid
     if change < 0:
         raise TransactionError("negative change.")
-    change_quotes: List[Optional[str]] = []
     now = int(time.time())
-    for pubkey, fixed in json.loads(record["change_outputs"]):
+    for quote_id, pubkey, fixed in json.loads(record["change_outputs"]):
         amount = fixed if fixed is not None else change
         if amount <= 0:  # a remainder quote with zero change is not created
-            change_quotes.append(None)
             continue
         # Moved value, not a deposit: nothing here touches keyset balances.
         quote = MintQuote(
-            quote=change_quote_id(bytes.fromhex(pubkey)),
+            quote=quote_id,
             method=CHANGE_METHOD,
-            request=digest,
-            checking_id=f"{CHANGE_METHOD}:{digest}:{len(change_quotes)}",
+            request="",
+            checking_id=f"{CHANGE_METHOD}:{quote_id}",
             unit=record["unit"],
             amount=amount,
             state=MintQuoteState.paid,
@@ -443,35 +472,39 @@ async def settle(
             updated_at=now,
         )
         await ledger.crud.store_mint_quote(quote=quote, db=ledger.db, conn=conn)
-        change_quotes.append(quote.quote)
-    await conn.execute(
-        f"""
-        UPDATE {ledger.db.table_with_schema("transactions")}
-        SET state = :state, change_quotes = :change_quotes WHERE digest = :digest
-        """,
-        {"state": PAID, "change_quotes": json.dumps(change_quotes), "digest": digest},
-    )
+        touched.append(quote)
+    if record["melt_quote"]:
+        # Settled ids stay claimed whatever later happens to the melt quote.
+        await conn.execute(
+            f"UPDATE {ledger.db.table_with_schema('mint_quote_id_claims')} SET melt_quote = NULL WHERE melt_quote = :melt_quote",
+            {"melt_quote": record["melt_quote"]},
+        )
+        await _delete_pending(ledger, record["melt_quote"], conn)
+    return signatures, touched
 
 
-async def fail(ledger: "Ledger", digest: str, conn: Connection) -> None:
-    """Return the quote inputs to paid and drop the reserved outputs."""
-    record = await _get_row(ledger, digest, conn=conn)
-    assert record is not None
+async def fail(ledger: "Ledger", record, conn: Connection) -> List[MintQuote]:
+    """Return the quote inputs to paid and release the change quote ids."""
+    touched: List[MintQuote] = []
     for quote_id, _ in json.loads(record["mint_quotes"]):
         quote = await ledger.crud.get_mint_quote(
             quote_id=quote_id, db=ledger.db, conn=conn
         )
-        assert quote is not None
+        if quote is None:
+            raise TransactionError("stored quote input not found.")
         ledger.db_write._set_mint_quote_state(quote, MintQuoteState.paid)
         await ledger.crud.update_mint_quote(quote=quote, db=ledger.db, conn=conn)
+        touched.append(quote)
     await conn.execute(
-        f"""
-        DELETE FROM {ledger.db.table_with_schema("promises")}
-        WHERE swap_id = :digest AND c_ IS NULL
-        """,
-        {"digest": digest},
+        f"DELETE FROM {ledger.db.table_with_schema('mint_quote_id_claims')} WHERE melt_quote = :melt_quote",
+        {"melt_quote": record["melt_quote"]},
     )
+    await _delete_pending(ledger, record["melt_quote"], conn)
+    return touched
+
+
+async def _delete_pending(ledger: "Ledger", melt_quote: str, conn: Connection) -> None:
     await conn.execute(
-        f"UPDATE {ledger.db.table_with_schema('transactions')} SET state = :state WHERE digest = :digest",
-        {"state": FAILED, "digest": digest},
+        f"DELETE FROM {ledger.db.table_with_schema('melt_transactions')} WHERE melt_quote = :melt_quote",
+        {"melt_quote": melt_quote},
     )

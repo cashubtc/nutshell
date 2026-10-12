@@ -31,6 +31,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
+from .transaction import CHANGE_METHOD
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -189,6 +190,16 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
                         )
 
+        # Change quotes (NUT-XX) exist in every unit a backend serves.
+        for unit_name in sorted({u.name for d in self.backends.values() for u in d}):
+            websocket_features[_SUPPORTED].append(
+                {
+                    _METHOD: CHANGE_METHOD,
+                    _UNIT: unit_name,
+                    _COMMANDS: [JSONRPCSubscriptionKinds.CHANGE_MINT_QUOTE.value],
+                }
+            )
+
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
 
@@ -243,6 +254,14 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     {
                         "method": "POST",
                         "path": "/v1/swap",
+                    },
+                    {
+                        "method": "POST",
+                        "path": "/v1/transaction",
+                    },
+                    {
+                        "method": "POST",
+                        "path": "/v1/mint/change",
                     },
                 ]
             }
