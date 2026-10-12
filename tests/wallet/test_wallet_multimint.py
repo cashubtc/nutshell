@@ -167,7 +167,8 @@ async def test_redeem_token_with_multiple_mints(wallets):
         await alice.serialize_proofs(alice.proofs)
     serialized = await alice.serialize_proofs(alice.proofs, legacy=True)
 
-    token = TokenV3.deserialize(serialized)
+    token = deserialize_token_from_string(serialized)
+    assert token.serialize() == serialized
     assert set(token.mints) == {alice.url, bob.url}
     assert token.amount == 80
 
