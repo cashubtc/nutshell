@@ -1645,6 +1645,38 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
     assert legacy.commitment is None
 
 
+def test_nut07_pending_state_carries_the_disclosed_opening():
+    """A pending spend shows the same opening as a spent one, with no commitment."""
+    from cashu.core.base import Proof, ProofSpentState
+    from cashu.mint.db.read import _spent_proof_state
+
+    pending = ProofSpentState.pending
+    v3 = dict(id="02" + "ab" * 32, secret="02" + "79be667e" * 8)
+    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    private = _spent_proof_state(
+        kp["Y"], Proof(**v3, witness=kp["witness"], digest=kp["input_digest"]), pending
+    )
+    assert private.state == pending
+    assert private.witness is None
+    assert private.input_digest is None
+    assert private.commitment is None
+
+    aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
+    disclosed = _spent_proof_state(
+        aud["Y"], Proof(**v3, witness=aud["witness"], digest=aud["input_digest"]), pending
+    )
+    assert disclosed.witness == aud["witness"]
+    assert disclosed.input_digest == aud["input_digest"]
+    assert disclosed.commitment is None
+
+    legacy = _spent_proof_state(
+        "02" + "ab" * 32,
+        Proof(id="01" + "ab" * 7, witness='{"signatures":["00"]}'),
+        pending,
+    )
+    assert legacy.witness is None
+
+
 @pytest.mark.asyncio
 async def test_nut17_spent_event_uses_the_nut07_disclosure_filter():
     """Live proof_state events must not reopen the witness leak closed by checkstate."""

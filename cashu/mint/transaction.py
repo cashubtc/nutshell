@@ -19,7 +19,6 @@ from ..core.base import (
     MintQuote,
     MintQuoteState,
     ProofSpentState,
-    ProofState,
     Unit,
 )
 from ..core.crypto.secp import PublicKey
@@ -269,7 +268,7 @@ async def run(
             await ledger.events.submit(quote)
     for p in proofs:
         await ledger.events.submit(
-            ProofState(Y=p.Y, state=ProofSpentState.pending)
+            _spent_proof_state(p.Y, p, ProofSpentState.pending)
             if melt
             else _spent_proof_state(p.Y, p)
         )

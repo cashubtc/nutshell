@@ -72,7 +72,7 @@ from ..lightning.base import (
 from ..mint.crud import LedgerCrudSqlite
 from . import transaction as nut_xx
 from .conditions import LedgerSpendingConditions
-from .db.read import DbReadHelper
+from .db.read import DbReadHelper, _spent_proof_state
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
@@ -473,13 +473,7 @@ class Ledger(
             )
 
         for proof in settled_proofs:
-            await self.events.submit(
-                ProofState(
-                    Y=proof.Y,
-                    state=ProofSpentState.spent,
-                    witness=proof.witness or None,
-                )
-            )
+            await self.events.submit(_spent_proof_state(proof.Y, proof))
         for quote in transaction_quotes:
             await self.events.submit(quote)
         await self.events.submit(melt_quote)
