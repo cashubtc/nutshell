@@ -1362,21 +1362,30 @@ async def m040_add_digest_to_proofs(db: Database):
         )
 
 
-async def m041_add_transactions(db: Database):
-    """NUT-XX transaction records, keyed by transaction digest."""
+async def m041_add_melt_transactions_and_mint_quote_id_claims(db: Database):
+    """NUT-XX: a pending transaction is recorded by its melt quote; change quote ids are claimed at acceptance."""
     async with db.connect() as conn:
         await conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {db.table_with_schema("transactions")} (
-                digest TEXT PRIMARY KEY,
-                state TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("melt_transactions")} (
+                melt_quote TEXT PRIMARY KEY,
                 unit TEXT NOT NULL,
-                melt_quote TEXT,
                 mint_quotes TEXT NOT NULL,
                 change_outputs TEXT NOT NULL,
                 excess {db.big_int} NOT NULL,
-                change_quotes TEXT,
                 created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}
             );
             """
+        )
+        # melt_quote names the pending transaction holding the id, so a failed melt releases it.
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("mint_quote_id_claims")} (
+                quote_id TEXT PRIMARY KEY,
+                melt_quote TEXT
+            );
+            """
+        )
+        await conn.execute(
+            f"CREATE INDEX IF NOT EXISTS mint_quote_id_claims_melt_quote_idx ON {db.table_with_schema('mint_quote_id_claims')} (melt_quote)"
         )

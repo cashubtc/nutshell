@@ -363,6 +363,7 @@ class Ledger(
     ) -> MeltQuote:
         """Atomically issue change, spend proofs, and mark a melt quote paid."""
         settled_proofs: List[Proof] = []
+        transaction_quotes: List[MintQuote] = []
 
         async with self.db.get_connection(
             locks=[
@@ -424,7 +425,7 @@ class Ledger(
                 signed=False,
                 conn=conn,
             )
-            if melt_outputs:
+            if melt_outputs and not transaction:
                 fee_reserve_provided = (
                     sum_proofs(settled_proofs)
                     - melt_quote.amount
@@ -459,7 +460,10 @@ class Ledger(
             if transaction:
                 # A backend fee over the reserve is the mint's loss, as in NUT-08.
                 fee_charged = min(melt_quote.fee_paid, melt_quote.fee_reserve)
-                await nut_xx.settle(self, transaction, fee_charged, conn)
+                signatures, transaction_quotes = await nut_xx.settle(
+                    self, transaction, melt_outputs, fee_charged, conn
+                )
+                melt_quote.change = signatures
             if not melt_quote.paid:
                 melt_quote.state = MeltQuoteState.paid
             await self.crud.update_melt_quote(
@@ -476,6 +480,8 @@ class Ledger(
                     witness=proof.witness or None,
                 )
             )
+        for quote in transaction_quotes:
+            await self.events.submit(quote)
         await self.events.submit(melt_quote)
         return melt_quote
 
@@ -486,6 +492,7 @@ class Ledger(
     ) -> MeltQuote:
         """Finalize the unpaid outcome for the selected melt attempt."""
         released_proofs: List[Proof] = []
+        transaction_quotes: List[MintQuote] = []
 
         async with self.db.get_connection(
             locks=[
@@ -510,6 +517,8 @@ class Ledger(
                 return melt_quote
             if melt_quote.unpaid:
                 return melt_quote
+            if await nut_xx.paid_internally(self, melt_quote, conn):
+                return melt_quote
             if expected_attempt is not None and melt_quote.attempt != expected_attempt:
                 logger.warning(
                     f"Not failing melt quote {quote_id}: attempt nonce changed "
@@ -533,7 +542,7 @@ class Ledger(
             if not released_proofs and not transaction:
                 raise TransactionError("Pending melt quote has no pending proofs.")
             if transaction:
-                await nut_xx.fail(self, transaction, conn)
+                transaction_quotes = await nut_xx.fail(self, transaction, conn)
 
             await self.db_write._unset_proofs_pending(
                 released_proofs,
@@ -558,6 +567,8 @@ class Ledger(
             await self.events.submit(
                 ProofState(Y=proof.Y, state=ProofSpentState.unspent)
             )
+        for quote in transaction_quotes:
+            await self.events.submit(quote)
         await self.events.submit(melt_quote)
         return melt_quote
 
@@ -1226,7 +1237,7 @@ class Ledger(
         await self._restore_melt_change_dleq(melt_quote)
 
         # Complete the proof stage of internal settlement.
-        if melt_quote.paid:
+        if melt_quote.paid or await nut_xx.paid_internally(self, melt_quote):
             pending_proofs = await self.crud.get_pending_proofs_for_quote(
                 quote_id=quote_id,
                 db=self.db,
@@ -1258,7 +1269,7 @@ class Ledger(
 
     async def melt_mint_settle_internally(
         self, melt_quote_arg: MeltQuote, proofs: List[Proof]
-    ) -> MeltQuote:
+    ) -> Tuple[MeltQuote, bool]:
         """Settles a melt quote internally if there is a mint quote with the same payment request.
 
         `proofs` are passed to determine the ecash input transaction fees for this melt quote.
@@ -1272,7 +1283,7 @@ class Ledger(
             Exception: Melt quote already issued.
 
         Returns:
-            MeltQuote: Settled melt quote.
+            Tuple[MeltQuote, bool]: The melt quote, and whether it was paid internally.
         """
         if not melt_quote_arg.pending:
             raise TransactionError("melt quote is not pending")
@@ -1283,11 +1294,11 @@ class Ledger(
             request=melt_quote_arg.request, db=self.db
         )
         if not mint_quote:
-            return melt_quote_arg
+            return melt_quote_arg, False
 
         # settle externally if units are different
         if mint_quote.unit != melt_quote_arg.unit:
-            return melt_quote_arg
+            return melt_quote_arg, False
 
         async with self.db.get_connection(
             locks=[
@@ -1350,7 +1361,10 @@ class Ledger(
 
             paid_time = int(time.time())
             melt_quote.fee_paid = 0  # no internal fees
-            melt_quote.state = MeltQuoteState.paid
+            # A transaction's melt quote turns PAID when the transaction settles (NUT-XX).
+            transaction = await nut_xx.pending_for_melt(self, melt_quote.quote, conn)
+            if not transaction:
+                melt_quote.state = MeltQuoteState.paid
             melt_quote.paid_time = paid_time
 
             mint_quote.state = MintQuoteState.paid
@@ -1368,10 +1382,11 @@ class Ledger(
                 conn=conn,
             )
 
-        await self.events.submit(melt_quote)
+        if not transaction:
+            await self.events.submit(melt_quote)
         await self.events.submit(mint_quote)
 
-        return melt_quote
+        return melt_quote, True
 
     async def async_melt(
         self,
@@ -1517,8 +1532,10 @@ class Ledger(
 
         try:
             # if the melt corresponds to an internal mint, mark both as paid
-            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
-            if melt_quote.state == MeltQuoteState.paid:
+            melt_quote, settled = await self.melt_mint_settle_internally(
+                melt_quote, proofs
+            )
+            if settled:
                 # we settled internally
                 melt_quote = await self._finalize_melt_paid(
                     melt_quote.quote,
@@ -1610,9 +1627,6 @@ class Ledger(
     ) -> PostTransactionResponse:
         """Run a NUT-XX transaction; see `transaction.run`."""
         return await nut_xx.run(self, payload)
-
-    async def get_transaction(self, digest: str) -> PostTransactionResponse:
-        return await nut_xx.get(self, digest)
 
     async def swap(
         self,

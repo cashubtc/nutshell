@@ -672,6 +672,8 @@ class MintQuote(LedgerEvent):
 
     @property
     def kind(self) -> JSONRPCSubscriptionKinds:
+        if self.method == "change":  # NUT-XX change quotes
+            return JSONRPCSubscriptionKinds.CHANGE_MINT_QUOTE
         return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
 
     @property

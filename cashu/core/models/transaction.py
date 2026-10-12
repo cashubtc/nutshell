@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from cashu.core.base import BlindedMessage, BlindedSignature, Proof
 from cashu.core.constants import MAX_PUBKEY_LEN, MAX_QUOTE_ID_LEN, MAX_WITNESS_LEN
+from cashu.core.crypto.transcript import derived_quote_id
 from cashu.core.settings import settings
 
 from .melt_quote import PostMeltQuoteResponse
@@ -23,8 +24,14 @@ class TransactionMeltOutput(BaseModel):
 
 
 class TransactionChangeOutput(BaseModel):
+    id_preimage: str = Field(..., pattern=r"^[0-9a-fA-F]{64}$")
     pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # change quote lock key
     amount: Optional[int] = Field(None, gt=0)  # omitted on the remainder quote
+
+    @property
+    def quote_id(self) -> str:
+        """The change quote's derived id (NUT-04)."""
+        return derived_quote_id(bytes.fromhex(self.id_preimage))
 
 
 class PostTransactionRequest(BaseModel):
@@ -44,7 +51,6 @@ class PostTransactionRequest(BaseModel):
 
 
 class PostTransactionResponse(BaseModel):
-    digest: str
     state: str  # PENDING, PAID or FAILED
     signatures: List[BlindedSignature] = []
     melt_quotes: List[PostMeltQuoteResponse] = []

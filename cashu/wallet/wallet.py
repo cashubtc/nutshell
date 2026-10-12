@@ -802,7 +802,9 @@ class Wallet(
                     ),
                     change_quote_outputs=[
                         TranscriptChangeOutput(
-                            pubkey=bytes.fromhex(c.pubkey), amount=c.amount
+                            pubkey=bytes.fromhex(c.pubkey),
+                            quote_id=c.quote_id,
+                            amount=c.amount,
                         )
                         for c in change_quote_outputs or []
                     ],

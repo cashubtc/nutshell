@@ -102,8 +102,11 @@ async def request_validation_exception_handler(
     This function will be called when client input is not valid.
     """
     query_params = request.query_params._dict
+    # Logs each error's loc, msg and type.
     detail = {
-        "errors": exc.errors(),
+        "errors": [
+            {k: e[k] for k in ("loc", "msg", "type") if k in e} for e in exc.errors()
+        ],
         "query_params": query_params,
     }
     # log the error

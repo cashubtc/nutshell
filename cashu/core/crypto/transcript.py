@@ -46,6 +46,7 @@ class TranscriptBlindedOutput:
 @dataclass
 class TranscriptChangeOutput:
     pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
+    quote_id: str  # derived from the output's id_preimage (NUT-04)
     amount: Optional[int] = None  # None on the remainder quote
 
 
@@ -67,10 +68,13 @@ def _amount_record(amount: int) -> bytes:
 def _change_output_container(c: TranscriptChangeOutput) -> bytes:
     if len(c.pubkey) != 33:
         raise ValueError("Transcript change lock key must be 33 bytes")
+    if not c.quote_id:
+        raise ValueError("Transcript quote id must be non-empty")
     return tlv_record(
         _CONTAINER_CHANGE_QUOTE_OUTPUT,
         (_amount_record(c.amount) if c.amount is not None else b"")
-        + tlv_record(0x02, c.pubkey),
+        + tlv_record(0x02, c.pubkey)
+        + tlv_record(0x03, c.quote_id.encode("utf-8")),
     )
 
 

@@ -75,6 +75,7 @@ class DbWriteHelper:
         keysets: Dict[str, MintKeyset],
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
+        emit_events: bool = True,
     ) -> None:
         """
         Method to check if proofs are already spent. If they are not spent, we check if they are pending.
@@ -127,8 +128,11 @@ class DbWriteHelper:
         except Exception as e:
             logger.error(f"Failed to set proofs pending: {e}")
             raise e
-        for p in proofs:
-            await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
+        if emit_events:
+            for p in proofs:
+                await self.events.submit(
+                    ProofState(Y=p.Y, state=ProofSpentState.pending)
+                )
 
     async def _unset_proofs_pending(
         self,
@@ -390,7 +394,10 @@ class DbWriteHelper:
         return quotes
 
     async def _set_melt_quote_pending(
-        self, quote: MeltQuote, conn: Optional[Connection] = None
+        self,
+        quote: MeltQuote,
+        conn: Optional[Connection] = None,
+        emit_events: bool = True,
     ) -> MeltQuote:
         """Sets the melt quote as pending.
 
@@ -441,7 +448,8 @@ class DbWriteHelper:
             quote_copy.state = MeltQuoteState.pending
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
-        await self.events.submit(quote_copy)
+        if emit_events:
+            await self.events.submit(quote_copy)
         return quote_copy
 
     async def _unset_melt_quote_pending(
@@ -531,6 +539,14 @@ class DbWriteHelper:
             )
             if not melt_quote:
                 raise TransactionError("Melt quote not found.")
+            # A pending NUT-XX transaction decides its melt quote's state.
+            if await conn.fetchone(
+                f"SELECT 1 FROM {self.db.table_with_schema('melt_transactions')} WHERE melt_quote = :quote",
+                {"quote": quote_id},
+            ):
+                raise TransactionError(
+                    "Melt quote belongs to a pending transaction: its state follows the payment."
+                )
             melt_quote.state = state
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
 
@@ -581,6 +597,7 @@ class DbWriteHelper:
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
         conn: Optional[Connection] = None,
+        emit_events: bool = True,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -606,9 +623,11 @@ class DbWriteHelper:
             conn=conn,
         ) as conn:
             await self._verify_spent_proofs_and_set_pending(
-                proofs, keysets, quote_id=quote.quote, conn=conn
+                proofs, keysets, quote_id=quote.quote, conn=conn, emit_events=emit_events
             )
-            quote = await self._set_melt_quote_pending(quote, conn=conn)
+            quote = await self._set_melt_quote_pending(
+                quote, conn=conn, emit_events=emit_events
+            )
 
         return quote
 

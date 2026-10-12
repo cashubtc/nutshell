@@ -139,12 +139,26 @@
         "pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
         "id_preimage": "54b61b1f5d56ce358cb3b919a4ed1d41e7aae6892376fb0a4fabc0a65a7d6e68",
         "quote_id": "0118a4cdd84f17f6d59d6bfc8a3bb8be51fb251c661a8211b1f9f77125fb87c5"
+      },
+      {
+        "counter": 2,
+        "privkey": "ae53ad7d7da1ab7a9f1b6725532f1a1cc56d354b6e7f01e1dc65f5da10bf2854",
+        "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+        "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+        "quote_id": "48f5284dd55d3baae4c43a5c6cf0deb0eba0a1c7e01e788f453e24f48f109815"
+      },
+      {
+        "counter": 3,
+        "privkey": "b00007547a668f8db818741d55aa4a7223c912f50387dd0e413222f9d3dc1b38",
+        "pubkey": "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2",
+        "id_preimage": "132004e11a17cea14291ed197bef25252fc1d5340fb23b401f4ac9d399d07b8a",
+        "quote_id": "7db21586f5bfd8958961cd9a4ac97232ab3756aefb39a6a3e0cfa44adbec52ae"
       }
     ],
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 change quote output (01 amount, absent on the remainder quote, 02 lock key, 03 quote id utf8 = hex(tagged_hash(\"Cashu_QuoteId\", id_preimage))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -441,16 +455,17 @@
         ],
         "change_quote_outputs": [
           {
-            "pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4"
+            "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+            "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b"
           }
         ]
       },
-      "change_container": "230024020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
-      "quote_id": "a4a5abdbbd7fb43ff3891c5335c461b7be1032e954e9f7ba43785224f6e5c030",
-      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327230024020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
-      "digest": "824bef448b38a40312f98bbb58b8d2dc8afa84e71647a4a1122e0bf62a4924e0",
+      "change_container": "23006702002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b03004034386635323834646435356433626161653463343361356336636630646562306562613061316337653031653738386634353365323466343866313039383135",
+      "quote_id": "48f5284dd55d3baae4c43a5c6cf0deb0eba0a1c7e01e788f453e24f48f109815",
+      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723006702002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b03004034386635323834646435356433626161653463343361356336636630646562306562613061316337653031653738386634353365323466343866313039383135",
+      "digest": "a04a79503b1f9627d5c9cacf441512f8f3e63fafb919d59e7519ec32cb00104c",
       "input_id": "900fb575d55eed27f7f52db079a2bf4843e674c461726eca70b90943cb3c7d07",
-      "input_digest": "30a20a07c0ece5536a13257480fdf2636011f0b89b2f2033c32ca5009b6617aa"
+      "input_digest": "e7258b61d6b9992c913128235c773373ac06805388245432bda50d5c2e9c3d86"
     },
     "proof_to_two_changes": {
       "tx": {
@@ -464,26 +479,28 @@
         ],
         "change_quote_outputs": [
           {
-            "pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+            "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+            "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
             "amount": 3
           },
           {
-            "pubkey": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556"
+            "id_preimage": "132004e11a17cea14291ed197bef25252fc1d5340fb23b401f4ac9d399d07b8a",
+            "pubkey": "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2"
           }
         ]
       },
       "change_containers": [
-        "23002801000103020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
-        "23002402002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556"
+        "23006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b03004034386635323834646435356433626161653463343361356336636630646562306562613061316337653031653738386634353365323466343866313039383135",
+        "23006702002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004037646232313538366635626664383935383936316364396134616339373233326162333735366165666233396136613365306366613434616462656335326165"
       ],
       "quote_ids": [
-        "a4a5abdbbd7fb43ff3891c5335c461b7be1032e954e9f7ba43785224f6e5c030",
-        "cbabdabc03877d03af1dc6882c60af1b79225c1cef9d2bde81749e0bd3ad740d"
+        "48f5284dd55d3baae4c43a5c6cf0deb0eba0a1c7e01e788f453e24f48f109815",
+        "7db21586f5bfd8958961cd9a4ac97232ab3756aefb39a6a3e0cfa44adbec52ae"
       ],
-      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723002801000103020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe423002402002103fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
-      "digest": "3a778d64a738526124c1858d7b5def958a2e14736383650e49a9ea46e720ceda",
+      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b0300403438663532383464643535643362616165346334336135633663663064656230656261306131633765303165373838663435336532346634386631303938313523006702002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004037646232313538366635626664383935383936316364396134616339373233326162333735366165666233396136613365306366613434616462656335326165",
+      "digest": "2e2f1c62b755becd89d2a4c7159622c4b0f7116d895f4bc8106e42c98ea4daea",
       "input_id": "900fb575d55eed27f7f52db079a2bf4843e674c461726eca70b90943cb3c7d07",
-      "input_digest": "c161aeecde16ff65ad29127d23a3c6dd47ac2bc52a0d2d7572c7dddb7dfdfc11"
+      "input_digest": "4a64e89d570616c4ac312f772d423e100bcc733a86a5af479cb00ba328de2088"
     }
   },
   "tokens_v4": {

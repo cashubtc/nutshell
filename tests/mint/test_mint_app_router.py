@@ -444,3 +444,53 @@ async def test_redis_cache_hit_and_miss(monkeypatch):
     assert cache.initialized is True
     await cache.disconnect()
     assert closed is True
+
+
+@pytest.mark.asyncio
+async def test_redis_cache_keys_are_hashed(monkeypatch):
+    store: dict = {}
+
+    class FakeRedis:
+        async def exists(self, key):
+            return key in store
+
+        async def get(self, key):
+            return store.get(key)
+
+        async def set(self, name, value, ex):
+            store[name] = value
+
+    class Payload(BaseModel):
+        value: int
+
+    monkeypatch.setattr(settings, "mint_redis_cache_enabled", True)
+    monkeypatch.setattr(settings, "mint_redis_cache_url", "redis://cache")
+    monkeypatch.setattr("cashu.mint.cache.from_url", lambda url: FakeRedis())
+    cache = RedisCache()
+
+    @cache.cache()
+    async def cached_route(request, payload):
+        return Payload(value=payload.value)
+
+    request = router_module.Request(
+        {"type": "http", "method": "POST", "path": "/v1/test", "headers": [], "query_string": b""}
+    )
+    await cached_route(request, Payload(value=2))
+    (key,) = store
+    assert len(key) == 64 and "value" not in key
+
+
+@pytest.mark.asyncio
+async def test_request_validation_exception_handler_logs_loc_msg_type(monkeypatch):
+    captured: dict = {}
+    request = router_module.Request(
+        {"type": "http", "method": "POST", "path": "/v1/transaction", "query_string": b"", "headers": []}
+    )
+    exc = RequestValidationError(
+        [{"loc": ("body", "x"), "msg": "Field required", "type": "missing", "input": {"secret": "s"}}]
+    )
+    monkeypatch.setattr(middleware_module.logger, "error", lambda detail: captured.update(detail))
+    await middleware_module.request_validation_exception_handler(request, exc)
+    assert captured["errors"] == [
+        {"loc": ("body", "x"), "msg": "Field required", "type": "missing"}
+    ]

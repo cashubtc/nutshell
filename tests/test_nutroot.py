@@ -20,7 +20,6 @@ from cashu.core.crypto.nutroot import (
     NUTROOT_TWEAK_TAG,
     NutrootLeaf,
     NutrootWitness,
-    change_quote_id,
     nutroot_branch_hash,
     nutroot_leaf_hash,
     nutroot_merkle_path,
@@ -37,6 +36,7 @@ from cashu.core.crypto.nutroot import (
     verify_nutroot_commitment,
 )
 from cashu.core.crypto.secp import PrivateKey, PublicKey
+from cashu.core.crypto.transcript import derived_quote_id
 from cashu.core.errors import TransactionError
 
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
@@ -454,7 +454,6 @@ async def test_nut13_v3_derivation_type_vectors():
 
 def test_nut13_v3_quote_id_preimage_vectors():
     """Type 0x05 shares the quote lock's counter and scope; its NUT-04 derived id matches."""
-    from cashu.core.crypto.transcript import derived_quote_id
     from cashu.wallet.secrets import WalletSecrets
 
     nut13 = VECTORS["nut13_v3"]
@@ -571,7 +570,9 @@ def _tx_from_vector(tx: dict):
         ],
         change_quote_outputs=[
             TranscriptChangeOutput(
-                pubkey=bytes.fromhex(c["pubkey"]), amount=c.get("amount")
+                pubkey=bytes.fromhex(c["pubkey"]),
+                quote_id=derived_quote_id(bytes.fromhex(c["id_preimage"])),
+                amount=c.get("amount"),
             )
             for c in tx.get("change_quote_outputs", [])
         ],
@@ -616,7 +617,7 @@ def test_transaction_vectors_input_digests():
     (context,) = proofs.values()
     assert context.digest.hex() == change_tx["input_digest"]
     (change_out,) = change_tx["tx"]["change_quote_outputs"]
-    assert change_quote_id(bytes.fromhex(change_out["pubkey"])) == change_tx["quote_id"]
+    assert derived_quote_id(bytes.fromhex(change_out["id_preimage"])) == change_tx["quote_id"]
 
     two_tx = tv["proof_to_two_changes"]
     assert two_tx["transcript"].endswith("".join(two_tx["change_containers"]))
@@ -624,7 +625,7 @@ def test_transaction_vectors_input_digests():
     (context,) = proofs.values()
     assert context.digest.hex() == two_tx["input_digest"]
     assert [
-        change_quote_id(bytes.fromhex(c["pubkey"]))
+        derived_quote_id(bytes.fromhex(c["id_preimage"]))
         for c in two_tx["tx"]["change_quote_outputs"]
     ] == two_tx["quote_ids"]
 

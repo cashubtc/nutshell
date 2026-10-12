@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -47,6 +48,16 @@ def quote_witness(privkey: str, shape: TransactionShape, quote_id: str) -> str:
     return json.dumps({"signatures": [signature.hex()]})
 
 
+def change_output(pubkey: str, amount=None) -> TransactionChangeOutput:
+    return TransactionChangeOutput(
+        id_preimage=os.urandom(32).hex(), pubkey=pubkey, amount=amount
+    )
+
+
+def transcript_change(c: TransactionChangeOutput) -> TranscriptChangeOutput:
+    return TranscriptChangeOutput(bytes.fromhex(c.pubkey), c.quote_id, c.amount)
+
+
 async def locked_quote(ledger: Ledger, amount: int):
     privkey, pubkey = nut20.generate_keypair()
     quote = await ledger.mint_quote(
@@ -63,12 +74,13 @@ async def test_transaction_mint_quote_to_melt_with_change(ledger: Ledger):
     )
     quote, privkey = await locked_quote(ledger, 70)
     change_privkey, change_key = nut20.generate_keypair()
+    change_out = change_output(change_key)
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
-        change_quote_outputs=[TranscriptChangeOutput(bytes.fromhex(change_key))],
+        change_quote_outputs=[transcript_change(change_out)],
     )
     request = PostTransactionRequest(
         mint_quote_inputs=[
@@ -81,7 +93,7 @@ async def test_transaction_mint_quote_to_melt_with_change(ledger: Ledger):
         melt_quote_outputs=[
             TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
         ],
-        change_quote_outputs=[TransactionChangeOutput(pubkey=change_key)],
+        change_quote_outputs=[change_out],
     )
     result = await ledger.transaction(request)
     assert result.state == "PAID"
@@ -92,13 +104,14 @@ async def test_transaction_mint_quote_to_melt_with_change(ledger: Ledger):
     assert change_quote.method == "change"
     assert change_quote.amount == 70 - 62 - fee_paid
     assert change_quote.pubkey == change_key
-    assert change_quote.request == result.digest
+    assert change_quote.request == ""
+    assert change_quote.quote == change_out.quote_id
     assert (await ledger.get_mint_quote(quote.quote)).issued
+    assert not result.melt_quotes[0].change
 
-    # A resend returns the record rather than spending again.
-    again = await ledger.transaction(request)
-    assert again.digest == result.digest and again.state == "PAID"
-    assert again.change_quotes[0] and again.change_quotes[0].quote == change_quote.quote
+    # The inputs are spent and the id claimed: a resend is refused.
+    with pytest.raises(Exception):
+        await ledger.transaction(request)
 
     # The change quote redeems like any locked quote.
     change = change_quote.amount
@@ -129,13 +142,13 @@ async def test_transaction_fee_overrun_does_not_eat_surplus(ledger: Ledger, monk
 
     monkeypatch.setattr(backend, "pay_invoice", overrun)
     quote, privkey = await locked_quote(ledger, 70)
-    _, change_key = nut20.generate_keypair()
+    change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
-        change_quote_outputs=[TranscriptChangeOutput(bytes.fromhex(change_key))],
+        change_quote_outputs=[transcript_change(change_out)],
     )
     result = await ledger.transaction(
         PostTransactionRequest(
@@ -149,7 +162,7 @@ async def test_transaction_fee_overrun_does_not_eat_surplus(ledger: Ledger, monk
             melt_quote_outputs=[
                 TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
             ],
-            change_quote_outputs=[TransactionChangeOutput(pubkey=change_key)],
+            change_quote_outputs=[change_out],
         )
     )
     assert result.state == "PAID"
@@ -160,7 +173,7 @@ async def test_transaction_fee_overrun_does_not_eat_surplus(ledger: Ledger, monk
 @pytest.mark.skipif(not is_fake, reason="fake backend pays the quote")
 async def test_transaction_quote_to_outputs_and_change(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 8)
-    _, change_key = nut20.generate_keypair()
+    change_out = change_output(nut20.generate_keypair()[1])
     outputs = [output(ledger, 4)]
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
@@ -172,28 +185,27 @@ async def test_transaction_quote_to_outputs_and_change(ledger: Ledger):
             )
             for o in outputs
         ],
-        change_quote_outputs=[TranscriptChangeOutput(bytes.fromhex(change_key))],
+        change_quote_outputs=[transcript_change(change_out)],
     )
-    result = await ledger.transaction(
-        PostTransactionRequest(
-            mint_quote_inputs=[
-                TransactionQuoteInput(
-                    quote=quote.quote,
-                    amount=8,
-                    witness=quote_witness(privkey, shape, quote.quote),
-                )
-            ],
-            blinded_outputs=outputs,
-            change_quote_outputs=[TransactionChangeOutput(pubkey=change_key)],
-        )
+    request = PostTransactionRequest(
+        mint_quote_inputs=[
+            TransactionQuoteInput(
+                quote=quote.quote,
+                amount=8,
+                witness=quote_witness(privkey, shape, quote.quote),
+            )
+        ],
+        blinded_outputs=outputs,
+        change_quote_outputs=[change_out],
     )
+    result = await ledger.transaction(request)
     assert result.state == "PAID"
     assert [s.amount for s in result.signatures] == [4]
     assert result.change_quotes[0] is not None
     assert result.change_quotes[0].amount == 4
-    assert (await ledger.get_transaction(result.digest)).signatures[0].C_ == (
-        result.signatures[0].C_
-    )
+    # Recovery after a lost response goes through NUT-09 and the change quote's id.
+    with pytest.raises(Exception):
+        await ledger.transaction(request)
 
 
 @pytest.mark.asyncio
@@ -240,9 +252,11 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
     )
     quote, privkey = await locked_quote(ledger, 62 + melt.fee_reserve)
     amount = quote.amount
+    change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
         melt_quote_outputs=[TranscriptQuote(amount=amount, quote_id=melt.quote)],
+        change_quote_outputs=[transcript_change(change_out)],
     )
     request = PostTransactionRequest(
         mint_quote_inputs=[
@@ -255,6 +269,7 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
         melt_quote_outputs=[
             TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
         ],
+        change_quote_outputs=[change_out],
     )
     settings.fakewallet_pay_invoice_state = "FAILED"
     settings.fakewallet_payment_state = "FAILED"
@@ -264,8 +279,9 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
         settings.fakewallet_pay_invoice_state = "SETTLED"
         settings.fakewallet_payment_state = "SETTLED"
     assert result.state == "FAILED"
+    assert result.change_quotes == [None]
     assert (await ledger.get_mint_quote(quote.quote)).paid
-    # A FAILED transaction may be resubmitted, and replaces its record.
+    # The failure released the inputs and the change quote id, so the request runs again.
     assert (await ledger.transaction(request)).state == "PAID"
 
 
@@ -347,7 +363,7 @@ async def test_transaction_rejects_a_mismatched_fee_reserve(ledger: Ledger):
         PostMeltQuoteRequest(unit="sat", request=INVOICE_62_SAT)
     )
     quote, privkey = await locked_quote(ledger, 70)
-    _, change_key = nut20.generate_keypair()
+    change_out = change_output(nut20.generate_keypair()[1])
     for melt_output in (
         TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve + 1),
         TransactionMeltOutput(
@@ -363,9 +379,7 @@ async def test_transaction_rejects_a_mismatched_fee_reserve(ledger: Ledger):
                         )
                     ],
                     melt_quote_outputs=[melt_output],
-                    change_quote_outputs=[
-                        TransactionChangeOutput(pubkey=change_key)
-                    ],
+                    change_quote_outputs=[change_out],
                 )
             )
     assert (await ledger.get_mint_quote(quote.quote)).paid
