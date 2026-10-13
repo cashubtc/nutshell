@@ -276,8 +276,11 @@ def test_mint_require_blind_auth_paths_includes_batch_mint():
     assert mint_info.requires_blind_auth_path("POST", "/v1/mint/bolt11/batch")
 
 
-def test_request_target_starts_at_the_v1_segment():
-    scope = {"raw_path": b"/cashu/v1/swap", "path": "/cashu/v1/swap", "query_string": b""}
+def test_request_target_is_relative_to_the_mint_url():
+    scope = {"raw_path": b"/v1/cashu/v1/swap", "root_path": "/v1/cashu", "query_string": b""}
+    assert request_target(scope) == "/v1/swap"
+    # A proxy that strips its prefix leaves the path already relative.
+    scope = {"raw_path": b"/v1/swap", "root_path": "/cashu", "query_string": b""}
     assert request_target(scope) == "/v1/swap"
     scope = {"raw_path": b"/v1/mint/quote/bolt11/q?b=2&a=1", "query_string": b"b=2&a=1"}
     assert request_target(scope) == "/v1/mint/quote/bolt11/q?b=2&a=1"

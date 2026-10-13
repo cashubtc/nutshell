@@ -78,9 +78,9 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
 
 
 def request_target(scope) -> str:
-    """The NUT-10 request target: the path from its /v1/ segment, plus the query, as sent.
+    """The NUT-10 request target: the path relative to the mint URL, plus the query, as sent.
 
-    A proxy's path prefix drops out, so a mint served under a subpath verifies the same bytes.
+    The ASGI root_path is the mint's own mount prefix; a proxy that strips its prefix leaves none.
     """
     raw_path = scope.get("raw_path")
     # Some ASGI transports include the query in raw_path.
@@ -89,8 +89,8 @@ def request_target(scope) -> str:
         if raw_path is not None
         else scope["path"]
     )
-    start = path.find("/v1/")
-    target = path[start:] if start >= 0 else path
+    root = scope.get("root_path", "")
+    target = path[len(root) :] if root and path.startswith(root) else path
     if scope["query_string"]:
         target += "?" + scope["query_string"].decode("ascii")
     return target
