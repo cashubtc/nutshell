@@ -140,18 +140,9 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
     return (
         b"".join(_proof_input_container(p) for p in proofs)
         + b"".join(_mint_quote_input_container(q) for q in mint_quotes)
-        + output_section(tx)
-    )
-
-
-def output_section(tx: TransactionShape) -> bytes:
-    """The transcript's output section (its 0x2n containers), which a template leaf hashes."""
-    return (
-        b"".join(_blinded_output_container(o) for o in (tx.blinded_outputs or []))
-        + b"".join(
-            _melt_quote_output_container(q) for q in (tx.melt_quote_outputs or [])
-        )
-        + b"".join(_change_output_container(c) for c in (tx.change_quote_outputs or []))
+        + b"".join(_blinded_output_container(o) for o in blinded)
+        + b"".join(_melt_quote_output_container(q) for q in melt_quotes)
+        + b"".join(_change_output_container(c) for c in change)
     )
 
 
@@ -172,11 +163,12 @@ def input_digest(transaction_digest_: bytes, container: bytes) -> bytes:
 @dataclass
 class InputContext:
     """One input's signing context: its container record, the digest it signs,
-    and the transaction's output section (what a template leaf commits to)."""
+    and each output's lock key, None for an output that is not a change quote
+    (what a template leaf checks)."""
 
     container: bytes
     digest: bytes
-    outputs: bytes = b""
+    outputs: Optional[List[Optional[bytes]]] = None
 
 
 def transaction_inputs(
@@ -187,7 +179,9 @@ def transaction_inputs(
     The transcript builder has already refused duplicates, so the keys are unique.
     """
     digest = transaction_digest(tx)
-    outputs = output_section(tx)
+    unlocked = len(tx.blinded_outputs or []) + len(tx.melt_quote_outputs or [])
+    outputs: List[Optional[bytes]] = [None] * unlocked
+    outputs += [c.pubkey for c in (tx.change_quote_outputs or [])]
     proofs = {
         p.Y: InputContext(container=c, digest=input_digest(digest, c), outputs=outputs)
         for p in (tx.proof_inputs or [])

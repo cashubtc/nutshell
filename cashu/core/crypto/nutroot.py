@@ -41,6 +41,7 @@ _FIELD_KEYS = 0x04
 _FIELD_TIME = 0x06
 _FIELD_HASH = 0x08
 _FIELD_DISCLOSURE = 0x0A
+_FIELD_DESTS = 0x0C
 
 # Normative caps from NUT-10. The leaf body excludes the leading version byte.
 NUTROOT_MAX_LEAF_BYTES = 512
@@ -59,10 +60,10 @@ SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 class NutrootLeaf:
     """A parsed declarative leaf (version 0x00).
 
-    Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes:
-    a hashlock's preimage digest, or a template's digest of the transaction's
-    output section. A `commit` leaf carries only `hash`: it names no signer and
-    is never a spend path (NUT-10).
+    Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes.
+    `dests` (template only) are the lock keys every change quote output must
+    use. A `commit` leaf carries only `hash`: it names no signer and is never a
+    spend path (NUT-10).
     """
 
     type: str
@@ -70,6 +71,7 @@ class NutrootLeaf:
     keys: List[PublicKey] = field(default_factory=list)
     time: Optional[int] = None
     hash: Optional[bytes] = None
+    dests: Optional[List[PublicKey]] = None
     # Disclosure mode (NUT-10): 1 publishes the exercised witness via
     # NUT-07/NUT-17. Valid on every leaf type; satisfaction is unaffected.
     disclosure: Optional[int] = None
@@ -178,7 +180,13 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
         raise ValueError(f"Unknown leaf type: {leaf.type}")
     if leaf.type == "commit":
         # Digest only: a commit leaf names no signer and is never a spend path.
-        if leaf.n or leaf.keys or leaf.time is not None or leaf.disclosure is not None:
+        if (
+            leaf.n
+            or leaf.keys
+            or leaf.time is not None
+            or leaf.disclosure is not None
+            or leaf.dests is not None
+        ):
             raise ValueError("commit leaf carries only a hash")
         if leaf.hash is None or len(leaf.hash) != 32:
             raise ValueError("commit leaf requires a 32-byte hash")
@@ -205,9 +213,9 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
         fields += tlv_record(_FIELD_TIME, minimal_be(leaf.time))
     elif leaf.time is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a time field")
-    if leaf.type in ("hashlock", "template"):
+    if leaf.type == "hashlock":
         if leaf.hash is None or len(leaf.hash) != 32:
-            raise ValueError(f"{leaf.type} leaf requires a 32-byte hash")
+            raise ValueError("hashlock leaf requires a 32-byte hash")
         fields += tlv_record(_FIELD_HASH, leaf.hash)
     elif leaf.hash is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a hash field")
@@ -215,6 +223,15 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
         if leaf.disclosure != 0x01:
             raise ValueError("disclosure mode must be 0x01")
         fields += tlv_record(_FIELD_DISCLOSURE, bytes([0x01]))
+    if leaf.type == "template":
+        if not leaf.dests:
+            raise ValueError("template leaf requires at least one destination key")
+        serialized_dests = [dest.format() for dest in leaf.dests]
+        if len(set(serialized_dests)) != len(serialized_dests):
+            raise ValueError("dests field must not repeat a key")
+        fields += tlv_record(_FIELD_DESTS, b"".join(serialized_dests))
+    elif leaf.dests is not None:
+        raise ValueError(f"{leaf.type} leaf must not carry a dests field")
     out = bytes([NUTROOT_LEAF_VERSION, NUTROOT_LEAF_TYPE[leaf.type]]) + fields
     if len(out) - 1 > NUTROOT_MAX_LEAF_BYTES:
         raise ValueError(f"Leaf body exceeds {NUTROOT_MAX_LEAF_BYTES} bytes")
@@ -248,6 +265,7 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
     time: Optional[int] = None
     hash_: Optional[bytes] = None
     disclosure: Optional[int] = None
+    dests: Optional[List[PublicKey]] = None
     for record_type, value in read_tlv_records(data[2:], unique_ascending=True):
         if record_type == _FIELD_N:
             if len(value) != 1 or value[0] == 0:
@@ -287,6 +305,20 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
             if len(value) != 1 or value[0] != 0x01:
                 raise ValueError("disclosure mode must be 0x01")
             disclosure = value[0]
+        elif record_type == _FIELD_DESTS:
+            if len(value) == 0 or len(value) % 33 != 0:
+                raise ValueError("dests field length must be a positive multiple of 33")
+            serialized_dests = [value[i : i + 33] for i in range(0, len(value), 33)]
+            if len(set(serialized_dests)) != len(serialized_dests):
+                raise ValueError("dests field must not repeat a key")
+            dests = []
+            for serialized_dest in serialized_dests:
+                try:
+                    dests.append(PublicKey(serialized_dest))
+                except ValueError:
+                    raise ValueError(
+                        "Template destination must be a valid compressed secp256k1 point"
+                    )
         else:
             # Odd types are reserved, so an unknown field of either parity rejects.
             raise ValueError(f"Unknown leaf field: {record_type}")
@@ -296,15 +328,24 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
         raise ValueError("Threshold exceeds leaf key count")
     if type_name == "after" and time is None:
         raise ValueError("after leaf missing time field")
-    hashed = type_name in ("hashlock", "template")
-    if hashed and hash_ is None:
-        raise ValueError(f"{type_name} leaf missing hash field")
+    if type_name == "hashlock" and hash_ is None:
+        raise ValueError("hashlock leaf missing hash field")
+    if type_name == "template" and dests is None:
+        raise ValueError("template leaf missing dests field")
     if type_name != "after" and time is not None:
         raise ValueError(f"{type_name} leaf must not carry a time field")
-    if not hashed and hash_ is not None:
+    if type_name != "hashlock" and hash_ is not None:
         raise ValueError(f"{type_name} leaf must not carry a hash field")
+    if type_name != "template" and dests is not None:
+        raise ValueError(f"{type_name} leaf must not carry a dests field")
     return NutrootLeaf(
-        type=type_name, n=n, keys=keys, time=time, hash=hash_, disclosure=disclosure
+        type=type_name,
+        n=n,
+        keys=keys,
+        time=time,
+        hash=hash_,
+        dests=dests,
+        disclosure=disclosure,
     )
 
 
@@ -505,14 +546,15 @@ def verify_script_path_spend(
     digest: bytes,
     witness: NutrootWitness,
     now: Optional[float] = None,
-    outputs: Optional[bytes] = None,
+    outputs: Optional[List[Optional[bytes]]] = None,
 ) -> NutrootLeaf:
     """Verify a script-path witness: commitment, then evaluate the revealed leaf.
 
     Witness shape (NUT-10): {"leaf": hex, "control": {"K": hex, "path": [hex]},
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
-    input digest; `outputs` is the transcript's output section, which a
-    template leaf must hash to. Raises ValueError on any failure (fail closed);
+    input digest; `outputs` holds each transaction output's lock key (None for
+    an output that is not a change quote), which a template leaf checks against
+    its dests. Raises ValueError on any failure (fail closed);
     returns the parsed leaf so callers can act on its disclosure mode.
     """
     if witness.leaf is None or witness.control is None:
@@ -547,8 +589,9 @@ def verify_script_path_spend(
     if leaf.type == "template":
         if outputs is None:
             raise ValueError("template leaf needs the transaction outputs")
-        if hashlib.sha256(outputs).digest() != leaf.hash:
-            raise ValueError("template leaf does not match the transaction outputs")
+        dests = {dest.format() for dest in leaf.dests or []}
+        if any(key is None or key not in dests for key in outputs):
+            raise ValueError("template leaf outputs must be change quotes to its dests")
 
     if leaf.type != "hashlock" and witness.preimage is not None:
         raise ValueError("preimage on a leaf that is not a hashlock")

@@ -112,47 +112,95 @@ def test_leaf_serialization_6_1():
 
 
 def test_leaf_serialization_template():
-    def outcome(output_section: str) -> bytes:
-        return serialize_nutroot_leaf(
-            NutrootLeaf(
-                type="template",
-                n=1,
-                keys=[PublicKey(bytes.fromhex(V_ESCROW["arbiter"]))],
-                hash=hashlib.sha256(bytes.fromhex(output_section)).digest(),
-            )
-        )
+    def pub(hex_: str) -> PublicKey:
+        return PublicKey(bytes.fromhex(hex_))
 
-    release = outcome(V_ESCROW["out_seller"])
-    refund = outcome(V_ESCROW["out_buyer"])
+    arbiter = serialize_nutroot_leaf(
+        NutrootLeaf(
+            type="template",
+            n=1,
+            keys=[pub(V_ESCROW["arbiter"])],
+            dests=[pub(V_ESCROW["buyer"]), pub(V_ESCROW["seller"])],
+        )
+    )
+    refund = serialize_nutroot_leaf(
+        NutrootLeaf(
+            type="after",
+            n=1,
+            keys=[pub(V_ESCROW["buyer"])],
+            time=V_REFUND["refund_time"],
+        )
+    )
     coop = serialize_nutroot_leaf(
         NutrootLeaf(
             type="threshold",
             n=2,
-            keys=[
-                PublicKey(bytes.fromhex(V_ESCROW["buyer"])),
-                PublicKey(bytes.fromhex(V_ESCROW["seller"])),
-            ],
+            keys=[pub(V_ESCROW["buyer"]), pub(V_ESCROW["seller"])],
         )
     )
-    assert release.hex() == V_ESCROW["leaf_release"]
+    assert arbiter.hex() == V_ESCROW["leaf_arbiter"]
     assert refund.hex() == V_ESCROW["leaf_refund"]
     assert coop.hex() == V_ESCROW["leaf_coop"]
-    assert parse_nutroot_leaf(release).type == "template"
-    assert nutroot_leaf_hash(release).hex() == V_ESCROW["leaf_hash_release"]
+    parsed = parse_nutroot_leaf(arbiter)
+    assert parsed.type == "template"
+    assert [d.format().hex() for d in parsed.dests or []] == [
+        V_ESCROW["buyer"],
+        V_ESCROW["seller"],
+    ]
+    assert nutroot_leaf_hash(arbiter).hex() == V_ESCROW["leaf_hash_arbiter"]
     assert nutroot_leaf_hash(refund).hex() == V_ESCROW["leaf_hash_refund"]
     assert nutroot_leaf_hash(coop).hex() == V_ESCROW["leaf_hash_coop"]
-    # A template leaf has no time field.
-    with pytest.raises(ValueError, match="time"):
+    tpl = VECTORS["template_lock"]
+    lock = serialize_nutroot_leaf(
+        NutrootLeaf(
+            type="template",
+            n=1,
+            keys=[pub(V_ESCROW["buyer"])],
+            dests=[pub(d) for d in tpl["dests"]],
+        )
+    )
+    assert lock.hex() == tpl["leaf"]
+
+    # A template leaf carries dests and neither time nor hash.
+    for extra, match in (
+        ({"time": 1}, "time"),
+        ({"hash": bytes(32)}, "hash"),
+        ({"dests": []}, "destination"),
+        ({"dests": [pub(V_ESCROW["buyer"])] * 2}, "repeat"),
+    ):
+        fields = {
+            "type": "template",
+            "n": 1,
+            "keys": [pub(V_ESCROW["arbiter"])],
+            "dests": [pub(V_ESCROW["buyer"])],
+        } | extra
+        with pytest.raises(ValueError, match=match):
+            serialize_nutroot_leaf(NutrootLeaf(**fields))
+    with pytest.raises(ValueError, match="dests"):
         serialize_nutroot_leaf(
             NutrootLeaf(
-                type="template",
+                type="threshold",
                 n=1,
-                keys=[PublicKey(bytes.fromhex(V_ESCROW["arbiter"]))],
-                time=1,
-                hash=bytes(32),
+                keys=[pub(V_ESCROW["buyer"])],
+                dests=[pub(V_ESCROW["seller"])],
             )
         )
-    timed = V_ESCROW["leaf_release"].replace("0800", "060001010800", 1)
+    dests_record = "0c0042" + V_ESCROW["buyer"] + V_ESCROW["seller"]
+    assert V_ESCROW["leaf_arbiter"].endswith(dests_record)
+    head = V_ESCROW["leaf_arbiter"][: -len(dests_record)]
+    for record, match in (
+        ("", "dests"),
+        ("0c0042" + V_ESCROW["buyer"] * 2, "repeat"),
+        ("0c0021" + "05" + "11" * 32, "valid"),
+        ("0c0020" + V_ESCROW["buyer"][:64], "multiple of 33"),
+    ):
+        with pytest.raises(ValueError, match=match):
+            parse_nutroot_leaf(bytes.fromhex(head + record))
+    with pytest.raises(ValueError, match="dests"):
+        parse_nutroot_leaf(
+            bytes.fromhex(V_ESCROW["leaf_coop"] + "0c0021" + V_ESCROW["buyer"])
+        )
+    timed = V_ESCROW["leaf_arbiter"].replace("0c0042", "0600010" + "10c0042", 1)
     with pytest.raises(ValueError, match="time"):
         parse_nutroot_leaf(bytes.fromhex(timed))
     # An unallocated type fails closed.
@@ -252,20 +300,20 @@ def test_leaf_parsing_fails_closed():
 
 
 def test_merkle_tree_escrow():
-    """Three leaves: the fold promotes the odd one and the release path has two hashes."""
-    release, refund, coop = (
+    """Three leaves: the fold promotes the odd one and the arbiter path has two hashes."""
+    arbiter, refund, coop = (
         bytes.fromhex(V_ESCROW[k])
-        for k in ("leaf_hash_release", "leaf_hash_refund", "leaf_hash_coop")
+        for k in ("leaf_hash_arbiter", "leaf_hash_refund", "leaf_hash_coop")
     )
-    leaves = [release, refund, coop]
+    leaves = [arbiter, refund, coop]
     assert nutroot_merkle_root(leaves).hex() == V_ESCROW["merkle_root"]
     assert (
-        nutroot_branch_hash(nutroot_branch_hash(refund, release), coop).hex()
+        nutroot_branch_hash(nutroot_branch_hash(arbiter, refund), coop).hex()
         == V_ESCROW["merkle_root"]
     )
     path = nutroot_merkle_path(leaves, 0)
     assert [p.hex() for p in path] == ESCROW_WITNESS["control"]["path"]
-    assert nutroot_root_from_path(release, path).hex() == V_ESCROW["merkle_root"]
+    assert nutroot_root_from_path(arbiter, path).hex() == V_ESCROW["merkle_root"]
 
 
 def test_merkle_tree_folding():
@@ -1170,42 +1218,50 @@ def test_script_path_spend_after_leaf_vectors():
 
 
 def test_script_path_template_leaf():
-    """6.2: the template leaf spends only into the committed output section."""
+    """6.2: the template leaf spends only into change quotes locked to its dests."""
     from cashu.core.crypto.nutroot import verify_script_path_spend
     from cashu.core.crypto.transcript import transaction_inputs
 
+    def context(tx: dict):
+        _, contexts, _ = transaction_inputs(_tx_from_vector(tx))
+        (ctx,) = contexts.values()
+        return ctx
+
     tpl = VECTORS["template_lock"]
-    for v, outputs in (
-        (tpl, bytes.fromhex(tpl["output_section"])),
-        (V_ESCROW, bytes.fromhex(V_ESCROW["out_seller"])),
-    ):
+    for v in (tpl, V_ESCROW):
         witness = nutroot_witness(json.loads(v["witness"]))
         secret = PublicKey(bytes.fromhex(v["secret"]))
-        digest = bytes.fromhex(v["input_digest"])
+        ctx = context(v["tx"])
+        # The mint's own transcript builder signs the digest the vector does.
+        assert ctx.digest.hex() == v["input_digest"]
         assert (
-            verify_script_path_spend(secret, digest, witness, outputs=outputs).type
+            verify_script_path_spend(
+                secret, ctx.digest, witness, outputs=ctx.outputs
+            ).type
             == "template"
         )
         with pytest.raises(ValueError, match="outputs"):
-            verify_script_path_spend(secret, digest, witness)
-    # Any other output section fails, however long the proof has waited.
-    for outputs in (
-        bytes.fromhex(tpl["rejected_outputs"]["output_section"]),
-        bytes.fromhex(V_ESCROW["out_buyer"]),
-    ):
-        with pytest.raises(ValueError, match="outputs"):
+            verify_script_path_spend(secret, ctx.digest, witness)
+        # A blinded message or melt quote beside the change quotes fails the leaf.
+        swap = VECTORS["transcript"]["swap"]["tx"]
+        mixed = context(v["tx"] | {"blinded_outputs": swap["blinded_outputs"]})
+        with pytest.raises(ValueError, match="dests"):
             verify_script_path_spend(
-                PublicKey(bytes.fromhex(V_ESCROW["secret"])),
-                bytes.fromhex(V_ESCROW["input_digest"]),
-                nutroot_witness(ESCROW_WITNESS),
-                outputs=outputs,
-                now=2**40,
+                secret, mixed.digest, witness, outputs=mixed.outputs
             )
-    # The mint's own transcript builder produces the section the leaf commits to.
-    _, contexts, _ = transaction_inputs(_tx_from_vector(VECTORS["template_lock"]["tx"]))
-    (context,) = contexts.values()
-    assert context.outputs.hex() == VECTORS["template_lock"]["output_section"]
-    assert context.digest.hex() == VECTORS["template_lock"]["input_digest"]
+    # A change quote to a key outside dests fails, whoever signs.
+    for v, outputs in (
+        (tpl, tpl["rejected_outputs"]),
+        (V_ESCROW, V_ESCROW["self_deal"]),
+    ):
+        rejected = context(v["tx"] | outputs)
+        with pytest.raises(ValueError, match="dests"):
+            verify_script_path_spend(
+                PublicKey(bytes.fromhex(v["secret"])),
+                rejected.digest,
+                nutroot_witness(json.loads(v["witness"])),
+                outputs=rejected.outputs,
+            )
 
 
 def test_script_path_unknown_leaf_type_fails_closed():

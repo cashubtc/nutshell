@@ -174,11 +174,14 @@ def verify_mint_quote_v3(
 
 
 def verify_quote_input_witness(
-    digest: bytes, public_key: str, signature: str, outputs: Optional[bytes] = None
+    digest: bytes,
+    public_key: str,
+    signature: str,
+    outputs: Optional[List[Optional[bytes]]] = None,
 ) -> bool:
     """Verify a quote input witness over its input digest: key path (hex sig
     or {"signatures"}) or script path, against the quote lock point. `outputs`
-    is the transcript's output section, needed to evaluate a template leaf."""
+    holds each output's lock key, needed to evaluate a template leaf."""
     witness: NutrootWitness | None = None
     if signature.strip().startswith("{"):
         try:
