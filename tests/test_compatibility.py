@@ -184,8 +184,10 @@ class FakeDocker:
 
     def __init__(self, fail=(), timeout=()):
         self.fail, self.timeout, self.calls = fail, timeout, []
+        self.commands = []
 
     def __call__(self, args, **kwargs):
+        self.commands.append(args)
         command = args[1]
         self.calls.append(command)
         if command in self.timeout:
@@ -205,6 +207,20 @@ def run_container(tmp_path):
     return compatibility.run_mint_container(
         "cashubtc/nutshell:0.20.3", 3337, tmp_path / "mint.log"
     )
+
+
+def test_released_container_uses_its_python(monkeypatch, tmp_path, ready_mint):
+    docker = FakeDocker()
+    monkeypatch.setattr(compatibility.subprocess, "run", docker)
+    with run_container(tmp_path):
+        pass
+    command = next(args for args in docker.commands if args[1] == "run")
+    assert command[-4:] == [
+        "cashubtc/nutshell:0.20.3",
+        "python",
+        "-c",
+        "from cashu.mint.main import main; main()",
+    ]
 
 
 def test_container_removed_when_start_fails(monkeypatch, tmp_path, ready_mint):

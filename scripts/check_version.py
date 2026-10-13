@@ -26,7 +26,7 @@ def get_pyproject_version():
         with open("pyproject.toml", "rb") as f:
             data = tomllib.load(f)
 
-        version = data["tool"]["poetry"]["version"]
+        version = data["project"]["version"]
         return version
     except FileNotFoundError:
         print(f"File not found: {pyproject_path}")

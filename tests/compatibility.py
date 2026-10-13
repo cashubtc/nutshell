@@ -235,9 +235,10 @@ def run_mint_container(image: str, port: int, log_file: Path) -> Iterator[str]:
             f"127.0.0.1:{port}:{port}",
             *env_args,
             image,
-            "poetry",
-            "run",
-            "mint",
+            # Released images may predate uv; call the mint with their Python.
+            "python",
+            "-c",
+            "from cashu.mint.main import main; main()",
         )
         url = f"http://localhost:{port}"
         deadline = time.monotonic() + 60

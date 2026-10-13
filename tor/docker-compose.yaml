@@ -13,7 +13,8 @@ services:
       - MINT_LISTEN_HOST=0.0.0.0
       - MINT_INPUT_FEE_PPK=0
       - MINT_LISTEN_PORT=3338
-    command: ["poetry", "run", "mint"]
+    # Invoke Python directly so this works with the pinned, older image too.
+    command: ["python", "-c", "from cashu.mint.main import main; main()"]
   tor:
     build: .
     container_name: tor
