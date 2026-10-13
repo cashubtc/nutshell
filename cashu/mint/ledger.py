@@ -971,10 +971,14 @@ class Ledger(
                 raise QuoteSignatureInvalidError()
 
         # Set all quotes to pending
+        signed_issued = [q.amount_issued or 0 for q in quotes]
         quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
-            for quote, amount in zip(quotes, quote_amounts):
+            for quote, amount, issued in zip(quotes, quote_amounts, signed_issued):
+                # The witnesses bind the state read above; a draw since then voids them.
+                if (quote.amount_issued or 0) != issued:
+                    raise QuoteSignatureInvalidError()
                 if amount > quote.mintable:
                     raise TransactionError(f"quote {quote.quote} was drawn meanwhile")
                 if quote.expiry and quote.expiry < int(time.time()):

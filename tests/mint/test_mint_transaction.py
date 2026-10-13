@@ -84,7 +84,7 @@ async def test_transaction_mint_quote_to_melt_with_change(ledger: Ledger):
     change_privkey, change_key = nut20.generate_keypair()
     change_out = change_output(change_key)
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
@@ -125,7 +125,7 @@ async def test_transaction_mint_quote_to_melt_with_change(ledger: Ledger):
     change = change_quote.amount
     outputs = [output(ledger, a) for a in amount_split(change)]
     signature = nut20.sign_mint_quote_v3(
-        change_quote.quote, change, outputs, change_privkey
+        change_quote.quote, change, outputs, change_privkey, 0
     )
     promises = await ledger.mint(
         outputs=outputs, quote_id=change_quote.quote, signature=signature
@@ -152,7 +152,7 @@ async def test_transaction_fee_overrun_does_not_eat_surplus(ledger: Ledger, monk
     quote, privkey = await locked_quote(ledger, 70)
     change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
@@ -184,7 +184,7 @@ async def test_transaction_quote_to_outputs_and_change(ledger: Ledger):
     change_out = change_output(nut20.generate_keypair()[1])
     outputs = [output(ledger, 4)]
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4,
@@ -222,7 +222,7 @@ async def test_transaction_rejects_blank_outputs_and_imbalance(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 8)
     outputs = [output(ledger, 4)]
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4,
@@ -262,7 +262,7 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
     amount = quote.amount
     change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         melt_quote_outputs=[TranscriptQuote(amount=amount, quote_id=melt.quote)],
         change_quote_outputs=[transcript_change(change_out)],
     )
@@ -296,7 +296,7 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
 def draw(ledger: Ledger, quote, privkey: str, amount: int):
     outputs = [output(ledger, a) for a in amount_split(amount)]
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=o.amount,
@@ -322,12 +322,16 @@ def draw(ledger: Ledger, quote, privkey: str, amount: int):
 @pytest.mark.skipif(not is_fake, reason="fake backend pays the quote")
 async def test_transaction_draws_a_quote_in_parts(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 8)
+    stale = draw(ledger, quote, privkey, 4)  # signed at amount_issued 0
     assert (await ledger.transaction(draw(ledger, quote, privkey, 4))).state == "PAID"
     part = await ledger.get_mint_quote(quote.quote)
     assert part.paid and part.amount_issued == 4 and part.mintable == 4
+    # The witness binds the quote's state (NUT-10): one signed before the draw is void.
+    with pytest.raises(Exception, match="Signature for mint request invalid"):
+        await ledger.transaction(stale)
     with pytest.raises(Exception, match="exceeds the quote's mintable"):
-        await ledger.transaction(draw(ledger, quote, privkey, 5))
-    assert (await ledger.transaction(draw(ledger, quote, privkey, 4))).state == "PAID"
+        await ledger.transaction(draw(ledger, part, privkey, 5))
+    assert (await ledger.transaction(draw(ledger, part, privkey, 4))).state == "PAID"
     done = await ledger.get_mint_quote(quote.quote)
     assert done.issued and done.amount_issued == 8 and done.mintable == 0
 
@@ -346,6 +350,20 @@ async def test_mint_rechecks_a_quote_drawn_after_reading(ledger: Ledger, monkeyp
     with pytest.raises(Exception, match="does not match quote amount"):
         await ledger.mint(outputs=[output(ledger, 8)], quote_id=quote.quote)
     assert (await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)).paid
+
+@pytest.mark.asyncio
+async def test_a_pending_quote_takes_no_other_draw(ledger: Ledger):
+    quote, privkey = await locked_quote(ledger, 8)
+    await ledger.db_write._set_mint_quotes_pending([quote.quote])
+    try:
+        with pytest.raises(Exception, match="pending"):
+            await ledger.transaction(draw(ledger, quote, privkey, 4))
+    finally:
+        await ledger.db_write._unset_mint_quotes_pending(
+            quote_ids=[quote.quote], state=MintQuoteState.paid
+        )
+    assert (await ledger.get_mint_quote(quote.quote)).amount_issued == 0
+
 
 def test_pending_revert_keeps_amount_issued():
     quote = MintQuote(

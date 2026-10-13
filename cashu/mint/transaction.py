@@ -112,8 +112,13 @@ async def run(
         outputs,
         melt,
         mint_quote_inputs=[
-            TranscriptQuote(amount=q.amount, quote_id=q.quote, pubkey=bytes.fromhex(k))
-            for q, k in zip(payload.mint_quote_inputs, lock_keys)
+            TranscriptQuote(
+                amount=q.amount,
+                quote_id=q.quote,
+                pubkey=bytes.fromhex(k),
+                issued=mq.amount_issued or 0,
+            )
+            for q, k, mq in zip(payload.mint_quote_inputs, lock_keys, mint_quotes)
         ],
         change_quote_outputs=[
             TranscriptChangeOutput(
@@ -226,11 +231,14 @@ async def run(
     async with ledger.db.get_connection(locks=locks) as conn:
         quote_ids = [q.quote for q in payload.mint_quote_inputs]
         locked = await ledger.db_write._set_mint_quotes_pending(quote_ids, conn=conn)
-        for q, mq in zip(payload.mint_quote_inputs, locked):
+        for q, mq, signed in zip(payload.mint_quote_inputs, locked, mint_quotes):
             if q.amount > mq.mintable:
                 raise TransactionError(
                     "quote input exceeds the quote's mintable amount."
                 )
+            # The witnesses bind the state read above; a draw settled since then voids them.
+            if (mq.amount_issued or 0) != (signed.amount_issued or 0):
+                raise QuoteSignatureInvalidError()
         if melt:
             melt = await ledger.db_write.verify_and_set_melt_quote_pending(
                 quote=melt,

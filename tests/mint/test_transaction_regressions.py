@@ -49,7 +49,7 @@ async def test_redeem_remainder_through_mint(ledger, change):
         change_key, pubkey = nut20.generate_keypair()
         change_out = change_output(pubkey)
         shape = TransactionShape(
-            mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+            mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
             change_quote_outputs=[transcript_change(change_out)],
         )
         result = await ledger.transaction(
@@ -69,7 +69,10 @@ async def test_redeem_remainder_through_mint(ledger, change):
         key = change_key
     await ledger.transaction(draw(ledger, quote, key, 4))
     outputs = [output(ledger, 4)]
-    signature = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, key)
+    # The NUT-04 mint signs at the quote's state after the draw (NUT-10).
+    issued = (await ledger.get_mint_quote(quote.quote)).amount_issued
+    assert issued == 4
+    signature = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, key, issued)
     signatures = await ledger.mint(
         outputs=outputs, quote_id=quote.quote, signature=signature
     )
@@ -87,7 +90,7 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
     outputs = [output(ledger, 4)]
     change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4,
@@ -160,7 +163,7 @@ async def test_melt_quote_change_carries_the_output_signatures(ledger):
     outputs = [output(ledger, 4), output(ledger, 2)]
     change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=o.amount, keyset_id=bytes.fromhex(o.id), B_=bytes.fromhex(o.B_)
@@ -215,7 +218,7 @@ async def test_internal_melt_turns_paid_when_its_transaction_settles(
     outputs = [output(ledger, 4)]
     change_out = change_output(nut20.generate_keypair()[1])
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=14, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=14, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey), issued=source.amount_issued or 0)],
         blinded_outputs=[
             TranscriptBlindedOutput(
                 amount=4, keyset_id=bytes.fromhex(outputs[0].id), B_=bytes.fromhex(outputs[0].B_)
@@ -268,7 +271,7 @@ async def test_internal_melt_finalized_by_a_poll_skips_the_backend(ledger, monke
         PostMeltQuoteRequest(unit="sat", request=destination.request)
     )
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey), issued=source.amount_issued or 0)],
         melt_quote_outputs=[TranscriptQuote(amount=8, quote_id=melt.quote)],
     )
     original = ledger.melt_mint_settle_internally
@@ -324,7 +327,7 @@ async def test_id_held_by_a_mint_quote_is_refused_before_reserving(ledger, monke
         db=ledger.db,
     )
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         melt_quote_outputs=[TranscriptQuote(amount=amount, quote_id=melt.quote)],
         change_quote_outputs=[transcript_change(change_out)],
     )
@@ -392,7 +395,7 @@ async def test_internal_quote_only_recovers_finalization(ledger, monkeypatch, re
         PostMeltQuoteRequest(unit="sat", request=destination.request)
     )
     shape = TransactionShape(
-        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey))],
+        mint_quote_inputs=[TranscriptQuote(amount=8, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey), issued=source.amount_issued or 0)],
         melt_quote_outputs=[TranscriptQuote(amount=8, quote_id=melt.quote)],
     )
     original = ledger._finalize_melt_paid
@@ -438,7 +441,7 @@ async def test_interrupted_acceptance_can_retry(ledger, monkeypatch, with_melt):
     quote, key = await locked_quote(ledger, amount)
     if melt:
         shape = TransactionShape(
-            mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))],
+            mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
             melt_quote_outputs=[TranscriptQuote(amount=amount, quote_id=melt.quote)],
         )
         request = PostTransactionRequest(

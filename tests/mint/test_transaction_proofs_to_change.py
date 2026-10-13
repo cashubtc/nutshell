@@ -199,7 +199,7 @@ async def test_concurrent_transactions_naming_one_id(ledger: Ledger):
         quote, key = await locked_quote(ledger, 8)
         shape = TransactionShape(
             mint_quote_inputs=[
-                TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey))
+                TranscriptQuote(amount=8, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)
             ],
             change_quote_outputs=[transcript_change(shared)],
         )
