@@ -11,7 +11,11 @@ from cashu.core.errors import ClearAuthFailedError
 from cashu.core.nuts import nut22
 from cashu.core.settings import settings
 from cashu.mint.auth.base import User
-from cashu.mint.middleware import BlindAuthMiddleware, ClearAuthMiddleware
+from cashu.mint.middleware import (
+    BlindAuthMiddleware,
+    ClearAuthMiddleware,
+    request_target,
+)
 
 
 def _request(path: str, headers: list[tuple[bytes, bytes]] | None = None) -> Request:
@@ -270,3 +274,12 @@ def test_mint_require_blind_auth_paths_includes_batch_mint():
     )
 
     assert mint_info.requires_blind_auth_path("POST", "/v1/mint/bolt11/batch")
+
+
+def test_request_target_starts_at_the_v1_segment():
+    scope = {"raw_path": b"/cashu/v1/swap", "path": "/cashu/v1/swap", "query_string": b""}
+    assert request_target(scope) == "/v1/swap"
+    scope = {"raw_path": b"/v1/mint/quote/bolt11/q?b=2&a=1", "query_string": b"b=2&a=1"}
+    assert request_target(scope) == "/v1/mint/quote/bolt11/q?b=2&a=1"
+    scope = {"path": "/v1/swap", "query_string": b"q=a%20b"}
+    assert request_target(scope) == "/v1/swap?q=a%20b"

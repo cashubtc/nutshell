@@ -77,6 +77,25 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def request_target(scope) -> str:
+    """The NUT-10 request target: the path from its /v1/ segment, plus the query, as sent.
+
+    A proxy's path prefix drops out, so a mint served under a subpath verifies the same bytes.
+    """
+    raw_path = scope.get("raw_path")
+    # Some ASGI transports include the query in raw_path.
+    path = (
+        raw_path.split(b"?", 1)[0].decode("ascii")
+        if raw_path is not None
+        else scope["path"]
+    )
+    start = path.find("/v1/")
+    target = path[start:] if start >= 0 else path
+    if scope["query_string"]:
+        target += "?" + scope["query_string"].decode("ascii")
+    return target
+
+
 class BlindAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -94,16 +113,7 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
             # verifier rebuilds the request transcript from these. The body is
             # read only for version 02 tokens; Starlette caches the read for
             # the downstream app.
-            raw_path = request.scope.get("raw_path")
-            # Some ASGI transports include the query in raw_path.
-            target = (
-                raw_path.split(b"?", 1)[0].decode("ascii")
-                if raw_path is not None
-                else request.url.path
-            )
-            query_string = request.scope["query_string"]
-            if query_string:
-                target += "?" + query_string.decode("ascii")
+            target = request_target(request.scope)
             body = b""
             try:
                 if is_bls_keyset(AuthProof.from_base64(blind_auth_token).id):
