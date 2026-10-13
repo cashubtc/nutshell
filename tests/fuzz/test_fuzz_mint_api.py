@@ -9,6 +9,7 @@ from cashu.core.base import (
     BlindedMessage,
     Proof,
 )
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.mint.app import app
 
 ALLOWED_STATUS_CODES = [400, 404, 405, 422, 503]
@@ -27,6 +28,10 @@ def public_key():
 def keyset_id():
     return st.builds(lambda a, b: a + b, st.just("00"), hex_string(14, 14))
 
+def pre_v3_keyset_id():
+    # A text secret on a v3 keyset id fails at construction, before the mint is reached.
+    return st.one_of(keyset_id(), hex_string(16, 16).filter(lambda s: not is_bls_keyset(s)))
+
 def url_safe_text(min_len=1, max_len=20):
     # Generates text that is safe for URLs (no control chars, no slashes, no #, no ?)
     return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x and "#" not in x and "?" not in x)
@@ -43,7 +48,7 @@ blinded_message_strategy = st.builds(
 # Strategy for Proof
 proof_strategy = st.builds(
     Proof,
-    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    id=pre_v3_keyset_id(),
     amount=st.integers(min_value=1),
     secret=st.text(min_size=1, max_size=64),
     C=st.one_of(hex_string(), public_key()),
