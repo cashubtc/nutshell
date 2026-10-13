@@ -553,6 +553,7 @@ def _tx_from_vector(tx: dict):
                 amount=q["amount"],
                 quote_id=q["quote_id"],
                 pubkey=bytes.fromhex(q["lock_pubkey"]),
+                issued=q["issued"],
             )
             for q in tx.get("mint_quote_inputs", [])
         ],
@@ -783,10 +784,10 @@ def test_quote_witness_with_malformed_lock_key_is_invalid():
 
     privkey, _ = nut20.generate_keypair()
     _, _, outputs = _swap_vector_proofs_and_outputs()
-    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
-    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig)
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey, 0)
+    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig, 0)
     assert not nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, "02" + "00" * 32, sig, batch_quotes=[("qid", 8, "")]
+        "qid", 8, outputs, "02" + "00" * 32, sig, 0, batch_quotes=[("qid", 8, "", 0)]
     )
 
 
@@ -795,13 +796,13 @@ def test_quote_key_path_witness_takes_exactly_one_signature():
 
     privkey, pubkey = nut20.generate_keypair()
     _, _, outputs = _swap_vector_proofs_and_outputs()
-    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
-    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig)
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey, 0)
+    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig, 0)
     assert nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]})
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]}), 0
     )
     assert not nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]})
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]}), 0
     )
 
 
@@ -816,10 +817,13 @@ def test_partial_mint_vector_commits_amount_issued():
         for o in vector["tx"]["blinded_outputs"]
     ]
     args = (outputs, vector["lock_pubkey"], vector["signature"])
-    assert nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args)
+    issued = quote["issued"]
+    assert nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args, issued)
     assert not nut20.verify_mint_quote_v3(
-        quote["quote_id"], vector["quote_amount"], *args
+        quote["quote_id"], vector["quote_amount"], *args, issued
     )
+    # The quote's state is bound too: the same witness fails at another amount_issued.
+    assert not nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args, 0)
 
 
 @pytest.mark.asyncio

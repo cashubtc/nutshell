@@ -34,6 +34,8 @@ class TranscriptQuote:
     amount: int
     quote_id: str
     pubkey: Optional[bytes] = None  # 33-byte lock key; required on a mint quote input
+    # The quote's amount_issued before this transaction; required on a mint quote input.
+    issued: Optional[int] = None
 
 
 @dataclass
@@ -103,8 +105,13 @@ def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
     # The container commits the lock key, so an offline co-signer can tell which key the input needs.
     if q.pubkey is None or len(q.pubkey) != 33:
         raise ValueError("Transcript mint quote input needs its 33-byte lock key")
+    if q.issued is None:
+        raise ValueError("Transcript mint quote input needs the quote's amount_issued")
     return tlv_record(
-        _CONTAINER_MINT_QUOTE_INPUT, _quote_fields(q) + tlv_record(0x03, q.pubkey)
+        _CONTAINER_MINT_QUOTE_INPUT,
+        _quote_fields(q)
+        + tlv_record(0x03, q.pubkey)
+        + tlv_record(0x04, minimal_be(q.issued)),
     )
 
 
