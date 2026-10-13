@@ -31,7 +31,7 @@ def sign_batch_v3(quote_list, outputs, privkey, for_quote=None):
     """Sign one quote's v3 input digest over the batch transcript (all quote
     inputs + outputs). Defaults to the first quote."""
     return nut20.sign_mint_quote_batch_v3(
-        [(q.quote, q.amount, q.pubkey) for q in quote_list],
+        [(q.quote, q.amount, q.pubkey, q.amount_issued or 0) for q in quote_list],
         outputs,
         privkey,
         (for_quote or quote_list[0]).quote,
@@ -306,7 +306,7 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
 
     outputs_normal, _ = wallet._construct_outputs([64], [secrets[2]], [rs_gen[2]])
     sig_normal = nut20.sign_mint_quote_v3(
-        mint_quote1.quote, mint_quote1.amount, outputs_normal, mint_quote1.privkey
+        mint_quote1.quote, mint_quote1.amount, outputs_normal, mint_quote1.privkey, 0
     )
 
     results = await asyncio.gather(
@@ -701,7 +701,7 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     )
     outputs2, rs2 = wallet._construct_outputs([64], secrets2, rs2)
     sig1_2 = nut20.sign_mint_quote_v3(
-        mint_quote1.quote, mint_quote1.amount, outputs2, mint_quote1.privkey
+        mint_quote1.quote, mint_quote1.amount, outputs2, mint_quote1.privkey, 0
     )
 
     promises = await ledger.mint(

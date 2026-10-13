@@ -5,7 +5,7 @@ transaction_digest = SHA256(TLV stream); each input carries
 one BIP-340 signature over its input digest,
 tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
 container record)). Containers: 0x11 proof input, 0x12 mint quote input
-(which commits the quote's lock key), 0x21 blinded message output (carrying
+(which commits the quote's lock key and amount_issued), 0x21 blinded message output (carrying
 SHA256(B_)), 0x22 melt quote output. Container types ascend (inputs before outputs by construction); elements keep request
 order within their type; field streams inside are ascending unique.
 Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the
@@ -42,6 +42,8 @@ class TranscriptQuote:
     amount: int
     quote_id: str
     pubkey: Optional[bytes] = None  # 33-byte lock key; required on a mint quote input
+    # The quote's amount_issued before this transaction; required on a mint quote input.
+    issued: Optional[int] = None
 
 
 @dataclass
@@ -90,8 +92,13 @@ def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
     # The container commits the lock key, so an offline co-signer can tell which key the input needs.
     if q.pubkey is None or len(q.pubkey) != 33:
         raise ValueError("Transcript mint quote input needs its 33-byte lock key")
+    if q.issued is None:
+        raise ValueError("Transcript mint quote input needs the quote's amount_issued")
     return tlv_record(
-        _CONTAINER_MINT_QUOTE_INPUT, _quote_fields(q) + tlv_record(0x03, q.pubkey)
+        _CONTAINER_MINT_QUOTE_INPUT,
+        _quote_fields(q)
+        + tlv_record(0x03, q.pubkey)
+        + tlv_record(0x04, minimal_be(q.issued)),
     )
 
 

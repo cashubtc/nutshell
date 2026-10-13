@@ -256,7 +256,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     assert mint_quote.privkey
     signature = nut20.sign_mint_quote_v3(
-        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
+        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey, 0
     )
     outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
@@ -829,8 +829,8 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
 
     # Each quote signs its own input digest over the shared batch transcript
     batch = [
-        (mint_quote1.quote, 64, mint_quote1.pubkey),
-        (mint_quote2.quote, 32, mint_quote2.pubkey),
+        (mint_quote1.quote, 64, mint_quote1.pubkey, 0),
+        (mint_quote2.quote, 32, mint_quote2.pubkey, 0),
     ]
     sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey, mint_quote1.quote)
     sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey, mint_quote2.quote)
