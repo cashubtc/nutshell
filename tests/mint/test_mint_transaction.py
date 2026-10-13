@@ -352,6 +352,7 @@ async def test_mint_rechecks_a_quote_drawn_after_reading(ledger: Ledger, monkeyp
     assert (await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)).paid
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="fake backend pays the quote")
 async def test_a_pending_quote_takes_no_other_draw(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 8)
     await ledger.db_write._set_mint_quotes_pending([quote.quote])
