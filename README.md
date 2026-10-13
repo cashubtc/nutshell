@@ -9,7 +9,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 <p align="center">
 <a href="#the-cashu-protocol">Cashu protocol</a> ·
 <a href="#easy-install-nutshell-wallet">Quick Install</a> ·
-<a href="#manual-install-poetry">Manual install</a> ·
+<a href="#manual-install-uv">Manual install</a> ·
 <a href="#configuration">Configuration</a> ·
 <a href="#using-cashu">Using Cashu</a> ·
 <a href="#running-a-mint">Run a mint</a>
@@ -70,7 +70,7 @@ the version required by `bip32` has no wheels for these interpreters. Selecting
 Python 3.12 avoids that build. Pipx uses its default interpreter unless you pass
 `--python`; it does not automatically switch to Python 3.12.
 
-You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
+You can skip the entire next section about uv and jump right to [Using Cashu](#using-cashu).
 
 ## Easy Install: Nutshell mint
 
@@ -87,59 +87,66 @@ docker compose up mint
 - Set `MINT_LISTEN_HOST=0.0.0.0` in your `.env` file, or
 - Use the pre-built Docker image command in the [Running a mint](#running-a-mint) section which sets environment variables directly.
 
-## Manual install: Poetry
+## Manual install: uv
 
-These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Poetry: Install Cashu Nutshell](#poetry-install-cashu-nutshell).
+[uv](https://docs.astral.sh/uv/) manages Python, dependencies, and the project's virtual environment.
 
-#### Poetry: Prerequisites
+#### uv: Prerequisites
 
 ```bash
-# on ubuntu:
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev ncurses-dev libbz2-dev libreadline-dev lzma-dev liblzma-dev
+# install uv (Linux/macOS)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# install python using pyenv
-curl https://pyenv.run | bash
-
-# !! follow the instructions of pyenv init to setup pyenv !!
-pyenv init
-
-# restart your shell (or source your .rc file), then install python:
-pyenv install 3.10
-
-# install poetry
-curl -sSL https://install.python-poetry.org | python3 - --version 2.3.2
-echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
-source ~/.bashrc
+# restart your shell, then install the Python version used by this project
+uv python install 3.10
 ```
 
-#### Poetry: Install Cashu Nutshell
+On Windows, follow the [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/).
+If a dependency must be compiled from source on Ubuntu, install its build prerequisites:
 
 ```bash
-# install nutshell
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev python3-dev
+```
+
+#### uv: Install Cashu Nutshell
+
+```bash
 git clone https://github.com/cashubtc/nutshell.git nutshell
 cd nutshell
-git checkout <latest_tag>
-pyenv local 3.10
-poetry install
+uv sync --locked
 ```
 
-#### Poetry: Update Cashu
+This installs the project and development dependencies into `.venv` using `uv.lock`.
+The `.python-version` file selects Python 3.10; uv downloads it if needed.
+For a mint or wallet installation without development tools, use `uv sync --locked --no-dev`
+and run commands with `uv run --locked --no-dev`.
+These instructions apply to revisions containing `uv.lock`.
 
-To update Cashu to the newest version enter
+#### uv: Update Cashu
 
 ```bash
-git pull && poetry install
+git pull
+uv sync --locked
 ```
 
-#### Poetry: Using the Nutshell wallet
+Use `uv lock --upgrade` when intentionally updating dependencies, and commit the resulting `uv.lock`.
+`make package` also regenerates `requirements.txt` for tools that need pip-compatible requirements.
 
-Cashu should be now installed. To execute the following commands, activate your virtual Poetry environment via
+#### uv: Using the Nutshell wallet
+
+Run the wallet in the project environment:
 
 ```bash
-poetry shell
+uv run --locked cashu --help
 ```
 
-If you don't activate your environment, just prepend `poetry run` to all following commands.
+For the commands below, either prepend `uv run --locked` or activate the environment:
+
+```bash
+source .venv/bin/activate
+```
+
+On Windows PowerShell, activate it with `.venv\Scripts\Activate.ps1`.
 
 ## Configuration
 
@@ -221,7 +228,7 @@ This command runs the mint on your local computer. Skip this step if you want to
 Run the mint using the pre-built Docker image. This method sets environment variables directly and works reliably regardless of local `.env` files:
 
 ```bash
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.21.0 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.21.0 python -c "from cashu.mint.main import main; main()"
 ```
 
 ## From this repository
@@ -229,7 +236,7 @@ docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet
 Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_PRIVATE_KEY` in your `.env` file.
 
 ```bash
-poetry run mint
+uv run --locked mint
 ```
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
@@ -257,8 +264,8 @@ Use the standalone tool at `cashu/mint/sqlite_to_postgres.py` to migrate a mint 
 # 1) optionally reset the target Postgres database (DROPS ALL DATA)
 psql -U <user> -h <host> -p <port> -d <database> -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL PRIVILEGES ON SCHEMA public TO <user>;"
 
-# 2) run migration (inside poetry env)
-poetry run python cashu/mint/sqlite_to_postgres.py \
+# 2) run migration (inside the project environment)
+uv run --locked python cashu/mint/sqlite_to_postgres.py \
   --sqlite data/mint/mint.sqlite3 \
   --postgres postgres://<user>:<pass>@<host>:<port>/<database> \
   --batch-size 2000
@@ -272,7 +279,7 @@ poetry run python cashu/mint/sqlite_to_postgres.py \
 To run the tests in this repository, first install the dev dependencies with
 
 ```bash
-poetry install --with dev
+uv sync --locked
 ```
 
 Then, make sure to set up your mint's `.env` file to use a fake Lightning backend and disable Tor:
@@ -285,7 +292,7 @@ TOR=FALSE
 You can run the tests with
 
 ```bash
-poetry run pytest tests
+uv run --locked pytest tests
 ```
 
 # Contributing

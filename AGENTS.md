@@ -7,21 +7,21 @@
 
 | Task | Command |
 |---|---|
-| Install dependencies | `poetry install` |
-| Activate virtual env | `poetry env activate` |
-| Run the wallet CLI | `cashu --help` |
-| Run the mint server | `poetry run mint` |
-| Run all tests | `make test` (or `pytest tests`) |
+| Install dependencies | `uv sync --locked` |
+| Activate virtual env | `source .venv/bin/activate` |
+| Run the wallet CLI | `uv run --locked cashu --help` |
+| Run the mint server | `uv run --locked mint` |
+| Run all tests | `make test` (or `uv run --locked pytest tests`) |
 | Run wallet tests only | `make test-wallet` |
 | Run mint tests only | `make test-mint` |
 | Lint + type-check | `make check` (Ruff + mypy) |
 | Auto-format code | `make format` |
-| Install pre-commit hook | `poetry run pre-commit install` |
+| Install pre-commit hook | `uv run --locked pre-commit install` |
 
 ### Environment setup
 
-- Python **3.10.4** (install via `pyenv install 3.10.4 && pyenv local 3.10.4`)
-- [Poetry](https://python-poetry.org/) for dependency and environment management
+- Python **3.10** (selected by `.python-version`; uv downloads it if needed)
+- [uv](https://docs.astral.sh/uv/) for Python, dependency, and package management
 - Copy `.env.example` to `.env` and set `MINT_BACKEND_BOLT11_SAT=FakeWallet` for local testing
 
 ## Repo Conventions
@@ -98,6 +98,7 @@ docker/                 # Docker-related configs (Redis, Keycloak, etc.)
 | File | Purpose |
 |---|---|
 | `pyproject.toml` | Project metadata, dependencies, Ruff config |
+| `uv.lock` | Locked dependency versions for development and deployment |
 | `Makefile` | Common dev tasks (test, format, check, build) |
 | `.env.example` | Template for environment variables |
 | `.pre-commit-config.yaml` | Pre-commit hook configuration |

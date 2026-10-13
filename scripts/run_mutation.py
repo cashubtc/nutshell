@@ -60,7 +60,7 @@ def prepare_profile_cache(paths, env=None):
         text=True,
     )
     digest.update(configuration.encode())
-    inputs = [Path("pyproject.toml"), Path("poetry.lock")]
+    inputs = [Path("pyproject.toml"), Path("uv.lock")]
     for directory in ("cashu", "tests", "scripts"):
         inputs.extend(sorted(Path(directory).rglob("*.py")))
     for path in inputs:
