@@ -6,6 +6,7 @@ import pytest_asyncio
 
 from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.crypto.secp import PrivateKey
+from cashu.core.errors import QuoteSignatureInvalidError
 from cashu.core.models import PostMintBatchRequest, PostMintQuoteCheckRequest
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
@@ -31,7 +32,7 @@ def sign_batch_v3(quote_list, outputs, privkey, for_quote=None):
     """Sign one quote's v3 input digest over the batch transcript (all quote
     inputs + outputs). Defaults to the first quote."""
     return nut20.sign_mint_quote_batch_v3(
-        [(q.quote, q.amount, q.pubkey) for q in quote_list],
+        [(q.quote, q.amount, q.pubkey, q.amount_issued or 0) for q in quote_list],
         outputs,
         privkey,
         (for_quote or quote_list[0]).quote,
@@ -306,7 +307,7 @@ async def test_ledger_mint_batch_and_normal_mint_race(ledger: Ledger, wallet: Wa
 
     outputs_normal, _ = wallet._construct_outputs([64], [secrets[2]], [rs_gen[2]])
     sig_normal = nut20.sign_mint_quote_v3(
-        mint_quote1.quote, mint_quote1.amount, outputs_normal, mint_quote1.privkey
+        mint_quote1.quote, mint_quote1.amount, outputs_normal, mint_quote1.privkey, 0
     )
 
     results = await asyncio.gather(
@@ -701,7 +702,7 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     )
     outputs2, rs2 = wallet._construct_outputs([64], secrets2, rs2)
     sig1_2 = nut20.sign_mint_quote_v3(
-        mint_quote1.quote, mint_quote1.amount, outputs2, mint_quote1.privkey
+        mint_quote1.quote, mint_quote1.amount, outputs2, mint_quote1.privkey, 0
     )
 
     promises = await ledger.mint(
@@ -711,3 +712,43 @@ async def test_ledger_mint_batch_atomicity_one_invalid(ledger: Ledger, wallet: W
     )
     assert len(promises) == 1
     assert promises[0].amount == 64
+
+
+@pytest.mark.asyncio
+async def test_ledger_mint_batch_refuses_a_draw_since_signing(
+    ledger: Ledger, wallet: Wallet
+):
+    # Witnesses bind each quote's amount_issued (NUT-10); a draw landing between
+    # the read and the lock voids them even when the quote can still cover the batch.
+    await wallet.load_mint()
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+    secrets, rs, _ = await wallet.generate_secrets_from_to(10100, 10101)
+    outputs, rs = wallet._construct_outputs([64, 32], secrets, rs)
+    assert is_bls_keyset(outputs[0].id), "wallet should be on the v3 keyset"
+    sig1 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote1.privkey, mint_quote1)
+    sig2 = sign_batch_v3([mint_quote1, mint_quote2], outputs, mint_quote2.privkey, mint_quote2)
+
+    lock = ledger.db_write._set_mint_quotes_pending
+
+    async def draw_then_lock(quote_ids):
+        quote = await ledger.crud.get_mint_quote(quote_id=mint_quote1.quote, db=ledger.db)
+        quote.amount_paid, quote.amount_issued = 68, 4
+        await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+        return await lock(quote_ids)
+
+    ledger.db_write._set_mint_quotes_pending = draw_then_lock
+    try:
+        with pytest.raises(QuoteSignatureInvalidError):
+            await ledger.mint_batch(
+                PostMintBatchRequest(
+                    quotes=[mint_quote1.quote, mint_quote2.quote],
+                    quote_amounts=[64, 32],
+                    outputs=outputs,
+                    signatures=[sig1, sig2],
+                )
+            )
+    finally:
+        ledger.db_write._set_mint_quotes_pending = lock

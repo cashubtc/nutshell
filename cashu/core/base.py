@@ -89,10 +89,12 @@ class ProofState(LedgerEvent):
 
     @model_validator(mode="after")
     def check_witness(self):
-        if self.state != ProofSpentState.spent and any(
+        if self.state == ProofSpentState.unspent and any(
             v is not None for v in (self.witness, self.input_digest, self.commitment)
         ):
-            raise ValueError('Spend fields can only be set if the state is "SPENT"')
+            raise ValueError('Spend fields cannot be set if the state is "UNSPENT"')
+        if self.state == ProofSpentState.pending and self.commitment is not None:
+            raise ValueError('Commitment can only be set if the state is "SPENT"')
         return self
 
     @property

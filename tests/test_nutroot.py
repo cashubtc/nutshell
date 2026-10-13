@@ -632,6 +632,7 @@ def _tx_from_vector(tx: dict):
                 amount=q["amount"],
                 quote_id=q["quote_id"],
                 pubkey=bytes.fromhex(q["lock_pubkey"]),
+                issued=q["issued"],
             )
             for q in tx.get("mint_quote_inputs", [])
         ],
@@ -862,10 +863,10 @@ def test_quote_witness_with_malformed_lock_key_is_invalid():
 
     privkey, _ = nut20.generate_keypair()
     _, _, outputs = _swap_vector_proofs_and_outputs()
-    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
-    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig)
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey, 0)
+    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig, 0)
     assert not nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, "02" + "00" * 32, sig, batch_quotes=[("qid", 8, "")]
+        "qid", 8, outputs, "02" + "00" * 32, sig, 0, batch_quotes=[("qid", 8, "", 0)]
     )
 
 
@@ -874,13 +875,13 @@ def test_quote_key_path_witness_takes_exactly_one_signature():
 
     privkey, pubkey = nut20.generate_keypair()
     _, _, outputs = _swap_vector_proofs_and_outputs()
-    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
-    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig)
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey, 0)
+    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig, 0)
     assert nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]})
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]}), 0
     )
     assert not nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]})
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]}), 0
     )
 
 
@@ -895,10 +896,13 @@ def test_partial_mint_vector_commits_amount_issued():
         for o in vector["tx"]["blinded_outputs"]
     ]
     args = (outputs, vector["lock_pubkey"], vector["signature"])
-    assert nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args)
+    issued = quote["issued"]
+    assert nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args, issued)
     assert not nut20.verify_mint_quote_v3(
-        quote["quote_id"], vector["quote_amount"], *args
+        quote["quote_id"], vector["quote_amount"], *args, issued
     )
+    # The quote's state is bound too: the same witness fails at another amount_issued.
+    assert not nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args, 0)
 
 
 @pytest.mark.asyncio
@@ -1786,6 +1790,38 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
     assert legacy.witness == '{"signatures":["00"]}'
     assert legacy.input_digest is None
     assert legacy.commitment is None
+
+
+def test_nut07_pending_state_carries_the_disclosed_opening():
+    """A pending spend shows the same opening as a spent one, with no commitment."""
+    from cashu.core.base import Proof, ProofSpentState
+    from cashu.mint.db.read import _spent_proof_state
+
+    pending = ProofSpentState.pending
+    v3 = dict(id="02" + "ab" * 32, secret="02" + "79be667e" * 8)
+    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    private = _spent_proof_state(
+        kp["Y"], Proof(**v3, witness=kp["witness"], digest=kp["input_digest"]), pending
+    )
+    assert private.state == pending
+    assert private.witness is None
+    assert private.input_digest is None
+    assert private.commitment is None
+
+    aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
+    disclosed = _spent_proof_state(
+        aud["Y"], Proof(**v3, witness=aud["witness"], digest=aud["input_digest"]), pending
+    )
+    assert disclosed.witness == aud["witness"]
+    assert disclosed.input_digest == aud["input_digest"]
+    assert disclosed.commitment is None
+
+    legacy = _spent_proof_state(
+        "02" + "ab" * 32,
+        Proof(id="01" + "ab" * 7, witness='{"signatures":["00"]}'),
+        pending,
+    )
+    assert legacy.witness is None
 
 
 @pytest.mark.asyncio

@@ -9,27 +9,31 @@ from ...core.errors import ProofsAlreadySpentError
 from ..crud import LedgerCrud
 
 
-def _spent_proof_state(Y: str, proof: Proof) -> ProofState:
-    """The NUT-07 entry for a spent proof.
+def _spent_proof_state(
+    Y: str, proof: Proof, state: ProofSpentState = ProofSpentState.spent
+) -> ProofState:
+    """The NUT-07 entry for a spent or pending proof.
 
-    Pre-v3 keysets: the witness as always. v3 keysets: the spend commitment
-    for every spent proof, and the exact witness string with its input digest
-    only when the exercised leaf carries disclosure mode 0x01; everything else
-    stays with the mint (NUT-07). The keyset version decides, as in the spec.
+    Pre-v3 keysets: the witness once spent. v3 keysets: the spend commitment
+    once spent, and the exact witness string with its input digest only when
+    the exercised leaf carries disclosure mode 0x01 (NUT-07).
     """
     if not is_bls_keyset(proof.id):
-        return ProofState(Y=Y, state=ProofSpentState.spent, witness=proof.witness)
+        spent = state == ProofSpentState.spent
+        return ProofState(Y=Y, state=state, witness=proof.witness if spent else None)
     commitment = (
         spend_commitment(
             bytes.fromhex(Y), bytes.fromhex(proof.digest), proof.witness
         ).hex()
-        if proof.witness is not None and proof.digest is not None
+        if state == ProofSpentState.spent
+        and proof.witness is not None
+        and proof.digest is not None
         else None
     )
     disclosed = proof.witness is not None and witness_discloses(proof.witness)
     return ProofState(
         Y=Y,
-        state=ProofSpentState.spent,
+        state=state,
         witness=proof.witness if disclosed else None,
         input_digest=proof.digest if disclosed else None,
         commitment=commitment,
@@ -95,7 +99,11 @@ class DbReadHelper:
                 if Y not in proofs_spent and Y not in proofs_pending:
                     states.append(ProofState(Y=Y, state=ProofSpentState.unspent))
                 elif Y not in proofs_spent and Y in proofs_pending:
-                    states.append(ProofState(Y=Y, state=ProofSpentState.pending))
+                    states.append(
+                        _spent_proof_state(
+                            Y, proofs_pending[Y], ProofSpentState.pending
+                        )
+                    )
                 else:
                     states.append(_spent_proof_state(Y, proofs_spent[Y]))
         return states

@@ -92,12 +92,12 @@ def verify_mint_quote(
 
 
 def construct_transaction_message(
-    quote_id: str, amount: int, outputs: List[BlindedMessage], pubkey: str
+    quote_id: str, amount: int, outputs: List[BlindedMessage], pubkey: str, issued: int
 ) -> bytes:
     """V3 (nutroot secrets): the quote is a transaction input signing its own
     input digest (NUT-10); NUT-20's separate message retires."""
     return construct_batch_transaction_message(
-        [(quote_id, amount, pubkey)], outputs, quote_id
+        [(quote_id, amount, pubkey, issued)], outputs, quote_id
     )
 
 
@@ -106,8 +106,8 @@ def construct_batch_transaction_message(
 ) -> bytes:
     """The input digest quote `for_quote_id` signs in a (batch) mint: the
     shared transcript covers every quote input (quote_id, amount, lock pubkey
-    hex) in request order plus all blinded outputs, and each quote's witness
-    signs its own input digest over it (NUT-10)."""
+    hex, amount_issued) in request order plus all blinded outputs, and each
+    quote's witness signs its own input digest over it (NUT-10)."""
     return quote_input_context(quotes, outputs, for_quote_id).digest
 
 
@@ -119,9 +119,12 @@ def quote_input_context(
         TransactionShape(
             mint_quote_inputs=[
                 TranscriptQuote(
-                    amount=amount, quote_id=quote_id, pubkey=bytes.fromhex(pubkey)
+                    amount=amount,
+                    quote_id=quote_id,
+                    pubkey=bytes.fromhex(pubkey),
+                    issued=issued,
                 )
-                for (quote_id, amount, pubkey) in quotes
+                for (quote_id, amount, pubkey, issued) in quotes
             ],
             blinded_outputs=[
                 TranscriptBlindedOutput(
@@ -139,12 +142,16 @@ def quote_input_context(
 
 
 def sign_mint_quote_v3(
-    quote_id: str, amount: int, outputs: List[BlindedMessage], private_key: str
+    quote_id: str,
+    amount: int,
+    outputs: List[BlindedMessage],
+    private_key: str,
+    issued: int,
 ) -> str:
     privkey = PrivateKey(bytes.fromhex(private_key))
     pubkey = PublicKey.from_secret(bytes.fromhex(private_key)).format().hex()
     return privkey.sign_schnorr(
-        construct_transaction_message(quote_id, amount, outputs, pubkey)
+        construct_transaction_message(quote_id, amount, outputs, pubkey, issued)
     ).hex()
 
 
@@ -154,6 +161,7 @@ def verify_mint_quote_v3(
     outputs: List[BlindedMessage],
     public_key: str,
     signature: str,
+    issued: int,
     batch_quotes: "List[tuple] | None" = None,
 ) -> bool:
     """Verify a v3 locked-quote witness: key path (hex sig or {"signatures"})
@@ -162,7 +170,9 @@ def verify_mint_quote_v3(
     covers them all and `quote_id` selects this quote's input digest."""
     try:
         context = quote_input_context(
-            batch_quotes if batch_quotes is not None else [(quote_id, amount, public_key)],
+            batch_quotes
+            if batch_quotes is not None
+            else [(quote_id, amount, public_key, issued)],
             outputs,
             quote_id,
         )

@@ -131,7 +131,7 @@ class DbWriteHelper:
         if emit_events:
             for p in proofs:
                 await self.events.submit(
-                    ProofState(Y=p.Y, state=ProofSpentState.pending)
+                    _spent_proof_state(p.Y, p, ProofSpentState.pending)
                 )
 
     async def _unset_proofs_pending(

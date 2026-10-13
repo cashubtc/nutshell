@@ -74,7 +74,7 @@ async def test_mint(ledger: Ledger):
         )
     ]
     signature = nut20.sign_mint_quote_v3(
-        quote.quote, quote.amount, blinded_messages_mock, privkey
+        quote.quote, quote.amount, blinded_messages_mock, privkey, 0
     )
     promises = await ledger.mint(
         outputs=blinded_messages_mock, quote_id=quote.quote, signature=signature
@@ -82,6 +82,9 @@ async def test_mint(ledger: Ledger):
     assert len(promises)
     assert promises[0].amount == 8
     assert promises[0].C_
+    # Every issuing path raises amount_issued, the state the next witness binds.
+    stored = await ledger.get_mint_quote(quote.quote)
+    assert stored.amount_issued == 8
 
 
 @pytest.mark.asyncio
@@ -98,10 +101,32 @@ async def test_mint_quote_witness_commits_amount_issued(ledger: Ledger):
             id=ledger.keyset.id,
         )
     ]
-    issued = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey)
-    face = nut20.sign_mint_quote_v3(quote.quote, 8, outputs, privkey)
+    issued = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey, 0)
+    face = nut20.sign_mint_quote_v3(quote.quote, 8, outputs, privkey, 0)
     assert ledger._verify_mint_quote_witness(quote, outputs, issued)
     assert not ledger._verify_mint_quote_witness(quote, outputs, face)
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_witness_commits_quote_state(ledger: Ledger):
+    # The quote input binds the quote's settled amount_issued (NUT-10), so a
+    # witness made at an earlier state does not verify after a draw.
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
+    quote.amount_issued = 3
+    outputs = [
+        BlindedMessage(
+            amount=4,
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
+            id=ledger.keyset.id,
+        )
+    ]
+    at_three = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey, 3)
+    at_zero = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey, 0)
+    assert ledger._verify_mint_quote_witness(quote, outputs, at_three)
+    assert not ledger._verify_mint_quote_witness(quote, outputs, at_zero)
 
 
 @pytest.mark.asyncio
@@ -137,7 +162,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     # We will use an invalid compressed point hex for BLS
     blinded_messages_mock_invalid_key[0].B_ = "020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     signature = nut20.sign_mint_quote_v3(
-        quote.quote, quote.amount, blinded_messages_mock_invalid_key, privkey
+        quote.quote, quote.amount, blinded_messages_mock_invalid_key, privkey, 0
     )
     await assert_err(
         ledger.mint(
