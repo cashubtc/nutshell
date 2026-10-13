@@ -6,7 +6,7 @@ from cashu.core.base import AuthProof, Method, TokenV3, TokenV4, Unit
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.mint_info import MintInfo as CoreMintInfo
 from cashu.core.models.info import GetInfoResponse
-from cashu.core.nuts.nuts import BOOLEAN_SUPPORTED_NUTS
+from cashu.core.nuts.nuts import BOOLEAN_SUPPORTED_NUTS, MINT_QUOTE_PUBKEY_NUT
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.split import amount_split
 from cashu.wallet.helpers import deserialize_token_from_string
@@ -77,6 +77,21 @@ def test_structured_nuts_remain_presence_based():
     assert mint_info.supports_websocket_mint_quote(Method.bolt11, Unit.sat)
     assert mint_info.requires_clear_auth()
     assert mint_info.requires_blind_auth()
+
+
+def test_mint_info_parses_numeric_and_provisional_nut_keys():
+    response = GetInfoResponse.model_validate_json(
+        '{"nuts":{"4":{"methods":[]},"XX":{"supported":true}}}'
+    )
+    mint_info = CoreMintInfo.from_json_str(response.model_dump_json())
+    for info in (response, mint_info):
+        assert info.nuts is not None
+        assert 4 in info.nuts
+        assert MINT_QUOTE_PUBKEY_NUT in info.nuts
+    assert response.supports(4)
+    assert response.supports(MINT_QUOTE_PUBKEY_NUT)
+    assert mint_info.supports_nut(4)
+    assert mint_info.supports_nut(MINT_QUOTE_PUBKEY_NUT)
 
 
 def test_get_output_split():
