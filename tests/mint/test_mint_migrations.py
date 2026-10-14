@@ -32,7 +32,7 @@ def _migrations_through(version):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [36, 37, 38, 39, 40, 41])
+@pytest.mark.parametrize("version", [36, 37, 38, 39, 40, 41, 42])
 async def test_payment_migrations_backfill_existing_accounting(tmp_path, version):
     db = Database("mint", str(tmp_path / "legacy_accounting"))
     try:
@@ -91,7 +91,7 @@ async def test_payment_identity_migration_preserves_conflicting_quotes(
 ):
     db = Database("mint", str(tmp_path / "duplicate_quotes"))
     try:
-        await migrate_databases(db, _migrations_through(42))
+        await migrate_databases(db, _migrations_through(43))
         for i in range(2):
             await db.execute(
                 """INSERT INTO mint_quotes
@@ -115,7 +115,7 @@ async def test_payment_identity_migration_preserves_conflicting_quotes(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", [39, 40, 41, 42])
+@pytest.mark.parametrize("version", [39, 40, 41, 42, 43])
 async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
     db = Database("mint", str(tmp_path / "payment_migration"))
     try:
@@ -137,7 +137,7 @@ async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
             )
         assert {"method_data", "amount_paid_internal"} <= mint_columns
         assert {"attempt", "method_data", "amountless_msat"} <= melt_columns
-        assert row and row["version"] == 43
+        assert row and row["version"] == 44
     finally:
         await db.engine.dispose()
 
@@ -657,7 +657,7 @@ async def test_internal_credit_migration_backfills_only_matching_settlements(led
     await ledger.db.execute(
         f"ALTER TABLE {ledger.db.table_with_schema('melt_quotes')} DROP COLUMN amountless_msat"
     )
-    await mint_migrations.m041_separate_internal_credits_and_amountless_payments(
+    await mint_migrations.m042_separate_internal_credits_and_amountless_payments(
         ledger.db
     )
     restored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
