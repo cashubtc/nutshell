@@ -21,6 +21,10 @@ from ..core.db import (
 )
 
 
+def _proof_from_row(row: Any) -> Proof:
+    return Proof(**{**dict(row), "C": row["c"]})
+
+
 class LedgerCrud(ABC):
     """
     Database interface for Cashu mint.
@@ -558,7 +562,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"quote_id": quote_id},
         )
-        return [Proof(**r) for r in rows]
+        return [_proof_from_row(r) for r in rows]
 
     async def get_proofs_pending(
         self,
@@ -573,7 +577,7 @@ class LedgerCrudSqlite(LedgerCrud):
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
-        return [Proof(**r) for r in rows]
+        return [_proof_from_row(r) for r in rows]
 
     async def set_proof_pending(
         self,
@@ -1100,7 +1104,7 @@ class LedgerCrudSqlite(LedgerCrud):
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
-        return [Proof(**r) for r in rows] if rows else []
+        return [_proof_from_row(r) for r in rows] if rows else []
 
     async def store_balance_log(
         self,
