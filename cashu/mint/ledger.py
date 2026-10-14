@@ -41,6 +41,7 @@ from ..core.errors import (
     NotAllowedError,
     QuoteAlreadyIssuedError,
     QuoteExpiredError,
+    QuoteNotFoundError,
     QuoteNotPaidError,
     QuotePendingError,
     QuoteSignatureInvalidError,
@@ -696,14 +697,14 @@ class Ledger(
             quote_id (str): ID of the mint quote.
 
         Raises:
-            Exception: Quote not found.
+            QuoteNotFoundError: Quote not found.
 
         Returns:
             MintQuote: Mint quote object.
         """
         quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
         if not quote:
-            raise Exception("quote not found")
+            raise QuoteNotFoundError()
         if quote.method == CHANGE_METHOD:
             return quote  # paid at creation, no backend behind it (NUT-XX)
 
@@ -747,7 +748,7 @@ class Ledger(
                         quote_id=quote_id, db=self.db, conn=conn
                     )
                     if not quote:
-                        raise Exception("quote not found")
+                        raise QuoteNotFoundError()
                     if quote.unpaid:
                         logger.trace(f"Setting quote {quote_id} as paid")
                         quote.state = MintQuoteState.paid
