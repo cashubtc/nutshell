@@ -679,6 +679,37 @@ async def test_lndrest_get_invoice_status_invalid_json_is_unknown():
 
 
 @pytest.mark.asyncio
+async def test_lndrest_get_invoice_status_not_found_is_not_an_error():
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+
+    class Client:
+        async def get(self, *args, **kwargs):
+            return _response(
+                404,
+                json_data={"error": "unable to locate invoice", "code": 5},
+            )
+
+    cast(Any, wallet).client = Client()
+    status = await wallet.get_invoice_status("check")
+    assert status.result == PaymentStatusResult.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_lndrest_get_invoice_status_backend_error_stays_error():
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+
+    class Client:
+        async def get(self, *args, **kwargs):
+            return _response(500, json_data={"error": "boom", "code": 13})
+
+    cast(Any, wallet).client = Client()
+    status = await wallet.get_invoice_status("check")
+    assert status.result == PaymentStatusResult.ERROR
+
+
+@pytest.mark.asyncio
 async def test_lndrest_get_payment_quote_uses_mpp_amount(monkeypatch):
     wallet = object.__new__(LndRestWallet)
     wallet.unit = Unit.sat

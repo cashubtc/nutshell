@@ -415,6 +415,16 @@ class LndRestWallet(LightningBackend):
         r = await self.client.get(url=f"/v1/invoice/{checking_id}")
 
         if r.is_error:
+            try:
+                error = r.json()
+            except json.JSONDecodeError:
+                error = None
+            if isinstance(error, dict) and error.get("code") == 5:
+                # LND garbage-collects expired invoices, so a missing
+                # invoice is a valid NOT_FOUND result, not an error.
+                return PaymentStatus(
+                    result=PaymentStatusResult.NOT_FOUND, error_message=r.text
+                )
             logger.error(f"Couldn't get invoice status: {r.text}")
             return PaymentStatus(result=PaymentStatusResult.ERROR, error_message=r.text)
 
