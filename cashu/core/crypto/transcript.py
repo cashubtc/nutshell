@@ -12,6 +12,7 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
 QUOTE_ID_TAG = "Cashu_QuoteId"
+INPUT_QUOTE_ID_TAG = "Cashu_InputQuoteId"
 
 # The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 _CONTAINER_PROOF_INPUT = 0x11
@@ -48,7 +49,7 @@ class TranscriptBlindedOutput:
 @dataclass
 class TranscriptChangeOutput:
     pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
-    quote_id: str  # derived from the output's id_preimage (NUT-04)
+    quote_id: Optional[str]  # from id_preimage (NUT-04); None binds it to the inputs
     amount: Optional[int] = None  # None on the remainder quote
 
 
@@ -67,16 +68,16 @@ def _amount_record(amount: int) -> bytes:
     return tlv_record(0x01, minimal_be(amount))
 
 
-def _change_output_container(c: TranscriptChangeOutput) -> bytes:
+def _change_output_container(c: TranscriptChangeOutput, quote_id: str) -> bytes:
     if len(c.pubkey) != 33:
         raise ValueError("Transcript change lock key must be 33 bytes")
-    if not c.quote_id:
+    if not quote_id:
         raise ValueError("Transcript quote id must be non-empty")
     return tlv_record(
         _CONTAINER_CHANGE_QUOTE_OUTPUT,
         (_amount_record(c.amount) if c.amount is not None else b"")
         + tlv_record(0x02, c.pubkey)
-        + tlv_record(0x03, c.quote_id.encode("utf-8")),
+        + tlv_record(0x03, quote_id.encode("utf-8")),
     )
 
 
@@ -149,7 +150,9 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
         + b"".join(_mint_quote_input_container(q) for q in mint_quotes)
         + b"".join(_blinded_output_container(o) for o in blinded)
         + b"".join(_melt_quote_output_container(q) for q in melt_quotes)
-        + b"".join(_change_output_container(c) for c in change)
+        + b"".join(
+            _change_output_container(c, i) for c, i in zip(change, change_quote_ids(tx))
+        )
     )
 
 
@@ -214,3 +217,26 @@ def derived_quote_id(id_preimage: bytes) -> str:
     if len(id_preimage) != 32:
         raise ValueError("Quote id preimage must be 32 bytes")
     return tagged_hash(QUOTE_ID_TAG, id_preimage).hex()
+
+
+def input_bound_quote_id(tx: TransactionShape, k: int) -> str:
+    """The id a change quote output without id_preimage takes (NUT-XX).
+
+    hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k))), k the
+    output's position among the change quote outputs. Only a transaction spending exactly
+    these inputs creates it.
+    """
+    section = b"".join(
+        _proof_input_container(p) for p in tx.proof_inputs or []
+    ) + b"".join(_mint_quote_input_container(q) for q in tx.mint_quote_inputs or [])
+    return tagged_hash(
+        INPUT_QUOTE_ID_TAG, hashlib.sha256(section).digest(), k.to_bytes(4, "big")
+    ).hex()
+
+
+def change_quote_ids(tx: TransactionShape) -> List[str]:
+    """Each change quote output's id, in request order."""
+    return [
+        c.quote_id if c.quote_id is not None else input_bound_quote_id(tx, k)
+        for k, c in enumerate(tx.change_quote_outputs or [])
+    ]
