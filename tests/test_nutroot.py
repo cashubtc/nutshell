@@ -651,7 +651,11 @@ def _tx_from_vector(tx: dict):
         change_quote_outputs=[
             TranscriptChangeOutput(
                 pubkey=bytes.fromhex(c["pubkey"]),
-                quote_id=derived_quote_id(bytes.fromhex(c["id_preimage"])),
+                quote_id=(
+                    derived_quote_id(bytes.fromhex(c["id_preimage"]))
+                    if "id_preimage" in c
+                    else None
+                ),
                 amount=c.get("amount"),
             )
             for c in tx.get("change_quote_outputs", [])
@@ -674,6 +678,7 @@ def test_transaction_transcript_vectors():
         "mint_quote_to_melt",
         "proof_to_change",
         "proof_to_two_changes",
+        "proof_to_input_bound_change",
     ):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
@@ -708,6 +713,24 @@ def test_transaction_vectors_input_digests():
         derived_quote_id(bytes.fromhex(c["id_preimage"]))
         for c in two_tx["tx"]["change_quote_outputs"]
     ] == two_tx["quote_ids"]
+
+
+def test_input_bound_change_quote_vector():
+    from cashu.core.crypto.transcript import (
+        build_transaction_transcript,
+        change_quote_ids,
+        input_bound_quote_id,
+    )
+
+    tv = VECTORS["transcript"]["proof_to_input_bound_change"]
+    tx = _tx_from_vector(tv["tx"])
+    assert change_quote_ids(tx) == tv["quote_ids"]
+    assert input_bound_quote_id(tx, 1) == tv["quote_ids"][1]
+    transcript = build_transaction_transcript(tx).hex()
+    assert transcript.endswith("".join(tv["change_containers"]))
+    # The input section is the transcript up to its first output container.
+    section = transcript[: transcript.index(tv["change_containers"][0])]
+    assert hashlib.sha256(bytes.fromhex(section)).hexdigest() == tv["input_section_hash"]
 
 
 def test_transcript_swap_signature_is_keypath_witness():

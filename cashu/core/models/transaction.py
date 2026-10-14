@@ -24,13 +24,16 @@ class TransactionMeltOutput(BaseModel):
 
 
 class TransactionChangeOutput(BaseModel):
-    id_preimage: str = Field(..., pattern=r"^[0-9a-fA-F]{64}$")
+    # Omitted for an id bound to the transaction's inputs (NUT-XX).
+    id_preimage: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
     pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # change quote lock key
     amount: Optional[int] = Field(None, gt=0)  # omitted on the remainder quote
 
     @property
-    def quote_id(self) -> str:
-        """The change quote's derived id (NUT-04)."""
+    def quote_id(self) -> Optional[str]:
+        """The change quote's derived id (NUT-04), None if bound to the inputs."""
+        if self.id_preimage is None:
+            return None
         return derived_quote_id(bytes.fromhex(self.id_preimage))
 
 

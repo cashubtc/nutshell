@@ -34,6 +34,7 @@ from ..core.crypto.transcript import (
     TranscriptChangeOutput,
     TranscriptProofInput,
     TranscriptQuote,
+    change_quote_ids,
     transaction_inputs,
 )
 from ..core.db import Connection
@@ -276,7 +277,7 @@ class LedgerVerification(
         melt_quote: Optional[MeltQuote] = None,
         mint_quote_inputs: Optional[List[TranscriptQuote]] = None,
         change_quote_outputs: Optional[List[TranscriptChangeOutput]] = None,
-    ) -> Optional[Tuple[bytes, Dict[str, InputContext]]]:
+    ) -> Optional[Tuple[bytes, Dict[str, InputContext], List[str]]]:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
         One shared transcript per transaction, one input digest per input
@@ -288,7 +289,8 @@ class LedgerVerification(
         transactions verify per input as specified.
 
         Passing `mint_quote_inputs` (NUT-XX) always builds the transcript and
-        returns its digest with the quote contexts; the caller checks quotes.
+        returns its digest, the quote contexts and the change quote ids; the
+        caller checks quotes.
         """
         if mint_quote_inputs is None:
             if not proofs or (not outputs and melt_quote is None):
@@ -297,41 +299,40 @@ class LedgerVerification(
                 return None
         # The transcript names each input by Y (NUT-10); hashed once per proof.
         ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
-        digest_, proof_contexts, quote_contexts = transaction_inputs(
-            TransactionShape(
-                proof_inputs=[
-                    TranscriptProofInput(
-                        amount=p.amount,
-                        keyset_id=keyset_id_transcript_bytes(p.id),
-                        Y=ys[p.secret],
-                        C=bytes.fromhex(p.C),
+        shape = TransactionShape(
+            proof_inputs=[
+                TranscriptProofInput(
+                    amount=p.amount,
+                    keyset_id=keyset_id_transcript_bytes(p.id),
+                    Y=ys[p.secret],
+                    C=bytes.fromhex(p.C),
+                )
+                for p in proofs
+            ],
+            mint_quote_inputs=mint_quote_inputs,
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=o.amount,
+                    keyset_id=keyset_id_transcript_bytes(o.id),
+                    B_=bytes.fromhex(o.B_),
+                )
+                for o in outputs
+            ],
+            # The melt output binds what the quote may take: amount plus its
+            # fee reserve (NUT-10).
+            melt_quote_outputs=(
+                [
+                    TranscriptQuote(
+                        amount=melt_quote.amount + melt_quote.fee_reserve,
+                        quote_id=melt_quote.quote,
                     )
-                    for p in proofs
-                ],
-                mint_quote_inputs=mint_quote_inputs,
-                blinded_outputs=[
-                    TranscriptBlindedOutput(
-                        amount=o.amount,
-                        keyset_id=keyset_id_transcript_bytes(o.id),
-                        B_=bytes.fromhex(o.B_),
-                    )
-                    for o in outputs
-                ],
-                # The melt output binds what the quote may take: amount plus its
-                # fee reserve (NUT-10).
-                melt_quote_outputs=(
-                    [
-                        TranscriptQuote(
-                            amount=melt_quote.amount + melt_quote.fee_reserve,
-                            quote_id=melt_quote.quote,
-                        )
-                    ]
-                    if melt_quote is not None
-                    else None
-                ),
-                change_quote_outputs=change_quote_outputs,
-            )
+                ]
+                if melt_quote is not None
+                else None
+            ),
+            change_quote_outputs=change_quote_outputs,
         )
+        digest_, proof_contexts, quote_contexts = transaction_inputs(shape)
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
@@ -373,7 +374,7 @@ class LedgerVerification(
                 raise TransactionError("invalid nutroot transaction witness.")
             if not valid:
                 raise TransactionError("invalid nutroot transaction witness.")
-        return digest_, quote_contexts
+        return digest_, quote_contexts, change_quote_ids(shape)
 
     def _verify_inputs_and_outputs_together(
         self,

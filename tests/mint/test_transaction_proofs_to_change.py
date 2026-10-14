@@ -5,11 +5,17 @@ import pytest
 import pytest_asyncio
 from pydantic import ValidationError
 
-from cashu.core.crypto.nutroot import is_nutroot_point_secret
+from cashu.core.crypto.nutroot import (
+    is_nutroot_point_secret,
+    keyset_id_transcript_bytes,
+    proof_transcript_y,
+)
 from cashu.core.crypto.transcript import (
     TransactionShape,
+    TranscriptProofInput,
     TranscriptQuote,
     derived_quote_id,
+    input_bound_quote_id,
 )
 from cashu.core.errors import TransactionError
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
@@ -113,6 +119,38 @@ async def test_transaction_proofs_to_fixed_and_remainder_quotes(
         remainder_pubkey,
     )
     assert [fixed.quote, remainder.quote] == [c.quote_id for c in change_outputs]
+
+
+@pytest.mark.asyncio
+async def test_change_output_without_preimage_takes_an_input_bound_id(
+    wallet1: Wallet, ledger: Ledger
+):
+    """The proof_to_input_bound_change vector's shape: the remainder output has no id_preimage."""
+    proofs = await _funded(wallet1, 8)
+    remainder_pubkey = nut20.generate_keypair()[1]
+    change_outputs = [
+        change_output(nut20.generate_keypair()[1], amount=3),
+        TransactionChangeOutput(pubkey=remainder_pubkey),
+    ]
+    result = await _to_change(ledger, wallet1, proofs, change_outputs)
+    assert result.state == "PAID"
+    fixed, remainder = result.change_quotes
+    assert fixed is not None and remainder is not None
+    assert fixed.quote == change_outputs[0].quote_id
+    inputs = TransactionShape(
+        proof_inputs=[
+            TranscriptProofInput(
+                amount=p.amount,
+                keyset_id=keyset_id_transcript_bytes(p.id),
+                Y=proof_transcript_y(p.secret, p.id),
+                C=bytes.fromhex(p.C),
+            )
+            for p in proofs
+        ]
+    )
+    assert remainder.quote == input_bound_quote_id(inputs, 1)
+    fetched = await ledger.get_mint_quote(remainder.quote)
+    assert (fetched.pubkey, fetched.amount) == (remainder_pubkey, remainder.amount)
 
 
 async def _funded(wallet: Wallet, amount: int):

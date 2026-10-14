@@ -83,9 +83,6 @@ async def run(
         key = bytes.fromhex(c.pubkey)
         PublicKey(key)  # raises unless a valid compressed point
         c.pubkey = key.hex()
-    change_ids = [c.quote_id for c in change_outputs]
-    if len(set(change_ids)) != len(change_ids):
-        raise TransactionError("transaction repeats a change quote id.")
 
     if any(m.fee_index is not None for m in payload.melt_quote_outputs):
         raise TransactionError("fee_index applies only to quotes offering fee_options.")
@@ -122,14 +119,16 @@ async def run(
         ],
         change_quote_outputs=[
             TranscriptChangeOutput(
-                pubkey=bytes.fromhex(c.pubkey), quote_id=i, amount=c.amount
+                pubkey=bytes.fromhex(c.pubkey), quote_id=c.quote_id, amount=c.amount
             )
-            for c, i in zip(change_outputs, change_ids)
+            for c in change_outputs
         ],
     )
     if verified is None:
         raise TransactionError("transaction has no v3 transcript.")
-    digest_bytes, quote_contexts = verified
+    digest_bytes, quote_contexts, change_ids = verified
+    if len(set(change_ids)) != len(change_ids):
+        raise TransactionError("transaction repeats a change quote id.")
     digest = digest_bytes.hex()
     for q, k in zip(payload.mint_quote_inputs, lock_keys):
         if not nut20.verify_quote_input_witness(
