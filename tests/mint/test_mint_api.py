@@ -909,3 +909,10 @@ def test_format_limit():
     assert format_limit(1_500, "sat") == "1.5K sat"
     assert format_limit(1_000, "sat") == "1K sat"
     assert format_limit(500, "sat") == "500 sat"
+
+
+@pytest.mark.asyncio
+async def test_unknown_change_quote_is_not_found(ledger: Ledger):
+    response = httpx.get(f"{BASE_URL}/v1/mint/quote/change/{'00' * 32}")
+    assert response.status_code == 400
+    assert response.json()["code"] == 20010

@@ -69,8 +69,9 @@ async def run(
         payload.mint_quote_inputs
     ):
         raise TransactionError("transaction repeats a mint quote.")
-    if any(o.amount == 0 for o in outputs):
-        raise TransactionError("blank outputs are not allowed: use a change quote.")
+    # A blank output takes a melt's change (NUT-08), so it needs a melt.
+    if any(o.amount == 0 for o in outputs) and not payload.melt_quote_outputs:
+        raise TransactionError("blank outputs are allowed only beside a melt.")
     # Outputs cannot be signed if their keyset rotates during the payment (NUT-02);
     # the remainder quote is where their value goes then.
     if outputs and payload.melt_quote_outputs and not has_remainder:
@@ -147,7 +148,11 @@ async def run(
             p.digest = d
         ledger._verify_input_output_spending_conditions(proofs, outputs)
     if outputs:
-        await ledger._verify_outputs(outputs)
+        fixed = [o for o in outputs if o.amount]
+        if fixed:
+            await ledger._verify_outputs(fixed)
+        if len(fixed) < len(outputs):  # blank outputs have no amount to check yet
+            await ledger._verify_outputs(outputs, skip_amount_check=True)
 
     units = (
         {ledger.keysets[p.id].unit.name for p in proofs}
@@ -427,16 +432,28 @@ async def settle(
     Returns the signatures and every quote touched, for the caller to emit once committed.
     """
     signatures: List[BlindedSignature] = []
-    unsigned = 0
+    change = record["excess"] - fee_paid
+    if change < 0:
+        raise TransactionError("negative change.")
     if outputs:
-        if ledger.keysets[outputs[0].id].active:
-            signatures = await ledger._sign_blinded_messages(outputs, conn)
+        keyset = ledger.keysets[outputs[0].id]
+        if keyset.active:
+            # Blank outputs take the change as in NUT-08; the remainder quote takes the rest.
+            blanks = [o for o in outputs if o.amount == 0]
+            fills = fill_blanks(change, keyset.amounts, len(blanks))
+            for blank, amount in zip(blanks, fills):
+                blank.amount = amount
+                change -= amount
+            to_sign = [o for o in outputs if o.amount]
+            if to_sign:
+                signatures = await ledger._sign_blinded_messages(to_sign, conn)
         elif not record["melt_quote"]:
             raise KeysetInactiveError()
         else:
             # The keyset was inactivated during the payment: nothing is signed
             # (NUT-02) and the outputs' value returns through the remainder quote.
-            unsigned = sum(o.amount for o in outputs)
+            change += sum(o.amount for o in outputs)
+        if record["melt_quote"]:  # drop the outputs left unsigned
             await ledger.crud.delete_blinded_messages_melt_id(
                 melt_id=record["melt_quote"], db=ledger.db, conn=conn
             )
@@ -453,9 +470,6 @@ async def settle(
         ledger.db_write._set_mint_quote_state(quote, state)
         await ledger.crud.update_mint_quote(quote=quote, db=ledger.db, conn=conn)
         touched.append(quote)
-    change = record["excess"] + unsigned - fee_paid
-    if change < 0:
-        raise TransactionError("negative change.")
     now = int(time.time())
     for quote_id, pubkey, fixed in json.loads(record["change_outputs"]):
         amount = fixed if fixed is not None else change
@@ -487,6 +501,16 @@ async def settle(
         )
         await _delete_pending(ledger, record["melt_quote"], conn)
     return signatures, touched
+
+
+def fill_blanks(change: int, amounts: List[int], blanks: int) -> List[int]:
+    """Each blank in turn takes the largest keyset amount not above what is left of `change`."""
+    fills: List[int] = []
+    for amount in sorted(amounts, reverse=True):
+        while amount > 0 and change >= amount and len(fills) < blanks:
+            fills.append(amount)
+            change -= amount
+    return fills
 
 
 async def fail(ledger: "Ledger", record, conn: Connection) -> List[MintQuote]:
