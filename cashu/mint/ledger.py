@@ -31,7 +31,6 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database, LockOptions
 from ..core.errors import (
-    AmountlessInvoiceNotSupportedError,
     AmountMismatchError,
     BatchDuplicateQuotesError,
     CashuError,
@@ -1052,6 +1051,8 @@ class Ledger(
         # This works with Lightning but might not work with other methods
         request = melt_quote.request.lower()
 
+        expiry = self.backends[method][unit].validate_payment_request(request)
+
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
         # and therefore respond with internal transaction fees (0 for now)
@@ -1083,18 +1084,11 @@ class Ledger(
                 f"Maximum melt amount is {settings.mint_max_melt_bolt11_sat} sat."
             )
 
-        # We assume that the request is a bolt11 invoice, this works since we
-        # support only the bol11 method for now.
-        invoice_obj = bolt11.decode(melt_quote.request)
-        if not invoice_obj.amount_msat:
-            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
-        # we set the expiry of this quote to the expiry of the bolt11 invoice
+        # A quote may expire before its payment request, but never after it.
         now = int(time.time())
-        expiry = None
         if settings.melt_quote_ttl is not None:
-            expiry = now + settings.melt_quote_ttl
-        elif invoice_obj.expiry is not None:
-            expiry = invoice_obj.date + invoice_obj.expiry
+            quote_expiry = now + settings.melt_quote_ttl
+            expiry = min(expiry, quote_expiry) if expiry is not None else quote_expiry
 
         quote = MeltQuote(
             quote=generate_uuid_v7(),
@@ -1285,15 +1279,12 @@ class Ledger(
                 raise InvoiceAlreadyPaidError("melt quote already paid")
             if not melt_quote.pending:
                 raise TransactionError("melt quote is not pending")
+            if melt_quote.expiry is not None and melt_quote.expiry < time.time():
+                raise QuoteExpiredError("quote expired")
 
-            bolt11_request = melt_quote.request
-            invoice_obj = bolt11.decode(bolt11_request)
-
-            if not invoice_obj.amount_msat:
-                raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
             if mint_quote.amount != melt_quote.amount:
                 raise AmountMismatchError("amounts do not match")
-            if bolt11_request != mint_quote.request:
+            if melt_quote.request != mint_quote.request:
                 raise TransactionError("bolt11 requests do not match")
             if mint_quote.method != melt_quote.method:
                 raise TransactionError("methods do not match")
@@ -1414,7 +1405,7 @@ class Ledger(
         if melt_quote.pending:
             raise QuotePendingError(f"melt quote is not unpaid: {melt_quote.state}")
 
-        unit, method = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
+        unit, _ = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
 
         # make sure that the proofs are in the same unit as the quote
         self._verify_proofs_unit(proofs, expected_unit=unit)
@@ -1445,7 +1436,6 @@ class Ledger(
 
         if melt_quote.expiry is not None and melt_quote.expiry < time.time():
             raise QuoteExpiredError("quote expired")
-        self.backends[method][unit].validate_payment_request(melt_quote.request)
 
         # set quote and proofs to pending to avoid race conditions
         melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
@@ -1490,8 +1480,9 @@ class Ledger(
                     preimage=melt_quote.payment_preimage,
                 )
                 return PostMeltQuoteResponse.from_melt_quote(melt_quote)
-            # Revalidate after preparation, before any backend payment is submitted.
-            self.backends[method][unit].validate_payment_request(melt_quote.request)
+            # Expiry during preparation is still safe to roll back before payment.
+            if melt_quote.expiry is not None and melt_quote.expiry < time.time():
+                raise QuoteExpiredError("quote expired")
         except Exception as e:
             logger.debug(f"Melt failed before backend payment: {e}")
             await self._finalize_melt_failed(
