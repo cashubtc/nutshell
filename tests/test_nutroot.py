@@ -612,9 +612,10 @@ def _tx_from_vector(tx: dict):
     from cashu.core.crypto.transcript import (
         TransactionShape,
         TranscriptBlindedOutput,
-        TranscriptChangeOutput,
+        TranscriptMintQuoteOutput,
         TranscriptProofInput,
         TranscriptQuote,
+        remainder_quote_id,
     )
 
     return TransactionShape(
@@ -648,17 +649,13 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
-        change_quote_outputs=[
-            TranscriptChangeOutput(
+        # The remainder quote is named by its melt (NUT-XX).
+        mint_quote_outputs=[
+            TranscriptMintQuoteOutput(
                 pubkey=bytes.fromhex(c["pubkey"]),
-                quote_id=(
-                    derived_quote_id(bytes.fromhex(c["id_preimage"]))
-                    if "id_preimage" in c
-                    else None
-                ),
-                amount=c.get("amount"),
+                quote_id=remainder_quote_id(tx["melt_quote_outputs"][0]["quote_id"]),
             )
-            for c in tx.get("change_quote_outputs", [])
+            for c in tx.get("mint_quote_outputs", [])
         ],
     )
 
@@ -676,9 +673,7 @@ def test_transaction_transcript_vectors():
         "melt",
         "melt_with_change",
         "mint_quote_to_melt",
-        "proof_to_change",
-        "proof_to_two_changes",
-        "proof_to_input_bound_change",
+        "melt_with_remainder",
     ):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
@@ -696,41 +691,21 @@ def test_transaction_vectors_input_digests():
     assert hashlib.sha256(context.container).hexdigest() == quote_tx["input_id"]
     assert context.digest.hex() == quote_tx["input_digest"]
 
-    change_tx = tv["proof_to_change"]
-    assert change_tx["transcript"].endswith(change_tx["change_container"])
-    _, proofs, _ = transaction_inputs(_tx_from_vector(change_tx["tx"]))
+    remainder_tx = tv["melt_with_remainder"]
+    assert remainder_tx["transcript"].endswith(remainder_tx["mint_quote_output_container"])
+    _, proofs, _ = transaction_inputs(_tx_from_vector(remainder_tx["tx"]))
     (context,) = proofs.values()
-    assert context.digest.hex() == change_tx["input_digest"]
-    (change_out,) = change_tx["tx"]["change_quote_outputs"]
-    assert derived_quote_id(bytes.fromhex(change_out["id_preimage"])) == change_tx["quote_id"]
-
-    two_tx = tv["proof_to_two_changes"]
-    assert two_tx["transcript"].endswith("".join(two_tx["change_containers"]))
-    _, proofs, _ = transaction_inputs(_tx_from_vector(two_tx["tx"]))
-    (context,) = proofs.values()
-    assert context.digest.hex() == two_tx["input_digest"]
-    assert [
-        derived_quote_id(bytes.fromhex(c["id_preimage"]))
-        for c in two_tx["tx"]["change_quote_outputs"]
-    ] == two_tx["quote_ids"]
+    assert context.digest.hex() == remainder_tx["input_digest"]
 
 
-def test_input_bound_change_quote_vector():
-    from cashu.core.crypto.transcript import (
-        build_transaction_transcript,
-        change_quote_ids,
-        input_bound_quote_id,
-    )
+def test_remainder_quote_id_vector():
+    from cashu.core.crypto.transcript import remainder_quote_id
 
-    tv = VECTORS["transcript"]["proof_to_input_bound_change"]
-    tx = _tx_from_vector(tv["tx"])
-    assert change_quote_ids(tx) == tv["quote_ids"]
-    assert input_bound_quote_id(tx, 1) == tv["quote_ids"][1]
-    transcript = build_transaction_transcript(tx).hex()
-    assert transcript.endswith("".join(tv["change_containers"]))
-    # The input section is the transcript up to its first output container.
-    section = transcript[: transcript.index(tv["change_containers"][0])]
-    assert hashlib.sha256(bytes.fromhex(section)).hexdigest() == tv["input_section_hash"]
+    lock = VECTORS["nut13_v3"]["remainder_lock"]
+    assert remainder_quote_id(lock["melt_quote_id"]) == lock["quote_id"]
+    assert VECTORS["transcript"]["melt_with_remainder"]["quote_id"] == lock["quote_id"]
+    with pytest.raises(ValueError):
+        remainder_quote_id("")
 
 
 def test_transcript_swap_signature_is_keypath_witness():

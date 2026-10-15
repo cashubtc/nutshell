@@ -79,7 +79,7 @@ from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .keysets import LedgerKeysets
 from .tasks import LedgerTasks
-from .transaction import CHANGE_METHOD
+from .transaction import TXOUT_METHOD
 from .verification import LedgerVerification
 from .watchdog import LedgerWatchdog
 
@@ -705,7 +705,7 @@ class Ledger(
         quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
         if not quote:
             raise QuoteNotFoundError()
-        if quote.method == CHANGE_METHOD:
+        if quote.method == TXOUT_METHOD:
             return quote  # paid at creation, no backend behind it (NUT-XX)
 
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
@@ -819,7 +819,7 @@ class Ledger(
             raise QuoteNotPaidError()
 
         # Also validate quotes created before invoice amount checks were added.
-        if quote.method != CHANGE_METHOD:
+        if quote.method != TXOUT_METHOD:
             self._verify_mint_quote_invoice_amount(
                 bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
             )

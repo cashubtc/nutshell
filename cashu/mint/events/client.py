@@ -222,13 +222,13 @@ class LedgerEventClientManager:
         async with self.db_read.db.connect() as conn:
             if kind in (
                 JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
-                JSONRPCSubscriptionKinds.CHANGE_MINT_QUOTE,
+                JSONRPCSubscriptionKinds.TXOUT_MINT_QUOTE,
             ):
                 for filter in filters:
                     mint_quote = await self.db_read.crud.get_mint_quote(
                         quote_id=filter, db=self.db_read.db, conn=conn
                     )
-                    # A change quote not created yet sends its first state once it exists.
+                    # A txout quote not created yet sends its first state once it exists.
                     if mint_quote and mint_quote.kind == kind:
                         results.append(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump())
             elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:

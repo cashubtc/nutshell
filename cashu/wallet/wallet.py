@@ -40,9 +40,10 @@ from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
-    TranscriptChangeOutput,
+    TranscriptMintQuoteOutput,
     TranscriptProofInput,
     TranscriptQuote,
+    remainder_quote_id,
     transaction_inputs,
 )
 from ..core.db import Database
@@ -59,7 +60,7 @@ from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
-    TransactionChangeOutput,
+    TransactionMintQuoteOutput,
 )
 from ..core.nuts import nut20
 from ..core.p2pk import Secret
@@ -759,7 +760,7 @@ class Wallet(
         outputs: List[BlindedMessage],
         melt_quote_id: Optional[str] = None,
         melt_quote_amount: Optional[int] = None,
-        change_quote_outputs: Optional[List[TransactionChangeOutput]] = None,
+        mint_quote_outputs: Optional[List[TransactionMintQuoteOutput]] = None,
     ) -> List[Proof]:
         """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
 
@@ -804,13 +805,13 @@ class Wallet(
                         if melt_quote_id is not None and melt_quote_amount is not None
                         else None
                     ),
-                    change_quote_outputs=[
-                        TranscriptChangeOutput(
+                    # The remainder quote is named by its melt (NUT-XX).
+                    mint_quote_outputs=[
+                        TranscriptMintQuoteOutput(
                             pubkey=bytes.fromhex(c.pubkey),
-                            quote_id=c.quote_id,
-                            amount=c.amount,
+                            quote_id=remainder_quote_id(melt_quote_id or ""),
                         )
-                        for c in change_quote_outputs or []
+                        for c in mint_quote_outputs or []
                     ],
                 )
             )

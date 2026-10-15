@@ -3,7 +3,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, Method, MintQuoteState, Unit
+from cashu.core.base import MeltQuoteState, Method, MintQuote, MintQuoteState, Unit
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -912,7 +912,42 @@ def test_format_limit():
 
 
 @pytest.mark.asyncio
-async def test_unknown_change_quote_is_not_found(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/mint/quote/change/{'00' * 32}")
+async def test_unknown_txout_quote_is_not_found(ledger: Ledger):
+    response = httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{'00' * 32}")
     assert response.status_code == 400
     assert response.json()["code"] == 20010
+    # Another method's quote is not a txout quote either.
+    bolt11 = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11", json={"amount": 8, "unit": "sat"}
+    ).json()["quote"]
+    response = httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{bolt11}")
+    assert response.status_code == 400
+    assert response.json()["code"] == 20010
+
+
+@pytest.mark.asyncio
+async def test_txout_quote_is_not_minted_at_the_bolt11_route(ledger: Ledger):
+    quote_id = "txout-" + "ab" * 16
+    await ledger.crud.store_mint_quote(
+        quote=MintQuote(
+            quote=quote_id,
+            method="txout",
+            request="",
+            checking_id=f"txout:{quote_id}",
+            unit="sat",
+            amount=8,
+            state=MintQuoteState.paid,
+            amount_paid=8,
+            amount_issued=0,
+            pubkey=nut20.generate_keypair()[1],
+        ),
+        db=ledger.db,
+    )
+    assert httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{quote_id}").status_code == 200
+    # It redeems only at its own route or as a quote input (NUT-XX).
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/bolt11", json={"quote": quote_id, "outputs": []}
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == 20010
+    assert (await ledger.get_mint_quote(quote_id)).paid
