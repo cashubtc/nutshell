@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from cashu.core.base import BlindedMessage, BlindedSignature, Proof
 from cashu.core.constants import MAX_PUBKEY_LEN, MAX_QUOTE_ID_LEN, MAX_WITNESS_LEN
+from cashu.core.crypto.transcript import derived_quote_id
 from cashu.core.settings import settings
 
 from .melt_quote import PostMeltQuoteResponse
@@ -23,10 +24,19 @@ class TransactionMeltOutput(BaseModel):
 
 
 class TransactionMintQuoteOutput(BaseModel):
-    # Only the remainder quote here, so an amount or id_preimage is refused, not ignored.
     model_config = ConfigDict(extra="forbid")
 
-    pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # remainder quote lock key
+    pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # txout quote lock key
+    amount: Optional[int] = Field(None, gt=0)  # a fixed txout quote; none on the remainder
+    # Fixed txout quotes only; omitted for an id bound to the transaction's inputs (NUT-XX).
+    id_preimage: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
+
+    @property
+    def quote_id(self) -> Optional[str]:
+        """The fixed txout quote's derived id (NUT-04), None if bound to the inputs."""
+        if self.id_preimage is None:
+            return None
+        return derived_quote_id(bytes.fromhex(self.id_preimage))
 
 
 class PostTransactionRequest(BaseModel):

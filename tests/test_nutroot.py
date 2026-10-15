@@ -649,11 +649,19 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
-        # The remainder quote is named by its melt (NUT-XX).
+        # The remainder quote is named by its melt; a fixed one by its preimage, or None
+        # for an id bound to the inputs (NUT-XX).
         mint_quote_outputs=[
             TranscriptMintQuoteOutput(
                 pubkey=bytes.fromhex(c["pubkey"]),
-                quote_id=remainder_quote_id(tx["melt_quote_outputs"][0]["quote_id"]),
+                quote_id=(
+                    remainder_quote_id(tx["melt_quote_outputs"][0]["quote_id"])
+                    if "amount" not in c
+                    else derived_quote_id(bytes.fromhex(c["id_preimage"]))
+                    if "id_preimage" in c
+                    else None
+                ),
+                amount=c.get("amount"),
             )
             for c in tx.get("mint_quote_outputs", [])
         ],
@@ -674,6 +682,8 @@ def test_transaction_transcript_vectors():
         "melt_with_change",
         "mint_quote_to_melt",
         "melt_with_remainder",
+        "proof_to_two_fixed_txouts",
+        "proof_to_input_bound_txout",
     ):
         example = tv[name]
         tx = _tx_from_vector(example["tx"])
@@ -696,6 +706,27 @@ def test_transaction_vectors_input_digests():
     _, proofs, _ = transaction_inputs(_tx_from_vector(remainder_tx["tx"]))
     (context,) = proofs.values()
     assert context.digest.hex() == remainder_tx["input_digest"]
+
+
+def test_fixed_txout_quote_vectors():
+    from cashu.core.crypto.transcript import (
+        build_transaction_transcript,
+        input_bound_quote_id,
+        mint_quote_ids,
+    )
+
+    two = VECTORS["transcript"]["proof_to_two_fixed_txouts"]
+    assert two["transcript"].endswith("".join(two["mint_quote_output_containers"]))
+    assert mint_quote_ids(_tx_from_vector(two["tx"])) == two["quote_ids"]
+
+    tv = VECTORS["transcript"]["proof_to_input_bound_txout"]
+    tx = _tx_from_vector(tv["tx"])
+    assert mint_quote_ids(tx) == tv["quote_ids"]
+    assert input_bound_quote_id(tx, 1) == tv["quote_ids"][1]
+    transcript = build_transaction_transcript(tx).hex()
+    # The input section is the transcript up to its first output container.
+    section = transcript[: transcript.index(tv["mint_quote_output_containers"][0])]
+    assert hashlib.sha256(bytes.fromhex(section)).hexdigest() == tv["input_section_hash"]
 
 
 def test_remainder_quote_id_vector():

@@ -34,6 +34,7 @@ from ..core.crypto.transcript import (
     TranscriptMintQuoteOutput,
     TranscriptProofInput,
     TranscriptQuote,
+    mint_quote_ids,
     transaction_inputs,
 )
 from ..core.db import Connection
@@ -276,7 +277,7 @@ class LedgerVerification(
         melt_quote: Optional[MeltQuote] = None,
         mint_quote_inputs: Optional[List[TranscriptQuote]] = None,
         mint_quote_outputs: Optional[List[TranscriptMintQuoteOutput]] = None,
-    ) -> Optional[Tuple[bytes, Dict[str, InputContext]]]:
+    ) -> Optional[Tuple[bytes, Dict[str, InputContext], List[str]]]:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
         One shared transcript per transaction, one input digest per input
@@ -288,7 +289,8 @@ class LedgerVerification(
         transactions verify per input as specified.
 
         Passing `mint_quote_inputs` (NUT-XX) always builds the transcript and
-        returns its digest and the quote contexts; the caller checks quotes.
+        returns its digest, the quote contexts and the txout quote ids; the
+        caller checks quotes.
         """
         if mint_quote_inputs is None:
             if not proofs or (not outputs and melt_quote is None):
@@ -372,7 +374,7 @@ class LedgerVerification(
                 raise TransactionError("invalid nutroot transaction witness.")
             if not valid:
                 raise TransactionError("invalid nutroot transaction witness.")
-        return digest_, quote_contexts
+        return digest_, quote_contexts, mint_quote_ids(shape)
 
     def _verify_inputs_and_outputs_together(
         self,

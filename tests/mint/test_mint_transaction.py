@@ -208,10 +208,10 @@ async def test_transaction_remainder_quote_needs_a_melt(ledger: Ledger):
                 mint_quote_outputs=[remainder, remainder],
             )
         )
-    # Only the remainder quote here: a fixed amount is refused, not ignored.
+    # An unknown field is refused, not ignored.
     with pytest.raises(Exception):
         TransactionMintQuoteOutput.model_validate(
-            {"pubkey": remainder.pubkey, "amount": 8}
+            {"pubkey": remainder.pubkey, "amount": 8, "memo": "x"}
         )
     result = await ledger.transaction(
         PostTransactionRequest(mint_quote_inputs=[quote_input], blinded_outputs=outputs)

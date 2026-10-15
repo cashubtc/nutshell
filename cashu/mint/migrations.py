@@ -1377,3 +1377,20 @@ async def m041_add_melt_transactions(db: Database):
             );
             """
         )
+
+
+async def m042_add_mint_quote_id_claims(db: Database):
+    """NUT-XX: fixed txout quote ids are claimed at acceptance."""
+    async with db.connect() as conn:
+        # melt_quote names the pending transaction holding the id, so a failed melt releases it.
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {db.table_with_schema("mint_quote_id_claims")} (
+                quote_id TEXT PRIMARY KEY,
+                melt_quote TEXT
+            );
+            """
+        )
+        await conn.execute(
+            f"CREATE INDEX IF NOT EXISTS mint_quote_id_claims_melt_quote_idx ON {db.table_with_schema('mint_quote_id_claims')} (melt_quote)"
+        )

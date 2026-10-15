@@ -61,7 +61,7 @@ class NutrootLeaf:
     """A parsed declarative leaf (version 0x00).
 
     Keys are secp256k1 public keys. `time` is unix seconds; `hash` is 32 bytes.
-    `dests` (template only) are the lock keys every change quote output must
+    `dests` (template only) are the lock keys every fixed txout quote output must
     use. A `commit` leaf carries only `hash`: it names no signer and is never a
     spend path (NUT-10).
     """
@@ -553,7 +553,7 @@ def verify_script_path_spend(
     Witness shape (NUT-10): {"leaf": hex, "control": {"K": hex, "path": [hex]},
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
     input digest; `outputs` holds each transaction output's lock key (None for
-    an output that is not a change quote), which a template leaf checks against
+    an output that is not a fixed txout quote), which a template leaf checks against
     its dests. Raises ValueError on any failure (fail closed);
     returns the parsed leaf so callers can act on its disclosure mode.
     """
@@ -591,7 +591,7 @@ def verify_script_path_spend(
             raise ValueError("template leaf needs the transaction outputs")
         dests = {dest.format() for dest in leaf.dests or []}
         if any(key is None or key not in dests for key in outputs):
-            raise ValueError("template leaf outputs must be change quotes to its dests")
+            raise ValueError("template leaf outputs must be fixed txout quotes to its dests")
 
     if leaf.type != "hashlock" and witness.preimage is not None:
         raise ValueError("preimage on a leaf that is not a hashlock")

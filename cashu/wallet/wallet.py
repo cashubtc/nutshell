@@ -805,11 +805,16 @@ class Wallet(
                         if melt_quote_id is not None and melt_quote_amount is not None
                         else None
                     ),
-                    # The remainder quote is named by its melt (NUT-XX).
+                    # The remainder quote is named by its melt, a fixed one by its own id (NUT-XX).
                     mint_quote_outputs=[
                         TranscriptMintQuoteOutput(
                             pubkey=bytes.fromhex(c.pubkey),
-                            quote_id=remainder_quote_id(melt_quote_id or ""),
+                            quote_id=(
+                                remainder_quote_id(melt_quote_id or "")
+                                if c.amount is None
+                                else c.quote_id
+                            ),
+                            amount=c.amount,
                         )
                         for c in mint_quote_outputs or []
                     ],

@@ -79,6 +79,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[TRANSACTION_NUT] = {
             "supported": True,
             "quote_input_fee_ppk": settings.quote_input_fee_ppk,
+            "fixed_txout_quotes": True,
         }
 
         return mint_features
