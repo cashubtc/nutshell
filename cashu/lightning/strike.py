@@ -1,11 +1,13 @@
 import secrets
 from typing import AsyncGenerator, Dict, Optional, Union
 
+import bolt11
 import httpx
 from loguru import logger
 from pydantic import BaseModel
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
@@ -150,6 +152,14 @@ class StrikeWallet(LightningBackend):
             await self.client.aclose()
         except RuntimeError as e:
             logger.warning(f"Error closing wallet connection: {e}")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = bolt11.decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         try:

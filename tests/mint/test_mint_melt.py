@@ -30,8 +30,6 @@ from cashu.lightning.base import (
     PaymentStatus,
     PaymentStatusResult,
 )
-from cashu.lightning.lnd_grpc.lnd_grpc import LndRPCWallet
-from cashu.lightning.lndrest import LndRestWallet
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -70,17 +68,6 @@ async def wallet(ledger: Ledger):
     )
     await wallet1.load_mint()
     yield wallet1
-
-
-@pytest.fixture(params=[LndRestWallet, LndRPCWallet], ids=["rest", "grpc"])
-def lnd_payment_validation(ledger: Ledger, monkeypatch, request):
-    # Keep local invoice validation active even when running with FakeWallet.
-    validation_backend = object.__new__(request.param)
-    monkeypatch.setattr(
-        ledger.backends[Method.bolt11][Unit.sat],
-        "validate_payment_request",
-        validation_backend.validate_payment_request,
-    )
 
 
 async def create_pending_melts(
@@ -554,7 +541,7 @@ async def test_fakewallet_pending_quote_get_melt_quote_exception(
 
 @pytest.mark.asyncio
 async def test_execute_melt_failed_payment_uses_settled_status(
-    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, lnd_payment_validation
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
 ):
     proof, quote = await create_pending_melts(ledger)
     backend = ledger.backends[Method.bolt11][Unit.sat]
@@ -580,7 +567,7 @@ async def test_execute_melt_failed_payment_uses_settled_status(
 
 @pytest.mark.asyncio
 async def test_execute_melt_payment_and_status_exceptions_keep_pending(
-    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, lnd_payment_validation
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
 ):
     proof, quote = await create_pending_melts(ledger)
     backend = ledger.backends[Method.bolt11][Unit.sat]

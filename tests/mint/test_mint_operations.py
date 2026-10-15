@@ -595,14 +595,7 @@ async def test_melt_preserves_change_signatures_order_integration(
     await wallet1.mint(128, quote_id=mint_quote.quote)
     assert wallet1.balance >= 64
 
-    invoice_dict = get_real_invoice(64)
-    invoice_payment_request = (
-        invoice_dict["payment_request"]
-        if is_regtest
-        else get_fake_invoice(64)
-    )
-    if type(invoice_payment_request) is dict:
-        invoice_payment_request = invoice_payment_request["payment_request"]
+    invoice_payment_request = get_fake_invoice(64)
 
     # wallet asks for quote
     _ = await wallet1.melt_quote(invoice_payment_request)

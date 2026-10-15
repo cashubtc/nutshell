@@ -17,7 +17,7 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
 import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
 import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
 from cashu.core.base import Amount, MeltQuote, Unit
-from cashu.core.errors import QuoteExpiredError
+from cashu.core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from cashu.core.helpers import fee_reserve
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -112,6 +112,14 @@ class LndRPCWallet(LightningBackend):
         if self.supports_mpp:
             logger.info("LndRPCWallet enabling MPP feature")
 
+    def validate_payment_request(self, request: str) -> int:
+        invoice = bolt11.decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
+
     async def status(self) -> StatusResponse:
         r = None
         try:
@@ -173,18 +181,9 @@ class LndRPCWallet(LightningBackend):
             error_message=None,
         )
 
-    def validate_payment_request(self, request: str) -> None:
-        if bolt11.decode(request).has_expired():
-            raise QuoteExpiredError("invoice expired")
-
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        try:
-            self.validate_payment_request(quote.request)
-        except QuoteExpiredError as exc:
-            return PaymentResponse(result=PaymentResult.FAILED, error_message=str(exc))
-
         # Pay invoices that exceed the quote amount partially with MPP.
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
@@ -464,7 +463,6 @@ class LndRPCWallet(LightningBackend):
         amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
         invoice_obj = bolt11.decode(melt_quote.request)
-        self.validate_payment_request(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         if amount_msat is None:
