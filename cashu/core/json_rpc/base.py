@@ -60,7 +60,7 @@ class JSONRPCMethods(Enum):
 class JSONRPCSubscriptionKinds(Enum):
     BOLT11_MINT_QUOTE = "bolt11_mint_quote"
     BOLT11_MELT_QUOTE = "bolt11_melt_quote"
-    CHANGE_MINT_QUOTE = "change_mint_quote"
+    TXOUT_MINT_QUOTE = "txout_mint_quote"
     PROOF_STATE = "proof_state"
 
 

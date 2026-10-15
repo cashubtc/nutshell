@@ -31,7 +31,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
-from .transaction import CHANGE_METHOD
+from .transaction import TXOUT_METHOD
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -190,13 +190,13 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
                         )
 
-        # Change quotes (NUT-XX) exist in every unit a backend serves.
+        # Txout quotes (NUT-XX) exist in every unit a backend serves.
         for unit_name in sorted({u.name for d in self.backends.values() for u in d}):
             websocket_features[_SUPPORTED].append(
                 {
-                    _METHOD: CHANGE_METHOD,
+                    _METHOD: TXOUT_METHOD,
                     _UNIT: unit_name,
-                    _COMMANDS: [JSONRPCSubscriptionKinds.CHANGE_MINT_QUOTE.value],
+                    _COMMANDS: [JSONRPCSubscriptionKinds.TXOUT_MINT_QUOTE.value],
                 }
             )
 
@@ -261,7 +261,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     },
                     {
                         "method": "POST",
-                        "path": "/v1/mint/change",
+                        "path": "/v1/mint/txout",
                     },
                 ]
             }

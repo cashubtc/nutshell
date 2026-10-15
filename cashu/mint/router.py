@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from loguru import logger
 
-from ..core.errors import KeysetNotFoundError, TransactionError
+from ..core.errors import KeysetNotFoundError, QuoteNotFoundError
 from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
@@ -54,6 +54,7 @@ from ..core.settings import settings
 from ..mint.startup import ledger
 from .cache import RedisCache
 from .limit import limit_websocket, limiter
+from .transaction import TXOUT_METHOD
 
 router = APIRouter()
 redis = RedisCache()
@@ -515,6 +516,9 @@ async def mint(
     Call this endpoint after `POST /v1/mint/quote`.
     """
     logger.trace(f"> POST /v1/mint/bolt11: {payload}")
+    # A txout quote redeems only at its own route or as a quote input (NUT-XX).
+    if (await ledger.get_mint_quote(payload.quote)).method == TXOUT_METHOD:
+        raise QuoteNotFoundError()
 
     promises = await ledger.mint(
         outputs=payload.outputs, quote_id=payload.quote, signature=payload.signature
@@ -607,7 +611,7 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
 @router.post(
     "/v1/transaction",
     name="Transaction",
-    summary="Spend proofs and paid quotes into outputs, a melt and a change quote",
+    summary="Spend proofs and paid quotes into outputs and a melt",
     response_model=PostTransactionResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -615,38 +619,36 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
 async def transaction(
     request: Request, payload: PostTransactionRequest
 ) -> PostTransactionResponse:
-    traced = payload.model_dump(
-        exclude={"change_quote_outputs": {"__all__": {"id_preimage"}}}
-    )
-    logger.trace(f"> POST /v1/transaction: {traced}")
+    logger.trace(f"> POST /v1/transaction: {payload}")
     return await ledger.transaction(payload)
 
 
 @router.get(
-    "/v1/mint/quote/change/{quote}",
-    name="Get change quote",
-    summary="Get a change quote created by a transaction",
+    "/v1/mint/quote/txout/{quote}",
+    name="Get txout quote",
+    summary="Get a txout quote created by a transaction",
     response_model=PostMintQuoteResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def get_change_quote(request: Request, quote: str) -> PostMintQuoteResponse:
-    change_quote = await ledger.get_mint_quote(quote)
-    if change_quote.method != "change":
-        raise TransactionError("not a change quote.")
-    return PostMintQuoteResponse.from_mint_quote(change_quote)
+async def get_txout_quote(request: Request, quote: str) -> PostMintQuoteResponse:
+    txout_quote = await ledger.get_mint_quote(quote)
+    # Another method's quote is not a txout quote: not found here (NUT-XX).
+    if txout_quote.method != TXOUT_METHOD:
+        raise QuoteNotFoundError()
+    return PostMintQuoteResponse.from_mint_quote(txout_quote)
 
 
 @router.post(
-    "/v1/mint/change",
-    name="Mint a change quote",
-    summary="Redeem a change quote for new proofs",
+    "/v1/mint/txout",
+    name="Mint a txout quote",
+    summary="Redeem a txout quote, in full, for new proofs",
     response_model=PostMintResponse,
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @redis.cache()
-async def mint_change(request: Request, payload: PostMintRequest) -> PostMintResponse:
-    if (await ledger.get_mint_quote(payload.quote)).method != "change":
-        raise TransactionError("not a change quote.")
+async def mint_txout(request: Request, payload: PostMintRequest) -> PostMintResponse:
+    if (await ledger.get_mint_quote(payload.quote)).method != TXOUT_METHOD:
+        raise QuoteNotFoundError()
     promises = await ledger.mint(
         outputs=payload.outputs, quote_id=payload.quote, signature=payload.signature
     )
