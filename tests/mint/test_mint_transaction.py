@@ -17,7 +17,7 @@ from cashu.core.crypto.transcript import (
     TranscriptBlindedOutput,
     TranscriptMintQuoteOutput,
     TranscriptQuote,
-    remainder_quote_id,
+    rotation_quote_id,
     transaction_inputs,
 )
 from cashu.core.helpers import calculate_number_of_blank_outputs
@@ -49,9 +49,9 @@ def quote_witness(privkey: str, shape: TransactionShape, quote_id: str) -> str:
     return json.dumps({"signatures": [signature.hex()]})
 
 
-def transcript_remainder(c: TransactionMintQuoteOutput, melt_quote: str):
+def transcript_rotation(c: TransactionMintQuoteOutput, melt_quote: str):
     return TranscriptMintQuoteOutput(
-        bytes.fromhex(c.pubkey), remainder_quote_id(melt_quote)
+        bytes.fromhex(c.pubkey), rotation_quote_id(melt_quote)
     )
 
 
@@ -95,14 +95,14 @@ async def test_transaction_mint_quote_to_melt_with_blank_change(ledger: Ledger):
         output(ledger, 0)
         for _ in range(calculate_number_of_blank_outputs(melt.fee_reserve))
     ]
-    remainder = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
+    rotation = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=70, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=transcript_outputs(ledger, outputs),
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
-        mint_quote_outputs=[transcript_remainder(remainder, melt.quote)],
+        mint_quote_outputs=[transcript_rotation(rotation, melt.quote)],
     )
     request = PostTransactionRequest(
         mint_quote_inputs=[
@@ -116,7 +116,7 @@ async def test_transaction_mint_quote_to_melt_with_blank_change(ledger: Ledger):
         melt_quote_outputs=[
             TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
         ],
-        mint_quote_outputs=[remainder],
+        mint_quote_outputs=[rotation],
     )
     result = await ledger.transaction(request)
     assert result.state == "PAID"
@@ -124,7 +124,7 @@ async def test_transaction_mint_quote_to_melt_with_blank_change(ledger: Ledger):
     fee_paid = (await ledger.get_melt_quote(melt.quote)).fee_paid
     assert sum(s.amount for s in result.signatures) == surplus + melt.fee_reserve - fee_paid
     assert result.melt_quotes[0].change == result.signatures
-    # The outputs were signed, so no remainder quote was created.
+    # The outputs were signed, so no rotation quote was created.
     assert result.mint_quotes == [None]
     assert (await ledger.get_mint_quote(quote.quote)).issued
 
@@ -181,7 +181,7 @@ async def test_transaction_fee_overrun_does_not_eat_surplus(ledger: Ledger, monk
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_fake, reason="fake backend pays the quote")
-async def test_transaction_remainder_quote_needs_a_melt(ledger: Ledger):
+async def test_transaction_rotation_quote_needs_a_melt(ledger: Ledger):
     quote, privkey = await locked_quote(ledger, 8)
     outputs = [output(ledger, 8)]
     shape = TransactionShape(
@@ -191,13 +191,13 @@ async def test_transaction_remainder_quote_needs_a_melt(ledger: Ledger):
     quote_input = TransactionQuoteInput(
         quote=quote.quote, amount=8, witness=quote_witness(privkey, shape, quote.quote)
     )
-    remainder = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
+    rotation = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
     with pytest.raises(Exception, match="needs a melt and blinded outputs"):
         await ledger.transaction(
             PostTransactionRequest(
                 mint_quote_inputs=[quote_input],
                 blinded_outputs=outputs,
-                mint_quote_outputs=[remainder],
+                mint_quote_outputs=[rotation],
             )
         )
     with pytest.raises(Exception, match="at most one mint quote output"):
@@ -205,13 +205,13 @@ async def test_transaction_remainder_quote_needs_a_melt(ledger: Ledger):
             PostTransactionRequest(
                 mint_quote_inputs=[quote_input],
                 blinded_outputs=outputs,
-                mint_quote_outputs=[remainder, remainder],
+                mint_quote_outputs=[rotation, rotation],
             )
         )
     # An unknown field is refused, not ignored.
     with pytest.raises(Exception):
         TransactionMintQuoteOutput.model_validate(
-            {"pubkey": remainder.pubkey, "amount": 8, "memo": "x"}
+            {"pubkey": rotation.pubkey, "amount": 8, "memo": "x"}
         )
     result = await ledger.transaction(
         PostTransactionRequest(mint_quote_inputs=[quote_input], blinded_outputs=outputs)
@@ -266,14 +266,14 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
     )
     quote, privkey = await locked_quote(ledger, 62 + melt.fee_reserve + 2)
     outputs = [output(ledger, 2), output(ledger, 0)]
-    remainder = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
+    rotation = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=quote.amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=transcript_outputs(ledger, outputs),
         melt_quote_outputs=[
             TranscriptQuote(amount=melt.amount + melt.fee_reserve, quote_id=melt.quote)
         ],
-        mint_quote_outputs=[transcript_remainder(remainder, melt.quote)],
+        mint_quote_outputs=[transcript_rotation(rotation, melt.quote)],
     )
     request = PostTransactionRequest(
         mint_quote_inputs=[
@@ -287,7 +287,7 @@ async def test_transaction_failed_payment_releases_quote(ledger: Ledger):
         melt_quote_outputs=[
             TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
         ],
-        mint_quote_outputs=[remainder],
+        mint_quote_outputs=[rotation],
     )
     settings.fakewallet_pay_invoice_state = "FAILED"
     settings.fakewallet_payment_state = "FAILED"

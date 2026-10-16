@@ -25,7 +25,7 @@ from ..core.crypto.secp import PublicKey
 from ..core.crypto.transcript import (
     TranscriptMintQuoteOutput,
     TranscriptQuote,
-    remainder_quote_id,
+    rotation_quote_id,
 )
 from ..core.db import Connection, LockOptions
 from ..core.errors import (
@@ -63,19 +63,19 @@ async def run(
     quote_outputs = payload.mint_quote_outputs
     if not (proofs or payload.mint_quote_inputs):
         raise TransactionError("transaction requires at least one input.")
-    # The amount-less output is the remainder quote, backing a melt's outputs (NUT-XX).
-    remainders = [c for c in quote_outputs if c.amount is None]
-    if len(remainders) > 1:
+    # The amount-less output is the rotation quote, backing a melt's outputs (NUT-XX).
+    rotations = [c for c in quote_outputs if c.amount is None]
+    if len(rotations) > 1:
         raise TransactionError(
-            "at most one mint quote output may omit its amount, the remainder quote."
+            "at most one mint quote output may omit its amount, the rotation quote."
         )
-    if any(c.id_preimage is not None for c in remainders):
+    if any(c.id_preimage is not None for c in rotations):
         raise TransactionError("only a fixed txout quote carries an id_preimage.")
     fixed_outputs = [c for c in quote_outputs if c.amount is not None]
     if not (outputs or payload.melt_quote_outputs or fixed_outputs):
         raise TransactionError("transaction requires at least one output.")
-    if remainders and not (outputs and payload.melt_quote_outputs):
-        raise TransactionError("a remainder quote needs a melt and blinded outputs.")
+    if rotations and not (outputs and payload.melt_quote_outputs):
+        raise TransactionError("a rotation quote needs a melt and blinded outputs.")
     if len({q.quote for q in payload.mint_quote_inputs}) != len(
         payload.mint_quote_inputs
     ):
@@ -130,7 +130,7 @@ async def run(
             TranscriptMintQuoteOutput(
                 pubkey=bytes.fromhex(c.pubkey),
                 quote_id=(
-                    remainder_quote_id(melt.quote)
+                    rotation_quote_id(melt.quote)
                     if c.amount is None and melt
                     else c.quote_id
                 ),
@@ -144,7 +144,7 @@ async def run(
     digest_bytes, quote_contexts, txout_ids = verified
     if len(set(txout_ids)) != len(txout_ids):
         raise TransactionError("transaction repeats a txout quote id.")
-    # Fixed txout quote ids are claimed at acceptance; the remainder's is its melt's.
+    # Fixed txout quote ids are claimed at acceptance; the rotation's is its melt's.
     fixed_ids = [i for c, i in zip(quote_outputs, txout_ids) if c.amount is not None]
     digest = digest_bytes.hex()
     for q, k in zip(payload.mint_quote_inputs, lock_keys):
@@ -341,7 +341,7 @@ async def _response(
         return PostTransactionResponse(
             state=state, melt_quotes=melts, mint_quotes=[None] * len(quote_ids)
         )
-    # One entry per request entry, in order; null for a remainder quote not created.
+    # One entry per request entry, in order; null for a rotation quote not created.
     created: List[Optional[PostMintQuoteResponse]] = []
     for quote_id in quote_ids:
         quote = await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db)
@@ -453,7 +453,7 @@ async def settle(
     change = record["excess"] - fee_paid
     if change < 0:
         raise TransactionError("negative change.")
-    # Held by the remainder quote if the outputs cannot be signed (NUT-XX).
+    # Held by the rotation quote if the outputs cannot be signed (NUT-XX).
     unsigned = 0
     if outputs:
         keyset = ledger.keysets[outputs[0].id]
@@ -490,7 +490,7 @@ async def settle(
         touched.append(quote)
     now = int(time.time())
     for quote_id, pubkey, fixed in json.loads(record["mint_quote_outputs"]):
-        # The remainder quote is created only for outputs the mint could not sign.
+        # The rotation quote is created only for outputs the mint could not sign.
         amount = fixed if fixed is not None else unsigned
         if amount <= 0:
             continue

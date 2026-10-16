@@ -127,16 +127,16 @@
       }
     ],
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da",
-    "remainder_lock": {
+    "rotation_lock": {
       "melt_quote_id": "quote-melt-0001",
       "suffix": "953fb61ead585098303840cd5ecbc3f030c3f25f2746d5538c95820e4a67d033",
       "privkey": "b16be68b95ba51c192a5f34a34d0f3bfa673f1956bb0bfdc16b750f804efc7c2",
       "pubkey": "030d037dacc95764fe0e07ba08031137aba13b659b98cb7c5d3ebec6f552834040",
-      "quote_id": "262a0baa2e33d0d8573b63fe01417fc220d265f082094d11ee1c13c67957f32e"
+      "quote_id": "044f928afebcd549c12a68cf1bed4f925c12d71448131df2a766fb03891c7bcf"
     }
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 mint quote output (01 amount, absent on the remainder quote, 02 lock key, 03 quote id utf8; the remainder quote id is hex(tagged_hash(\"Cashu_RemainderQuoteId\", melt quote id))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 mint quote output (01 amount, absent on the rotation quote, 02 lock key, 03 quote id utf8; the rotation quote id is hex(tagged_hash(\"Cashu_RotationQuoteId\", melt quote id))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -426,7 +426,7 @@
       "input_id": "d294012dd54976b05eb3e36eb218b9a6d66b19d79ec122944a35b99b8ddd8839",
       "input_digest": "492728212791e2222a327b9c4fe6c17e2da0e9e7d1aebbe0062c3585909edb57"
     },
-    "melt_with_remainder": {
+    "melt_with_rotation": {
       "tx": {
         "proof_inputs": [
           {
@@ -460,12 +460,12 @@
           }
         ]
       },
-      "mint_quote_output_container": "230067020021030d037dacc95764fe0e07ba08031137aba13b659b98cb7c5d3ebec6f55283404003004032363261306261613265333364306438353733623633666530313431376663323230643236356630383230393464313165653163313363363739353766333265",
-      "quote_id": "262a0baa2e33d0d8573b63fe01417fc220d265f082094d11ee1c13c67957f32e",
-      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332721004a01000002002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004a01000002002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee2200160100010802000f71756f74652d6d656c742d30303031230067020021030d037dacc95764fe0e07ba08031137aba13b659b98cb7c5d3ebec6f55283404003004032363261306261613265333364306438353733623633666530313431376663323230643236356630383230393464313165653163313363363739353766333265",
-      "digest": "2c9ba9dcadde3213071d29b1a3c4e9b32f5af1de258dde74276d1ff9c36f038b",
+      "mint_quote_output_container": "230067020021030d037dacc95764fe0e07ba08031137aba13b659b98cb7c5d3ebec6f55283404003004030343466393238616665626364353439633132613638636631626564346639323563313264373134343831333164663261373636666230333839316337626366",
+      "quote_id": "044f928afebcd549c12a68cf1bed4f925c12d71448131df2a766fb03891c7bcf",
+      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332721004a01000002002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004a01000002002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee2200160100010802000f71756f74652d6d656c742d30303031230067020021030d037dacc95764fe0e07ba08031137aba13b659b98cb7c5d3ebec6f55283404003004030343466393238616665626364353439633132613638636631626564346639323563313264373134343831333164663261373636666230333839316337626366",
+      "digest": "bece17daa86a50004c43ee0a54f2081c811b688d351e869e5e666765e9cfb375",
       "input_id": "900fb575d55eed27f7f52db079a2bf4843e674c461726eca70b90943cb3c7d07",
-      "input_digest": "f1e5bf804cae6e0fd9a338f25a8e67c209ba28cce1fbaf7464a35e455bc29341"
+      "input_digest": "c42ad213ea794a86879e1cb2d8a11e6e80aa039d755b1cbe64a7210d643699d7"
     },
     "proof_to_two_fixed_txouts": {
       "tx": {

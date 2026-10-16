@@ -27,7 +27,7 @@ class TransactionMintQuoteOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # txout quote lock key
-    amount: Optional[int] = Field(None, gt=0)  # a fixed txout quote; none on the remainder
+    amount: Optional[int] = Field(None, gt=0)  # a fixed txout quote; none on the rotation
     # Fixed txout quotes only; omitted for an id bound to the transaction's inputs (NUT-XX).
     id_preimage: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
 

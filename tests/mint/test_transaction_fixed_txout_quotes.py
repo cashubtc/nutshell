@@ -266,7 +266,7 @@ async def test_a_txout_quote_does_not_hop_into_another(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_transaction_rejects_two_remainder_quotes_and_a_remainder_preimage(
+async def test_transaction_rejects_two_rotation_quotes_and_a_rotation_preimage(
     wallet1: Wallet, ledger: Ledger
 ):
     proofs = await _funded(wallet1, 8)

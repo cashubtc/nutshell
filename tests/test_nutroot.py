@@ -615,7 +615,7 @@ def _tx_from_vector(tx: dict):
         TranscriptMintQuoteOutput,
         TranscriptProofInput,
         TranscriptQuote,
-        remainder_quote_id,
+        rotation_quote_id,
     )
 
     return TransactionShape(
@@ -649,13 +649,13 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
-        # The remainder quote is named by its melt; a fixed one by its preimage, or None
+        # The rotation quote is named by its melt; a fixed one by its preimage, or None
         # for an id bound to the inputs (NUT-XX).
         mint_quote_outputs=[
             TranscriptMintQuoteOutput(
                 pubkey=bytes.fromhex(c["pubkey"]),
                 quote_id=(
-                    remainder_quote_id(tx["melt_quote_outputs"][0]["quote_id"])
+                    rotation_quote_id(tx["melt_quote_outputs"][0]["quote_id"])
                     if "amount" not in c
                     else derived_quote_id(bytes.fromhex(c["id_preimage"]))
                     if "id_preimage" in c
@@ -681,7 +681,7 @@ def test_transaction_transcript_vectors():
         "melt",
         "melt_with_change",
         "mint_quote_to_melt",
-        "melt_with_remainder",
+        "melt_with_rotation",
         "proof_to_two_fixed_txouts",
         "proof_to_input_bound_txout",
     ):
@@ -701,11 +701,11 @@ def test_transaction_vectors_input_digests():
     assert hashlib.sha256(context.container).hexdigest() == quote_tx["input_id"]
     assert context.digest.hex() == quote_tx["input_digest"]
 
-    remainder_tx = tv["melt_with_remainder"]
-    assert remainder_tx["transcript"].endswith(remainder_tx["mint_quote_output_container"])
-    _, proofs, _ = transaction_inputs(_tx_from_vector(remainder_tx["tx"]))
+    rotation_tx = tv["melt_with_rotation"]
+    assert rotation_tx["transcript"].endswith(rotation_tx["mint_quote_output_container"])
+    _, proofs, _ = transaction_inputs(_tx_from_vector(rotation_tx["tx"]))
     (context,) = proofs.values()
-    assert context.digest.hex() == remainder_tx["input_digest"]
+    assert context.digest.hex() == rotation_tx["input_digest"]
 
 
 def test_fixed_txout_quote_vectors():
@@ -729,14 +729,14 @@ def test_fixed_txout_quote_vectors():
     assert hashlib.sha256(bytes.fromhex(section)).hexdigest() == tv["input_section_hash"]
 
 
-def test_remainder_quote_id_vector():
-    from cashu.core.crypto.transcript import remainder_quote_id
+def test_rotation_quote_id_vector():
+    from cashu.core.crypto.transcript import rotation_quote_id
 
-    lock = VECTORS["nut13_v3"]["remainder_lock"]
-    assert remainder_quote_id(lock["melt_quote_id"]) == lock["quote_id"]
-    assert VECTORS["transcript"]["melt_with_remainder"]["quote_id"] == lock["quote_id"]
+    lock = VECTORS["nut13_v3"]["rotation_lock"]
+    assert rotation_quote_id(lock["melt_quote_id"]) == lock["quote_id"]
+    assert VECTORS["transcript"]["melt_with_rotation"]["quote_id"] == lock["quote_id"]
     with pytest.raises(ValueError):
-        remainder_quote_id("")
+        rotation_quote_id("")
 
 
 def test_transcript_swap_signature_is_keypath_witness():

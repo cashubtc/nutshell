@@ -9,7 +9,7 @@ from cashu.core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
     TranscriptQuote,
-    remainder_quote_id,
+    rotation_quote_id,
 )
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 from cashu.core.models import (
@@ -30,7 +30,7 @@ from tests.mint.test_mint_transaction import (
     locked_quote,
     output,
     quote_witness,
-    transcript_remainder,
+    transcript_rotation,
 )
 from tests.mint.test_mint_websocket_protocol import FakeWebSocket
 
@@ -38,17 +38,17 @@ pytestmark = pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
 
 
 async def melt_with_outputs(
-    ledger, outputs: List[BlindedMessage], with_remainder: bool = True
+    ledger, outputs: List[BlindedMessage], with_rotation: bool = True
 ):
-    """A quote input paying the 62 sat invoice and `outputs`, with a remainder quote."""
+    """A quote input paying the 62 sat invoice and `outputs`, with a rotation quote."""
     melt = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="sat", request=INVOICE_62_SAT)
     )
     amount = 62 + melt.fee_reserve + sum(o.amount for o in outputs)
     quote, key = await locked_quote(ledger, amount)
-    remainders = (
+    rotations = (
         [TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])]
-        if with_remainder
+        if with_rotation
         else []
     )
     shape = TransactionShape(
@@ -69,7 +69,7 @@ async def melt_with_outputs(
         melt_quote_outputs=[
             TranscriptQuote(amount=62 + melt.fee_reserve, quote_id=melt.quote)
         ],
-        mint_quote_outputs=[transcript_remainder(r, melt.quote) for r in remainders],
+        mint_quote_outputs=[transcript_rotation(r, melt.quote) for r in rotations],
     )
     request = PostTransactionRequest(
         mint_quote_inputs=[
@@ -83,7 +83,7 @@ async def melt_with_outputs(
         melt_quote_outputs=[
             TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
         ],
-        mint_quote_outputs=remainders,
+        mint_quote_outputs=rotations,
     )
     return melt, request
 
@@ -114,7 +114,7 @@ async def test_blank_outputs_take_the_melt_change(ledger, monkeypatch):
         m.C_ for m in signed
     ]
     assert [s.C_ for s in stored.change or []] == [m.C_ for m in signed]
-    # The outputs were signed: the remainder quote is not created.
+    # The outputs were signed: the rotation quote is not created.
     assert result.mint_quotes == [None]
     assert not await ledger.crud.get_blinded_messages_melt_id(
         melt_id=melt.quote, db=ledger.db, signed=False
@@ -134,7 +134,7 @@ def _rotate_during_payment(ledger, monkeypatch, keyset_id: str):
 
 
 @pytest.mark.asyncio
-async def test_after_rotation_the_remainder_quote_holds_outputs_and_blank_change(
+async def test_after_rotation_the_rotation_quote_holds_outputs_and_blank_change(
     ledger, monkeypatch
 ):
     monkeypatch.setattr(settings, "lightning_reserve_fee_min", 6000)
@@ -148,19 +148,19 @@ async def test_after_rotation_the_remainder_quote_holds_outputs_and_blank_change
     assert not result.melt_quotes[0].change
     change = melt.fee_reserve - (await ledger.get_melt_quote(melt.quote)).fee_paid
     # One blank holds the largest amount of the change; the rest stays with the mint.
-    (remainder,) = result.mint_quotes
-    assert remainder is not None
-    assert remainder.amount == 4 + sum(fill_blanks(change, keyset.amounts, 1))
-    assert remainder.method == "txout"
-    assert remainder.pubkey == request.mint_quote_outputs[0].pubkey
+    (rotation,) = result.mint_quotes
+    assert rotation is not None
+    assert rotation.amount == 4 + sum(fill_blanks(change, keyset.amounts, 1))
+    assert rotation.method == "txout"
+    assert rotation.pubkey == request.mint_quote_outputs[0].pubkey
 
 
 @pytest.mark.asyncio
-async def test_after_rotation_without_a_remainder_quote_the_value_is_forfeit(
+async def test_after_rotation_without_a_rotation_quote_the_value_is_forfeit(
     ledger, monkeypatch
 ):
     outputs = [output(ledger, 4), output(ledger, 0)]
-    melt, request = await melt_with_outputs(ledger, outputs, with_remainder=False)
+    melt, request = await melt_with_outputs(ledger, outputs, with_rotation=False)
     _rotate_during_payment(ledger, monkeypatch, outputs[0].id)
     result = await ledger.transaction(request)
     assert result.state == "PAID"
@@ -170,10 +170,10 @@ async def test_after_rotation_without_a_remainder_quote_the_value_is_forfeit(
 
 
 @pytest.mark.asyncio
-async def test_txout_subscription_before_the_remainder_quote_exists(ledger, monkeypatch):
+async def test_txout_subscription_before_the_rotation_quote_exists(ledger, monkeypatch):
     outputs = [output(ledger, 4), output(ledger, 0)]
     melt, request = await melt_with_outputs(ledger, outputs)
-    quote_id = remainder_quote_id(melt.quote)
+    quote_id = rotation_quote_id(melt.quote)
     websocket = FakeWebSocket()
     client = ledger.events.add_client(websocket, ledger.db, ledger.crud)  # type: ignore
     try:

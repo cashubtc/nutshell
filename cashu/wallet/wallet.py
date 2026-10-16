@@ -43,7 +43,7 @@ from ..core.crypto.transcript import (
     TranscriptMintQuoteOutput,
     TranscriptProofInput,
     TranscriptQuote,
-    remainder_quote_id,
+    rotation_quote_id,
     transaction_inputs,
 )
 from ..core.db import Database
@@ -805,12 +805,12 @@ class Wallet(
                         if melt_quote_id is not None and melt_quote_amount is not None
                         else None
                     ),
-                    # The remainder quote is named by its melt, a fixed one by its own id (NUT-XX).
+                    # The rotation quote is named by its melt, a fixed one by its own id (NUT-XX).
                     mint_quote_outputs=[
                         TranscriptMintQuoteOutput(
                             pubkey=bytes.fromhex(c.pubkey),
                             quote_id=(
-                                remainder_quote_id(melt_quote_id or "")
+                                rotation_quote_id(melt_quote_id or "")
                                 if c.amount is None
                                 else c.quote_id
                             ),
