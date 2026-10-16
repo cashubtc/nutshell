@@ -419,3 +419,29 @@ async def test_transaction_rejects_a_mismatched_fee_reserve(ledger: Ledger):
                 )
             )
     assert (await ledger.get_mint_quote(quote.quote)).paid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="fake backend pays the quote")
+async def test_transaction_rejects_outputs_on_a_keyset_expiring_before_the_melt(
+    ledger: Ledger, monkeypatch
+):
+    melt = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=INVOICE_62_SAT)
+    )
+    assert melt.expiry
+    monkeypatch.setattr(ledger.keyset, "final_expiry", melt.expiry - 1)
+    quote, _ = await locked_quote(ledger, 70)
+    with pytest.raises(Exception, match="expires before the melt quote"):
+        await ledger.transaction(
+            PostTransactionRequest(
+                mint_quote_inputs=[
+                    TransactionQuoteInput(quote=quote.quote, amount=70, witness="{}")
+                ],
+                blinded_outputs=[output(ledger, 0)],
+                melt_quote_outputs=[
+                    TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
+                ],
+            )
+        )
+    assert (await ledger.get_mint_quote(quote.quote)).paid

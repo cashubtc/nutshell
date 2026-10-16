@@ -94,6 +94,12 @@ async def run(
     # bolt11 quotes offer no fee_options, so the reserve is the quote's own (NUT-XX).
     if melt and payload.melt_quote_outputs[0].fee_reserve != melt.fee_reserve:
         raise TransactionError("melt fee_reserve does not match the quote.")
+    # Outputs beside a melt need a keyset that outlives the melt quote (NUT-XX).
+    if melt and outputs:
+        keyset = ledger.keysets.get(outputs[0].id)
+        final_expiry = keyset.final_expiry if keyset else None
+        if final_expiry and melt.expiry and final_expiry < melt.expiry:
+            raise TransactionError("outputs' keyset expires before the melt quote.")
     # The transcript commits each quote input's lock key, so the quotes come first.
     mint_quotes = [
         await ledger.get_mint_quote(q.quote) for q in payload.mint_quote_inputs
