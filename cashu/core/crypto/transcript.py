@@ -12,7 +12,7 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
 QUOTE_ID_TAG = "Cashu_QuoteId"
-REMAINDER_QUOTE_ID_TAG = "Cashu_RemainderQuoteId"
+ROTATION_QUOTE_ID_TAG = "Cashu_RotationQuoteId"
 
 # The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
 _CONTAINER_PROOF_INPUT = 0x11
@@ -49,8 +49,8 @@ class TranscriptBlindedOutput:
 @dataclass
 class TranscriptMintQuoteOutput:
     pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
-    quote_id: str  # the remainder quote's is remainder_quote_id(melt quote id)
-    amount: Optional[int] = None  # None on the remainder quote
+    quote_id: str  # the rotation quote's is rotation_quote_id(melt quote id)
+    amount: Optional[int] = None  # None on the rotation quote
 
 
 @dataclass
@@ -143,7 +143,7 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
     if not blinded and not melt_quotes and not quote_outputs:
         raise ValueError("Transaction requires at least one output")
     if sum(c.amount is None for c in quote_outputs) > 1:
-        raise ValueError("Transaction allows at most one remainder quote")
+        raise ValueError("Transaction allows at most one rotation quote")
     # NUT-10: the same proof or quote twice would sign one input digest for two inputs.
     if len({p.Y for p in proofs}) != len(proofs):
         raise ValueError("Transaction repeats a proof input")
@@ -221,8 +221,8 @@ def derived_quote_id(id_preimage: bytes) -> str:
     return tagged_hash(QUOTE_ID_TAG, id_preimage).hex()
 
 
-def remainder_quote_id(melt_quote_id: str) -> str:
-    """The remainder quote's id (NUT-XX): hex(tagged_hash("Cashu_RemainderQuoteId", melt_quote_id))."""
+def rotation_quote_id(melt_quote_id: str) -> str:
+    """The rotation quote's id (NUT-XX): hex(tagged_hash("Cashu_RotationQuoteId", melt_quote_id))."""
     if not melt_quote_id:
-        raise ValueError("Remainder quote id needs the melt quote id")
-    return tagged_hash(REMAINDER_QUOTE_ID_TAG, melt_quote_id.encode("utf-8")).hex()
+        raise ValueError("Rotation quote id needs the melt quote id")
+    return tagged_hash(ROTATION_QUOTE_ID_TAG, melt_quote_id.encode("utf-8")).hex()

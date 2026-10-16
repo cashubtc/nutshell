@@ -15,7 +15,7 @@ from cashu.core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
     TranscriptQuote,
-    remainder_quote_id,
+    rotation_quote_id,
 )
 from cashu.core.errors import KeysetInactiveError, TransactionError
 from cashu.core.models import (
@@ -35,7 +35,7 @@ from tests.mint.test_mint_transaction import (
     locked_quote,
     output,
     quote_witness,
-    transcript_remainder,
+    transcript_rotation,
 )
 
 pytestmark = pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
@@ -66,8 +66,8 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
     amount = 62 + melt.fee_reserve + 4
     quote, key = await locked_quote(ledger, amount)
     outputs = [output(ledger, 4)]
-    remainder_key, pubkey = nut20.generate_keypair()
-    remainder = TransactionMintQuoteOutput(pubkey=pubkey)
+    rotation_key, pubkey = nut20.generate_keypair()
+    rotation = TransactionMintQuoteOutput(pubkey=pubkey)
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
@@ -80,7 +80,7 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
         melt_quote_outputs=[
             TranscriptQuote(amount=62 + melt.fee_reserve, quote_id=melt.quote)
         ],
-        mint_quote_outputs=[transcript_remainder(remainder, melt.quote)],
+        mint_quote_outputs=[transcript_rotation(rotation, melt.quote)],
     )
     backend = ledger.backends[Method.bolt11][Unit.sat]
     original = backend.pay_invoice
@@ -104,16 +104,16 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
             melt_quote_outputs=[
                 TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
             ],
-            mint_quote_outputs=[remainder],
+            mint_quote_outputs=[rotation],
         )
     )
-    # The rotated keyset signs nothing (NUT-02); the outputs' value is in the remainder quote.
+    # The rotated keyset signs nothing (NUT-02); the outputs' value is in the rotation quote.
     assert result.state == "PAID"
     assert result.signatures == []
     assert not result.melt_quotes[0].change
     (txout,) = result.mint_quotes
     assert txout is not None and txout.amount == 4
-    assert txout.quote == remainder_quote_id(melt.quote)
+    assert txout.quote == rotation_quote_id(melt.quote)
     assert (await ledger.get_mint_quote(quote.quote)).issued
     with pytest.raises(KeysetInactiveError):
         await ledger._sign_blinded_messages([output(ledger, 4)])
@@ -122,10 +122,10 @@ async def test_settlement_after_rotation(ledger, monkeypatch):
     ledger.keysets[outputs[0].id].active = True  # stands in for the new active keyset
     stored = await ledger.get_mint_quote(txout.quote)
     with pytest.raises(TransactionError, match="drawn only in full"):
-        await ledger.transaction(draw(ledger, stored, remainder_key, 2))
+        await ledger.transaction(draw(ledger, stored, rotation_key, 2))
     for amounts in ([2], [4]):
         fresh = [output(ledger, a) for a in amounts]
-        signature = nut20.sign_mint_quote_v3(txout.quote, sum(amounts), fresh, remainder_key, 0)
+        signature = nut20.sign_mint_quote_v3(txout.quote, sum(amounts), fresh, rotation_key, 0)
         if amounts == [2]:
             with pytest.raises(TransactionError, match="does not match quote amount"):
                 await ledger.mint(outputs=fresh, quote_id=txout.quote, signature=signature)
@@ -146,7 +146,7 @@ async def test_melt_quote_change_carries_the_output_signatures(ledger):
     amount = 62 + melt.fee_reserve + 6
     quote, key = await locked_quote(ledger, amount)
     outputs = [output(ledger, 4), output(ledger, 2)]
-    remainder = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
+    rotation = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=amount, quote_id=quote.quote, pubkey=bytes.fromhex(quote.pubkey), issued=quote.amount_issued or 0)],
         blinded_outputs=[
@@ -158,7 +158,7 @@ async def test_melt_quote_change_carries_the_output_signatures(ledger):
         melt_quote_outputs=[
             TranscriptQuote(amount=62 + melt.fee_reserve, quote_id=melt.quote)
         ],
-        mint_quote_outputs=[transcript_remainder(remainder, melt.quote)],
+        mint_quote_outputs=[transcript_rotation(rotation, melt.quote)],
     )
     result = await ledger.transaction(
         PostTransactionRequest(
@@ -173,7 +173,7 @@ async def test_melt_quote_change_carries_the_output_signatures(ledger):
             melt_quote_outputs=[
                 TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
             ],
-            mint_quote_outputs=[remainder],
+            mint_quote_outputs=[rotation],
         )
     )
     assert result.state == "PAID"
@@ -197,7 +197,7 @@ async def test_internal_melt_turns_paid_when_its_transaction_settles(
         PostMeltQuoteRequest(unit="sat", request=destination.request)
     )
     outputs = [output(ledger, 4), output(ledger, 2)]
-    remainder = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
+    rotation = TransactionMintQuoteOutput(pubkey=nut20.generate_keypair()[1])
     shape = TransactionShape(
         mint_quote_inputs=[TranscriptQuote(amount=14, quote_id=source.quote, pubkey=bytes.fromhex(source.pubkey), issued=source.amount_issued or 0)],
         blinded_outputs=[
@@ -207,7 +207,7 @@ async def test_internal_melt_turns_paid_when_its_transaction_settles(
             for o in outputs
         ],
         melt_quote_outputs=[TranscriptQuote(amount=8, quote_id=melt.quote)],
-        mint_quote_outputs=[transcript_remainder(remainder, melt.quote)],
+        mint_quote_outputs=[transcript_rotation(rotation, melt.quote)],
     )
     melt_events = []
     source_states = []
@@ -232,7 +232,7 @@ async def test_internal_melt_turns_paid_when_its_transaction_settles(
             melt_quote_outputs=[
                 TransactionMeltOutput(quote=melt.quote, fee_reserve=melt.fee_reserve)
             ],
-            mint_quote_outputs=[remainder],
+            mint_quote_outputs=[rotation],
         )
     )
     assert result.state == "PAID" and len(result.signatures) == 2

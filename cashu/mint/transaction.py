@@ -1,5 +1,5 @@
 """NUT-XX transactions: proofs and paid quotes in; blinded messages and one melt
-out, with a remainder quote beside the melt. A transaction with a melt is recorded
+out, with a rotation quote beside the melt. A transaction with a melt is recorded
 by its melt quote."""
 
 import asyncio
@@ -25,7 +25,7 @@ from ..core.crypto.secp import PublicKey
 from ..core.crypto.transcript import (
     TranscriptMintQuoteOutput,
     TranscriptQuote,
-    remainder_quote_id,
+    rotation_quote_id,
 )
 from ..core.db import Connection, LockOptions
 from ..core.errors import (
@@ -65,11 +65,11 @@ async def run(
         raise TransactionError("transaction requires at least one input.")
     if not (outputs or payload.melt_quote_outputs):
         raise TransactionError("transaction requires at least one output.")
-    # The only mint quote output is the remainder quote, backing a melt's outputs (NUT-XX).
+    # The only mint quote output is the rotation quote, backing a melt's outputs (NUT-XX).
     if len(quote_outputs) > 1:
-        raise TransactionError("at most one mint quote output, the remainder quote.")
+        raise TransactionError("at most one mint quote output, the rotation quote.")
     if quote_outputs and not (outputs and payload.melt_quote_outputs):
-        raise TransactionError("a remainder quote needs a melt and blinded outputs.")
+        raise TransactionError("a rotation quote needs a melt and blinded outputs.")
     if len({q.quote for q in payload.mint_quote_inputs}) != len(
         payload.mint_quote_inputs
     ):
@@ -119,7 +119,7 @@ async def run(
         ],
         mint_quote_outputs=[
             TranscriptMintQuoteOutput(
-                pubkey=bytes.fromhex(c.pubkey), quote_id=remainder_quote_id(melt.quote)
+                pubkey=bytes.fromhex(c.pubkey), quote_id=rotation_quote_id(melt.quote)
             )
             for c in quote_outputs
             if melt
@@ -202,8 +202,8 @@ async def run(
         raise TransactionError(
             f"inputs ({inputs}) do not balance outputs, melt and fee ({required})."
         )
-    remainder = (
-        [[remainder_quote_id(melt.quote), c.pubkey] for c in quote_outputs]
+    rotation = (
+        [[rotation_quote_id(melt.quote), c.pubkey] for c in quote_outputs]
         if melt
         else []
     )
@@ -214,7 +214,7 @@ async def run(
         "mint_quotes": json.dumps(
             [[q.quote, q.amount] for q in payload.mint_quote_inputs]
         ),
-        "mint_quote_outputs": json.dumps(remainder),
+        "mint_quote_outputs": json.dumps(rotation),
         "excess": inputs - fee - sum_outputs - melt_amount,
     }
     signatures: List[BlindedSignature] = []
@@ -298,7 +298,7 @@ async def run(
             asyncio.create_task(pay())
         else:
             await pay()
-    return await _response(ledger, melt_id, [r[0] for r in remainder], signatures)
+    return await _response(ledger, melt_id, [r[0] for r in rotation], signatures)
 
 
 async def _response(
@@ -319,7 +319,7 @@ async def _response(
         return PostTransactionResponse(
             state=state, melt_quotes=melts, mint_quotes=[None] * len(quote_ids)
         )
-    # One entry per request entry, in order; null for a remainder quote not created.
+    # One entry per request entry, in order; null for a rotation quote not created.
     created: List[Optional[PostMintQuoteResponse]] = []
     for quote_id in quote_ids:
         quote = await ledger.crud.get_mint_quote(quote_id=quote_id, db=ledger.db)
@@ -382,7 +382,7 @@ async def settle(
     fee_paid: int,
     conn: Connection,
 ) -> Tuple[List[BlindedSignature], List[MintQuote]]:
-    """Sign the outputs, issue the quote inputs and create any remainder quote.
+    """Sign the outputs, issue the quote inputs and create any rotation quote.
 
     Returns the signatures and every quote touched, for the caller to emit once committed.
     """
@@ -390,7 +390,7 @@ async def settle(
     change = record["excess"] - fee_paid
     if change < 0:
         raise TransactionError("negative change.")
-    # Held by the remainder quote if the outputs cannot be signed (NUT-XX).
+    # Held by the rotation quote if the outputs cannot be signed (NUT-XX).
     unsigned = 0
     if outputs:
         keyset = ledger.keysets[outputs[0].id]

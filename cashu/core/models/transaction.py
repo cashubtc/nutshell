@@ -23,10 +23,10 @@ class TransactionMeltOutput(BaseModel):
 
 
 class TransactionMintQuoteOutput(BaseModel):
-    # Only the remainder quote here, so an amount or id_preimage is refused, not ignored.
+    # Only the rotation quote here, so an amount or id_preimage is refused, not ignored.
     model_config = ConfigDict(extra="forbid")
 
-    pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # remainder quote lock key
+    pubkey: str = Field(..., max_length=MAX_PUBKEY_LEN)  # rotation quote lock key
 
 
 class PostTransactionRequest(BaseModel):
