@@ -114,7 +114,10 @@ async def test_get_user_falls_back_when_sub_is_missing():
 
     cast(Any, ledger).auth_crud = Crud()
     user = await ledger._get_user({"preferred_username": "carol", "azp": "client"})
-    assert user.id == "carol"
+    assert user.id == "preferred_username:carol"
+    # a fallback id never equals a `sub`-based one
+    other = await ledger._get_user({"preferred_username": "bob"})
+    assert other.id != (await ledger._get_user({"sub": "bob"})).id
     # the client id is shared by every user, so it never names one
     with pytest.raises(Exception, match="no usable subject claim"):
         await ledger._get_user({"azp": "client"})

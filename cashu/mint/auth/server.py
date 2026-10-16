@@ -154,14 +154,17 @@ class AuthLedger(Ledger):
         Returns:
             User: User object
         """
-        user_id = next(
-            (decoded_token[c] for c in self._USER_ID_CLAIMS if decoded_token.get(c)),
-            None,
-        )
-        if not user_id:
+        claim = next((c for c in self._USER_ID_CLAIMS if decoded_token.get(c)), None)
+        if not claim:
             raise Exception(
                 f"Token has no usable subject claim (tried {', '.join(self._USER_ID_CLAIMS)})"
             )
+        # Fallback claims carry their name, so user ids from different claims stay distinct.
+        user_id = (
+            decoded_token[claim]
+            if claim == "sub"
+            else f"{claim}:{decoded_token[claim]}"
+        )
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")
