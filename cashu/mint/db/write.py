@@ -240,6 +240,12 @@ class DbWriteHelper:
                 )
             if not quote.paid:
                 raise QuoteNotPaidError("Mint quote is not paid yet.")
+            if quote.amount_issued:
+                # quotes partially issued via NUT-29 batch mint must be drained
+                # via batch mint; minting the full quote amount here would
+                # issue more than was paid. Checked under the row lock so a
+                # concurrent batch mint cannot race the guard in mint().
+                raise TransactionError("quote already partially issued")
             # set the quote as pending
             self._set_mint_quote_state(quote, MintQuoteState.pending)
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
@@ -327,8 +333,10 @@ class DbWriteHelper:
                 raise TransactionError(
                     f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
                 )
-            # set the quote to previous state
-            self._set_mint_quote_state(quote, state)
+            # set the quote to the previous state without touching its
+            # accounting fields (amount_paid / amount_issued)
+            quote.state_val = state
+            quote.updated_at = int(time.time())
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -376,14 +384,104 @@ class DbWriteHelper:
                     raise TransactionError(
                         f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot set as {state.value}."
                     )
-                # set the quote to previous state
-                self._set_mint_quote_state(quote, state)
+                # set the quote to the previous state without touching its
+                # accounting fields (amount_paid / amount_issued)
+                quote.state_val = state
+                quote.updated_at = int(time.time())
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
 
         for quote in quotes:
             await self.events.submit(quote)
+        return quotes
+
+    @staticmethod
+    def _mint_quotes_lock(quote_ids: List[str]) -> LockOptions:
+        """Describe the quote row locks required by mint issuance."""
+        lock_parameters = {
+            f"quote_{i}": quote_id for i, quote_id in enumerate(sorted(quote_ids))
+        }
+        return LockOptions(
+            table="mint_quotes",
+            select_statement=(
+                "quote IN ("
+                + ", ".join(f":{parameter}" for parameter in lock_parameters)
+                + ")"
+            ),
+            parameters=lock_parameters,
+        )
+
+    async def _issue_mint_quotes(
+        self,
+        quote_ids: List[str],
+        amounts: List[int],
+        conn: Optional[Connection] = None,
+        emit_events: bool = True,
+    ) -> List[MintQuote]:
+        """Issues multiple pending mint quotes (NUT-29 batch mint).
+
+        Atomically increases each quote's amount_issued by the corresponding
+        amount. The quote becomes ISSUED once amount_issued reaches
+        amount_paid, otherwise it returns to PAID with the remaining mintable
+        amount.
+
+        Args:
+            quote_ids (List[str]): List of mint quote IDs to issue.
+            amounts (List[int]): Amount issued per quote, in the same order as
+                quote_ids.
+            conn (Optional[Connection]): Connection to reuse for atomic signature
+                storage and quote accounting.
+            emit_events (bool): Submit quote events. Disable when the caller
+                submits them after committing its transaction.
+        """
+        if not quote_ids:
+            return []
+
+        quotes: List[MintQuote] = []
+        async with self.db.get_connection(
+            conn=conn,
+            locks=[self._mint_quotes_lock(quote_ids)],
+        ) as conn:
+            for quote_id, amount in zip(quote_ids, amounts):
+                quote = await self.crud.get_mint_quote(
+                    quote_id=quote_id, db=self.db, conn=conn
+                )
+                if not quote:
+                    raise TransactionError(f"Mint quote {quote_id} not found.")
+                if quote.state != MintQuoteState.pending:
+                    raise TransactionError(
+                        f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot issue."
+                    )
+                now = int(time.time())
+                amount_paid = quote.amount_paid or 0
+                amount_issued = quote.amount_issued or 0
+                if not amount_paid and not amount_issued:
+                    # normalize legacy quotes without accounting data
+                    amount_paid = quote.amount
+                    quote.amount_paid = amount_paid
+                # re-validate under the row lock: the mintable amount checked
+                # in mint_batch was computed from an unlocked read and may be
+                # stale if a concurrent batch mint committed in the meantime
+                if amount > amount_paid - amount_issued:
+                    raise TransactionError(
+                        f"amount {amount} exceeds mintable amount of quote {quote_id}"
+                    )
+                quote.amount_issued = amount_issued + amount
+                if quote.amount_issued >= amount_paid:
+                    quote.state_val = MintQuoteState.issued
+                    if not quote.issued_time:
+                        quote.issued_time = now
+                else:
+                    quote.state_val = MintQuoteState.paid
+                quote.updated_at = now
+                logger.trace(f"crud: issuing quote {quote_id} amount {amount}")
+                await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+                quotes.append(quote)
+
+        if emit_events:
+            for quote in quotes:
+                await self.events.submit(quote)
         return quotes
 
     async def _set_melt_quote_pending(

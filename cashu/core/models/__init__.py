@@ -30,6 +30,8 @@ from .mint import (
 )
 from .mint_quote import (
     PostMintQuoteCheckRequest,
+    PostMintQuoteCheckResponse,
+    PostMintQuoteCheckUnknownResponse,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
 )
@@ -62,6 +64,8 @@ __all__ = [
     "PostMintRequest",
     "PostMintResponse",
     "PostMintQuoteCheckRequest",
+    "PostMintQuoteCheckResponse",
+    "PostMintQuoteCheckUnknownResponse",
     "PostMintQuoteRequest",
     "PostMintQuoteResponse",
     "PostRestoreRequest",

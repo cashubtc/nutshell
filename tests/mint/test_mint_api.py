@@ -1,3 +1,5 @@
+import time
+
 import bolt11
 import httpx
 import pytest
@@ -16,6 +18,7 @@ from cashu.core.models import (
 )
 from cashu.core.nuts import nut20
 from cashu.core.nuts.nuts import MINT_NUT
+from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
@@ -119,7 +122,10 @@ async def test_api_keysets(ledger: Ledger):
             },
         ]
     }
-    assert response.json() == expected
+    result = response.json()
+    result["keysets"].sort(key=lambda keyset: keyset["id"])
+    expected["keysets"].sort(key=lambda keyset: keyset["id"])
+    assert result == expected
 
 
 @pytest.mark.asyncio
@@ -717,11 +723,145 @@ async def test_mint_quote_check(ledger: Ledger, wallet: Wallet):
     assert result[0]["quote"] == mint_quote1.quote
     assert result[0]["amount"] == 64
     assert result[0]["method"] == "bolt11"
-    assert result[0]["state"] in ["UNPAID", "PAID"]
+    assert "state" not in result[0]
     assert result[1]["quote"] == mint_quote2.quote
     assert result[1]["amount"] == 32
     assert result[1]["method"] == "bolt11"
-    assert result[1]["state"] in ["UNPAID", "PAID"]
+    assert "state" not in result[1]
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_returns_positional_unknown_quotes(
+    ledger: Ledger, wallet: Wallet
+):
+    mint_quote1 = await wallet.request_mint(64)
+    mint_quote2 = await wallet.request_mint(32)
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={
+            "quotes": [
+                mint_quote1.quote,
+                "not-a-valid-quote-id",
+                "01989999-9999-7999-8999-999999999999",
+                "",
+                mint_quote2.quote,
+            ]
+        },
+    )
+
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert len(result) == 5
+    assert result[0]["quote"] == mint_quote1.quote
+    assert result[1] == {"quote": "not-a-valid-quote-id", "unknown": True}
+    assert result[2] == {
+        "quote": "01989999-9999-7999-8999-999999999999",
+        "unknown": True,
+    }
+    assert result[3] == {"quote": "", "unknown": True}
+    assert result[4]["quote"] == mint_quote2.quote
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state, amount_paid, amount_issued, expected_paid, expected_issued",
+    [
+        (MintQuoteState.unpaid, None, None, 0, 0),
+        (MintQuoteState.paid, None, None, 64, 0),
+        (MintQuoteState.pending, None, None, 64, 0),
+        (MintQuoteState.issued, None, None, 64, 64),
+        (MintQuoteState.paid, 64, 32, 64, 32),
+    ],
+)
+async def test_mint_quote_check_derives_legacy_accounting(
+    ledger: Ledger,
+    wallet: Wallet,
+    state,
+    amount_paid,
+    amount_issued,
+    expected_paid,
+    expected_issued,
+):
+    mint_quote = await wallet.request_mint(64)
+    quote = await ledger.get_mint_quote(mint_quote.quote)
+    quote.state_val = state
+    quote.amount_paid = amount_paid
+    quote.amount_issued = amount_issued
+    # Keep the unpaid legacy quote from triggering a backend status update.
+    quote.last_checked = int(time.time()) + 60
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": [mint_quote.quote]},
+    )
+
+    assert response.status_code == 200, response.text
+    result = response.json()[0]
+    assert result["amount_paid"] == expected_paid
+    assert result["amount_issued"] == expected_issued
+    assert "state" not in result
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_returns_unknown_for_unknown_quotes(
+    ledger: Ledger,
+):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": ["not-a-valid-quote-id"]},
+    )
+
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert response.json() == [{"quote": "not-a-valid-quote-id", "unknown": True}]
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_empty_quotes(ledger: Ledger):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": []},
+    )
+
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_rejects_duplicate_quotes(ledger: Ledger):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": ["duplicate_quote_id", "duplicate_quote_id"]},
+    )
+
+    assert response.status_code == 400, f"{response.url} {response.status_code}"
+    assert response.json()["code"] == 11016
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_rejects_oversized_batch(ledger: Ledger):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": ["quote"] * (settings.mint_max_request_length + 1)},
+    )
+
+    assert response.status_code == 400, f"{response.url} {response.status_code}"
+    assert response.json()["code"] == 11017
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_check_overlong_quote_id_rejected(ledger: Ledger):
+    """Overlong quote IDs are rejected with a validation error (DoS protection)."""
+    from cashu.core.constants import MAX_QUOTE_ID_LEN
+
+    long_quote = "a" * (MAX_QUOTE_ID_LEN + 1)
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": [long_quote]},
+    )
+
+    assert response.status_code == 422, f"{response.url} {response.status_code}"
 
 
 @pytest.mark.asyncio
