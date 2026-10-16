@@ -23,19 +23,21 @@ def sigall_message_to_sign_v1(
     quote_id: Optional[str] = None,
 ) -> bytes:
     """
-    Creates the NUT-11 v1 SIG_ALL message: length-framed bytes.
+    Creates the NUT-11 v1 SIG_ALL message: typed records of length-framed fields.
 
-    Commits to the quote id (empty for swaps), then each proof's secret and C,
-    then each output's amount (minimal big-endian bytes) and B_. The value
-    signed is `sigall_message_hash_v1`, not the SHA-256 of this message.
+    Each proof is 0x11 || secret || C, each output 0x21 || amount || SHA256(B_),
+    and a melt ends with 0x22 || quote id. The value signed is
+    `sigall_message_hash_v1`, not the SHA-256 of this message.
     """
-    msg = bytearray(_len_prefixed((quote_id or "").encode("utf-8")))
+    msg = bytearray()
     for p in proofs:
-        msg += _len_prefixed(p.secret.encode("utf-8"))
+        msg += b"\x11" + _len_prefixed(p.secret.encode("utf-8"))
         msg += _len_prefixed(bytes.fromhex(p.C))
     for o in outputs:
-        msg += _len_prefixed(int_to_minimal_bytes(o.amount))
-        msg += _len_prefixed(bytes.fromhex(o.B_))
+        msg += b"\x21" + _len_prefixed(int_to_minimal_bytes(o.amount))
+        msg += _len_prefixed(sha256(bytes.fromhex(o.B_)).digest())
+    if quote_id:
+        msg += b"\x22" + _len_prefixed(quote_id.encode("utf-8"))
     return bytes(msg)
 
 
