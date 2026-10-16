@@ -143,6 +143,16 @@ class LightningBackend(ABC):
             raise Unsupported(f"Unit {unit} is not supported")
 
     @abstractmethod
+    def validate_payment_request(self, request: str) -> Optional[int]:
+        """Validate locally and return the request's absolute expiry, if any.
+
+        Raise if the request cannot be paid. Do not submit a payment or make
+        network calls. Return the expiry as a Unix timestamp in seconds, or
+        None for a request without an expiry.
+        """
+        pass
+
+    @abstractmethod
     def __init__(self, unit: Unit, **kwargs):
         pass
 

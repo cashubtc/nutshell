@@ -288,7 +288,13 @@ FAKE_INVOICE_PRIVKEY = (
 )
 
 
-def get_fake_invoice(sats: int, description: Union[str, dict] = "") -> str:
+def get_fake_invoice(
+    sats: int,
+    description: Union[str, dict] = "",
+    *,
+    date: int | None = None,
+    expiry: int | None = None,
+) -> str:
     """External invoice for FakeWallet melts; a dict description is sent as JSON.
 
     Follows CDK's create_fake_invoice, whose parser needs the features tag.
@@ -310,10 +316,12 @@ def get_fake_invoice(sats: int, description: Union[str, dict] = "") -> str:
             }
         ),
     )
+    if expiry is not None:
+        tags.add(bolt11.TagChar.expire_time, expiry)
     invoice = bolt11.Bolt11(
         currency="bc",
         amount_msat=bolt11.MilliSatoshi(sats * 1000),
-        date=int(time.time()),
+        date=int(time.time()) if date is None else date,
         tags=tags,
     )
     return bolt11.encode(invoice, FAKE_INVOICE_PRIVKEY)
