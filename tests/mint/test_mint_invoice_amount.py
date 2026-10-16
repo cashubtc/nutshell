@@ -174,3 +174,74 @@ async def test_legacy_mismatched_quote_cannot_issue(
     restored_outputs, promises = await amount_ledger.restore(outputs)
     assert restored_outputs == []
     assert promises == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("amount", [1, 999, 1001, 20_000_001])
+@pytest.mark.parametrize("batch", [False, True], ids=["single", "batch"])
+async def test_msat_quote_accepts_invoice_rounded_up_to_whole_sat(
+    amount_ledger: Ledger, monkeypatch, amount, batch
+):
+    # Backends without msat invoices (e.g. Spark) round msat requests up to a whole sat.
+    rounded = -(-amount // 1000) * 1000
+    response = invoice_response(rounded)
+    backend = amount_ledger.backends[Method.bolt11][Unit.msat]
+    monkeypatch.setattr(backend, "create_invoice", AsyncMock(return_value=response))
+
+    quote = await amount_ledger.mint_quote(
+        PostMintQuoteRequest(unit=Unit.msat.name, amount=amount)
+    )
+    quote.state = MintQuoteState.paid
+    await amount_ledger.crud.update_mint_quote(quote=quote, db=amount_ledger.db)
+    outputs, secrets = make_outputs(amount_ledger, amount, Unit.msat)
+
+    promises = await issue(amount_ledger, [quote], outputs, batch)
+    await amount_ledger._verify_inputs(
+        unblind_promises(amount_ledger, promises, secrets)
+    )
+
+    assert sum(p.amount for p in promises) == amount
+    assert (await amount_ledger.get_mint_quote(quote.quote)).issued
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("batch", [False, True], ids=["single", "batch"])
+async def test_legacy_msat_quote_with_rounded_invoice_can_issue(
+    amount_ledger: Ledger, batch
+):
+    amount = 20_000_001
+    response = invoice_response(20_001_000)
+    assert response.payment_request and response.checking_id
+    quote = MintQuote(
+        quote=uuid4().hex,
+        method=Method.bolt11.name,
+        unit=Unit.msat.name,
+        amount=amount,
+        request=response.payment_request,
+        checking_id=response.checking_id,
+        state=MintQuoteState.paid,
+    )
+    await amount_ledger.crud.store_mint_quote(quote=quote, db=amount_ledger.db)
+    outputs, secrets = make_outputs(amount_ledger, amount, Unit.msat)
+
+    promises = await issue(amount_ledger, [quote], outputs, batch)
+
+    assert sum(p.amount for p in promises) == amount
+    assert (await amount_ledger.get_mint_quote(quote.quote)).issued
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invoice_msat", [1999, 2001, 3000])
+async def test_msat_quote_still_rejects_other_invoice_amounts(
+    amount_ledger: Ledger, monkeypatch, invoice_msat
+):
+    backend = amount_ledger.backends[Method.bolt11][Unit.msat]
+    monkeypatch.setattr(
+        backend,
+        "create_invoice",
+        AsyncMock(return_value=invoice_response(invoice_msat)),
+    )
+    with pytest.raises(LightningError, match="invoice amount does not match"):
+        await amount_ledger.mint_quote(
+            PostMintQuoteRequest(unit=Unit.msat.name, amount=1001)
+        )

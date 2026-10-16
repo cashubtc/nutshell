@@ -46,13 +46,22 @@ class LedgerVerification(
     def _verify_mint_quote_invoice_amount(
         self, invoice: bolt11.Bolt11, amount: Amount
     ) -> None:
-        """Require BTC mint quotes to collect their exact issuance amount."""
+        """Require BTC mint quotes to collect their exact issuance amount.
+
+        An msat quote may also be funded by an invoice for the amount rounded up
+        to the next whole satoshi, which is what backends that cannot create
+        msat invoices (e.g. Spark) issue for it. Anything lower or otherwise
+        different is rejected.
+        """
         if amount.unit not in (Unit.sat, Unit.msat):
             return
+        accepted_msat = {amount.to(Unit.msat).amount}
+        if amount.unit == Unit.msat:
+            accepted_msat.add(amount.to(Unit.sat, round="up").to(Unit.msat).amount)
         if (
             amount.amount <= 0
             or invoice.amount_msat is None
-            or invoice.amount_msat != amount.to(Unit.msat).amount
+            or invoice.amount_msat not in accepted_msat
         ):
             raise LightningError("backend invoice amount does not match mint quote")
 
