@@ -63,6 +63,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
             tos_url=settings.mint_info_tos_url,
             motd=settings.mint_info_motd,
             time=None,
+            max_array_length=settings.mint_max_request_length,
         )
 
     @property

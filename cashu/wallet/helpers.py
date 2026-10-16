@@ -106,6 +106,8 @@ def deserialize_token_from_string(token: str) -> Token:
     # deserialize token
     if token.startswith("cashuA"):
         tokenV3Obj = TokenV3.deserialize(token)
+        if len(tokenV3Obj.mints) > 1:
+            return tokenV3Obj
         try:
             return TokenV4.from_tokenv3(tokenV3Obj)
         except ValueError as e:

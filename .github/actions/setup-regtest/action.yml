@@ -1,0 +1,23 @@
+name: Setup regtest
+description: Start the pinned Lightning environment, including Spark when selected.
+
+inputs:
+  backend-wallet-class:
+    description: Lightning backend under test
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Start regtest
+      shell: bash
+      working-directory: regtest
+      env:
+        BACKEND: ${{ inputs.backend-wallet-class }}
+      run: |
+        chmod -R 777 .
+        if [ "$BACKEND" = "SparkL2Wallet" ]; then
+          bash ./start.sh --spark
+        else
+          bash ./start.sh
+        fi

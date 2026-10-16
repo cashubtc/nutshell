@@ -5,8 +5,8 @@ import pytest
 import pytest_asyncio
 from fastapi import WebSocket
 
-from cashu.core.base import MeltQuoteState, MintQuoteState
-from cashu.core.errors import ProofsArePendingError
+from cashu.core.base import MeltQuoteState, MintQuote, MintQuoteState
+from cashu.core.errors import ProofsArePendingError, QuoteAlreadyIssuedError
 from cashu.core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
@@ -14,6 +14,7 @@ from cashu.core.json_rpc.base import (
     JSONRPCSubscriptionKinds,
 )
 from cashu.core.models import PostMeltQuoteRequest, PostMeltQuoteResponse
+from cashu.mint.events.client import LedgerEventClientManager
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -72,6 +73,75 @@ async def test_mint_quote(wallet: Wallet, ledger: Ledger):
     assert quote.state != MintQuoteState.paid
     # assert quote.paid_time is None
     assert quote.created_time
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pubkey",
+    [None, "", "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"],
+    ids=["unlocked", "empty", "locked"],
+)
+async def test_mint_quote_pubkey_roundtrip(ledger: Ledger, pubkey):
+    quote = MintQuote(
+        quote="quote-pubkey",
+        method="bolt11",
+        request="lnbc1",
+        checking_id="check-pubkey",
+        unit="sat",
+        amount=1,
+        state=MintQuoteState.unpaid,
+        created_time=123,
+        pubkey=pubkey,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+
+    row = await ledger.db.fetchone(
+        f"SELECT pubkey FROM {ledger.db.table_with_schema('mint_quotes')} "
+        "WHERE quote = :quote",
+        {"quote": quote.quote},
+    )
+    assert row is not None
+    assert row["pubkey"] == (pubkey or None)
+
+    stored_quote = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored_quote is not None
+    assert stored_quote.pubkey == (pubkey or None)
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_legacy_empty_pubkey(ledger: Ledger):
+    quote = MintQuote(
+        quote="quote-legacy-pubkey",
+        method="bolt11",
+        request="lnbc1",
+        checking_id="check-legacy-pubkey",
+        unit="sat",
+        amount=1,
+        state=MintQuoteState.unpaid,
+        created_time=123,
+    )
+    await ledger.crud.store_mint_quote(quote=quote, db=ledger.db)
+    # Older mints stored missing pubkeys as empty strings.
+    await ledger.db.execute(
+        f"UPDATE {ledger.db.table_with_schema('mint_quotes')} "
+        "SET pubkey = :pubkey WHERE quote = :quote",
+        {"quote": quote.quote, "pubkey": ""},
+    )
+
+    stored_quote = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored_quote is not None
+    assert stored_quote.pubkey is None
+
+    websocket = AsyncMock(spec=WebSocket)
+    client = LedgerEventClientManager(websocket, ledger.db, ledger.crud)
+    await client._init_subscriptions(
+        "subId", [quote.quote], JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+    )
+    notification = JSONRPCNotification.model_validate_json(
+        websocket.send_text.call_args.args[0]
+    )
+    assert notification.params["payload"]["quote"] == quote.quote
+    assert notification.params["payload"]["pubkey"] is None
 
 
 @pytest.mark.asyncio
@@ -206,6 +276,26 @@ async def test_melt_quote_state_transitions(wallet: Wallet, ledger: Ledger):
         set_state(quote, MeltQuoteState.pending),
         "Cannot change state of a paid melt quote.",
     )
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_set_pending_rejects_issued_quote(
+    wallet: Wallet, ledger: Ledger
+):
+    """An issued quote is neither pending nor paid, so the locked guard must not
+    fall through to QuoteNotPaidError."""
+    mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    _ = await ledger.get_mint_quote(mint_quote.quote)
+
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert quote is not None
+    quote.state = MintQuoteState.issued
+    await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
+
+    with pytest.raises(QuoteAlreadyIssuedError) as exc_info:
+        await ledger.db_write._set_mint_quote_pending(quote.quote)
+    assert exc_info.value.code == 20002
 
 
 @pytest.mark.asyncio

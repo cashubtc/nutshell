@@ -46,8 +46,8 @@ class WitnessForP2pkOrHtlc:
         try:
             parsed = P2PKWitness.from_witness(witness)
             return cls(preimage=None, signatures=parsed.signatures)
-        except Exception:
-            return cls(preimage=None, signatures=[])
+        except Exception as exc:
+            raise TransactionError("witness could not be parsed.") from exc
 
     @classmethod
     def from_htlc_witness(cls, witness: Optional[str]) -> "WitnessForP2pkOrHtlc":
@@ -59,8 +59,8 @@ class WitnessForP2pkOrHtlc:
             return cls(
                 preimage=parsed.preimage, signatures=list(parsed.signatures or [])
             )
-        except Exception:
-            return cls(preimage=None, signatures=[])
+        except Exception as exc:
+            raise TransactionError("witness could not be parsed.") from exc
 
 
 class LedgerSpendingConditions:
@@ -152,7 +152,7 @@ class LedgerSpendingConditions:
                 raise TransactionError("HTLC secret does not have SIG_ALL flag")
             return self._verify_p2pk_or_htlc_spending_requirements(
                 self._get_spending_requirements(unique_secret),
-                WitnessForP2pkOrHtlc.from_htlc_witness(first_proof.witness),
+                first_proof.witness,
                 digests_to_sign,
             )
         elif isinstance(unique_secret, P2PKSecret):
@@ -160,7 +160,7 @@ class LedgerSpendingConditions:
                 raise TransactionError("P2PK secret does not have SIG_ALL flag")
             return self._verify_p2pk_or_htlc_spending_requirements(
                 self._get_spending_requirements(unique_secret),
-                WitnessForP2pkOrHtlc.from_p2pk_witness(first_proof.witness),
+                first_proof.witness,
                 digests_to_sign,
             )
         else:
@@ -269,7 +269,7 @@ class LedgerSpendingConditions:
                 raise TransactionError("Expected P2PKSecret")
             return self._verify_p2pk_or_htlc_spending_requirements(
                 requirements,
-                WitnessForP2pkOrHtlc.from_p2pk_witness(proof.witness),
+                proof.witness,
                 digests_to_sign,
             )
 
@@ -277,7 +277,7 @@ class LedgerSpendingConditions:
             raise TransactionError("Expected HTLCSecret")
         return self._verify_p2pk_or_htlc_spending_requirements(
             requirements,
-            WitnessForP2pkOrHtlc.from_htlc_witness(proof.witness),
+            proof.witness,
             digests_to_sign,
         )
 
@@ -325,10 +325,25 @@ class LedgerSpendingConditions:
     def _verify_p2pk_or_htlc_spending_requirements(
         self,
         requirements: SpendingRequirements,
-        witness: WitnessForP2pkOrHtlc,
+        raw_witness: Optional[str],
         digests_to_sign: List[bytes],
     ) -> bool:
         # Contract: this verifier returns True on success and raises on failure.
+        try:
+            witness = (
+                WitnessForP2pkOrHtlc.from_htlc_witness(raw_witness)
+                if requirements.preimage_hash is not None
+                else WitnessForP2pkOrHtlc.from_p2pk_witness(raw_witness)
+            )
+        except TransactionError:
+            # An unreadable witness supplies no preimage and no signatures, so
+            # no path that demands either can spend. A refund path that demands
+            # neither still can, and an expired lock without refund pubkeys is
+            # exactly that
+            if requirements.refund_path and requirements.refund_path.required_sigs == 0:
+                return True
+            raise
+
         primary_path_error: Optional[Exception] = None
 
         # Try the primary path first. Any failure here is remembered and only

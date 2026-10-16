@@ -26,13 +26,23 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet2
+from tests.compatibility import mint_older_than
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
+    get_real_invoice_routed,
     is_fake,
     is_github_actions,
     is_regtest,
+    is_spark_backend,
     pay_if_regtest,
+)
+
+# The test mint's sat keyset. Mints before 0.20.0 derive version 00 keyset IDs.
+KEYSET_ID = (
+    "009a1f293253e41e"
+    if mint_older_than("0.20.0")
+    else "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 )
 
 
@@ -54,18 +64,6 @@ async def assert_err(f, msg: Union[str, CashuError]):
     raise Exception(f"Expected error: {msg}, got no error")
 
 
-async def assert_err_multiple(f, msgs: List[str]):
-    """Compute f() and expect an error message 'msg'."""
-    try:
-        await f
-    except Exception as exc:
-        for msg in msgs:
-            if msg in str(exc.args[0]):
-                return
-        raise Exception(f"Expected error: {msgs}, got: {exc.args[0]}")
-    raise Exception(f"Expected error: {msgs}, got no error")
-
-
 def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
     assert sum([p.amount for p in proofs]) == expected
@@ -79,25 +77,27 @@ async def reset_wallet_db(wallet: Wallet):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
+async def wallet1(mint, tmp_path):
     wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet1",
+        db=str(tmp_path / "wallet1"),
         name="wallet1",
     )
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2():
+async def wallet2(tmp_path):
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet2",
+        db=str(tmp_path / "wallet2"),
         name="wallet2",
     )
     await wallet2.load_mint()
     yield wallet2
+    await wallet2.db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -108,10 +108,7 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    assert (
-        keyset.id
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    assert keyset.id == KEYSET_ID
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -315,12 +312,12 @@ async def test_melt(wallet1: Wallet):
     quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
 
-    if is_regtest:
-        # we expect a fee reserve of 2 sat for regtest
+    if is_regtest and not is_spark_backend:
+        # LND and CLN reserve 2 sats for routing.
         assert total_amount == 66
         assert quote.fee_reserve == 2
-    if is_fake:
-        # we expect a fee reserve of 0 sat for fake
+    if is_fake or is_spark_backend:
+        # Internal payments and the local Spark SSP have zero fees.
         assert total_amount == 64
         assert quote.fee_reserve == 0
 
@@ -337,7 +334,7 @@ async def test_melt(wallet1: Wallet):
         quote_id=quote.quote,
     )
 
-    if is_regtest:
+    if is_regtest and quote.fee_reserve:
         assert melt_response.change, "No change returned"
         assert len(melt_response.change) == 1, "More than one change returned"
         # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
@@ -371,6 +368,40 @@ async def test_melt(wallet1: Wallet):
     # the payment was without fees so we need to remove it from the total amount
     assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
     assert wallet1.balance == 64, "Wrong balance"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only works on regtest")
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
+)
+async def test_melt_routed_invoice(wallet1: Wallet):
+    topup_mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    await wallet1.mint(128, quote_id=topup_mint_quote.quote)
+    assert wallet1.balance == 128
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(64)
+
+    quote = await wallet1.melt_quote(invoice_payment_request)
+    total_amount = quote.amount + quote.fee_reserve
+    assert quote.fee_reserve > 0
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
+
+    melt_response = await wallet1.melt(
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
+    )
+    assert melt_response.state == MeltQuoteState.paid.value, "Melt not paid"
+    assert melt_response.payment_preimage is not None, "No payment preimage"
+
+    # the payment had a routing fee, so we get back less than the full fee reserve
+    assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
 
 
 @pytest.mark.asyncio
@@ -462,12 +493,17 @@ async def test_split_race_condition(wallet1: Wallet):
     # run two splits in parallel
     import asyncio
 
-    await assert_err_multiple(
-        asyncio.gather(
-            wallet1.split(wallet1.proofs, 20),
-            wallet1.split(wallet1.proofs, 20),
-        ),
-        ["proofs are pending", "already spent"],
+    # Await both attempts: the losing split can fail before the winning split
+    # releases its SQLite transaction, which otherwise leaks into the next test.
+    results = await asyncio.gather(
+        wallet1.split(wallet1.proofs, 20),
+        wallet1.split(wallet1.proofs, 20),
+        return_exceptions=True,
+    )
+    errors = [result for result in results if isinstance(result, Exception)]
+    assert len(errors) == 1, results
+    assert any(
+        message in str(errors[0]) for message in ("proofs are pending", "already spent")
     )
 
 
@@ -551,13 +587,9 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == [
-        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    ]
+    assert list(wallet1.keysets.keys()) == [KEYSET_ID]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
-    await wallet1.activate_keyset(
-        keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    await wallet1.activate_keyset(keyset_id=KEYSET_ID)
     # expect deprecated keyset id to be present
     await assert_err(
         wallet1.activate_keyset(keyset_id="nonexistent"),

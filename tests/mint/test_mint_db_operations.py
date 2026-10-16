@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core import db
-from cashu.core.db import Connection
+from cashu.core.db import Connection, LockOptions
 from cashu.core.migrations import backup_database
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
@@ -129,6 +129,93 @@ async def test_db_get_connection(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_db_get_connection_multiple_locks(ledger: Ledger):
+    locks = [
+        LockOptions(table="mint_quotes"),
+        LockOptions(table="melt_quotes"),
+    ]
+    async with ledger.db.get_connection(locks=locks) as conn:
+        assert isinstance(conn, Connection)
+
+
+@pytest.mark.asyncio
+async def test_db_get_connection_adds_locks_to_reused_connection(ledger: Ledger):
+    async with ledger.db.get_connection(
+        locks=[LockOptions(table="mint_quotes")]
+    ) as conn:
+        async with ledger.db.get_connection(
+            conn=conn,
+            locks=[LockOptions(table="melt_quotes")],
+        ) as reused_conn:
+            assert reused_conn is conn
+
+
+def test_db_orders_locks_globally():
+    database = object.__new__(db.Database)
+    expected_order = ["keysets", "melt_quotes", "mint_quotes", "new_table"]
+    locks = database._order_locks(
+        [LockOptions(table=table) for table in reversed(expected_order)]
+    )
+
+    assert [lock.table for lock in locks] == expected_order
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_postgres or is_github_actions,
+    reason="Requires PostgreSQL table locks",
+)
+async def test_db_ordered_lock_acquisition(ledger: Ledger, monkeypatch):
+    first_lock_acquired = asyncio.Event()
+    competing_transaction_started = asyncio.Event()
+    acquired: dict[str, List[str]] = {"lock-order-a": [], "lock-order-b": []}
+    acquire_lock = ledger.db._acquire_lock
+
+    async def acquire_lock_with_barrier(conn: Connection, lock: LockOptions):
+        task = asyncio.current_task()
+        task_name = task.get_name() if task else ""
+
+        if task_name == "lock-order-b" and lock.table == "melt_quotes":
+            competing_transaction_started.set()
+
+        await acquire_lock(conn, lock)
+        acquired[task_name].append(lock.table)
+
+        if task_name == "lock-order-a" and lock.table == "melt_quotes":
+            first_lock_acquired.set()
+            await competing_transaction_started.wait()
+
+    monkeypatch.setattr(ledger.db, "_acquire_lock", acquire_lock_with_barrier)
+
+    async def run_transaction(locks: List[LockOptions]):
+        async with ledger.db.get_connection(locks=locks):
+            pass
+
+    transaction_a = asyncio.create_task(
+        run_transaction(
+            [LockOptions(table="mint_quotes"), LockOptions(table="melt_quotes")]
+        ),
+        name="lock-order-a",
+    )
+    await asyncio.wait_for(first_lock_acquired.wait(), timeout=1)
+
+    transaction_b = asyncio.create_task(
+        run_transaction(
+            [LockOptions(table="melt_quotes"), LockOptions(table="mint_quotes")]
+        ),
+        name="lock-order-b",
+    )
+
+    await asyncio.wait_for(
+        asyncio.gather(transaction_a, transaction_b),
+        timeout=3,
+    )
+
+    assert acquired["lock-order-a"] == ["melt_quotes", "mint_quotes"]
+    assert acquired["lock-order-b"] == ["melt_quotes", "mint_quotes"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(is_github_actions, reason="Hangs on GitHub Actions")
 async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(64)
@@ -136,10 +223,12 @@ async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
     async def get_connection():
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
-            async with ledger.db.get_connection(lock_table="mint_quotes"):
+            async with ledger.db.get_connection(
+                locks=[LockOptions(table="mint_quotes")]
+            ):
                 try:
                     async with ledger.db.get_connection(
-                        lock_table="mint_quotes", lock_timeout=0.1
+                        locks=[LockOptions(table="mint_quotes", timeout=0.1)]
                     ) as conn2:
                         # write something with conn1, we never reach this point if the lock works
                         await conn2.execute(
@@ -170,18 +259,28 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
             async with ledger.db.get_connection(
-                lock_table="mint_quotes",
-                lock_select_statement=f"quote='{mint_quote.quote}'",
-                lock_timeout=0.1,
+                locks=[
+                    LockOptions(
+                        table="mint_quotes",
+                        select_statement="quote = :quote",
+                        parameters={"quote": mint_quote.quote},
+                        timeout=0.1,
+                    )
+                ],
             ) as conn1:
                 await conn1.execute(
                     f"UPDATE mint_quotes SET amount=100 WHERE quote='{mint_quote.quote}';"
                 )
                 try:
                     async with ledger.db.get_connection(
-                        lock_table="mint_quotes",
-                        lock_select_statement=f"quote='{mint_quote.quote}'",
-                        lock_timeout=0.1,
+                        locks=[
+                            LockOptions(
+                                table="mint_quotes",
+                                select_statement="quote = :quote",
+                                parameters={"quote": mint_quote.quote},
+                                timeout=0.1,
+                            )
+                        ],
                     ) as conn2:
                         # write something with conn1, we never reach this point if the lock works
                         await conn2.execute(
@@ -301,15 +400,25 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
             async with ledger.db.get_connection(
-                lock_table="mint_quotes",
-                lock_select_statement=f"quote='{mint_quote.quote}'",
-                lock_timeout=0.1,
+                locks=[
+                    LockOptions(
+                        table="mint_quotes",
+                        select_statement="quote = :quote",
+                        parameters={"quote": mint_quote.quote},
+                        timeout=0.1,
+                    )
+                ],
             ):
                 try:
                     async with ledger.db.get_connection(
-                        lock_table="mint_quotes",
-                        lock_select_statement=f"quote='{mint_quote_2.quote}'",
-                        lock_timeout=0.1,
+                        locks=[
+                            LockOptions(
+                                table="mint_quotes",
+                                select_statement="quote = :quote",
+                                parameters={"quote": mint_quote_2.quote},
+                                timeout=0.1,
+                            )
+                        ],
                     ) as conn2:
                         # write something with conn1, this time we should reach this block with postgres
                         quote = await ledger.crud.get_mint_quote(
@@ -347,7 +456,9 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
-    async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
+    async with ledger.db.connect(
+        locks=[LockOptions(table="proofs_pending", timeout=0.1)]
+    ) as conn:
         assert isinstance(conn, Connection)
         await assert_err(
             ledger.db_write._verify_spent_proofs_and_set_pending(
@@ -732,9 +843,9 @@ async def test_get_melt_quote_preserves_change_signatures_order(
     # However we can just verify that C_ values matches what we inserted
     # Since we mocked C_ to be the same as B_ in our test
     for i in range(5):
-        assert (
-            quote_db.change[i].C_ == b_values[i]
-        ), f"Change signature at index {i} is out of order"
+        assert quote_db.change[i].C_ == b_values[i], (
+            f"Change signature at index {i} is out of order"
+        )
 
 
 @pytest.mark.asyncio

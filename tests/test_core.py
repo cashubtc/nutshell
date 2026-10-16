@@ -1,10 +1,82 @@
+from typing import Any, Dict
+
 import pytest
 
-from cashu.core.base import AuthProof, TokenV3, TokenV4, Unit
+from cashu.core.base import AuthProof, Method, TokenV3, TokenV4, Unit
 from cashu.core.helpers import calculate_number_of_blank_outputs
+from cashu.core.mint_info import MintInfo as CoreMintInfo
+from cashu.core.models.info import GetInfoResponse
+from cashu.core.nuts.nuts import BOOLEAN_SUPPORTED_NUTS
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.split import amount_split
 from cashu.wallet.helpers import deserialize_token_from_string
+from cashu.wallet.mint_info import MintInfo as WalletMintInfo
+
+
+def support_helpers(nuts: Dict[int, Any]):
+    return (
+        CoreMintInfo.model_construct(nuts=nuts).supports_nut,
+        WalletMintInfo.model_construct(nuts=nuts).supports_nut,
+        GetInfoResponse(nuts=nuts).supports,
+    )
+
+
+@pytest.mark.parametrize("nut", BOOLEAN_SUPPORTED_NUTS)
+@pytest.mark.parametrize(
+    "entry, expected",
+    [
+        ({"supported": True}, True),
+        ({"supported": False}, False),
+        ({"supported": "true"}, False),
+        ({"supported": "false"}, False),
+        ({"supported": 1}, False),
+        ({"supported": 0}, False),
+        ({"supported": {}}, False),
+        ({"supported": []}, False),
+        ({"supported": None}, False),
+        ({}, False),
+    ],
+)
+def test_boolean_supported_nuts_require_true(nut: int, entry: Any, expected: bool):
+    for supports in support_helpers({nut: entry}):
+        assert supports(nut) is expected
+
+
+@pytest.mark.parametrize("nut", BOOLEAN_SUPPORTED_NUTS)
+def test_absent_boolean_supported_nut_is_unsupported(nut: int):
+    for supports in support_helpers({}):
+        assert supports(nut) is False
+
+
+def test_structured_nuts_remain_presence_based():
+    nuts = {
+        15: {"methods": [{"method": "bolt11", "unit": "sat"}]},
+        17: {
+            "supported": [
+                {
+                    "method": "bolt11",
+                    "unit": "sat",
+                    "commands": ["bolt11_mint_quote"],
+                }
+            ]
+        },
+        21: {
+            "openid_discovery": "https://mint.example/.well-known/openid-configuration",
+            "client_id": "cashu-client",
+            "protected_endpoints": [],
+        },
+        22: {"bat_max_mint": 10, "protected_endpoints": []},
+    }
+
+    for supports in support_helpers(nuts):
+        for nut in nuts:
+            assert supports(nut) is True
+
+    mint_info = CoreMintInfo.model_construct(nuts=nuts)
+    assert mint_info.supports_mpp("bolt11", Unit.sat)
+    assert mint_info.supports_websocket_mint_quote(Method.bolt11, Unit.sat)
+    assert mint_info.requires_clear_auth()
+    assert mint_info.requires_blind_auth()
 
 
 def test_get_output_split():

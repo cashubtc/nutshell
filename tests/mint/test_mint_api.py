@@ -3,7 +3,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.base import MeltQuoteState, Method, MintQuoteState, Unit
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -19,7 +19,16 @@ from cashu.core.nuts.nuts import MINT_NUT
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    get_real_invoice_fee_leaf,
+    get_real_invoice_routed,
+    is_cln_backend,
+    is_fake,
+    is_regtest,
+    is_spark_backend,
+    pay_if_regtest,
+)
 
 BASE_URL = "http://localhost:3337"
 
@@ -81,7 +90,11 @@ async def test_api_keys(ledger: Ledger):
             for keyset in ledger.keysets.values()
         ]
     }
-    assert response.json() == expected
+    result = response.json()
+    # PostgreSQL can return the same keysets in a different order.
+    result["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    expected["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    assert result == expected
 
 
 @pytest.mark.asyncio
@@ -251,6 +264,31 @@ async def test_mint_quote(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pubkey_payload", [{}, {"pubkey": None}], ids=["omitted", "null"]
+)
+async def test_mint_quote_without_pubkey(ledger: Ledger, pubkey_payload):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11",
+        json={"unit": "sat", "amount": 1, **pubkey_payload},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["pubkey"] is None
+
+    response = httpx.get(f"{BASE_URL}/v1/mint/quote/bolt11/{result['quote']}")
+    assert response.status_code == 200
+    assert response.json()["pubkey"] is None
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11/check",
+        json={"quotes": [result["quote"]]},
+    )
+    assert response.status_code == 200
+    assert response.json()[0]["pubkey"] is None
+
+
+@pytest.mark.asyncio
 async def test_mint(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -373,8 +411,8 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
     result = response.json()
     assert result["quote"]
     assert result["amount"] == 64
-    # external invoice, fee should be 2
-    assert result["fee_reserve"] == 2
+    # Spark uses the local SSP's exact (zero) swap fee.
+    assert result["fee_reserve"] == (0 if is_spark_backend else 2)
 
 
 @pytest.mark.asyncio
@@ -444,7 +482,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 62
-    assert quote.fee_reserve == 2
+    assert quote.fee_reserve == (0 if is_spark_backend else 2)
 
     keep, send = await wallet.swap_to_send(wallet.proofs, 64)
     inputs_payload = [p.to_dict() for p in send]
@@ -482,6 +520,135 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert resp_quote.change is not None
     assert resp_quote.change[0].amount == 2
     assert resp_quote.state == MeltQuoteState.paid.value
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
+)
+async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(128, quote_id=mint_quote.quote)
+    assert wallet.balance == 128
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(62)
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 62
+    assert quote.fee_reserve > 0
+
+    keep, send = await wallet.swap_to_send(
+        wallet.proofs, quote.amount + quote.fee_reserve
+    )
+    inputs_payload = [p.to_dict() for p in send]
+
+    # outputs for change
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(3)
+    outputs, rs = wallet._construct_outputs([1, 1, 1], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote = PostMeltQuoteResponse(**response.json())
+    assert resp_quote.state == MeltQuoteState.paid.value
+    assert resp_quote.payment_preimage is not None
+
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert melt_quote, "No melt quote in db"
+    assert melt_quote.fee_paid > 0, "No routing fee paid"
+    # the mint passes the fee reserve to the backend as the fee limit
+    assert melt_quote.fee_paid <= quote.fee_reserve, "Fee exceeded the fee reserve"
+
+    # change must compensate exactly for the unspent part of the reserve
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    assert (
+        change_sat == quote.fee_reserve - melt_quote.fee_paid
+    ), "Wrong change returned"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+@pytest.mark.skipif(
+    is_cln_backend,
+    reason="requires an LND mint for the fee-leaf route query",
+)
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
+)
+async def test_melt_external_routing_fee_rounding(ledger: Ledger, wallet: Wallet):
+    mint_quote = await wallet.request_mint(1024)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(1024, quote_id=mint_quote.quote)
+    assert wallet.balance == 1024
+
+    # The isolated fee leaf prevents LDK from offering a cheaper, whole-sat route.
+    invoice_payment_request = get_real_invoice_fee_leaf(1000)
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 1000
+    assert quote.fee_reserve >= 2
+
+    keep, send = await wallet.swap_to_send(
+        wallet.proofs, quote.amount + quote.fee_reserve
+    )
+    inputs_payload = [p.to_dict() for p in send]
+
+    # Blank outputs for the unspent part of the fee reserve.
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(5)
+    outputs, rs = wallet._construct_outputs([1, 1, 1, 1, 1], secrets, rs)
+    outputs_payload = [o.model_dump() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    response.raise_for_status()
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote = PostMeltQuoteResponse(**response.json())
+    assert resp_quote.state == MeltQuoteState.paid.value
+
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert melt_quote, "No melt quote in db"
+
+    # Verify rounding against LND's settled fee, independently of path selection.
+    payment = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        melt_quote.checking_id
+    )
+    assert payment.settled
+    assert payment.fee is not None and payment.fee.unit == Unit.msat
+    whole_sats, remainder_msat = divmod(payment.fee.amount, 1000)
+    assert remainder_msat > 0, "Route must charge a fractional sat to test rounding"
+    rounded_fee = whole_sats + 1
+    assert melt_quote.fee_paid == rounded_fee, "Fee not rounded up to the next sat"
+
+    # we get back the fee reserve minus the rounded up fee
+    change_sat = sum([c.amount for c in resp_quote.change or []])
+    assert change_sat == quote.fee_reserve - rounded_fee, "Wrong change returned"
 
 
 @pytest.mark.asyncio
@@ -589,9 +756,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert response.status_code == 200, (
-        f"{response.url} {response.status_code} {response.text}"
-    )
+    assert (
+        response.status_code == 200
+    ), f"{response.url} {response.status_code} {response.text}"
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64

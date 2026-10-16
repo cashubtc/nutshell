@@ -25,8 +25,7 @@ clean:
 
 package:
 	poetry export -f requirements.txt --without-hashes --output requirements.txt
-	make clean
-	python setup.py sdist bdist_wheel
+	poetry build --clean
 
 test:
 	PYTHONUNBUFFERED=1 \
@@ -43,15 +42,49 @@ test-mint:
 	DEBUG=true \
 	poetry run pytest tests/mint --cov-report xml --cov cashu
 
-install:
-	make clean
-	python setup.py sdist bdist_wheel
-	pip install --upgrade dist/*
+.PHONY: compatibility-targets test-wallet-compatibility
+compatibility-targets:
+	poetry run python -m tests.compatibility
 
-upload:
-	make clean
-	python setup.py sdist bdist_wheel
-	twine upload --repository pypi dist/*
+test-wallet-compatibility:
+	@test -n "$$CASHU_TEST_MINT_IMAGE" || \
+		(echo "Set CASHU_TEST_MINT_IMAGE, e.g. CASHU_TEST_MINT_IMAGE=cashubtc/nutshell:0.20.3" && exit 1)
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	poetry run pytest tests/wallet --cov-report xml --cov cashu
+
+.PHONY: test-spark-regtest test-spark-backend-regtest test-spark-mint test-spark-wallet
+test-spark-regtest:
+	$(MAKE) test-spark-backend-regtest
+	$(MAKE) test-spark-mint
+	$(MAKE) test-spark-wallet
+
+test-spark-backend-regtest:
+	CASHU_SPARK_REGTEST=true \
+	MINT_BACKEND_BOLT11_SAT=FakeWallet \
+	MINT_BACKEND_BOLT11_USD=FakeWallet \
+	TOR=FALSE \
+	poetry run pytest tests/lightning/test_spark_regtest.py -v
+
+test-spark-mint:
+	CASHU_SPARK_REGTEST=true \
+	MINT_BACKEND_BOLT11_SAT=SparkL2Wallet \
+	MINT_BACKEND_BOLT11_USD=FakeWallet \
+	TOR=FALSE \
+	$(MAKE) test-mint
+
+test-spark-wallet:
+	CASHU_SPARK_REGTEST=true \
+	MINT_BACKEND_BOLT11_SAT=SparkL2Wallet \
+	MINT_BACKEND_BOLT11_USD=FakeWallet \
+	TOR=FALSE \
+	$(MAKE) test-wallet
+
+install: package
+	python -m pip install --upgrade dist/*.whl
+
+upload: package
+	poetry publish
 
 install-pre-commit-hook:
 	@echo "Installing pre-commit hook to git"

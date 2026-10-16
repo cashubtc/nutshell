@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from cashu.core.base import Proof
+from cashu.core.base import MintQuoteState, Proof
 from cashu.wallet.npc import NpubCash
 from cashu.wallet.wallet import Wallet
 
@@ -125,3 +125,61 @@ async def test_mint_quotes(npc, mock_wallet):
         
         assert len(proofs) == 1
         mock_wallet.mint.assert_called_once_with(100, quote_id="q1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error_code, expect_issued",
+    [
+        (20002, True),   # QuoteAlreadyIssuedError: the quote really was issued
+        (11000, False),  # generic TransactionError: unrelated failure, keep retrying
+        (20001, False),  # QuoteNotPaidError
+        (20005, False),  # QuotePendingError
+    ],
+)
+async def test_mint_quotes_only_marks_issued_on_already_issued_code(
+    npc, mock_wallet, error_code, expect_issued
+):
+    """Only the mint's "quote already issued" code may mark the local quote issued.
+
+    Marking it on any other failure strands a paid invoice: the quote is skipped
+    on every later poll, so no ecash is ever issued for it.
+    """
+    with patch("cashu.wallet.npc.httpx.AsyncClient") as mock_client, \
+         patch("cashu.wallet.npc.get_bolt11_mint_quote", new_callable=AsyncMock) as mock_get_quote, \
+         patch("cashu.wallet.npc.update_bolt11_mint_quote", new_callable=AsyncMock) as mock_update_quote:
+
+        mock_instance = mock_client.return_value.__aenter__.return_value
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "error": False,
+            "data": {
+                "quotes": [
+                    {"quoteId": "q1", "amount": 100, "state": "PAID", "mintUrl": "https://mint.example.com"},
+                ]
+            }
+        }
+        mock_instance.get.return_value = mock_resp
+
+        mock_get_quote.return_value = None
+
+        mock_mint_quote = MagicMock()
+        mock_mint_quote.state = "PAID"
+        mock_wallet.get_mint_quote = AsyncMock(return_value=mock_mint_quote)
+
+        # the wallet flattens mint errors to "Mint Error: <detail> (Code: <n>)"
+        mock_wallet.mint = AsyncMock(
+            side_effect=Exception(f"Mint Error: something went wrong (Code: {error_code})")
+        )
+
+        proofs = await npc.mint_quotes()
+
+        assert proofs == []
+        if expect_issued:
+            mock_update_quote.assert_awaited_once()
+            assert mock_update_quote.await_args.kwargs["quote"] == "q1"
+            assert mock_update_quote.await_args.kwargs["state"] == MintQuoteState.issued
+        else:
+            mock_update_quote.assert_not_awaited()

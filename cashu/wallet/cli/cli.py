@@ -1384,7 +1384,7 @@ async def wallets(ctx: Context):
     except ValueError:
         pass
     for w in wallets:
-        wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, w))
+        wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, w), name=w)
         try:
             await wallet.load_proofs(reload=True, all_keysets=True)
             if wallet.proofs and len(wallet.proofs):

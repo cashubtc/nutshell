@@ -5,6 +5,7 @@ from typing import List
 from loguru import logger
 
 from ..core.base import MintQuoteState
+from ..core.db import LockOptions
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from .protocols import SupportsBackends, SupportsDb, SupportsEvents
@@ -25,7 +26,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         if backend.supports_incoming_payment_stream:
             retry_delay = settings.mint_retry_exponential_backoff_base_delay
             max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-            
+
             while True:
                 try:
                     # Reset retry delay on successful connection to backend stream
@@ -34,19 +35,25 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                         await self.invoice_callback_dispatcher(checking_id)
                 except Exception as e:
                     logger.error(f"Error in invoice listener: {e}")
-                    logger.info(f"Restarting invoice listener in {retry_delay} seconds...")
+                    logger.info(
+                        f"Restarting invoice listener in {retry_delay} seconds..."
+                    )
                     await asyncio.sleep(retry_delay)
-                    
+
                     # Exponential backoff
                     retry_delay = min(retry_delay * 2, max_retry_delay)
 
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement="checking_id = :checking_id",
-            lock_parameters={"checking_id": checking_id},
-            lock_timeout=5,
+            locks=[
+                LockOptions(
+                    table="mint_quotes",
+                    select_statement="checking_id = :checking_id",
+                    parameters={"checking_id": checking_id},
+                    timeout=5,
+                )
+            ],
         ) as conn:
             quote = await self.crud.get_mint_quote(
                 checking_id=checking_id, db=self.db, conn=conn

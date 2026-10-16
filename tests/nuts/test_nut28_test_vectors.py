@@ -1,8 +1,9 @@
+import hashlib
 import json
 
 import pytest
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, TokenV4
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.p2bk import (
     blind_pubkeys,
@@ -10,6 +11,9 @@ from cashu.core.p2bk import (
     derive_blinding_scalar,
     ecdh_shared_secret,
 )
+from cashu.core.p2pk import P2PKSecret
+from cashu.core.secret import SecretKind
+from cashu.wallet.p2bk import WalletP2BK
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -161,3 +165,147 @@ def test_example_proof_slot_0_round_trips():
     )
     assert derived is not None
     assert derived.to_hex() == DERIVED_PRIVKEY_HEX[0]
+
+
+@pytest.mark.parametrize("slot", [-1, 256])
+def test_blinding_scalar_refuses_slot_outside_one_byte(slot):
+    with pytest.raises(ValueError, match="slot index"):
+        derive_blinding_scalar(bytes(32), slot)
+
+
+# --- HTLC example proof (cashubtc/nuts#402) ---
+
+# The NUT-14 preimage pair reused as the hash lock.
+EXAMPLE_HTLC_PREIMAGE_HEX = "00" * 31 + "01"
+
+EXAMPLE_HTLC_PROOF = {
+    "amount": 64,
+    "C": "0270aba098c920adafa1ce75acefb06d8cc541ef80270f70cc7b66375b789ed9be",
+    "id": "009a1f293253e41e",
+    "secret": '["HTLC",{"nonce":"8b1f18aa85a2787903cfdc776fde0b8555bdb126eea02b05cd84de06a4f4b551","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","0352fb6d93360b7c2538eedf3c861f32ea5883fceec9f3e573d9d84377420da838"],["locktime","1689418329"],["refund","03667361ca925065dcafea0a705ba49e75bdd7975751fcc933e05953463c79fff1"]]}]',
+    "dleq": {
+        "s": "bd6ed079b954151898cadac38c3b8d3371c20d67e8c5f06af3cee4152ac317b4",
+        "e": "9ec5b6f2095a8dc7d052a00e0bb050ac95e633e702575630cfd43cb58592d2a1",
+        "r": "e8349cf88e5a9f025f0072bf8a2db48d394bad9f7be3d8023f9ee90de1c1924d",
+    },
+    "p2pk_e": "02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c",
+}
+
+# The two example proofs encoded as a V4 token, pinning the `pe` field
+# (ephemeral pubkey E as a 33-byte CBOR bstr) and the dleq wire format.
+EXAMPLE_V4_TOKEN = "cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAmh8pMlPkHmFwgqVhYRhAYXN4q1siUDJQSyIseyJub25jZSI6ImQ0YTE3YTg4ZjVkMGMwOTAwMWY3YjQ1M2M0MmMxZjlkNWE4NzM2M2IxZjY2MzdhNWE4M2ZjMzFhNmEzYjcyNjYiLCJkYXRhIjoiMDNiN2MwM2ViMDVhMGE1MzljZmM0MzhlODFiY2YzOGI2NWI3YmI4Njg1ZTg3OTBmOWI4NTNiZmUzZDc3YWQ1MzE1IiwidGFncyI6W119XWFjWCEDgYVd3MQ0qakLNWTynveOcnH4VE0AVnY7QYsA6IUlwP9hZKNhZVggI_IZCxi_0EPTpSYQPhX0qTjWRqa_k7AX4rt8heFUCzJhc1ggYXiXhFbELu6O77UIMPwxRr4nsFYZ8E40kNxZYAXwzHhhclgg0mpVqjnKUJV_2vVANrAQU7DeQgSLlqb7KhZ-A_ANCg9icGVYIQKozaTPRIv86ankbliMBuoXgPy5Tju98yd_QpldQDqLDKVhYRhAYXN5AWNbIkhUTEMiLHsibm9uY2UiOiI4YjFmMThhYTg1YTI3ODc5MDNjZmRjNzc2ZmRlMGI4NTU1YmRiMTI2ZWVhMDJiMDVjZDg0ZGUwNmE0ZjRiNTUxIiwiZGF0YSI6ImVjNDkxNmRkMjhmYzRjMTBkNzhlMjg3Y2E1ZDljYzUxZWUxYWU3M2NiZmRlMDhjNmIzNzMyNGNiZmFhYzhiYzUiLCJ0YWdzIjpbWyJwdWJrZXlzIiwiMDM1MmZiNmQ5MzM2MGI3YzI1MzhlZWRmM2M4NjFmMzJlYTU4ODNmY2VlYzlmM2U1NzNkOWQ4NDM3NzQyMGRhODM4Il0sWyJsb2NrdGltZSIsIjE2ODk0MTgzMjkiXSxbInJlZnVuZCIsIjAzNjY3MzYxY2E5MjUwNjVkY2FmZWEwYTcwNWJhNDllNzViZGQ3OTc1NzUxZmNjOTMzZTA1OTUzNDYzYzc5ZmZmMSJdXX1dYWNYIQJwq6CYySCtr6HOdazvsG2MxUHvgCcPcMx7ZjdbeJ7ZvmFko2FlWCCexbbyCVqNx9BSoA4LsFCsleYz5wJXVjDP1Dy1hZLSoWFzWCC9btB5uVQVGJjK2sOMO40zccINZ-jF8GrzzuQVKsMXtGFyWCDoNJz4jlqfAl8Acr-KLbSNOUutn3vj2AI_nukN4cGSTWJwZVghAqjNpM9Ei_zpqeRuWIwG6heA_LlOO73zJ39CmV1AOosM"
+
+
+def _assert_proof_matches_example(proof: Proof, example: dict) -> None:
+    assert proof.amount == example["amount"]
+    assert proof.id == example["id"]
+    assert proof.secret == example["secret"]
+    assert proof.C == example["C"]
+    assert proof.dleq is not None
+    assert proof.dleq.e == example["dleq"]["e"]
+    assert proof.dleq.s == example["dleq"]["s"]
+    assert proof.dleq.r == example["dleq"]["r"]
+    assert proof.p2pk_e == example["p2pk_e"]
+
+
+def test_htlc_example_proof_hash_lock_is_nut14_preimage_pair():
+    """Slot 0 holds the hash lock, unblinded: the NUT-14 preimage pair."""
+    secret = P2PKSecret.deserialize(EXAMPLE_HTLC_PROOF["secret"])
+    preimage = bytes.fromhex(EXAMPLE_HTLC_PREIMAGE_HEX)
+    assert hashlib.sha256(preimage).hexdigest() == secret.data
+
+
+def test_htlc_example_proof_slot_layout():
+    """Blinded keys are the slot 1 and slot 2 table entries.
+
+    The `locktime` tag sits between `pubkeys` and `refund` in the JSON as a
+    check that slots are numbered by the canonical `[data, ...pubkeys,
+    ...refund]` order, not by tag position.
+    """
+    secret = P2PKSecret.deserialize(EXAMPLE_HTLC_PROOF["secret"])
+    assert secret.kind == SecretKind.HTLC.value
+    assert secret.tags.get_tag_all("pubkeys") == [BLINDED_PUBKEY_HEX[1]]
+    assert secret.tags.get_tag_all("refund") == [BLINDED_PUBKEY_HEX[2]]
+    assert secret.tags.get_tag("locktime") == "1689418329"
+
+
+def test_htlc_example_proof_derives_slot_1_and_2_keys():
+    """Receiver-side derivation at slots 1 and 2 matches the vector tables."""
+    p = PrivateKey(bytes.fromhex(P_PRIVKEY_HEX))
+    k1 = derive_blinded_private_key(
+        privkey=p,
+        ephemeral_pubkey_hex=E_PUBKEY_HEX,
+        blinded_pubkey_hex=BLINDED_PUBKEY_HEX[1],
+        slot_index=1,
+    )
+    k2 = derive_blinded_private_key(
+        privkey=p,
+        ephemeral_pubkey_hex=E_PUBKEY_HEX,
+        blinded_pubkey_hex=BLINDED_PUBKEY_HEX[2],
+        slot_index=2,
+    )
+    assert k1 is not None
+    assert k1.to_hex() == DERIVED_PRIVKEY_HEX[1]
+    assert k2 is not None
+    assert k2.to_hex() == DERIVED_PRIVKEY_HEX[2]
+
+
+def test_htlc_example_proof_wallet_derives_receiver_keys():
+    """The wallet-level slot numbering derives both receiver keys.
+
+    Pins the slot order against the cashu-ts #763 bug class: the hash lock
+    occupies slot 0 unblinded, the `pubkeys` key blinds at slot 1 and the
+    `refund` key at slot 2. A wallet that numbers HTLC keys from slot 0
+    derives neither key.
+    """
+
+    class ReceiverStub(WalletP2BK):
+        def __init__(self, private_key: PrivateKey) -> None:
+            self.private_key = private_key
+
+    proof = Proof(
+        amount=EXAMPLE_HTLC_PROOF["amount"],
+        C=EXAMPLE_HTLC_PROOF["C"],
+        id=EXAMPLE_HTLC_PROOF["id"],
+        secret=EXAMPLE_HTLC_PROOF["secret"],
+        p2pk_e=EXAMPLE_HTLC_PROOF["p2pk_e"],
+    )
+    stub = ReceiverStub(PrivateKey(bytes.fromhex(P_PRIVKEY_HEX)))
+    assert [k.to_hex() for k in stub._derive_p2bk_signing_keys(proof)] == [
+        DERIVED_PRIVKEY_HEX[1],
+        DERIVED_PRIVKEY_HEX[2],
+    ]
+
+
+def test_example_v4_token_decodes_to_example_proofs():
+    """The V4 token decodes to the exact P2PK and HTLC example proofs.
+
+    This pins the `pe` field as a 33-byte CBOR bstr and the dleq values as
+    32-byte bstrs: if the token carried them as hex strings the assertions
+    below would fail.
+    """
+    token = TokenV4.deserialize(EXAMPLE_V4_TOKEN)
+    assert token.mint == "http://localhost:3338"
+    assert token.unit == "sat"
+    assert token.memo is None
+    proofs = token.proofs
+    assert len(proofs) == 2
+    _assert_proof_matches_example(proofs[0], EXAMPLE_PROOF)
+    _assert_proof_matches_example(proofs[1], EXAMPLE_HTLC_PROOF)
+
+
+def test_example_v4_token_serialization_round_trips():
+    """Re-encoding and decoding preserves the P2BK fields exactly.
+
+    Nutshell emits the top-level CBOR map keys in a different order than the
+    vector (t, d, m, u vs m, u, t, matching the NUT-00 examples), which every
+    decoder accepts, so the round trip is checked semantically rather than
+    byte-for-byte.
+    """
+    token = TokenV4.deserialize(EXAMPLE_V4_TOKEN)
+    encoded = token.serialize(include_dleq=True)
+    assert encoded.startswith("cashuB")
+    token2 = TokenV4.deserialize(encoded)
+    assert len(token2.proofs) == 2
+    _assert_proof_matches_example(token2.proofs[0], EXAMPLE_PROOF)
+    _assert_proof_matches_example(token2.proofs[1], EXAMPLE_HTLC_PROOF)

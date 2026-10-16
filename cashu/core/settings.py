@@ -3,13 +3,11 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from environs import Env  # type: ignore
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-env = Env()
-
-VERSION = "0.20.3"
+VERSION = "0.21.0"
 
 
 def find_env_file():
@@ -18,7 +16,7 @@ def find_env_file():
     if not os.path.isfile(env_file):
         env_file = os.path.join(str(Path.home()), ".cashu", ".env")
     if os.path.isfile(env_file):
-        env.read_env(env_file, recurse=False, override=True)
+        load_dotenv(env_file, override=True)
     else:
         env_file = ""
     return env_file
@@ -113,10 +111,7 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
-    mint_lnbits_endpoint: Optional[str] = Field(default=None)
-    mint_lnbits_key: Optional[str] = Field(default=None)
     mint_strike_key: Optional[str] = Field(default=None)
-    mint_blink_key: Optional[str] = Field(default=None)
 
     mint_spark_network: str = Field(default="TESTNET")
     mint_spark_api_key: Optional[str] = Field(default=None)
@@ -332,14 +327,9 @@ class CLNRestFundingSource(MintSettings):
     mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
-class CoreLightningRestFundingSource(MintSettings):
-    mint_corelightning_rest_url: Optional[str] = Field(default=None)
-    mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
-    mint_corelightning_rest_cert: Optional[str] = Field(default=None)
-
-
 class AuthSettings(MintSettings):
     mint_auth_database: str = Field(default="data/mint")
+    mint_auth_private_key: Optional[str] = Field(default=None)
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
@@ -372,7 +362,6 @@ class Settings(
     EnvSettings,
     LndRPCFundingSource,
     LndRestFundingSource,
-    CoreLightningRestFundingSource,
     CLNRestFundingSource,
     FakeWalletSettings,
     MintLimits,

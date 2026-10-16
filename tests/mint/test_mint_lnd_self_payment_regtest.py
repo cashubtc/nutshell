@@ -4,7 +4,7 @@ import pytest
 
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
 from cashu.core.settings import settings
-from cashu.lightning.base import LightningBackend, PaymentResult
+from cashu.lightning.base import LightningBackend, PaymentResult, PaymentStatusResult
 
 LND_BACKENDS = {"LndRPCWallet", "LndRestWallet"}
 
@@ -44,7 +44,7 @@ async def test_lnd_can_pay_its_own_invoice_when_enabled(monkeypatch):
         assert payment.preimage
 
         invoice_status = await backend.get_invoice_status(invoice.checking_id)
-        assert invoice_status.result == PaymentResult.SETTLED
+        assert invoice_status.result == PaymentStatusResult.SETTLED
     finally:
         client = getattr(backend, "client", None)
         if client is not None:

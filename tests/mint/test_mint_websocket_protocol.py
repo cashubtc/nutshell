@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi import WebSocketDisconnect
+from pydantic import ValidationError
 
 from cashu.core.base import (
     MeltQuote,
@@ -147,6 +148,22 @@ def test_add_subscription_rejects_when_max_reached():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["subscribe", "unsubscribe"])
+async def test_handle_request_rejects_long_subscription_id(method):
+    manager = _client_manager(FakeWebSocket())
+    request = JSONRPCRequest(
+        id=1,
+        method=method,
+        params={"kind": "proof_state", "filters": ["Y1"], "subId": "s" * 257},
+    )
+
+    with pytest.raises(ValidationError):
+        await manager._handle_request(request)
+
+    assert not any(manager.subscriptions.values())
+
+
+@pytest.mark.asyncio
 async def test_init_subscription_sends_initial_snapshots():
     websocket = FakeWebSocket()
     manager = _client_manager(websocket)
@@ -169,11 +186,12 @@ async def test_init_subscription_sends_initial_snapshots():
         amount=1,
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
+        attempt="internal-attempt-nonce",
     )
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
 
     from contextlib import asynccontextmanager
-    
+
     @asynccontextmanager
     async def mock_connect():
         yield object()
@@ -223,6 +241,7 @@ async def test_init_subscription_sends_initial_snapshots():
     payloads = [json.loads(msg) for msg in websocket.sent]
     assert payloads[0]["payload"]["quote"] == "quote-1"
     assert payloads[1]["payload"]["quote"] == "melt-1"
+    assert "attempt" not in payloads[1]["payload"]
     assert payloads[2]["payload"]["Y"] == "Y1"
 
 

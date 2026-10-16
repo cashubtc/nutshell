@@ -916,7 +916,7 @@ class Wallet(
             change_derivation_paths,
         ) = await self.generate_n_secrets(n_change_outputs)
         change_outputs, change_rs = self._construct_outputs(
-            n_change_outputs * [1], change_secrets, change_rs
+            n_change_outputs * [0], change_secrets, change_rs
         )
 
         await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)

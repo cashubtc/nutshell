@@ -105,8 +105,8 @@ def test_fuzz_blinded_message(amount, id, B_, C_):
     id=st.one_of(keyset_id(), hex_string(16, 16)),
     amount=st.integers(min_value=1),
     C_=st.one_of(hex_string(), public_key()),
-    dleq_e=hex_string(),
-    dleq_s=hex_string(),
+    dleq_e=hex_string(64, 64),
+    dleq_s=hex_string(64, 64),
 )
 def test_fuzz_blinded_signature(id, amount, C_, dleq_e, dleq_s):
     dleq = DLEQ(e=dleq_e, s=dleq_s)

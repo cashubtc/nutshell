@@ -41,7 +41,7 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     unit: str  # input unit
-    method: str  # payment method
+    method: Optional[str] = None  # payment method
     request: str  # output payment request
     fee_reserve: int  # input fee reserve
     state: str  # state of the quote

@@ -12,23 +12,26 @@ from tests.helpers import pay_if_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet_sender():
+async def wallet_sender(tmp_path):
     wallet = await Wallet.with_db(
-        SERVER_ENDPOINT, "test_data/wallet_receive_named_sender", name="sender"
+        SERVER_ENDPOINT, str(tmp_path / "sender"), name="sender"
     )
     await wallet.load_mint()
     yield wallet
+    await wallet.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet_bob():
+async def wallet_bob(tmp_path, monkeypatch):
     # Mirrors how the CLI constructs the main wallet: db directory is
     # <cashu_dir>/<wallet_name>, same convention receive_cli/redeem_TokenV3 assume.
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     wallet = await Wallet.with_db(
         SERVER_ENDPOINT, os.path.join(settings.cashu_dir, "bob"), name="bob"
     )
     await wallet.load_mint()
     yield wallet
+    await wallet.db.engine.dispose()
 
 
 async def _mint_p2pk_locked_proofs_to(
@@ -81,7 +84,7 @@ async def test_redeem_tokenv3_reuses_receivers_private_key(
 
 @pytest.mark.asyncio
 async def test_redeem_tokenv3_custom_db_dir_reuses_receivers_private_key(
-    wallet_sender: Wallet,
+    wallet_sender: Wallet, tmp_path
 ):
     """Pins that the mint_wallet built inside redeem_TokenV3 derives its db
     directory from the receiver wallet's actual db.db_location, not from
@@ -90,7 +93,7 @@ async def test_redeem_tokenv3_custom_db_dir_reuses_receivers_private_key(
     opening whatever wallet happens to live under <cashu_dir>/<name>.
     """
     wallet_receiver = await Wallet.with_db(
-        SERVER_ENDPOINT, "test_data/wallet_receive_named_custom_dir", name="bob"
+        SERVER_ENDPOINT, str(tmp_path / "custom"), name="bob"
     )
     await wallet_receiver.load_mint()
 

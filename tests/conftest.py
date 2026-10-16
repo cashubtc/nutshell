@@ -2,13 +2,17 @@ import importlib
 import multiprocessing
 import os
 import shutil
+import threading
 import time
+from contextlib import contextmanager
+from copy import deepcopy
 from pathlib import Path
 
 import httpx
 import pytest
 import pytest_asyncio
 import uvicorn
+from sqlalchemy.exc import DBAPIError
 from uvicorn import Config, Server
 
 from cashu.core.base import Method, Unit
@@ -18,6 +22,20 @@ from cashu.core.settings import settings
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
+from tests.compatibility import (
+    BELOW_MINIMUM_ERROR,
+    MINIMUM_MINT_VERSION,
+    MINT_IMAGE,
+    MINT_VERSION,
+    mint_older_than,
+    run_mint_container,
+)
+
+pytest_plugins = (
+    ["tests.spark_regtest"]
+    if os.getenv("CASHU_SPARK_REGTEST", "").lower() == "true"
+    else []
+)
 
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
@@ -53,7 +71,7 @@ settings.mint_lnd_enable_mpp = True
 settings.mint_clnrest_enable_mpp = True
 settings.mint_input_fee_ppk = 0
 settings.db_connection_pool = True
-settings.mint_require_auth = False
+# Preserve mint_require_auth from the environment for the Keycloak integration job.
 settings.mint_watchdog_enabled = False
 
 settings.mint_rpc_server_enable = True
@@ -62,6 +80,48 @@ settings.mint_rpc_server_mutual_tls = False
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Against a released mint image, run only the wallet suite."""
+    if not MINT_IMAGE:
+        return
+    skip = pytest.mark.skip(
+        reason="Only wallet tests run against a released mint image"
+    )
+    for item in items:
+        if not item.nodeid.startswith("tests/wallet/"):
+            item.add_marker(skip)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Against a mint older than the wallet supports, report failures caused by
+    that known incompatibility as expected failures. Other failures still fail."""
+    report = yield
+    if (
+        report.failed
+        and call.excinfo is not None
+        and mint_older_than(MINIMUM_MINT_VERSION)
+    ):
+        output = "\n".join(
+            (str(call.excinfo.value), report.capstdout, report.capstderr, report.caplog)
+        )
+        if BELOW_MINIMUM_ERROR in output:
+            report.outcome = "skipped"
+            report.wasxfail = (
+                f"Nutshell {MINT_VERSION} is older than the minimum supported "
+                f"mint version {MINIMUM_MINT_VERSION}"
+            )
+    return report
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(monkeypatch):
+    """Restore settings after each test, including RPC updates to mutable lists."""
+    for name in type(settings).model_fields:
+        monkeypatch.setattr(settings, name, deepcopy(getattr(settings, name)))
+
 
 # from cashu.mint.startup import lightning_backend  # noqa
 
@@ -77,6 +137,19 @@ class UvicornServer(multiprocessing.Process):
 
     def run(self, *args, **kwargs):
         self.server.run()
+
+
+async def reset_postgres_database(db: Database):
+    for attempt in range(3):
+        try:
+            async with db.connect() as conn:
+                await conn.execute("DROP SCHEMA public CASCADE;")
+                await conn.execute("CREATE SCHEMA public;")
+            return
+        except DBAPIError as exc:
+            # A deadlock aborts the transaction; retry it with a fresh session.
+            if getattr(exc.orig, "sqlstate", None) != "40P01" or attempt == 2:
+                raise
 
 
 # This fixture is used for all other tests
@@ -96,11 +169,10 @@ async def ledger():
     else:
         # clear postgres database
         db = Database("mint", settings.mint_database)
-        async with db.connect() as conn:
-            # drop all tables
-            await conn.execute("DROP SCHEMA public CASCADE;")
-            await conn.execute("CREATE SCHEMA public;")
-        await db.engine.dispose()
+        try:
+            await reset_postgres_database(db)
+        finally:
+            await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
@@ -129,15 +201,34 @@ async def ledger():
     await ledger.shutdown_ledger()
 
 
-# # This fixture is used for tests that require API access to the mint
-@pytest.fixture(autouse=True, scope="session")
-def mint():
+@contextmanager
+def start_mint_server():
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
         host=settings.mint_listen_host,
         log_level="trace",
     )
+
+    if os.getenv("MUTATION_TESTING") == "true":
+        server = Server(config=config)
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+
+        assert settings.mint_url is not None
+        for _ in range(100):
+            try:
+                httpx.get(settings.mint_url)
+                break
+            except httpx.ConnectError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("Mutation-test mint server did not start")
+
+        yield server
+        server.should_exit = True
+        thread.join(timeout=10)
+        return
 
     server = UvicornServer(config=config)
     server.start()
@@ -155,3 +246,21 @@ def mint():
 
     yield server
     server.stop()
+    server.join(timeout=10)
+    if server.is_alive():
+        server.kill()
+        server.join()
+
+
+# This fixture is used for tests that require API access to the mint.
+@pytest.fixture(autouse=True, scope="session")
+def mint(request):
+    if MINT_IMAGE:
+        log_file = Path(settings.cashu_dir) / "released-mint.log"
+        with run_mint_container(MINT_IMAGE, SERVER_PORT, log_file) as url:
+            yield url
+        return
+    if "tests.spark_regtest" in pytest_plugins:
+        request.getfixturevalue("spark_regtest_config")
+    with start_mint_server() as server:
+        yield server

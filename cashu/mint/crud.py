@@ -134,6 +134,16 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def try_debit_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> bool: ...
+
+    @abstractmethod
     async def bump_keyset_fees_paid(
         self,
         *,
@@ -291,6 +301,15 @@ class LedgerCrud(ABC):
     ) -> List[MeltQuote]: ...
 
     @abstractmethod
+    async def get_melt_quotes_by_request(
+        self,
+        *,
+        request: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]: ...
+
+    @abstractmethod
     async def get_melt_quote_by_request(
         self,
         *,
@@ -378,7 +397,7 @@ class LedgerCrudSqlite(LedgerCrud):
             f"""
             SELECT * from {db.table_with_schema("promises")}
             WHERE melt_quote = :melt_id
-                AND c_ IS {'NOT NULL' if signed else 'NULL'}
+                AND c_ IS {"NOT NULL" if signed else "NULL"}
             ORDER BY order_index ASC
             """,
             {"melt_id": melt_id},
@@ -636,7 +655,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 )
                 if quote.last_checked
                 else None,
-                "pubkey": quote.pubkey or "",
+                "pubkey": quote.pubkey or None,
                 "amount_paid": quote.amount_paid,
                 "amount_issued": quote.amount_issued,
                 "updated_at": db.to_timestamp(
@@ -861,7 +880,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id WHERE quote = :quote
+            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id, attempt = :attempt WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -874,6 +893,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "proof": quote.payment_preimage,
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
+                "attempt": quote.attempt,
             },
         )
 
@@ -892,7 +912,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {
                 "id": keyset.id,
-                "seed": keyset.seed,
+                "seed": "" if keyset.encrypted_seed else keyset.seed,
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
@@ -929,6 +949,26 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"amount": amount, "id": keyset.id},
         )
+
+    async def try_debit_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> bool:
+        if amount <= 0:
+            raise ValueError("Keyset balance debit amount must be positive")
+        result = await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema("keysets")}
+            SET balance = balance - :amount
+            WHERE id = :id AND balance >= :amount
+            """,
+            {"amount": amount, "id": keyset.id},
+        )
+        return result.rowcount > 0
 
     async def bump_keyset_fees_paid(
         self,
@@ -1027,7 +1067,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {
                 "id": keyset.id,
-                "seed": keyset.seed,
+                "seed": "" if keyset.encrypted_seed else keyset.seed,
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
@@ -1120,5 +1160,21 @@ class LedgerCrudSqlite(LedgerCrud):
             WHERE checking_id = :checking_id
             """,
             {"checking_id": checking_id},
+        )
+        return [MeltQuote.from_row(row) for row in results]  # type: ignore
+
+    async def get_melt_quotes_by_request(
+        self,
+        *,
+        request: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]:
+        results = await (conn or db).fetchall(
+            f"""
+            SELECT * FROM {db.table_with_schema("melt_quotes")}
+            WHERE request = :request
+            """,
+            {"request": request},
         )
         return [MeltQuote.from_row(row) for row in results]  # type: ignore

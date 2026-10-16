@@ -1,8 +1,10 @@
 from typing import List, Literal, Optional, Tuple, Union
 
+import bolt11
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     Method,
@@ -15,6 +17,8 @@ from ..core.crypto.secp import PublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
+    KeysetInactiveError,
+    LightningError,
     NoSecretInProofsError,
     NotAllowedError,
     OutputsAlreadySignedError,
@@ -24,8 +28,8 @@ from ..core.errors import (
     TransactionDuplicateOutputsError,
     TransactionError,
     TransactionMultipleUnitsError,
-    TransactionUnitError,
     TransactionUnitMismatchError,
+    UnitNotSupportedError,
     WitnessTooLongError,
 )
 from ..core.nuts import nut20
@@ -38,6 +42,19 @@ class LedgerVerification(
     LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
 ):
     """Verification functions for the ledger."""
+
+    def _verify_mint_quote_invoice_amount(
+        self, invoice: bolt11.Bolt11, amount: Amount
+    ) -> None:
+        """Require BTC mint quotes to collect their exact issuance amount."""
+        if amount.unit not in (Unit.sat, Unit.msat):
+            return
+        if (
+            amount.amount <= 0
+            or invoice.amount_msat is None
+            or invoice.amount_msat != amount.to(Unit.msat).amount
+        ):
+            raise LightningError("backend invoice amount does not match mint quote")
 
     async def verify_inputs_and_outputs(
         self,
@@ -178,7 +195,7 @@ class LedgerVerification(
         if outputs[0].id not in self.keysets:
             raise TransactionError("keyset id unknown.")
         if not self.keysets[outputs[0].id].active:
-            raise TransactionError("keyset id inactive.")
+            raise KeysetInactiveError()
         if expected_unit and self.keysets[outputs[0].id].unit != expected_unit:
             raise TransactionError(
                 f"output unit {self.keysets[outputs[0].id].unit.name} does not match quote unit {expected_unit.name}"
@@ -350,7 +367,7 @@ class LedgerVerification(
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         if not len({self.keysets[p.id].unit for p in proofs}) == 1:
-            raise TransactionUnitError("inputs have different units.")
+            raise TransactionMultipleUnitsError("inputs have different units.")
         fee = (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000
         return fee
 
@@ -384,7 +401,9 @@ class LedgerVerification(
         unit = Unit[unit_str]
 
         if not any([unit == k.unit for k in self.keysets.values()]):
-            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+            raise UnitNotSupportedError(
+                f"unit '{unit.name}' not supported in any keyset."
+            )
 
         if not self.backends.get(method) or unit not in self.backends[method]:
             raise NotAllowedError(

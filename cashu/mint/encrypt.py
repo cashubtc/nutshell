@@ -139,12 +139,13 @@ async def migrate(no_dry_run):
                 click.echo(f"Updating keyset {keyset_dict['id']}")
                 await conn.execute(
                     f"UPDATE {ledger.db.table_with_schema('keysets')} SET seed='',"
-                    " encrypted_seed = ?, seed_encryption_method = ? WHERE id = ?",
-                    (
-                        keyset_dict["encrypted_seed"],
-                        keyset_dict["seed_encryption_method"],
-                        keyset_dict["id"],
-                    ),
+                    " encrypted_seed = :encrypted_seed, seed_encryption_method ="
+                    " :seed_encryption_method WHERE id = :id",
+                    {
+                        "encrypted_seed": keyset_dict["encrypted_seed"],
+                        "seed_encryption_method": keyset_dict["seed_encryption_method"],
+                        "id": keyset_dict["id"],
+                    },
                 )
 
         click.echo("Initializing mint with encrypted seeds.")

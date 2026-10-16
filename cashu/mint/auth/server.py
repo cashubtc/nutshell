@@ -247,12 +247,19 @@ class AuthLedger(Ledger):
             logger.error(f"Blind auth error: {e}")
             raise BlindAuthFailedError()
 
+        finalized = False
         try:
             yield
             # We do not calculate fees for auth keysets
-            await self.db_write.invalidate_proofs(proofs=[proof], keysets=self.keysets)
+            await self.db_write.finalize_pending_proofs(
+                proofs=[proof], keysets=self.keysets
+            )
+            finalized = True
         except Exception as e:
             logger.error(f"Blind auth error: {e}")
             raise BlindAuthFailedError()
         finally:
-            await self.db_write._unset_proofs_pending([proof], self.keysets)
+            if not finalized:
+                await self.db_write._unset_proofs_pending(
+                    [proof], self.keysets, spent=False
+                )
