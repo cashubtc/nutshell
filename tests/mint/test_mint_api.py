@@ -912,6 +912,14 @@ def test_format_limit():
 
 
 @pytest.mark.asyncio
+async def test_unknown_bolt11_quotes_are_not_found(ledger: Ledger):
+    for kind in ("mint", "melt"):
+        response = httpx.get(f"{BASE_URL}/v1/{kind}/quote/bolt11/{'00' * 32}")
+        assert response.status_code == 400
+        assert response.json()["code"] == 20010
+
+
+@pytest.mark.asyncio
 async def test_unknown_txout_quote_is_not_found(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{'00' * 32}")
     assert response.status_code == 400

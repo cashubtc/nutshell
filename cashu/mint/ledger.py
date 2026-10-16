@@ -1225,14 +1225,14 @@ class Ledger(
             quote_id (str): ID of the melt quote.
 
         Raises:
-            Exception: Quote not found.
+            QuoteNotFoundError: Quote not found.
 
         Returns:
             MeltQuote: Melt quote object.
         """
         melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db)
         if not melt_quote:
-            raise Exception("quote not found")
+            raise QuoteNotFoundError()
 
         await self._restore_melt_change_dleq(melt_quote)
 
