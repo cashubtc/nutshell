@@ -62,6 +62,7 @@ class MintSettings(CashuSettings):
     mint_max_witness_length: int = Field(default=1024)
 
     mint_input_fee_ppk: int = Field(default=100)
+    mint_quote_input_fee_ppk: Optional[int] = Field(default=None)  # NUT-XX
     mint_disable_melt_on_error: bool = Field(default=False)
     mint_quote_ttl: Optional[int] = Field(
         default=None,
@@ -85,6 +86,13 @@ class MintSettings(CashuSettings):
 
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
+
+    @property
+    def quote_input_fee_ppk(self) -> int:
+        """NUT-XX fee per quote input; defaults to the keyset input fee."""
+        if self.mint_quote_input_fee_ppk is None:
+            return self.mint_input_fee_ppk
+        return self.mint_quote_input_fee_ppk
 
 
 class MintWatchdogSettings(MintSettings):
@@ -343,6 +351,8 @@ class AuthSettings(MintSettings):
     ]
     mint_require_blind_auth_paths: List[List[str]] = [
         ["POST", "/v1/swap"],
+        ["POST", "/v1/transaction"],
+        ["POST", "/v1/mint/txout"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
         ["POST", "/v1/mint/bolt11/batch"],

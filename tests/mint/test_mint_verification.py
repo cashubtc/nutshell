@@ -580,6 +580,13 @@ async def test_verify_outputs_rejects_unknown_keyset(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_verify_outputs_rejects_amount_without_key(ledger: Ledger):
+    o = _blinded_output(ledger, amount=3, label="nokey")
+    with pytest.raises(TransactionError, match="no key for output amount"):
+        await ledger._verify_outputs([o])
+
+
+@pytest.mark.asyncio
 async def test_verify_outputs_rejects_inactive_keyset(ledger: Ledger):
     o = _blinded_output(ledger, label="inact")
     ks = ledger.keysets[v2_keyset_id(ledger)]

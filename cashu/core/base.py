@@ -89,10 +89,12 @@ class ProofState(LedgerEvent):
 
     @model_validator(mode="after")
     def check_witness(self):
-        if self.state != ProofSpentState.spent and any(
+        if self.state == ProofSpentState.unspent and any(
             v is not None for v in (self.witness, self.input_digest, self.commitment)
         ):
-            raise ValueError('Spend fields can only be set if the state is "SPENT"')
+            raise ValueError('Spend fields cannot be set if the state is "UNSPENT"')
+        if self.state == ProofSpentState.pending and self.commitment is not None:
+            raise ValueError('Commitment can only be set if the state is "SPENT"')
         return self
 
     @property
@@ -648,15 +650,22 @@ class MintQuote(LedgerEvent):
         self.state_val = value
         if value == MintQuoteState.pending:
             return
-        if value in [MintQuoteState.paid, MintQuoteState.issued]:
-            self.amount_paid = self.amount
-        else:
-            self.amount_paid = 0
-
+        if value == MintQuoteState.unpaid:
+            self.amount_paid = self.amount_issued = 0
+            return
+        # Paid keeps what was already issued: a quote may be drawn in parts (NUT-XX).
+        self.amount_paid = self.amount
         if value == MintQuoteState.issued:
             self.amount_issued = self.amount
-        else:
+        elif self.amount_issued is None:
             self.amount_issued = 0
+
+    @property
+    def mintable(self) -> int:
+        """amount_paid - amount_issued; zero unless the quote is paid (or pending)."""
+        if self.state not in (MintQuoteState.paid, MintQuoteState.pending):
+            return 0
+        return (self.amount_paid or self.amount) - (self.amount_issued or 0)
 
     @property
     def identifier(self) -> str:
@@ -665,6 +674,8 @@ class MintQuote(LedgerEvent):
 
     @property
     def kind(self) -> JSONRPCSubscriptionKinds:
+        if self.method == "txout":  # NUT-XX txout quotes
+            return JSONRPCSubscriptionKinds.TXOUT_MINT_QUOTE
         return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
 
     @property

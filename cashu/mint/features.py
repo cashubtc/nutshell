@@ -26,10 +26,12 @@ from ..core.nuts.nuts import (
     RESTORE_NUT,
     SCRIPT_NUT,
     STATE_NUT,
+    TRANSACTION_NUT,
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
+from .transaction import TXOUT_METHOD
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -67,17 +69,21 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         )
 
     @property
-    def mint_features(self) -> Dict[int, Union[List[Any], Dict[str, Any]]]:
+    def mint_features(self) -> Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]:
         mint_features = self.create_mint_features()
         mint_features = self.add_supported_features(mint_features)
         mint_features = self.add_mpp_features(mint_features)
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
         mint_features = self.add_batch_features(mint_features)
+        mint_features[TRANSACTION_NUT] = {
+            "supported": True,
+            "quote_input_fee_ppk": settings.quote_input_fee_ppk,
+        }
 
         return mint_features
 
-    def create_mint_features(self) -> Dict[int, Union[List[Any], Dict[str, Any]]]:
+    def create_mint_features(self) -> Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]:
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
@@ -102,7 +108,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     melt_setting.min_amount = 0
                 melt_method_settings.append(melt_setting)
 
-        mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
+        mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
                 methods=mint_method_settings,
                 disabled=settings.mint_bolt11_disable_mint,
@@ -115,7 +121,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return mint_features
 
     def add_supported_features(
-        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+        self, mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]
     ):
         supported_dict = dict(supported=True)
         mint_features[STATE_NUT] = supported_dict
@@ -129,7 +135,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return mint_features
 
     def add_batch_features(
-        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+        self, mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]
     ):
         mint_features[BATCH_MINT_NUT] = {
             "supported": True,
@@ -139,7 +145,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return mint_features
 
     def add_mpp_features(
-        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+        self, mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]
     ):
         # signal which method-unit pairs support MPP
         mpp_features = []
@@ -154,7 +160,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return mint_features
 
     def add_websocket_features(
-        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+        self, mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]
     ):
         # specify which websocket features are supported
         # these two are supported by default
@@ -183,6 +189,16 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             supported_features
                             + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
                         )
+
+        # Txout quotes (NUT-XX) exist in every unit a backend serves.
+        for unit_name in sorted({u.name for d in self.backends.values() for u in d}):
+            websocket_features[_SUPPORTED].append(
+                {
+                    _METHOD: TXOUT_METHOD,
+                    _UNIT: unit_name,
+                    _COMMANDS: [JSONRPCSubscriptionKinds.TXOUT_MINT_QUOTE.value],
+                }
+            )
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
@@ -222,7 +238,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return mint_features
 
     def add_cache_features(
-        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+        self, mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]]
     ):
         if settings.mint_redis_cache_enabled:
             cache_features: dict[str, list[dict[str, str]] | int] = {
@@ -238,6 +254,14 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     {
                         "method": "POST",
                         "path": "/v1/swap",
+                    },
+                    {
+                        "method": "POST",
+                        "path": "/v1/transaction",
+                    },
+                    {
+                        "method": "POST",
+                        "path": "/v1/mint/txout",
                     },
                 ]
             }
