@@ -33,8 +33,9 @@ def pre_v3_keyset_id():
     return st.one_of(keyset_id(), hex_string(16, 16).filter(lambda s: not is_bls_keyset(s)))
 
 def url_safe_text(min_len=1, max_len=20):
-    # Generates text that is safe for URLs (no control chars, no slashes, no #, no ?)
-    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x and "#" not in x and "?" not in x)
+    # Generates text that is safe for URLs (no control chars, no slashes, no #, no ?).
+    # "." and ".." are path segments the client normalizes away, so they never reach the route.
+    return st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp", "Cn")), min_size=min_len, max_size=max_len).filter(lambda x: "/" not in x and "\\" not in x and "#" not in x and "?" not in x and x not in (".", ".."))
 
 # Strategy for BlindedMessage
 blinded_message_strategy = st.builds(
