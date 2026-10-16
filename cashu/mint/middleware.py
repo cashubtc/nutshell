@@ -16,6 +16,8 @@ from starlette.middleware.base import (
 )
 from starlette.middleware.cors import CORSMiddleware
 
+from ..core.base import AuthProof
+from ..core.crypto.keys import is_bls_keyset
 from ..core.settings import settings
 from .limit import _rate_limit_exceeded_handler, limiter_global
 
@@ -75,6 +77,25 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def request_target(scope) -> str:
+    """The NUT-10 request target: the path relative to the mint URL, plus the query, as sent.
+
+    The ASGI root_path is the mint's own mount prefix; a proxy that strips its prefix leaves none.
+    """
+    raw_path = scope.get("raw_path")
+    # Some ASGI transports include the query in raw_path.
+    path = (
+        raw_path.split(b"?", 1)[0].decode("ascii")
+        if raw_path is not None
+        else scope["path"]
+    )
+    root = scope.get("root_path", "")
+    target = path[len(root) :] if root and path.startswith(root) else path
+    if scope["query_string"]:
+        target += "?" + scope["query_string"].decode("ascii")
+    return target
+
+
 class BlindAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -88,7 +109,23 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
             blind_auth_token = request.headers.get("blind-auth")
             if not blind_auth_token:
                 raise Exception("Missing blind auth token.")
-            async with auth_ledger.verify_blind_auth(blind_auth_token):
+            # NUT-22: a version 02 BAT signs the request it authorizes, so the
+            # verifier rebuilds the request transcript from these. The body is
+            # read only for version 02 tokens; Starlette caches the read for
+            # the downstream app.
+            target = request_target(request.scope)
+            body = b""
+            try:
+                if is_bls_keyset(AuthProof.from_base64(blind_auth_token).id):
+                    body = await request.body()
+            except Exception:
+                pass
+            async with auth_ledger.verify_blind_auth(
+                blind_auth_token,
+                method=request.method,
+                target=target,
+                body=body,
+            ):
                 return await call_next(request)
         else:
             return await call_next(request)

@@ -149,3 +149,6 @@ tor-data
 
 junit.xml
 googleapis/
+
+# written by tests/keycloak_data/docker-compose-restore.yml
+tests/keycloak_data/postgres_data/
