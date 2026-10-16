@@ -3,7 +3,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, Method, MintQuoteState, Unit
+from cashu.core.base import MeltQuoteState, Method, MintQuote, MintQuoteState, Unit
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -256,7 +256,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     assert mint_quote.privkey
     signature = nut20.sign_mint_quote_v3(
-        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
+        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey, 0
     )
     outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
@@ -828,7 +828,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote2.privkey
 
     # Each quote signs its own input digest over the shared batch transcript
-    batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
+    batch = [
+        (mint_quote1.quote, 64, mint_quote1.pubkey, 0),
+        (mint_quote2.quote, 32, mint_quote2.pubkey, 0),
+    ]
     sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey, mint_quote1.quote)
     sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey, mint_quote2.quote)
 
@@ -906,3 +909,45 @@ def test_format_limit():
     assert format_limit(1_500, "sat") == "1.5K sat"
     assert format_limit(1_000, "sat") == "1K sat"
     assert format_limit(500, "sat") == "500 sat"
+
+
+@pytest.mark.asyncio
+async def test_unknown_txout_quote_is_not_found(ledger: Ledger):
+    response = httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{'00' * 32}")
+    assert response.status_code == 400
+    assert response.json()["code"] == 20010
+    # Another method's quote is not a txout quote either.
+    bolt11 = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11", json={"amount": 8, "unit": "sat"}
+    ).json()["quote"]
+    response = httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{bolt11}")
+    assert response.status_code == 400
+    assert response.json()["code"] == 20010
+
+
+@pytest.mark.asyncio
+async def test_txout_quote_is_not_minted_at_the_bolt11_route(ledger: Ledger):
+    quote_id = "txout-" + "ab" * 16
+    await ledger.crud.store_mint_quote(
+        quote=MintQuote(
+            quote=quote_id,
+            method="txout",
+            request="",
+            checking_id=f"txout:{quote_id}",
+            unit="sat",
+            amount=8,
+            state=MintQuoteState.paid,
+            amount_paid=8,
+            amount_issued=0,
+            pubkey=nut20.generate_keypair()[1],
+        ),
+        db=ledger.db,
+    )
+    assert httpx.get(f"{BASE_URL}/v1/mint/quote/txout/{quote_id}").status_code == 200
+    # It redeems only at its own route or as a quote input (NUT-XX).
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/bolt11", json={"quote": quote_id, "outputs": []}
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == 20010
+    assert (await ledger.get_mint_quote(quote_id)).paid

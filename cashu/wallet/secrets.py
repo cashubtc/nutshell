@@ -26,12 +26,13 @@ from .protocols import SupportsDb, SupportsKeysets
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
 # NUT-13 derivation types. 0x00-0x03 are components of one proof allocation and
-# share the keyset's proof counter; 0x04 has its own quote counter.
+# share the keyset's proof counter; 0x04 and 0x05 share a per-mint quote counter.
 DERIVATION_TYPE_SECRET_KEY = 0x00
 DERIVATION_TYPE_BLINDING_FACTOR = 0x01
 DERIVATION_TYPE_NUMS_OFFSET = 0x02
 DERIVATION_TYPE_LEAF_KEY = 0x03
 DERIVATION_TYPE_QUOTE_LOCK = 0x04
+DERIVATION_TYPE_QUOTE_ID_PREIMAGE = 0x05
 
 
 class WalletSecrets(SupportsDb, SupportsKeysets):
@@ -214,17 +215,17 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         counter: int,
         scope: str,
         derivation_type: int,
-        order: int = SECP256K1_N,
+        order: Optional[int] = SECP256K1_N,
         suffix: bytes = b"",
     ) -> bytes:
         """Derive one V3 scalar by rejection sampling the framed V3 message.
 
         message_v3 = DST || u32_BE(len(scope)) || scope || u64_BE(counter)
                      || derivation_type || u32_BE(attempt) || type_suffix
-        The scope (a keyset id, or the mint identity pubkey for type 0x04) is the one
+        The scope (a keyset id, or the mint identity pubkey for types 0x04-0x05) is the one
         variable-length field, so it is framed; a type may then append its own
         suffix. V2 keeps its unframed message: reframing it would re-derive every
-        deployed secret.
+        deployed secret. With no order, the first digest is used as is.
         """
         if self.seed is None:
             raise RuntimeError("Seed not initialized yet.")
@@ -245,7 +246,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
                 self.seed, base + attempt_bytes + suffix, hashlib.sha256
             ).digest()
             x = int.from_bytes(digest, "big")
-            if x != 0 and x < order:
+            if order is None or (x != 0 and x < order):
                 return digest
         raise RuntimeError(f"V3 derivation failed for type {derivation_type}")
 
@@ -295,6 +296,16 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         """
         return SecpPrivateKey(
             self._derive_v3_scalar(counter, mint_pubkey, DERIVATION_TYPE_QUOTE_LOCK)
+        )
+
+    def derive_v3_quote_id_preimage(self, counter: int, mint_pubkey: str) -> bytes:
+        """Derive a mint quote id preimage (NUT-13 message type 0x05).
+
+        Same quote counter and scope as the 0x04 lock key. Any 32 bytes is valid,
+        so there is no rejection sampling.
+        """
+        return self._derive_v3_scalar(
+            counter, mint_pubkey, DERIVATION_TYPE_QUOTE_ID_PREIMAGE, order=None
         )
 
     async def _derive_secret_hmac_sha256_v3(

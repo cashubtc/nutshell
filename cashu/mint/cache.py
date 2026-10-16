@@ -1,4 +1,5 @@
 import functools
+import hashlib
 import json
 from typing import Any, Union
 
@@ -50,7 +51,9 @@ class RedisCache:
             @functools.wraps(func)
             async def wrapper(request: Request, payload: BaseModel):
                 logger.trace(f"cache wrapper on route {func.__name__}")
-                key = request.url.path + payload.model_dump_json()
+                key = hashlib.sha256(
+                    (request.url.path + payload.model_dump_json()).encode()
+                ).hexdigest()
                 logger.trace(f"KEY: {key}")
                 # Check if we have a value under this key
                 if await self.redis.exists(key):

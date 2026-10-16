@@ -814,7 +814,7 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
         outputs=outputs,
         quote_id=sat_mint_quote.quote,
         signature=nut20.sign_mint_quote_v3(
-            sat_mint_quote.quote, sat_mint_quote.amount, outputs, quote_privkey
+            sat_mint_quote.quote, sat_mint_quote.amount, outputs, quote_privkey, 0
         ),
     )
 

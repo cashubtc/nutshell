@@ -1,15 +1,6 @@
-"""Transaction transcript (NUT-10).
+"""Transaction transcript (NUT-10): one shared digest, one derived message per input.
 
-One shared digest, one derived message per input:
-transaction_digest = SHA256(TLV stream); each input carries
-one BIP-340 signature over its input digest,
-tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
-container record)). Containers: 0x01 proof input, 0x02 mint quote input,
-0x03 blinded message output, 0x04 melt quote output. Container types
-ascend (inputs before outputs by construction); elements keep request
-order within their type; field streams inside are ascending unique.
-Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the
-shared vectors.
+Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the shared vectors.
 """
 
 import hashlib
@@ -20,11 +11,16 @@ from .nutroot import minimal_be, tagged_hash, tlv_record
 
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
+QUOTE_ID_TAG = "Cashu_QuoteId"
+INPUT_QUOTE_ID_TAG = "Cashu_InputQuoteId"
+ROTATION_QUOTE_ID_TAG = "Cashu_RotationQuoteId"
 
-_CONTAINER_PROOF_INPUT = 0x01
-_CONTAINER_MINT_QUOTE_INPUT = 0x02
-_CONTAINER_BLINDED_OUTPUT = 0x03
-_CONTAINER_MELT_QUOTE_OUTPUT = 0x04
+# The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+_CONTAINER_PROOF_INPUT = 0x11
+_CONTAINER_MINT_QUOTE_INPUT = 0x12
+_CONTAINER_BLINDED_OUTPUT = 0x21
+_CONTAINER_MELT_QUOTE_OUTPUT = 0x22
+_CONTAINER_MINT_QUOTE_OUTPUT = 0x23
 
 
 @dataclass
@@ -39,6 +35,9 @@ class TranscriptProofInput:
 class TranscriptQuote:
     amount: int
     quote_id: str
+    pubkey: Optional[bytes] = None  # 33-byte lock key; required on a mint quote input
+    # The quote's amount_issued before this transaction; required on a mint quote input.
+    issued: Optional[int] = None
 
 
 @dataclass
@@ -49,17 +48,42 @@ class TranscriptBlindedOutput:
 
 
 @dataclass
+class TranscriptMintQuoteOutput:
+    pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
+    # The rotation quote's is rotation_quote_id(melt quote id); None binds a fixed
+    # txout quote's id to the inputs.
+    quote_id: Optional[str]
+    amount: Optional[int] = None  # None on the rotation quote
+
+
+@dataclass
 class TransactionShape:
     proof_inputs: Optional[List[TranscriptProofInput]] = None
     mint_quote_inputs: Optional[List[TranscriptQuote]] = None
     blinded_outputs: Optional[List[TranscriptBlindedOutput]] = None
     melt_quote_outputs: Optional[List[TranscriptQuote]] = None
+    mint_quote_outputs: Optional[List[TranscriptMintQuoteOutput]] = None
 
 
 def _amount_record(amount: int) -> bytes:
     if amount < 0:
         raise ValueError("Transcript amount must be non-negative")
     return tlv_record(0x01, minimal_be(amount))
+
+
+def _mint_quote_output_container(c: TranscriptMintQuoteOutput, quote_id: str) -> bytes:
+    if len(c.pubkey) != 33:
+        raise ValueError("Transcript mint quote output lock key must be 33 bytes")
+    if not quote_id:
+        raise ValueError("Transcript quote id must be non-empty")
+    if c.amount is not None and c.amount <= 0:
+        raise ValueError("Transcript mint quote output amount must be positive")
+    return tlv_record(
+        _CONTAINER_MINT_QUOTE_OUTPUT,
+        (_amount_record(c.amount) if c.amount is not None else b"")
+        + tlv_record(0x02, c.pubkey)
+        + tlv_record(0x03, quote_id.encode("utf-8")),
+    )
 
 
 def _proof_input_container(p: TranscriptProofInput) -> bytes:
@@ -76,13 +100,29 @@ def _proof_input_container(p: TranscriptProofInput) -> bytes:
     )
 
 
-def _quote_container(container_type: int, q: TranscriptQuote) -> bytes:
+def _quote_fields(q: TranscriptQuote) -> bytes:
+    """Fields 01 amount and 02 quote id, shared by the mint quote input and melt quote output."""
     if not q.quote_id:
         raise ValueError("Transcript quote id must be non-empty")
+    return _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8"))
+
+
+def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
+    # The container commits the lock key, so an offline co-signer can tell which key the input needs.
+    if q.pubkey is None or len(q.pubkey) != 33:
+        raise ValueError("Transcript mint quote input needs its 33-byte lock key")
+    if q.issued is None:
+        raise ValueError("Transcript mint quote input needs the quote's amount_issued")
     return tlv_record(
-        container_type,
-        _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8")),
+        _CONTAINER_MINT_QUOTE_INPUT,
+        _quote_fields(q)
+        + tlv_record(0x03, q.pubkey)
+        + tlv_record(0x04, minimal_be(q.issued)),
     )
+
+
+def _melt_quote_output_container(q: TranscriptQuote) -> bytes:
+    return tlv_record(_CONTAINER_MELT_QUOTE_OUTPUT, _quote_fields(q))
 
 
 def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
@@ -90,7 +130,7 @@ def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
         _CONTAINER_BLINDED_OUTPUT,
         _amount_record(o.amount)
         + tlv_record(0x02, o.keyset_id)
-        + tlv_record(0x03, o.B_),
+        + tlv_record(0x03, hashlib.sha256(o.B_).digest()),
     )
 
 
@@ -100,10 +140,13 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
     mint_quotes = tx.mint_quote_inputs or []
     blinded = tx.blinded_outputs or []
     melt_quotes = tx.melt_quote_outputs or []
+    quote_outputs = tx.mint_quote_outputs or []
     if not proofs and not mint_quotes:
         raise ValueError("Transaction requires at least one input")
-    if not blinded and not melt_quotes:
+    if not blinded and not melt_quotes and not quote_outputs:
         raise ValueError("Transaction requires at least one output")
+    if sum(c.amount is None for c in quote_outputs) > 1:
+        raise ValueError("Transaction allows at most one rotation quote")
     # NUT-10: the same proof or quote twice would sign one input digest for two inputs.
     if len({p.Y for p in proofs}) != len(proofs):
         raise ValueError("Transaction repeats a proof input")
@@ -111,9 +154,13 @@ def build_transaction_transcript(tx: TransactionShape) -> bytes:
         raise ValueError("Transaction repeats a mint quote input")
     return (
         b"".join(_proof_input_container(p) for p in proofs)
-        + b"".join(_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q) for q in mint_quotes)
+        + b"".join(_mint_quote_input_container(q) for q in mint_quotes)
         + b"".join(_blinded_output_container(o) for o in blinded)
-        + b"".join(_quote_container(_CONTAINER_MELT_QUOTE_OUTPUT, q) for q in melt_quotes)
+        + b"".join(_melt_quote_output_container(q) for q in melt_quotes)
+        + b"".join(
+            _mint_quote_output_container(c, i)
+            for c, i in zip(quote_outputs, mint_quote_ids(tx))
+        )
     )
 
 
@@ -133,10 +180,13 @@ def input_digest(transaction_digest_: bytes, container: bytes) -> bytes:
 
 @dataclass
 class InputContext:
-    """One input's signing context: its container record and the digest it signs."""
+    """One input's signing context: its container record, the digest it signs,
+    and each output's lock key, None for an output that is not a fixed txout
+    quote (what a template leaf checks)."""
 
     container: bytes
     digest: bytes
+    outputs: Optional[List[Optional[bytes]]] = None
 
 
 def transaction_inputs(
@@ -147,15 +197,22 @@ def transaction_inputs(
     The transcript builder has already refused duplicates, so the keys are unique.
     """
     digest = transaction_digest(tx)
+    unlocked = len(tx.blinded_outputs or []) + len(tx.melt_quote_outputs or [])
+    outputs: List[Optional[bytes]] = [None] * unlocked
+    outputs += [
+        c.pubkey if c.amount is not None else None for c in (tx.mint_quote_outputs or [])
+    ]
     proofs = {
-        p.Y: InputContext(container=c, digest=input_digest(digest, c))
+        p.Y: InputContext(container=c, digest=input_digest(digest, c), outputs=outputs)
         for p in (tx.proof_inputs or [])
         for c in [_proof_input_container(p)]
     }
     quotes = {
-        q.quote_id: InputContext(container=c, digest=input_digest(digest, c))
+        q.quote_id: InputContext(
+            container=c, digest=input_digest(digest, c), outputs=outputs
+        )
         for q in (tx.mint_quote_inputs or [])
-        for c in [_quote_container(_CONTAINER_MINT_QUOTE_INPUT, q)]
+        for c in [_mint_quote_input_container(q)]
     }
     return digest, proofs, quotes
 
@@ -171,3 +228,40 @@ def spend_commitment(Y: bytes, input_digest_: bytes, witness: str) -> bytes:
         input_digest_,
         hashlib.sha256(witness.encode("utf-8")).digest(),
     )
+
+
+def derived_quote_id(id_preimage: bytes) -> str:
+    """A derived quote id (NUT-04): hex(tagged_hash("Cashu_QuoteId", id_preimage))."""
+    if len(id_preimage) != 32:
+        raise ValueError("Quote id preimage must be 32 bytes")
+    return tagged_hash(QUOTE_ID_TAG, id_preimage).hex()
+
+
+def rotation_quote_id(melt_quote_id: str) -> str:
+    """The rotation quote's id (NUT-XX): hex(tagged_hash("Cashu_RotationQuoteId", melt_quote_id))."""
+    if not melt_quote_id:
+        raise ValueError("Rotation quote id needs the melt quote id")
+    return tagged_hash(ROTATION_QUOTE_ID_TAG, melt_quote_id.encode("utf-8")).hex()
+
+
+def input_bound_quote_id(tx: TransactionShape, k: int) -> str:
+    """The id a fixed txout quote without id_preimage takes (NUT-XX).
+
+    hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k))), k the
+    output's position among the mint quote outputs. Only a transaction spending exactly
+    these inputs creates it.
+    """
+    section = b"".join(
+        _proof_input_container(p) for p in tx.proof_inputs or []
+    ) + b"".join(_mint_quote_input_container(q) for q in tx.mint_quote_inputs or [])
+    return tagged_hash(
+        INPUT_QUOTE_ID_TAG, hashlib.sha256(section).digest(), k.to_bytes(4, "big")
+    ).hex()
+
+
+def mint_quote_ids(tx: TransactionShape) -> List[str]:
+    """Each mint quote output's id, in request order."""
+    return [
+        c.quote_id if c.quote_id is not None else input_bound_quote_id(tx, k)
+        for k, c in enumerate(tx.mint_quote_outputs or [])
+    ]
