@@ -168,6 +168,16 @@ class MintLimits(MintSettings):
         title="Maximum request length",
         description="Maximum length of REST API request arrays.",
     )
+    mint_quote_lookup_max_pubkeys: int = Field(
+        default=50,
+        gt=0,
+        description="Maximum number of public keys in a mint quote lookup request.",
+    )
+    mint_quote_lookup_max_page_size: int = Field(
+        default=100,
+        gt=0,
+        description="Maximum number of quotes in a mint quote lookup response.",
+    )
 
     mint_peg_out_only: bool = Field(  # deprecated for mint_bolt11_disable_mint
         default=False,
