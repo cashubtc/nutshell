@@ -23,6 +23,7 @@ from cashu.mint import migrations as mint_migrations
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
 from tests.mint.spending_conditions_test_helpers import proof, secret_str
 
 GENERATOR = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
@@ -331,6 +332,7 @@ async def prepare_swap(
     wallet1: Wallet, ledger: Ledger
 ) -> tuple[list[Proof], list[BlindedMessage]]:
     quote = await wallet1.request_mint(64)
+    await pay_if_regtest(quote.request)
     await ledger.get_mint_quote(quote.quote)
     await wallet1.mint(64, quote_id=quote.quote)
     pubkey = await wallet1.create_p2pk_pubkey()
