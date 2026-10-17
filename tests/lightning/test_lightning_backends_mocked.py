@@ -171,6 +171,20 @@ def test_strike_fee_int_rejects_unexpected_currency():
         wallet.fee_int(cast(Any, quote), Unit.sat)
 
 
+@pytest.mark.parametrize(
+    ("fee", "currency", "unit", "expected"),
+    [
+        ("0.00000029", "BTC", Unit.sat, 29),
+        ("0.00000029", "BTC", Unit.msat, 29000),
+        ("0.29", "USD", Unit.usd, 29),
+    ],
+)
+def test_strike_fee_int_rounds(fee, currency, unit, expected):
+    wallet = object.__new__(StrikeWallet)
+    quote = SimpleNamespace(totalFee=SimpleNamespace(amount=fee, currency=currency))
+    assert wallet.fee_int(cast(Any, quote), unit) == expected
+
+
 @pytest.mark.asyncio
 async def test_clnrest_create_invoice_description_hash_unsupported():
     wallet = object.__new__(CLNRestWallet)

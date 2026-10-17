@@ -109,15 +109,15 @@ class StrikeWallet(LightningBackend):
         fee: int = 0
         if strike_quote.totalFee.currency == self.currency_map[Unit.sat]:
             if unit == Unit.sat:
-                fee = int(float(fee_str) * 1e8)
+                fee = int(round(float(fee_str) * 1e8))
             elif unit == Unit.msat:
-                fee = int(float(fee_str) * 1e11)
+                fee = int(round(float(fee_str) * 1e11))
         elif strike_quote.totalFee.currency in [
             self.currency_map[Unit.usd],
             self.currency_map[Unit.eur],
             USDT,
         ]:
-            fee = int(float(fee_str) * 100)
+            fee = int(round(float(fee_str) * 100))
         else:
             raise Exception(
                 f"Unexpected currency {strike_quote.totalFee.currency} in fee"
