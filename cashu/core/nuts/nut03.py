@@ -1,4 +1,4 @@
-"""Additive unpoisonable V2 swap output derivation."""
+"""Additive mint-rerandomized V2 swap output derivation."""
 
 from hashlib import sha256
 from typing import List
@@ -9,7 +9,7 @@ from ..crypto.secp import PrivateKey, PublicKey
 SECP256K1_ORDER = int(
     "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16
 )
-TWEAK_TAG = b"Cashu_UnpoisonableTweak_secp256k1_v1"
+TWEAK_TAG = b"Cashu_OutputRerandomization_secp256k1_v1"
 
 
 class PointAtInfinity(ValueError):

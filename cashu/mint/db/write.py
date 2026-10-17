@@ -174,7 +174,7 @@ class DbWriteHelper:
         keyset_fees: Optional[Dict[str, int]] = None,
         conn: Optional[Connection] = None,
         emit_events: bool = True,
-        unpoisonable_r: Optional[str] = None,
+        rerandomization_r: Optional[str] = None,
     ) -> None:
         """Atomically convert pending proofs into spent proofs.
 
@@ -191,7 +191,7 @@ class DbWriteHelper:
                 keyset_fees=keyset_fees,
                 conn=conn,
                 emit_events=emit_events,
-                unpoisonable_r=unpoisonable_r,
+                rerandomization_r=rerandomization_r,
             )
 
     async def _validate_proofs_pending(
@@ -653,7 +653,7 @@ class DbWriteHelper:
         keyset_fees: Optional[Dict[str, int]] = None,
         conn: Optional[Connection] = None,
         emit_events: bool = True,
-        unpoisonable_r: Optional[str] = None,
+        rerandomization_r: Optional[str] = None,
     ) -> None:
         """Invalidates proofs (spends them) and updates keyset balances and fees.
 
@@ -691,7 +691,7 @@ class DbWriteHelper:
                     db=self.db,
                     quote_id=quote_id,
                     conn=conn,
-                    unpoisonable_r=unpoisonable_r,
+                    rerandomization_r=rerandomization_r,
                 )
                 if emit_events:
                     await self.events.submit(

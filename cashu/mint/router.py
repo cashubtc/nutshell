@@ -111,9 +111,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -632,11 +630,11 @@ async def swap(
     logger.trace(f"> POST /v1/swap: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
-    if payload.unpoisonable:
+    if payload.rerandomize:
         signatures, randomness = await ledger.swap(
-            proofs=payload.inputs, outputs=payload.outputs, unpoisonable=True
+            proofs=payload.inputs, outputs=payload.outputs, rerandomize=True
         )
-        return PostSwapResponse(signatures=signatures, unpoisonable_r=randomness)
+        return PostSwapResponse(signatures=signatures, rerandomization_r=randomness)
     signatures = await ledger.swap(proofs=payload.inputs, outputs=payload.outputs)
     return PostSwapResponse(signatures=signatures)
 

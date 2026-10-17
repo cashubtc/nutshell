@@ -29,7 +29,7 @@ class LedgerCrud(ABC):
     to use their own database.
     """
 
-    def supports_unpoisonable_swaps(self) -> bool:
+    def supports_output_rerandomization(self) -> bool:
         """Declare atomic recovery writes and durable get_proofs_used recovery reads.
 
         Override only when invalidate_proof_with_r persists R with the spent proof
@@ -44,10 +44,12 @@ class LedgerCrud(ABC):
         proof: Proof,
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-        unpoisonable_r: Optional[str] = None,
+        rerandomization_r: Optional[str] = None,
     ) -> None:
-        if unpoisonable_r is not None:
-            raise NotImplementedError("backend does not support unpoisonable recovery")
+        if rerandomization_r is not None:
+            raise NotImplementedError(
+                "backend does not support output rerandomization recovery"
+            )
         await self.invalidate_proof(db=db, proof=proof, quote_id=quote_id, conn=conn)
 
     @abstractmethod
@@ -375,7 +377,7 @@ class LedgerCrudSqlite(LedgerCrud):
         LedgerCrud (ABC): Abstract base class for LedgerCrud.
     """
 
-    def supports_unpoisonable_swaps(self) -> bool:
+    def supports_output_rerandomization(self) -> bool:
         return True
 
     async def store_blinded_message(
@@ -548,10 +550,10 @@ class LedgerCrudSqlite(LedgerCrud):
         proof: Proof,
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-        unpoisonable_r: Optional[str] = None,
+        rerandomization_r: Optional[str] = None,
     ) -> None:
-        recovery_column = ", unpoisonable_r" if unpoisonable_r is not None else ""
-        recovery_value = ", :unpoisonable_r" if unpoisonable_r is not None else ""
+        recovery_column = ", rerandomization_r" if rerandomization_r is not None else ""
+        recovery_value = ", :rerandomization_r" if rerandomization_r is not None else ""
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("proofs_used")}
@@ -567,7 +569,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "witness": proof.witness,
                 "created": db.to_timestamp(db.timestamp_now_str()),
                 "melt_quote": quote_id,
-                "unpoisonable_r": unpoisonable_r,
+                "rerandomization_r": rerandomization_r,
             },
         )
 

@@ -1576,7 +1576,7 @@ class Ledger(
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
-        unpoisonable: bool = False,
+        rerandomize: bool = False,
     ):
         """Consumes proofs and prepares new promises based on the amount swap. Used for swapping tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
@@ -1585,19 +1585,19 @@ class Ledger(
             proofs (List[Proof]): Proofs to be invalidated for the swap.
             outputs (List[BlindedMessage]): New outputs that should be signed in return.
             keyset (Optional[MintKeyset], optional): Keyset to use. Uses default keyset if not given. Defaults to None.
-            unpoisonable (bool): Sign tweaked outputs and disclose recovery randomness after commit.
+            rerandomize (bool): Sign tweaked outputs and disclose recovery randomness after commit.
 
         Raises:
             Exception: Validation of proofs or outputs failed
 
         Returns:
-            Ordinary swaps return promises; unpoisonable swaps return promises and R.
+            Ordinary swaps return promises; rerandomized swaps return promises and R.
         """
         logger.trace("swap called")
         await self._verify_transaction(
             proofs=proofs,
             outputs=outputs,
-            unpoisonable=unpoisonable,
+            rerandomize=rerandomize,
         )
         await self.db_write._verify_spent_proofs_and_set_pending(
             proofs, keysets=self.keysets
@@ -1614,8 +1614,8 @@ class Ledger(
                 keyset_id: self.get_fees_for_proofs(keyset_proofs)
                 for keyset_id, keyset_proofs in proofs_by_keyset.items()
             }
-            for _ in range(16 if unpoisonable else 1):
-                randomness = secrets.token_bytes(32) if unpoisonable else None
+            for _ in range(16 if rerandomize else 1):
+                randomness = secrets.token_bytes(32) if rerandomize else None
                 try:
                     execution_outputs = (
                         tweak_outputs(outputs, randomness)
@@ -1636,7 +1636,7 @@ class Ledger(
                             )
                         ],
                     ) as conn:
-                        if unpoisonable:
+                        if rerandomize:
                             await self._verify_outputs(execution_outputs, conn=conn)
                         try:
                             await self._store_blinded_messages(
@@ -1659,7 +1659,7 @@ class Ledger(
                                 and str(original)
                                 == "UNIQUE constraint failed: promises.b_"
                             )
-                            if unpoisonable and duplicate_point:
+                            if rerandomize and duplicate_point:
                                 raise OutputsAlreadySignedError() from exc
                             raise
 
@@ -1668,8 +1668,8 @@ class Ledger(
                             keysets=self.keysets,
                             keyset_fees=keyset_fees,
                             conn=conn,
-                            emit_events=not unpoisonable,
-                            unpoisonable_r=(
+                            emit_events=not rerandomize,
+                            rerandomization_r=(
                                 randomness.hex() if randomness is not None else None
                             ),
                         )
@@ -1677,9 +1677,9 @@ class Ledger(
                             execution_outputs, conn
                         )
                 except (OutputsAlreadySignedError, OutputsArePendingError) as exc:
-                    if not unpoisonable:
+                    if not rerandomize:
                         raise
-                    logger.debug(f"Retrying occupied unpoisonable output: {exc}")
+                    logger.debug(f"Retrying occupied rerandomized output: {exc}")
                     continue
                 finalized = True
                 if randomness is not None:
@@ -1689,13 +1689,13 @@ class Ledger(
                                 Y=proof.Y,
                                 state=ProofSpentState.spent,
                                 witness=proof.witness,
-                                unpoisonable_r=randomness.hex(),
+                                rerandomization_r=randomness.hex(),
                             )
                         )
                     return promises, randomness.hex()
                 return promises
 
-            raise TransactionError("could not reserve unpoisonable outputs")
+            raise TransactionError("could not reserve rerandomized outputs")
         except Exception as e:
             logger.trace(f"swap failed: {e}")
             raise e

@@ -19,10 +19,10 @@ def sigall_message_to_sign(proofs: List[Proof], outputs: List[BlindedMessage]) -
     return message
 
 
-def unpoisonable_sigall_digest(
+def rerandomized_sigall_digest(
     proofs: List[Proof], outputs: List[BlindedMessage]
 ) -> bytes:
-    """Tagged digest for V2 unpoisonable swaps; ordinary SIG_ALL is unchanged."""
+    """Tagged digest for V2 mint-rerandomized swaps; ordinary SIG_ALL is unchanged."""
     message = bytearray()
 
     def frame(data: bytes) -> None:
@@ -37,5 +37,5 @@ def unpoisonable_sigall_digest(
         frame(int_to_minimal_bytes(output.amount))
         frame(bytes.fromhex(output.B_))
 
-    tag_hash = sha256(b"Cashu_SigAllUnpoisonable_v1").digest()
+    tag_hash = sha256(b"Cashu_SigAllRerandomized_v1").digest()
     return sha256(tag_hash + tag_hash + message).digest()

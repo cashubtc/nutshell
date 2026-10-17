@@ -16,7 +16,7 @@ from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import TransactionError
 from cashu.core.migrations import migrate_databases
 from cashu.core.nuts.nut03 import derive_tweak, tweak_outputs
-from cashu.core.nuts.nut11 import sigall_message_to_sign, unpoisonable_sigall_digest
+from cashu.core.nuts.nut11 import rerandomized_sigall_digest, sigall_message_to_sign
 from cashu.core.p2pk import SigFlags, schnorr_sign
 from cashu.core.secret import SecretKind
 from cashu.mint import migrations as mint_migrations
@@ -43,7 +43,7 @@ async def test_shared_writer_supports_auth_schema(tmp_path):
     spent = Proof(id=ledger.keyset.id, amount=1, secret="test", C=GENERATOR)
     await ledger.crud.invalidate_proof_with_r(db=db, proof=spent)
     rows = await ledger.crud.get_proofs_used(db=db, Ys=[spent.Y])
-    assert len(rows) == 1 and rows[0].unpoisonable_r is None
+    assert len(rows) == 1 and rows[0].rerandomization_r is None
     await db.engine.dispose()
 
 
@@ -55,14 +55,14 @@ async def test_legacy_crud_defaults_reject_r_without_calling_writer():
     from cashu.mint.crud import LedgerCrud
 
     legacy = SimpleNamespace(invalidate_proof=AsyncMock())
-    assert not LedgerCrud.supports_unpoisonable_swaps(legacy)
+    assert not LedgerCrud.supports_output_rerandomization(legacy)
     await LedgerCrud.invalidate_proof_with_r(legacy, db=None, proof=None)
     legacy.invalidate_proof.assert_awaited_once_with(
         db=None, proof=None, quote_id=None, conn=None
     )
     with pytest.raises(NotImplementedError):
         await LedgerCrud.invalidate_proof_with_r(
-            legacy, db=None, proof=None, unpoisonable_r="42" * 32
+            legacy, db=None, proof=None, rerandomization_r="42" * 32
         )
     assert legacy.invalidate_proof.await_count == 1
 
@@ -73,16 +73,16 @@ def test_absent_recovery_field_is_never_serialized():
 
     for state in ProofSpentState:
         value = ProofState(Y=GENERATOR, state=state)
-        assert "unpoisonable_r" not in value.model_dump()
+        assert "rerandomization_r" not in value.model_dump()
         assert (
-            "unpoisonable_r"
+            "rerandomization_r"
             not in PostCheckStateResponse(states=[value]).model_dump_json()
         )
-    assert "unpoisonable_r" not in PostSwapResponse(signatures=[]).model_dump_json()
+    assert "rerandomization_r" not in PostSwapResponse(signatures=[]).model_dump_json()
 
 
 @pytest.mark.asyncio
-async def test_unpoisonable_insert_conflict_retries(wallet1, ledger, monkeypatch):
+async def test_rerandomized_insert_conflict_retries(wallet1, ledger, monkeypatch):
     locked, outputs = await prepare_swap(wallet1, ledger)
     first, second = bytes([0x42]) * 32, bytes([0x43]) * 32
     await ledger._store_blinded_messages(tweak_outputs(outputs, first))
@@ -93,7 +93,7 @@ async def test_unpoisonable_insert_conflict_retries(wallet1, ledger, monkeypatch
         return []
 
     monkeypatch.setattr(ledger, "_check_outputs_pending_or_issued_before", no_precheck)
-    _, randomness = await ledger.swap(proofs=locked, outputs=outputs, unpoisonable=True)
+    _, randomness = await ledger.swap(proofs=locked, outputs=outputs, rerandomize=True)
     assert randomness == second.hex()
 
 
@@ -115,33 +115,33 @@ async def test_non_collision_integrity_failure_is_not_retried(
 
     monkeypatch.setattr(ledger, "_store_blinded_messages", invalid_insert)
     with pytest.raises(IntegrityError):
-        await ledger.swap(proofs=locked, outputs=outputs, unpoisonable=True)
+        await ledger.swap(proofs=locked, outputs=outputs, rerandomize=True)
     assert calls == 1
     states = await ledger.db_read.get_proofs_states([p.Y for p in locked])
-    assert all(state.unspent and state.unpoisonable_r is None for state in states)
+    assert all(state.unspent and state.rerandomization_r is None for state in states)
 
 
 @pytest_asyncio.fixture
 async def wallet1(ledger: Ledger, tmp_path) -> Wallet:
     wallet = await Wallet.with_db(
-        url=SERVER_ENDPOINT, db=str(tmp_path / "wallet"), name="unpoisonable-wallet"
+        url=SERVER_ENDPOINT, db=str(tmp_path / "wallet"), name="rerandomized-wallet"
     )
     await wallet.load_mint()
     return wallet
 
 
-def test_unpoisonable_vectors_and_domains():
+def test_rerandomized_vectors_and_domains():
     randomness = bytes([0x42]) * 32
     assert (
         derive_tweak(randomness).hex()
-        == "a8295baeabbf25970d1ff9e17f2a6148f41eac602eae3fb6299d1a4973d37b90"
+        == "ea8bfdd0711f5a0cdd1377930ed729ca779722a8a5f97156242fcef09965eeb5"
     )
     output = BlindedMessage(id="ks", amount=1, B_=GENERATOR)
-    tag = sha256(b"Cashu_SigAllUnpoisonable_v1").digest()
-    digest = unpoisonable_sigall_digest([], [output])
+    tag = sha256(b"Cashu_SigAllRerandomized_v1").digest()
+    digest = rerandomized_sigall_digest([], [output])
     assert (
         digest.hex()
-        == "5324c9b2ad78f0ccd53fc11722c9c30ef6e60f1e166e9a8e8bd20350e0ac9ea8"
+        == "2e96fda9957222af5e1a8e8c581ab12ed8b5180108a554bdb934d661d9bc2c71"
     )
     assert (
         digest
@@ -157,7 +157,7 @@ def test_unpoisonable_vectors_and_domains():
     assert tweaked.amount == output.amount
 
 
-def test_unpoisonable_sigall_excludes_ordinary_signatures():
+def test_rerandomized_sigall_excludes_ordinary_signatures():
     signer = PrivateKey()
     raw_secret = secret_str(
         kind=SecretKind.P2PK,
@@ -179,21 +179,21 @@ def test_unpoisonable_sigall_excludes_ordinary_signatures():
     conditions = LedgerSpendingConditions()
     with pytest.raises(TransactionError, match="signature threshold not met"):
         conditions._verify_input_output_spending_conditions(
-            inputs, outputs, unpoisonable=True
+            inputs, outputs, rerandomize=True
         )
     inputs[0].witness = P2PKWitness(
         signatures=[
-            signer.sign_schnorr(unpoisonable_sigall_digest(inputs, outputs), None).hex()
+            signer.sign_schnorr(rerandomized_sigall_digest(inputs, outputs), None).hex()
         ]
     ).model_dump_json()
     assert conditions._verify_input_output_spending_conditions(
-        inputs, outputs, unpoisonable=True
+        inputs, outputs, rerandomize=True
     )
     with pytest.raises(TransactionError, match="signature threshold not met"):
         conditions._verify_input_output_spending_conditions(inputs, outputs)
 
 
-def test_unpoisonable_htlc_receiver_and_refund_paths():
+def test_rerandomized_htlc_receiver_and_refund_paths():
     from cashu.mint.conditions import LedgerSpendingConditions
 
     receiver, refund = PrivateKey(), PrivateKey()
@@ -211,7 +211,7 @@ def test_unpoisonable_htlc_receiver_and_refund_paths():
     inputs = [proof(raw_secret)]
     inputs[0].C = GENERATOR
     outputs = [BlindedMessage(id="ks", amount=1, B_=GENERATOR)]
-    digest = unpoisonable_sigall_digest(inputs, outputs)
+    digest = rerandomized_sigall_digest(inputs, outputs)
     conditions = LedgerSpendingConditions()
     for signer, presented_preimage in [(receiver, preimage.hex()), (refund, "")]:
         inputs[0].witness = HTLCWitness(
@@ -219,7 +219,7 @@ def test_unpoisonable_htlc_receiver_and_refund_paths():
             signatures=[signer.sign_schnorr(digest, None).hex()],
         ).model_dump_json()
         assert conditions._verify_input_output_spending_conditions(
-            inputs, outputs, unpoisonable=True
+            inputs, outputs, rerandomize=True
         )
 
 
@@ -229,7 +229,7 @@ def test_sigall_required_and_domains_cannot_mix_for_multisig():
     cond = LedgerSpendingConditions()
     with pytest.raises(TransactionError, match="requires SIG_ALL"):
         cond._verify_input_output_spending_conditions(
-            [proof("ordinary")], [], unpoisonable=True
+            [proof("ordinary")], [], rerandomize=True
         )
     a, b = PrivateKey(), PrivateKey()
     inputs = [
@@ -245,27 +245,25 @@ def test_sigall_required_and_domains_cannot_mix_for_multisig():
     inputs[0].C = GENERATOR
     outputs = [BlindedMessage(id="ks", amount=1, B_=GENERATOR)]
     ordinary = schnorr_sign(sigall_message_to_sign(inputs, outputs).encode(), a).hex()
-    tagged = b.sign_schnorr(unpoisonable_sigall_digest(inputs, outputs), None).hex()
+    tagged = b.sign_schnorr(rerandomized_sigall_digest(inputs, outputs), None).hex()
     inputs[0].witness = P2PKWitness(signatures=[ordinary, tagged]).model_dump_json()
     with pytest.raises(TransactionError, match="signature threshold not met"):
-        cond._verify_input_output_spending_conditions(
-            inputs, outputs, unpoisonable=True
-        )
+        cond._verify_input_output_spending_conditions(inputs, outputs, rerandomize=True)
     inputs[0].witness = P2PKWitness(
         signatures=[
-            a.sign_schnorr(unpoisonable_sigall_digest(inputs, outputs), None).hex(),
+            a.sign_schnorr(rerandomized_sigall_digest(inputs, outputs), None).hex(),
             tagged,
         ]
     ).model_dump_json()
     assert cond._verify_input_output_spending_conditions(
-        inputs, outputs, unpoisonable=True
+        inputs, outputs, rerandomize=True
     )
 
 
 @pytest.mark.asyncio
 async def test_capability_follows_crud(ledger, monkeypatch):
-    assert ledger.mint_info.nuts[3] == {"unpoisonable": True}
-    monkeypatch.setattr(ledger.crud, "supports_unpoisonable_swaps", lambda: False)
+    assert ledger.mint_info.nuts[3] == {"rerandomize": True}
+    monkeypatch.setattr(ledger.crud, "supports_output_rerandomization", lambda: False)
     assert 3 not in ledger.mint_info.nuts
 
 
@@ -280,7 +278,7 @@ async def test_infinity_exhaustion_releases_inputs(wallet1, ledger, monkeypatch)
     locked[0].witness = P2PKWitness(
         signatures=[
             wallet1.private_key.sign_schnorr(
-                unpoisonable_sigall_digest(locked, outputs), None
+                rerandomized_sigall_digest(locked, outputs), None
             ).hex()
         ]
     ).model_dump_json()
@@ -293,14 +291,14 @@ async def test_infinity_exhaustion_releases_inputs(wallet1, ledger, monkeypatch)
 
     monkeypatch.setattr("cashu.mint.ledger.secrets.token_bytes", random)
     with pytest.raises(TransactionError, match="could not reserve"):
-        await ledger.swap(proofs=locked, outputs=outputs, unpoisonable=True)
+        await ledger.swap(proofs=locked, outputs=outputs, rerandomize=True)
     assert calls == 16
     states = await ledger.db_read.get_proofs_states([p.Y for p in locked])
-    assert all(s.unspent and s.unpoisonable_r is None for s in states)
+    assert all(s.unspent and s.rerandomization_r is None for s in states)
 
 
 @pytest.mark.asyncio
-async def test_unpoisonable_swap_commits_recovery_data(
+async def test_rerandomized_swap_commits_recovery_data(
     wallet1: Wallet, ledger: Ledger, monkeypatch
 ):
     locked, outputs = await prepare_swap(wallet1, ledger)
@@ -308,19 +306,19 @@ async def test_unpoisonable_swap_commits_recovery_data(
     original_submit = ledger.events.submit
 
     async def observe(event):
-        if isinstance(event, ProofState) and event.unpoisonable_r is not None:
+        if isinstance(event, ProofState) and event.rerandomization_r is not None:
             persisted = await ledger.db_read.get_proofs_states([event.Y])
-            assert persisted[0].unpoisonable_r == event.unpoisonable_r
+            assert persisted[0].rerandomization_r == event.rerandomization_r
             committed_events.append(event)
         await original_submit(event)
 
     monkeypatch.setattr(ledger.events, "submit", observe)
-    signatures, r = await ledger.swap(proofs=locked, outputs=outputs, unpoisonable=True)
+    signatures, r = await ledger.swap(proofs=locked, outputs=outputs, rerandomize=True)
     assert len(r) == 64
     assert len(committed_events) == len(locked)
     states = await ledger.db_read.get_proofs_states([p.Y for p in locked])
     assert all(
-        state.state == ProofSpentState.spent and state.unpoisonable_r == r
+        state.state == ProofSpentState.spent and state.rerandomization_r == r
         for state in states
     )
     tweaked = tweak_outputs(outputs, bytes.fromhex(r))
@@ -342,14 +340,14 @@ async def prepare_swap(
     outputs, _ = wallet1._construct_outputs([32], secrets, blindings)
 
     signature = wallet1.private_key.sign_schnorr(
-        unpoisonable_sigall_digest(locked, outputs), None
+        rerandomized_sigall_digest(locked, outputs), None
     ).hex()
     locked[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
     return locked, outputs
 
 
 @pytest.mark.asyncio
-async def test_unpoisonable_signing_failure_rolls_back(
+async def test_rerandomized_signing_failure_rolls_back(
     wallet1: Wallet, ledger: Ledger, monkeypatch
 ):
     locked, outputs = await prepare_swap(wallet1, ledger)
@@ -361,11 +359,11 @@ async def test_unpoisonable_signing_failure_rolls_back(
 
     monkeypatch.setattr(ledger, "_sign_blinded_messages", fail_signing)
     with pytest.raises(RuntimeError, match="test signing failure"):
-        await ledger.swap(proofs=locked, outputs=outputs, unpoisonable=True)
+        await ledger.swap(proofs=locked, outputs=outputs, rerandomize=True)
 
     states = await ledger.db_read.get_proofs_states([p.Y for p in locked])
     assert all(
-        state.state == ProofSpentState.unspent and state.unpoisonable_r is None
+        state.state == ProofSpentState.unspent and state.rerandomization_r is None
         for state in states
     )
     tweaked = tweak_outputs(outputs, randomness)
@@ -374,7 +372,7 @@ async def test_unpoisonable_signing_failure_rolls_back(
 
 
 @pytest.mark.asyncio
-async def test_unpoisonable_swap_retries_occupied_tweaked_point(
+async def test_rerandomized_swap_retries_occupied_tweaked_point(
     wallet1: Wallet, ledger: Ledger, monkeypatch
 ):
     locked, outputs = await prepare_swap(wallet1, ledger)
@@ -395,7 +393,7 @@ async def test_unpoisonable_swap_retries_occupied_tweaked_point(
     monkeypatch.setattr(
         ledger, "_check_outputs_pending_or_issued_before", occupied_once
     )
-    signatures, r = await ledger.swap(proofs=locked, outputs=outputs, unpoisonable=True)
+    signatures, r = await ledger.swap(proofs=locked, outputs=outputs, rerandomize=True)
     assert len(signatures) == 1 and r == (bytes([0x43]) * 32).hex()
     assert checks == 2
 
@@ -409,13 +407,13 @@ async def test_recovery_migration_preserves_existing_spent_proofs(
     async with ledger.db.connect() as conn:
         original = await conn.fetchone(f"SELECT y FROM {table} LIMIT 1")
         assert original is not None
-        await conn.execute(f"ALTER TABLE {table} DROP COLUMN unpoisonable_r")
+        await conn.execute(f"ALTER TABLE {table} DROP COLUMN rerandomization_r")
         await conn.execute(
             f"UPDATE {ledger.db.table_with_schema('dbversions')} SET version=40 WHERE db='mint'"
         )
     await migrate_databases(ledger.db, mint_migrations)
     async with ledger.db.connect() as conn:
         migrated = await conn.fetchone(
-            f"SELECT unpoisonable_r FROM {table} WHERE y=:y", {"y": original["y"]}
+            f"SELECT rerandomization_r FROM {table} WHERE y=:y", {"y": original["y"]}
         )
-    assert migrated is not None and migrated["unpoisonable_r"] is None
+    assert migrated is not None and migrated["rerandomization_r"] is None

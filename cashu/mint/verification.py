@@ -100,7 +100,7 @@ class LedgerVerification(
         skip_output_amount_check: bool = False,
         expected_output_unit: Optional[Unit] = None,
         verify_input_output_balance: bool = True,
-        unpoisonable: bool = False,
+        rerandomize: bool = False,
     ) -> None:
         # 1. Verify the inputs generically: amounts, secret and witness
         # criteria, duplicate-input prevention, ECASH signature validity, and
@@ -109,9 +109,9 @@ class LedgerVerification(
 
         # 2. Verify NUT-10 spending conditions (P2PK, HTLC, and grouped
         # SIG_ALL rules) at the transaction level.
-        if unpoisonable:
+        if rerandomize:
             self._verify_input_output_spending_conditions(
-                proofs, outputs or [], quote, unpoisonable=True
+                proofs, outputs or [], quote, rerandomize=True
             )
         else:
             self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
@@ -123,7 +123,7 @@ class LedgerVerification(
         # 3. Verify the outputs generically: keyset consistency, amount rules,
         # duplicate-output prevention, and that the blinded messages have not
         # already been stored or signed by the mint.
-        if unpoisonable:
+        if rerandomize:
             await self._verify_outputs(
                 outputs,
                 skip_amount_check=skip_output_amount_check,

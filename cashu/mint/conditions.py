@@ -70,7 +70,7 @@ class LedgerSpendingConditions:
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         quote: Optional[str] = None,
-        unpoisonable: bool = False,
+        rerandomize: bool = False,
     ) -> bool:
         """
         This is the central function for all NUT-10 spending conditions. Any
@@ -78,13 +78,13 @@ class LedgerSpendingConditions:
         This either returns True, if the token has no spending conditions or
         it satisifies them, or it raises an error.
         """
-        if unpoisonable and not self._at_least_one_proof_has_sig_all(proofs):
-            raise TransactionError("unpoisonable swap requires SIG_ALL inputs")
+        if rerandomize and not self._at_least_one_proof_has_sig_all(proofs):
+            raise TransactionError("rerandomized swap requires SIG_ALL inputs")
         if self._at_least_one_proof_has_sig_all(proofs):
             # At least one proof has SIG_ALL in it, therefore we delegate all
             # enforcement to SIG_ALL-aware enforcement:
             return self._verify_sigall_spending_conditions(
-                proofs, outputs, quote, unpoisonable=unpoisonable
+                proofs, outputs, quote, rerandomize=rerandomize
             )
         else:
             # otherwise, check each proof in turn and enforce any conditions
@@ -98,7 +98,7 @@ class LedgerSpendingConditions:
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         quote: Optional[str] = None,
-        unpoisonable: bool = False,
+        rerandomize: bool = False,
     ) -> bool:
         """
         Verify grouped spending conditions for a SIG_ALL transaction.
@@ -138,10 +138,10 @@ class LedgerSpendingConditions:
         # Compute the grouped message that the signing pubkeys are expected to sign:
 
         message_to_sign: str | bytes
-        if unpoisonable:
+        if rerandomize:
             if quote is not None:
-                raise TransactionError("unpoisonable SIG_ALL only supports swaps")
-            message_to_sign = nut11.unpoisonable_sigall_digest(proofs, outputs)
+                raise TransactionError("rerandomized SIG_ALL only supports swaps")
+            message_to_sign = nut11.rerandomized_sigall_digest(proofs, outputs)
         else:
             message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
             if quote is not None:
@@ -156,7 +156,7 @@ class LedgerSpendingConditions:
                 self._get_spending_requirements(unique_secret),
                 first_proof.witness,
                 message_to_sign,
-                prehashed=unpoisonable,
+                prehashed=rerandomize,
             )
         elif isinstance(unique_secret, P2PKSecret):
             if unique_secret.sigflag != SigFlags.SIG_ALL:
@@ -165,7 +165,7 @@ class LedgerSpendingConditions:
                 self._get_spending_requirements(unique_secret),
                 first_proof.witness,
                 message_to_sign,
-                prehashed=unpoisonable,
+                prehashed=rerandomize,
             )
         else:
             # not a P2PK or HTLC secret

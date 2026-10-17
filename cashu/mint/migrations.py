@@ -1358,11 +1358,11 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
         )
 
 
-async def m041_unpoisonable_recovery(db: Database):
+async def m041_rerandomization_recovery(db: Database):
     """Persist V2 swap recovery randomness on spent inputs, never pending ones."""
     async with db.connect() as conn:
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('proofs_used')} "
-            "ADD COLUMN unpoisonable_r TEXT "
-            "CHECK (unpoisonable_r IS NULL OR length(unpoisonable_r) = 64)"
+            "ADD COLUMN rerandomization_r TEXT "
+            "CHECK (rerandomization_r IS NULL OR length(rerandomization_r) = 64)"
         )

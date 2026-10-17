@@ -75,8 +75,8 @@ class LedgerFeatures(SupportsDb, SupportsBackends, SupportsPubkey):
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
         mint_features = self.add_batch_features(mint_features)
-        if self.crud.supports_unpoisonable_swaps():
-            mint_features[SWAP_NUT] = {"unpoisonable": True}
+        if self.crud.supports_output_rerandomization():
+            mint_features[SWAP_NUT] = {"rerandomize": True}
 
         return mint_features
 
