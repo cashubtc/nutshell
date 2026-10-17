@@ -6,7 +6,7 @@ from coincurve import PrivateKey, PublicKey
 class PublicKeyExt(PublicKey):
     def __add__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
-            return self.combine([pubkey2])    # type: ignore
+            return self.combine([pubkey2])  # type: ignore
         else:
             raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
@@ -24,10 +24,24 @@ class PublicKeyExt(PublicKey):
             raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
     def __mul__(self, privkey):
-        if isinstance(privkey, PrivateKey):
-            return self.multiply(bytes.fromhex(privkey.to_hex()))
-        else:
+        """Compute s*P as ((s+t) mod n)*P - t*P with a fresh random mask.
+
+        Coincurve handles key generation, scalar addition, and multiplication.
+        Retry if a key is invalid or the masked sum is zero, since Coincurve
+        cannot represent the point at infinity.
+        """
+        if not isinstance(privkey, PrivateKey):
             raise TypeError("Can't multiply with non privatekey")
+
+        while True:
+            try:
+                mask = PrivateKey(context=self.context)
+                masked_scalar = privkey.add(mask.secret)
+            except ValueError:
+                continue
+            break
+
+        return self.multiply(masked_scalar.secret) - self.multiply(mask.secret)
 
     def __eq__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
