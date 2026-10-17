@@ -6,8 +6,8 @@ on:
       python-version:
         default: "3.12"
         type: string
-      poetry-version:
-        default: "2.3.2"
+      uv-version:
+        default: "0.13.0"
         type: string
       os:
         default: "ubuntu-latest"
@@ -28,7 +28,7 @@ jobs:
       - uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
+          uv-version: ${{ inputs.uv-version }}
       - name: Resolve latest patch of each recent release line
         id: resolve
         env:
@@ -54,7 +54,7 @@ jobs:
       - uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
+          uv-version: ${{ inputs.uv-version }}
       - name: Run tests
         env:
           CASHU_TEST_MINT_IMAGE: ${{ matrix.target.image }}

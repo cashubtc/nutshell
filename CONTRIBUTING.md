@@ -12,14 +12,14 @@ We use [Ruff](https://docs.astral.sh/ruff/formatter/) for formatting. To make su
 
 ## Setting up your environment
 
-We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, activate the environment with `poetry env activate` (or install the optional poetry-plugin-shell if you prefer `poetry shell`). Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
+We use [uv](https://docs.astral.sh/uv/) to manage Python, dependencies, and packaging. Install uv as described in the README, then run `uv sync --locked` to install the project and its development dependencies into `.venv`. The `.python-version` file selects Python `3.10`; uv downloads it if needed. Run `uv run --locked cashu --help` to use the wallet or `uv run --locked mint` to run the mint. You can also activate the environment with `source .venv/bin/activate`.
 
 ### Precommit hook
 
 To run the formatter and mypy (linter) before you push code, you can install the very useful pre-commit hook which will check your code every time you push with git.
 
 ```bash
-poetry run pre-commit install
+uv run --locked pre-commit install
 ```
 
 ## Debugging
@@ -33,7 +33,7 @@ LOG_LEVEL=TRACE
 
 ## Testing
 
-To run the tests, run `make test` or `pytest tests` in the poetry environment.
+To run the tests, run `make test` or `uv run --locked pytest tests`.
 
 ### Mutation testing
 
@@ -46,7 +46,7 @@ Run the mutation-testing pilot with:
 ```bash
 PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
   MUTATION_TESTING=true TOR=false \
-  poetry run python scripts/run_mutation.py --profile tor
+  uv run --locked python scripts/run_mutation.py --profile tor
 ```
 
 The profiles cover each complete production subsystem: core, mint, wallet,
@@ -77,15 +77,15 @@ targets rerun cached verdicts; use `--profile` for incremental execution:
 ```bash
 PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
   MUTATION_TESTING=true TOR=false \
-  poetry run python scripts/run_mutation.py 'cashu.core.split*'
+  uv run --locked python scripts/run_mutation.py 'cashu.core.split*'
 ```
 
 Mutmut stores incremental results in the ignored `mutants/` directory. View
-surviving mutants with `poetry run mutmut results`, or create the machine-readable
+surviving mutants with `uv run --locked mutmut results`, or create the machine-readable
 `mutants/mutmut-cicd-stats.json` report with
-`poetry run mutmut export-cicd-stats`. Use
-`poetry run mutmut show <mutant-name>` to inspect a mutant and
-`poetry run mutmut apply <mutant-name>` to apply it temporarily for debugging.
+`uv run --locked mutmut export-cicd-stats`. Use
+`uv run --locked mutmut show <mutant-name>` to inspect a mutant and
+`uv run --locked mutmut apply <mutant-name>` to apply it temporarily for debugging.
 Only apply mutants in a clean worktree.
 
 Scheduled CI runs each profile independently at 01:00 UTC: core on Monday, mint
@@ -110,7 +110,7 @@ Jobs use GitHub's six-hour hosted-runner limit. Mutation execution receives 340
 minutes, leaving time to upload partial results if a profile does not finish.
 Failed profiles with available artifacts still contribute their partial counts
 to the weekly report. Test the runner and report tooling separately with
-`poetry run pytest scripts/tests`; these tests are outside mutmut's own suite.
+`uv run --locked pytest scripts/tests`; these tests are outside mutmut's own suite.
 Do not add `# pragma: no mutate` or broaden `do_not_mutate` without review.
 Changes involving cryptography, key handling, migrations, protocol behavior, or
 public APIs require maintainer review.
@@ -190,7 +190,7 @@ MINT_CLNREST_CERT="../cashu-regtest-enviroment/data/clightning-2/regtest/ca.pem"
 
 ### Spark backend regtest
 
-The Spark tests use the real Breez SDK installed by Poetry with the local Spark
+The Spark tests use the real Breez SDK installed by uv with the local Spark
 operators, SSP, Esplora, LND, and CLN from
 [cashu-regtest](https://github.com/callebtc/cashu-regtest). Set up the environment:
 
@@ -242,7 +242,7 @@ For direct pytest invocation of the shared suites, set:
 ```sh
 CASHU_SPARK_REGTEST=true MINT_BACKEND_BOLT11_SAT=SparkL2Wallet \
   MINT_BACKEND_BOLT11_USD=FakeWallet TOR=FALSE \
-  poetry run pytest tests/mint/test_mint_regtest.py tests/wallet/test_wallet_regtest.py -v
+  uv run --locked pytest tests/mint/test_mint_regtest.py tests/wallet/test_wallet_regtest.py -v
 ```
 
 The direct backend cases use their own isolated wallets and remain skipped in
