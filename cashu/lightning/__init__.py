@@ -1,5 +1,6 @@
 # type: ignore
 from ..core.settings import settings
+from .cln_rpc import CLNRPCWallet  # noqa: F401
 from .clnrest import CLNRestWallet  # noqa: F401
 from .fake import FakeWallet  # noqa: F401
 from .lnd_grpc.lnd_grpc import LndRPCWallet  # noqa: F401
