@@ -29,6 +29,27 @@ class LedgerCrud(ABC):
     to use their own database.
     """
 
+    def supports_unpoisonable_swaps(self) -> bool:
+        """Declare atomic recovery writes and durable get_proofs_used recovery reads.
+
+        Override only when invalidate_proof_with_r persists R with the spent proof
+        and get_proofs_used restores it after restart. This drives NUT-03 discovery.
+        """
+        return False
+
+    async def invalidate_proof_with_r(
+        self,
+        *,
+        db: Database,
+        proof: Proof,
+        quote_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+        unpoisonable_r: Optional[str] = None,
+    ) -> None:
+        if unpoisonable_r is not None:
+            raise NotImplementedError("backend does not support unpoisonable recovery")
+        await self.invalidate_proof(db=db, proof=proof, quote_id=quote_id, conn=conn)
+
     @abstractmethod
     async def get_keyset(
         self,
@@ -354,6 +375,9 @@ class LedgerCrudSqlite(LedgerCrud):
         LedgerCrud (ABC): Abstract base class for LedgerCrud.
     """
 
+    def supports_unpoisonable_swaps(self) -> bool:
+        return True
+
     async def store_blinded_message(
         self,
         *,
@@ -513,11 +537,26 @@ class LedgerCrudSqlite(LedgerCrud):
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> None:
+        await self.invalidate_proof_with_r(
+            db=db, proof=proof, quote_id=quote_id, conn=conn
+        )
+
+    async def invalidate_proof_with_r(
+        self,
+        *,
+        db: Database,
+        proof: Proof,
+        quote_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+        unpoisonable_r: Optional[str] = None,
+    ) -> None:
+        recovery_column = ", unpoisonable_r" if unpoisonable_r is not None else ""
+        recovery_value = ", :unpoisonable_r" if unpoisonable_r is not None else ""
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("proofs_used")}
-            (amount, c, secret, y, id, witness, created, melt_quote)
-            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
+            (amount, c, secret, y, id, witness, created, melt_quote{recovery_column})
+            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote{recovery_value})
             """,
             {
                 "amount": proof.amount,
@@ -528,6 +567,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "witness": proof.witness,
                 "created": db.to_timestamp(db.timestamp_now_str()),
                 "melt_quote": quote_id,
+                "unpoisonable_r": unpoisonable_r,
             },
         )
 

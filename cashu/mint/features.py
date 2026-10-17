@@ -26,10 +26,11 @@ from ..core.nuts.nuts import (
     RESTORE_NUT,
     SCRIPT_NUT,
     STATE_NUT,
+    SWAP_NUT,
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
-from ..mint.protocols import SupportsBackends, SupportsPubkey
+from ..mint.protocols import SupportsBackends, SupportsDb, SupportsPubkey
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -42,7 +43,7 @@ _OPENID_DISCOVERY = "openid_discovery"
 _CLIENT_ID = "client_id"
 
 
-class LedgerFeatures(SupportsBackends, SupportsPubkey):
+class LedgerFeatures(SupportsDb, SupportsBackends, SupportsPubkey):
     @property
     def mint_info(self) -> MintInfo:
         contact_info = [
@@ -74,6 +75,8 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
         mint_features = self.add_batch_features(mint_features)
+        if self.crud.supports_unpoisonable_swaps():
+            mint_features[SWAP_NUT] = {"unpoisonable": True}
 
         return mint_features
 

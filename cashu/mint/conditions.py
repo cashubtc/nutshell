@@ -15,6 +15,7 @@ from ..core.nuts import nut10, nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
+    verify_schnorr_digest,
     verify_schnorr_signature,
 )
 from ..core.secret import SecretKind
@@ -69,6 +70,7 @@ class LedgerSpendingConditions:
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         quote: Optional[str] = None,
+        unpoisonable: bool = False,
     ) -> bool:
         """
         This is the central function for all NUT-10 spending conditions. Any
@@ -76,10 +78,14 @@ class LedgerSpendingConditions:
         This either returns True, if the token has no spending conditions or
         it satisifies them, or it raises an error.
         """
+        if unpoisonable and not self._at_least_one_proof_has_sig_all(proofs):
+            raise TransactionError("unpoisonable swap requires SIG_ALL inputs")
         if self._at_least_one_proof_has_sig_all(proofs):
             # At least one proof has SIG_ALL in it, therefore we delegate all
             # enforcement to SIG_ALL-aware enforcement:
-            return self._verify_sigall_spending_conditions(proofs, outputs, quote)
+            return self._verify_sigall_spending_conditions(
+                proofs, outputs, quote, unpoisonable=unpoisonable
+            )
         else:
             # otherwise, check each proof in turn and enforce any conditions
             # such as P2PK and HTLC:
@@ -92,6 +98,7 @@ class LedgerSpendingConditions:
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         quote: Optional[str] = None,
+        unpoisonable: bool = False,
     ) -> bool:
         """
         Verify grouped spending conditions for a SIG_ALL transaction.
@@ -130,9 +137,15 @@ class LedgerSpendingConditions:
 
         # Compute the grouped message that the signing pubkeys are expected to sign:
 
-        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
-        if quote is not None:
-            message_to_sign += quote
+        message_to_sign: str | bytes
+        if unpoisonable:
+            if quote is not None:
+                raise TransactionError("unpoisonable SIG_ALL only supports swaps")
+            message_to_sign = nut11.unpoisonable_sigall_digest(proofs, outputs)
+        else:
+            message_to_sign = nut11.sigall_message_to_sign(proofs, outputs)
+            if quote is not None:
+                message_to_sign += quote
 
         # Now split depending on whether the secret kind is P2PK or HTLC:
 
@@ -143,6 +156,7 @@ class LedgerSpendingConditions:
                 self._get_spending_requirements(unique_secret),
                 first_proof.witness,
                 message_to_sign,
+                prehashed=unpoisonable,
             )
         elif isinstance(unique_secret, P2PKSecret):
             if unique_secret.sigflag != SigFlags.SIG_ALL:
@@ -151,6 +165,7 @@ class LedgerSpendingConditions:
                 self._get_spending_requirements(unique_secret),
                 first_proof.witness,
                 message_to_sign,
+                prehashed=unpoisonable,
             )
         else:
             # not a P2PK or HTLC secret
@@ -315,7 +330,8 @@ class LedgerSpendingConditions:
         self,
         requirements: SpendingRequirements,
         raw_witness: Optional[str],
-        message_to_sign: str,
+        message_to_sign: str | bytes,
+        prehashed: bool = False,
     ) -> bool:
         # Contract: this verifier returns True on success and raises on failure.
         try:
@@ -350,6 +366,7 @@ class LedgerSpendingConditions:
                 requirements.primary_path.pubkeys,
                 witness.signatures,
                 requirements.primary_path.required_sigs,
+                prehashed=prehashed,
             ):
                 logger.trace(
                     "Spending condition satisfied via primary (non-refund) path"
@@ -370,6 +387,7 @@ class LedgerSpendingConditions:
                     requirements.refund_path.pubkeys,
                     witness.signatures,
                     requirements.refund_path.required_sigs,
+                    prehashed=prehashed,
                 ):
                     logger.trace("Spending condition satisfied via refund pubkeys.")
                     return True
@@ -397,10 +415,11 @@ class LedgerSpendingConditions:
 
     def _verify_p2pk_signatures(
         self,
-        message_to_sign: str,
+        message_to_sign: str | bytes,
         pubkeys: List[str],
         signatures: List[str],
         n_sigs_required: int,
+        prehashed: bool = False,
     ) -> bool:
         if n_sigs_required < 0:
             raise TransactionError("n_sigs may not be negative.")
@@ -436,12 +455,27 @@ class LedgerSpendingConditions:
         for pubkey in unique_pubkeys:
             for i, input_sig in enumerate(signatures):
                 logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
-                logger.trace(f"Message: {message_to_sign}")
-                if verify_schnorr_signature(
-                    message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(pubkey)),
-                    signature=bytes.fromhex(input_sig),
-                ):
+                if isinstance(message_to_sign, bytes):
+                    logger.trace(f"Message digest: {message_to_sign.hex()}")
+                else:
+                    logger.trace(f"Message: {message_to_sign}")
+                if prehashed:
+                    if not isinstance(message_to_sign, bytes):
+                        raise TransactionError("expected a tagged SIG_ALL digest")
+                    valid = verify_schnorr_digest(
+                        message_to_sign,
+                        PublicKey(bytes.fromhex(pubkey)),
+                        bytes.fromhex(input_sig),
+                    )
+                else:
+                    if not isinstance(message_to_sign, str):
+                        raise TransactionError("expected ordinary SIG_ALL message")
+                    valid = verify_schnorr_signature(
+                        message=message_to_sign.encode("utf-8"),
+                        pubkey=PublicKey(bytes.fromhex(pubkey)),
+                        signature=bytes.fromhex(input_sig),
+                    )
+                if valid:
                     n_pubkeys_with_valid_sigs += 1
                     logger.trace(
                         f"signature on input is valid: {input_sig} on {pubkey}."

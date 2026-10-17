@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,11 @@ class PostSwapRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
         ..., max_length=settings.mint_max_request_length
     )
+    unpoisonable: bool = False
 
 
 class PostSwapResponse(BaseModel):
     signatures: List[BlindedSignature]
+    unpoisonable_r: Optional[str] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
