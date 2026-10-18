@@ -231,8 +231,8 @@ async def cli(
             ctx.obj["HOST"], db_path, name=walletname, unit=unit
         )
 
-    # if we have never seen this mint before, we load its information
-    if not wallet.mint_info:
+    # History does not need mint metadata or keysets.
+    if ctx.invoked_subcommand != "history" and not wallet.mint_info:
         await wallet.load_mint()
 
     assert wallet, "Wallet not found."

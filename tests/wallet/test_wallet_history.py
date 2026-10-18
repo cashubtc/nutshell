@@ -193,25 +193,32 @@ async def test_mixed_owned_and_outside_inputs_count_only_outside_credit(wallets)
     ]
 
 
-def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cached", [False, True], ids=["uncached", "cached"])
+def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch, cached):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     monkeypatch.setattr(settings, "debug", False)
+    host = settings.mint_url if cached else "https://uncached-mint.invalid"
 
     async def prepare():
         wallet = await Wallet.with_db(
-            settings.mint_url, str(tmp_path / "cli"), name="cli"
+            host, str(tmp_path / "cli"), name="cli"
         )
-        await wallet.load_mint()
+        if cached:
+            await wallet.load_mint()
+        else:
+            assert not wallet.mint_info
+            assert not wallet.keysets
         await wallet.db.engine.dispose()
 
     asyncio.run(prepare())
     request = AsyncMock(side_effect=AssertionError("History must not poll the mint"))
     monkeypatch.setattr(httpx.AsyncClient, "request", request)
-    args = ["--host", settings.mint_url, "--wallet", "cli", "--tests", "history"]
+    args = ["--host", host, "--wallet", "cli", "--tests", "history"]
     runner = CliRunner()
     result = runner.invoke(cli, args)
     assert result.exit_code == 0, result.output
     assert "No transaction history." in result.output
+    request.assert_not_called()
 
     async def add_rows():
         db = Database("cli", str(tmp_path / "cli"))
