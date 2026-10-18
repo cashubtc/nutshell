@@ -8,7 +8,8 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import TokenV3, Unit
+from cashu.core.base import TokenV3, TokenV3Token, Unit
+from cashu.wallet.crud import get_history
 from cashu.wallet.errors import BalanceTooLowError
 from cashu.wallet.helpers import (
     deserialize_token_from_string,
@@ -28,7 +29,7 @@ settings.mint_seed_decryption_key = ""
 settings.mint_database = sys.argv[2]
 settings.mint_backend_bolt11_sat = "FakeWallet"
 settings.mint_backend_bolt11_usd = "FakeWallet"
-settings.mint_input_fee_ppk = 0
+settings.mint_input_fee_ppk = int(sys.argv[4])
 settings.mint_require_auth = False
 settings.mint_rpc_server_enable = False
 settings.fakewallet_brr = True
@@ -38,7 +39,7 @@ uvicorn.run("cashu.mint.app:app", host="127.0.0.1", port=int(sys.argv[3]))
 
 
 @pytest.fixture(scope="module")
-def mint(tmp_path_factory):
+def mint(tmp_path_factory, request):
     """Run two independent FakeWallet mints without changing the shared test mint."""
     directory = tmp_path_factory.mktemp("multimint")
     urls = []
@@ -59,6 +60,7 @@ def mint(tmp_path_factory):
                         f"MULTIMINT_TEST_PRIVATE_KEY_{index}",
                         str(directory / f"mint{index}"),
                         str(port),
+                        str(getattr(request, "param", 0)),
                     ],
                     stdout=log,
                     stderr=STDOUT,
@@ -184,3 +186,60 @@ async def test_redeem_token_with_multiple_mints(wallets):
         alice.keyset_id,
         bob.keyset_id,
     }
+    receipts = [r for r in await get_history(bob.db) if r["type"] == "receive"]
+    assert {(r["mint"], r["amount"]) for r in receipts} == {
+        (alice.url, 64), (bob.url, 16)
+    }
+
+
+@pytest.mark.asyncio
+async def test_history_preserves_successful_leg_when_later_mint_rejects(
+    wallets, tmp_path
+):
+    alice, bob = wallets
+    spent = list(bob.proofs)
+    await bob.redeem(spent)
+    token = TokenV3(
+        token=[
+            TokenV3Token(mint=alice.url, proofs=alice.proofs),
+            TokenV3Token(mint=bob.url, proofs=spent),
+        ]
+    )
+    recipient = await Wallet.with_db(alice.url, str(tmp_path / "recipient"))
+    try:
+        with pytest.raises(Exception, match="already spent"):
+            await receive(recipient, token)
+        rows = await get_history(recipient.db)
+        assert [(r["type"], r["amount"], r["mint"]) for r in rows] == [
+            ("receive", 64, alice.url)
+        ]
+    finally:
+        await recipient.db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mint", [1000], indirect=True, ids=["input-fees"])
+async def test_history_uses_actual_export_and_net_receipt_with_fees(wallets, tmp_path):
+    sender, _ = wallets
+    _, serialized = await send(
+        sender, amount=8, lock="", legacy=False, include_fees=True
+    )
+    token = deserialize_token_from_string(serialized)
+    assert token.amount > 8
+    receiver = await Wallet.with_db(sender.url, str(tmp_path / "receiver"))
+    try:
+        await receiver.load_mint()
+        proofs = token.proofs
+        await receiver._expand_short_keyset_ids(proofs)
+        fee = receiver.get_fees_for_proofs(proofs)
+        assert fee > 0
+        await receive(receiver, token)
+        rows = await get_history(receiver.db)
+        assert [(r["type"], r["amount"]) for r in rows] == [
+            ("receive", token.amount - fee)
+        ]
+        assert rows[0]["amount"] == receiver.balance.amount
+        exports = [r for r in await get_history(sender.db) if r["type"] == "send"]
+        assert exports[0]["amount"] == -token.amount
+    finally:
+        await receiver.db.engine.dispose()
