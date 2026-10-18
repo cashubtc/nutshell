@@ -10,7 +10,7 @@ from ..core.migrations import migrate_databases
 from ..core.secret import Tags
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keysets
+from ..wallet.crud import get_keysets, store_ecash_transaction
 from ..wallet.wallet import Wallet
 
 
@@ -223,6 +223,13 @@ async def send(
     print(token)
 
     await wallet.set_reserved_for_send(send_proofs, reserved=True)
+    await store_ecash_transaction(
+        wallet.db,
+        tx_type="send",
+        amount=sum_proofs(send_proofs),
+        unit=wallet.unit.name,
+        mint=wallet.url,
+    )
     return wallet.available_balance, token
 
 

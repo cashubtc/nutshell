@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from ..core.base import (
     MeltQuote,
@@ -19,6 +19,54 @@ class _UnsetType:
 
 
 _UNSET = _UnsetType()
+
+
+async def store_ecash_transaction(
+    db: Database,
+    *,
+    tx_type: Literal["send", "receive"],
+    amount: int,
+    unit: str,
+    mint: str,
+) -> None:
+    await db.execute(
+        """
+        INSERT INTO ecash_transactions (type, amount, unit, mint, created_time)
+        VALUES (:type, :amount, :unit, :mint, :created_time)
+        """,
+        {
+            "type": tx_type,
+            "amount": amount,
+            "unit": unit,
+            "mint": mint,
+            "created_time": int(time.time()),
+        },
+    )
+
+
+async def get_history(db: Database) -> List[Dict[str, Any]]:
+    """Read local activity; Lightning rows remain owned by their quote tables."""
+    rows = await db.fetchall(
+        """
+        SELECT * FROM (
+            SELECT 'mint' AS type, COALESCE(amount_issued, amount) AS amount,
+                   unit, mint, COALESCE(paid_time, created_time) AS created_time,
+                   quote AS reference
+            FROM bolt11_mint_quotes
+            WHERE amount_issued > 0 OR (amount_issued IS NULL AND state = 'ISSUED')
+            UNION ALL
+            SELECT 'melt', -amount, unit, mint,
+                   COALESCE(paid_time, created_time), quote
+            FROM bolt11_melt_quotes WHERE state = 'PAID'
+            UNION ALL
+            SELECT type, CASE WHEN type = 'send' THEN -amount ELSE amount END,
+                   unit, mint, created_time, CAST(id AS TEXT)
+            FROM ecash_transactions
+        ) AS history
+        ORDER BY created_time DESC NULLS LAST, type, reference
+        """
+    )
+    return [dict(row) for row in rows]
 
 
 async def store_proof(
