@@ -142,20 +142,64 @@ def test_rerandomized_vectors_and_domains():
     digest = rerandomized_sigall_digest([], [output])
     assert (
         digest.hex()
-        == "2e96fda9957222af5e1a8e8c581ab12ed8b5180108a554bdb934d661d9bc2c71"
+        == "12ba73147194f4528cf2e06b4a557daff57a1f2153938106af49d51c399bbe2a"
     )
     assert (
         digest
         == sha256(
             tag
             + tag
-            + b"\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x21"
-            + bytes.fromhex(GENERATOR)
+            + b"\x00\x00\x00\x00\x00\x00\x00\x01\x01"
+            + sha256(bytes.fromhex(GENERATOR)).digest()
         ).digest()
     )
     tweaked = tweak_outputs([output], randomness)[0]
     assert tweaked.B_ != output.B_
     assert tweaked.amount == output.amount
+
+
+def test_previous_raw_point_transcript_no_longer_authorizes_swap():
+    from cashu.mint.conditions import LedgerSpendingConditions
+
+    signer = PrivateKey()
+    secret = secret_str(
+        kind=SecretKind.P2PK,
+        data=signer.public_key.format().hex(),
+        sigflag=SigFlags.SIG_ALL,
+    )
+    inputs = [proof(secret)]
+    inputs[0].C = GENERATOR
+    outputs = [BlindedMessage(id="ks", amount=1, B_=GENERATOR)]
+
+    def old_frame(value: bytes) -> bytes:
+        return len(value).to_bytes(4, "big") + value
+
+    old_message = (
+        old_frame(b"")
+        + old_frame(secret.encode("utf-8"))
+        + old_frame(bytes.fromhex(GENERATOR))
+        + old_frame(b"\x01")
+        + old_frame(bytes.fromhex(GENERATOR))
+    )
+    tag_hash = sha256(b"Cashu_SigAllRerandomized_v1").digest()
+    old_digest = sha256(tag_hash + tag_hash + old_message).digest()
+    inputs[0].witness = P2PKWitness(
+        signatures=[signer.sign_schnorr(old_digest, None).hex()]
+    ).model_dump_json()
+    conditions = LedgerSpendingConditions()
+    with pytest.raises(TransactionError, match="signature threshold not met"):
+        conditions._verify_input_output_spending_conditions(
+            inputs, outputs, rerandomize=True
+        )
+
+    inputs[0].witness = P2PKWitness(
+        signatures=[
+            signer.sign_schnorr(rerandomized_sigall_digest(inputs, outputs), None).hex()
+        ]
+    ).model_dump_json()
+    assert conditions._verify_input_output_spending_conditions(
+        inputs, outputs, rerandomize=True
+    )
 
 
 def test_rerandomized_sigall_excludes_ordinary_signatures():

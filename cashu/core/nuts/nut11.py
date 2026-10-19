@@ -35,7 +35,9 @@ def rerandomized_sigall_digest(
         frame(bytes.fromhex(proof.C))
     for output in outputs:
         frame(int_to_minimal_bytes(output.amount))
-        frame(bytes.fromhex(output.B_))
+        # Breaking transcript update: commit to the original compressed point's
+        # 32-byte SHA-256 digest directly, without a length frame.
+        message.extend(sha256(bytes.fromhex(output.B_)).digest())
 
     tag_hash = sha256(b"Cashu_SigAllRerandomized_v1").digest()
     return sha256(tag_hash + tag_hash + message).digest()
