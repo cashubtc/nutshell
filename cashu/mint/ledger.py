@@ -1088,6 +1088,11 @@ class Ledger(
         invoice_obj = bolt11.decode(melt_quote.request)
         if not invoice_obj.amount_msat:
             raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        # reject invoices that have already expired: the Lightning backend would
+        # reject the payment pre-flight, which can leave the melt quote and its
+        # proofs stuck PENDING with no terminal status to roll them back.
+        if invoice_obj.has_expired():
+            raise QuoteExpiredError("invoice has expired")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         now = int(time.time())
         expiry = None
@@ -1413,6 +1418,12 @@ class Ledger(
             )
         if melt_quote.pending:
             raise QuotePendingError(f"melt quote is not unpaid: {melt_quote.state}")
+
+        # re-check expiry here too: the invoice may have expired between quote
+        # creation and this melt. Reject before locking proofs so a backend
+        # pre-flight rejection can never strand them as PENDING.
+        if bolt11.decode(melt_quote.request).has_expired():
+            raise QuoteExpiredError("invoice has expired")
 
         unit, _ = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
 

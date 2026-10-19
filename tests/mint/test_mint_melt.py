@@ -19,6 +19,7 @@ from cashu.core.errors import (
     OutputsAlreadySignedError,
     OutputsArePendingError,
     QuoteAlreadyIssuedError,
+    QuoteExpiredError,
     QuotePendingError,
     TransactionError,
 )
@@ -34,6 +35,7 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    fresh_bolt11,
     get_real_invoice,
     is_fake,
     is_regtest,
@@ -267,8 +269,8 @@ async def test_pending_melt_quote_outputs_registration_regression(
     proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
     proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
 
-    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_64_sat = await fresh_bolt11(64)
+    invoice_62_sat = await fresh_bolt11(62)
 
     # Get two melt quotes
     melt_quote1 = await wallet.melt_quote(invoice_64_sat)
@@ -326,8 +328,8 @@ async def test_settled_melt_quote_outputs_registration_regression(
     proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
     proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
 
-    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_64_sat = await fresh_bolt11(64)
+    invoice_62_sat = await fresh_bolt11(62)
 
     # Get two melt quotes
     melt_quote1 = await wallet.melt_quote(invoice_64_sat)
@@ -385,8 +387,8 @@ async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
     proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
     proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
 
-    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_64_sat = await fresh_bolt11(64)
+    invoice_62_sat = await fresh_bolt11(62)
 
     # Get two melt quotes
     melt_quote1 = await wallet.melt_quote(invoice_64_sat)
@@ -596,7 +598,7 @@ async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_62_sat = await fresh_bolt11(62)
     quote_id = (
         await ledger.melt_quote(
             PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
@@ -616,7 +618,7 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_62_sat = await fresh_bolt11(62)
     quote_id = (
         await ledger.melt_quote(
             PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
@@ -640,7 +642,7 @@ async def test_melt_lightning_error_status_keeps_proofs_pending(
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet.mint(64, quote_id=mint_quote.quote)
-    invoice = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice = await fresh_bolt11(62)
     quote_id = (
         await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice))
     ).quote
@@ -657,13 +659,116 @@ async def test_melt_lightning_error_status_keeps_proofs_pending(
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_melt_lightning_not_found_status_stays_pending_forever(
+    ledger: Ledger, wallet: Wallet
+):
+    """A NOT_FOUND payment status leaves the melt PENDING forever.
+
+    Models the production incident: pay_invoice returns a non-settled result and
+    the follow-up status check returns NOT_FOUND ("payment isn't initiated").
+    _resolve_melt_payment_status treats NOT_FOUND like PENDING/ERROR (no-op), so
+    the proofs stay PENDING and never roll back -- not on the melt call, not on
+    subsequent polls, and not on the startup recovery (which also just re-runs
+    get_melt_quote).
+
+    Uses a fresh (non-expired) invoice on purpose: the expiry guard in
+    melt_quote/_prepare_melt only removes the *expired-invoice* trigger. The
+    underlying stuck-pending behavior documented here is unchanged for any other
+    pre-flight rejection that yields NOT_FOUND.
+    """
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    invoice = await fresh_bolt11(62)
+    quote_id = (
+        await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice))
+    ).quote
+
+    # LND: pay_invoice rejected pre-flight, TrackPaymentV2 -> "payment isn't initiated"
+    settings.fakewallet_pay_invoice_state = PaymentResult.ERROR.name
+    settings.fakewallet_payment_state = PaymentStatusResult.NOT_FOUND.name
+
+    response = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    assert response.state == MeltQuoteState.pending.value
+
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.pending for state in states)
+
+    # The wallet keeps polling and the mint keeps re-checking on restart; with a
+    # NOT_FOUND status the quote never leaves PENDING and the proofs stay locked.
+    for _ in range(3):
+        requoted = await ledger.get_melt_quote(quote_id)
+        assert requoted.state == MeltQuoteState.pending
+
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.pending for state in states)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_melt_quote_rejects_expired_invoice(ledger: Ledger):
+    """An expired bolt11 is rejected at quote creation, before any proofs move.
+
+    This is the guard that prevents the forever-pending melt reproduced above:
+    an expired invoice would be rejected by the backend pre-flight (NOT_FOUND),
+    which strands proofs as PENDING. Rejecting it here means it never gets that
+    far.
+    """
+    # Hardcoded invoice whose bolt11 expiry is in the past.
+    expired_invoice = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    with pytest.raises(QuoteExpiredError):
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=expired_invoice)
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_melt_rejects_invoice_expired_after_quote(ledger: Ledger, wallet: Wallet):
+    """A quote created while valid is rejected at melt if the invoice expired.
+
+    melt_quote is bypassed with a direct quote whose invoice is already expired,
+    standing in for an invoice that expired between quote creation and the melt
+    call. _prepare_melt must reject it before locking the proofs -- so the melt
+    raises and the proofs remain spendable (not stranded PENDING).
+    """
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+
+    # Persist a melt quote directly for an already-expired invoice, skipping the
+    # melt_quote guard, to exercise the second guard in _prepare_melt.
+    expired_invoice = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    quote = MeltQuote(
+        quote="expired-after-quote",
+        method=Method.bolt11.name,
+        request=expired_invoice,
+        checking_id="expired-after-quote",
+        unit=Unit.sat.name,
+        amount=62,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+        created_time=0,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+
+    with pytest.raises(QuoteExpiredError):
+        await ledger.melt(proofs=wallet.proofs, quote=quote.quote)
+
+    # Proofs were never locked: they are still spendable.
+    states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    assert all(state.unspent for state in states)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_failed_settled(
     ledger: Ledger, wallet: Wallet
 ):
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_62_sat = await fresh_bolt11(62)
     quote_id = (
         await ledger.melt_quote(
             PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
@@ -686,7 +791,7 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_62_sat = await fresh_bolt11(62)
     quote_id = (
         await ledger.melt_quote(
             PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
@@ -710,7 +815,7 @@ async def test_melt_lightning_payment_exceptions_keep_pending(
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
-    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    invoice_62_sat = await fresh_bolt11(62)
     quote_id = (
         await ledger.melt_quote(
             PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
@@ -1053,7 +1158,7 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     invoice = (
         get_real_invoice(64)["payment_request"]
         if is_regtest
-        else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+        else await fresh_bolt11(64)
     )
     melt_quote1 = await wallet.melt_quote(invoice)
     melt_quote2 = await wallet.melt_quote(invoice)
@@ -1289,7 +1394,7 @@ async def test_melt_early_return_leaves_no_orphan_blank_outputs(
     settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = ""
 
-    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_64_sat = await fresh_bolt11(64)
 
     mint_quote = await wallet.request_mint(100)
     proofs = await wallet.mint(amount=100, quote_id=mint_quote.quote)

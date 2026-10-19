@@ -20,11 +20,10 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     assert_err,
+    fresh_bolt11,
     is_github_actions,
     pay_if_regtest,
 )
-
-payment_request = "lnbc1u1p5qeft3sp5jn5cqclnxvucfqtjm8qnlar2vhevcuudpccv7tsuglruj3qm579spp5ygdhy0t7xu53myke8z3z024xhz4kzgk9fcqk64sp0fyeqzhmaswqdqqcqpjrzjq0euzzxv65mts5ngg8c2t3vzz2aeuevy5845jvyqulqucd8c9kkhzrtp55qq63qqqqqqqqqqqqqzwyqqyg9qxpqysgqscprcpnk8whs3askqhgu6z5a4hupyn8du2aahdcf00s5pxrs4g94sv9f95xdn4tu0wec7kfyzj439wu9z27k6m6e3q4ysjquf5agx7gp0eeye4"
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -430,7 +429,7 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
-    melt_quote = await wallet.melt_quote(payment_request)
+    melt_quote = await wallet.melt_quote(await fresh_bolt11(100))
     await ledger.db_write._update_melt_quote_state(
         melt_quote.quote, MeltQuoteState.paid
     )

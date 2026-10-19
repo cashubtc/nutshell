@@ -12,9 +12,27 @@ from typing import List, Tuple, Union
 import bolt11
 from loguru import logger
 
-from cashu.core.base import Unit
+from cashu.core.base import Amount, Unit
 from cashu.core.errors import CashuError
 from cashu.core.settings import settings
+
+
+async def fresh_bolt11(amount_sat: int) -> str:
+    """Return a freshly minted (non-expired) bolt11 invoice for the melt path.
+
+    The repo's old hardcoded regtest invoices are long expired, which the mint
+    now rejects up front with QuoteExpiredError. Generating a fresh invoice of
+    the same amount keeps fake-wallet melt tests exercising the payment-result
+    logic they target instead of tripping the expiry guard.
+    """
+    # Imported lazily so importing this helper module does not pull in the
+    # lightning backend for every test.
+    from cashu.lightning.fake import FakeWallet
+
+    response = await FakeWallet(unit=Unit.sat).create_invoice(
+        Amount(Unit.sat, amount_sat)
+    )
+    return response.payment_request
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
