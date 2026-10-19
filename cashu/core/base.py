@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
+from mnemonic import Mnemonic
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,8 +28,10 @@ from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
+    BIP39_DERIVATION_PATH,
     derive_keys,
     derive_keys_deprecated_pre_0_15,
+    derive_keys_from_seed,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
@@ -978,6 +981,12 @@ class MintKeyset:
 
         self.derivation_path = derivation_path
 
+        # keysets on the BIP-39 derivation path store no seed, their keys are
+        # derived from MINT_MNEMONIC
+        self.from_mnemonic = derivation_path.startswith(
+            f"{BIP39_DERIVATION_PATH}/"
+        ) and not (seed or encrypted_seed)
+
         if encrypted_seed and not settings.mint_seed_decryption_key:
             raise Exception("MINT_SEED_DECRYPTION_KEY not set, but seed is encrypted.")
         if settings.mint_seed_decryption_key and encrypted_seed:
@@ -987,10 +996,10 @@ class MintKeyset:
         else:
             self.seed = seed
 
-        assert self.seed, "seed not set"
+        assert self.seed or self.from_mnemonic, "seed not set"
 
         # keep the seed encrypted at rest if a decryption key is set
-        if settings.mint_seed_decryption_key and not encrypted_seed:
+        if settings.mint_seed_decryption_key and self.seed and not encrypted_seed:
             encrypted_seed = AESCipher(settings.mint_seed_decryption_key).encrypt(
                 self.seed.encode()
             )
@@ -1043,7 +1052,6 @@ class MintKeyset:
             self.unit = Unit[unit]
 
         # generate keys from seed
-        assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
 
         self.generate_keys()
@@ -1080,8 +1088,32 @@ class MintKeyset:
 
     def generate_keys(self):
         """Generates keys of a keyset from a seed."""
-        assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
+
+        if self.from_mnemonic:
+            if not settings.mint_mnemonic:
+                raise Exception("MINT_MNEMONIC not set, but keyset is derived from it.")
+            self.private_keys = derive_keys_from_seed(
+                Mnemonic.to_seed(settings.mint_mnemonic),
+                self.derivation_path,
+                self.amounts,
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)
+            assert self.public_keys is not None
+            keyset_id = derive_keyset_id_v2(
+                self.public_keys,
+                self.unit.name,
+                self.final_expiry,
+                self.input_fee_ppk,
+            )
+            # a different mnemonic derives different keys, which must not be
+            # loaded under the ID of a stored keyset
+            if self.id and self.id != keyset_id:
+                raise Exception(f"Keyset {self.id} was not derived from MINT_MNEMONIC.")
+            self.id = keyset_id
+            return
+
+        assert self.seed, "seed not set"
 
         # BEGIN: BACKWARDS COMPATIBILITY < 0.15.0
         # we overwrite keyset id only if it isn't already set in the database
