@@ -205,6 +205,7 @@ async def request_validation_exception_handler(
         for error in exc.errors()
     ]
     query_params = request.query_params._dict
+    # Logs each error's loc, msg and type.
     detail = {
         "errors": errors,
         "query_params": query_params,

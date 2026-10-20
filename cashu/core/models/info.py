@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ..nuts.nuts import BOOLEAN_SUPPORTED_NUTS
+from ..nuts.nuts import BOOLEAN_SUPPORTED_NUTS, NutKey
 
 
 class MintMethodBolt11OptionSetting(BaseModel):
@@ -49,7 +49,7 @@ class GetInfoResponse(BaseModel):
     urls: Optional[List[str]] = None
     time: Optional[int] = None
     max_array_length: Optional[int] = None
-    nuts: Optional[Dict[int, Any]] = None
+    nuts: Optional[Dict[NutKey, Any]] = None
 
     def supports(self, nut: int) -> bool:
         if not self.nuts or nut not in self.nuts:

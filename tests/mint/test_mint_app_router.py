@@ -548,3 +548,37 @@ def test_router_rejects_long_secrets_before_hashing(
     assert "input" not in response.json()["detail"][0]
     assert len(response.content) < 1024
     hashed.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_redis_cache_keys_are_hashed(monkeypatch):
+    store: dict = {}
+
+    class FakeRedis:
+        async def exists(self, key):
+            return key in store
+
+        async def get(self, key):
+            return store.get(key)
+
+        async def set(self, name, value, ex):
+            store[name] = value
+
+    class Payload(BaseModel):
+        value: int
+
+    monkeypatch.setattr(settings, "mint_redis_cache_enabled", True)
+    monkeypatch.setattr(settings, "mint_redis_cache_url", "redis://cache")
+    monkeypatch.setattr("cashu.mint.cache.from_url", lambda url: FakeRedis())
+    cache = RedisCache()
+
+    @cache.cache()
+    async def cached_route(request, payload):
+        return Payload(value=payload.value)
+
+    request = router_module.Request(
+        {"type": "http", "method": "POST", "path": "/v1/test", "headers": [], "query_string": b""}
+    )
+    await cached_route(request, Payload(value=2))
+    (key,) = store
+    assert len(key) == 64 and "value" not in key

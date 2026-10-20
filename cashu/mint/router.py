@@ -33,6 +33,8 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
+    PostTransactionRequest,
+    PostTransactionResponse,
 )
 from ..core.nuts.nuts import (
     BATCH_MINT_NUT,
@@ -516,7 +518,6 @@ async def mint(
     Call this endpoint after `POST /v1/mint/quote`.
     """
     logger.trace(f"> POST /v1/mint/bolt11: {payload}")
-
     promises = await ledger.mint(
         outputs=payload.outputs, quote_id=payload.quote, signature=payload.signature
     )
@@ -606,6 +607,21 @@ async def melt(
         )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
+
+
+@router.post(
+    "/v1/transaction",
+    name="Transaction",
+    summary="Spend proofs and paid quotes into outputs and a melt",
+    response_model=PostTransactionResponse,
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
+async def transaction(
+    request: Request, payload: PostTransactionRequest
+) -> PostTransactionResponse:
+    logger.trace(f"> POST /v1/transaction: {payload}")
+    return await ledger.transaction(payload)
 
 
 @router.post(
