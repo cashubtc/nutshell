@@ -41,6 +41,7 @@ from ..core.errors import (
     NotAllowedError,
     QuoteAlreadyIssuedError,
     QuoteExpiredError,
+    QuoteNotFoundError,
     QuoteNotPaidError,
     QuotePendingError,
     QuoteSignatureInvalidError,
@@ -78,6 +79,7 @@ from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .keysets import LedgerKeysets
 from .tasks import LedgerTasks
+from .transaction import TXOUT_METHOD
 from .verification import LedgerVerification
 from .watchdog import LedgerWatchdog
 
@@ -696,14 +698,16 @@ class Ledger(
             quote_id (str): ID of the mint quote.
 
         Raises:
-            Exception: Quote not found.
+            QuoteNotFoundError: Quote not found.
 
         Returns:
             MintQuote: Mint quote object.
         """
         quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
         if not quote:
-            raise Exception("quote not found")
+            raise QuoteNotFoundError()
+        if quote.method == TXOUT_METHOD:
+            return quote  # paid at creation, no backend behind it (NUT-XX)
 
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
@@ -745,7 +749,7 @@ class Ledger(
                         quote_id=quote_id, db=self.db, conn=conn
                     )
                     if not quote:
-                        raise Exception("quote not found")
+                        raise QuoteNotFoundError()
                     if quote.unpaid:
                         logger.trace(f"Setting quote {quote_id} as paid")
                         quote.state = MintQuoteState.paid
@@ -817,18 +821,23 @@ class Ledger(
             raise QuoteNotPaidError()
 
         # Also validate quotes created before invoice amount checks were added.
-        self._verify_mint_quote_invoice_amount(
-            bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
-        )
+        if quote.method != TXOUT_METHOD:
+            self._verify_mint_quote_invoice_amount(
+                bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
+            )
 
         previous_state = quote.state
+        # Re-read under the lock: a transaction may have drawn part of the quote.
         quote = await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
             if sum_amount_outputs > (quote.amount_paid if quote.amount_paid is not None else quote.amount) - (quote.amount_issued or 0):
                 raise TransactionError("amount to mint exceeds quote mintable amount")
-            if not v3 and quote.amount != sum_amount_outputs:
+            # A txout quote redeems once and in full (NUT-XX).
+            if (not v3 and quote.amount != sum_amount_outputs) or (
+                quote.method == TXOUT_METHOD and quote.mintable != sum_amount_outputs
+            ):
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
                 raise QuoteExpiredError("quote expired")

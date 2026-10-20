@@ -763,6 +763,8 @@ class MintQuote(LedgerEvent):
 
     @property
     def kind(self) -> JSONRPCSubscriptionKinds:
+        if self.method == "txout":  # NUT-XX txout quotes
+            return JSONRPCSubscriptionKinds.TXOUT_MINT_QUOTE
         return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
 
     @property

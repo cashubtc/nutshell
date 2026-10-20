@@ -31,8 +31,10 @@ from ..core.crypto.transcript import (
     InputContext,
     TransactionShape,
     TranscriptBlindedOutput,
+    TranscriptMintQuoteOutput,
     TranscriptProofInput,
     TranscriptQuote,
+    mint_quote_ids,
     transaction_inputs,
 )
 from ..core.db import Connection
@@ -274,7 +276,8 @@ class LedgerVerification(
         outputs: List[BlindedMessage],
         melt_quote: Optional[MeltQuote] = None,
         mint_quote_inputs: Optional[List[TranscriptQuote]] = None,
-    ) -> Optional[Tuple[bytes, Dict[str, InputContext]]]:
+        mint_quote_outputs: Optional[List[TranscriptMintQuoteOutput]] = None,
+    ) -> Optional[Tuple[bytes, Dict[str, InputContext], List[str]]]:
         """Verify v3 point-secret input witnesses over the transaction transcript.
 
         One shared transcript per transaction, one input digest per input
@@ -286,7 +289,8 @@ class LedgerVerification(
         transactions verify per input as specified.
 
         Passing `mint_quote_inputs` (NUT-XX) always builds the transcript and
-        returns its digest and the quote contexts; the caller checks quotes.
+        returns its digest, the quote contexts and the txout quote ids; the
+        caller checks quotes.
         """
         if mint_quote_inputs is None:
             if not proofs or (not outputs and melt_quote is None):
@@ -326,12 +330,14 @@ class LedgerVerification(
                 if melt_quote is not None
                 else None
             ),
+            mint_quote_outputs=mint_quote_outputs,
         )
         digest_, proof_contexts, quote_contexts = transaction_inputs(shape)
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
-            digest = proof_contexts[ys[(proof.id, proof.secret)]].digest
+            context = proof_contexts[ys[(proof.id, proof.secret)]]
+            digest = context.digest
             # Stored and reported with the exact witness, which verifies only
             # against this input digest. A failure below
             # aborts the transaction, so nothing unverified is ever persisted.
@@ -348,7 +354,10 @@ class LedgerVerification(
                 # Script path: leaf -> root -> tweak -> P, then evaluate (NUT-10).
                 try:
                     verify_script_path_spend(
-                        SecpPublicKey(bytes.fromhex(proof.secret)), digest, witness
+                        SecpPublicKey(bytes.fromhex(proof.secret)),
+                        digest,
+                        witness,
+                        outputs=context.outputs,
                     )
                 except Exception as e:
                     raise TransactionError(
@@ -365,7 +374,7 @@ class LedgerVerification(
                 raise TransactionError("invalid nutroot transaction witness.")
             if not valid:
                 raise TransactionError("invalid nutroot transaction witness.")
-        return digest_, quote_contexts
+        return digest_, quote_contexts, mint_quote_ids(shape)
 
     def _verify_inputs_and_outputs_together(
         self,

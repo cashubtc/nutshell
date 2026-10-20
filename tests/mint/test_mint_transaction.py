@@ -24,6 +24,7 @@ from cashu.core.models import (
     PostMintQuoteRequest,
     PostTransactionRequest,
     TransactionMeltOutput,
+    TransactionMintQuoteOutput,
     TransactionQuoteInput,
 )
 from cashu.core.nuts import nut20
@@ -176,6 +177,11 @@ async def test_transaction_quote_input_to_outputs(ledger: Ledger):
     quote_input = TransactionQuoteInput(
         quote=quote.quote, amount=8, witness=quote_witness(privkey, shape, quote.quote)
     )
+    # An unknown field is refused, not ignored.
+    with pytest.raises(Exception):
+        TransactionMintQuoteOutput.model_validate(
+            {"pubkey": nut20.generate_keypair()[1], "amount": 8, "memo": "x"}
+        )
     result = await ledger.transaction(
         PostTransactionRequest(mint_quote_inputs=[quote_input], blinded_outputs=outputs)
     )

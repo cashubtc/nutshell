@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Union
 
 from ..core.base import Method
+from ..core.crypto.nutroot import NUTROOT_LEAF_TYPE, NUTROOT_LEAF_VERSION
 from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.mint_info import MintInfo
 from ..core.models import (
@@ -31,6 +32,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
+from .transaction import TXOUT_METHOD
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -78,6 +80,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[TRANSACTION_NUT] = {
             "supported": True,
             "quote_input_fee_ppk": settings.quote_input_fee_ppk,
+            "fixed_txout_quotes": True,
         }
 
         return mint_features
@@ -126,7 +129,12 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[STATE_NUT] = supported_dict
         mint_features[FEE_RETURN_NUT] = supported_dict
         mint_features[RESTORE_NUT] = supported_dict
-        mint_features[SCRIPT_NUT] = supported_dict
+        # NUT-10 leaves as version || type hex; the template leaf (0005, NUT-YY) needs the
+        # fixed txout quotes NUT-XX advertises.
+        mint_features[SCRIPT_NUT] = {
+            "supported": True,
+            "leaves": [f"{NUTROOT_LEAF_VERSION:02x}{t:02x}" for t in NUTROOT_LEAF_TYPE.values()],
+        }
         mint_features[P2PK_NUT] = supported_dict
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
@@ -189,6 +197,16 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
                         )
 
+        # Txout quotes (NUT-XX) exist in every unit a backend serves.
+        for unit_name in sorted({u.name for d in self.backends.values() for u in d}):
+            websocket_features[_SUPPORTED].append(
+                {
+                    _METHOD: TXOUT_METHOD,
+                    _UNIT: unit_name,
+                    _COMMANDS: [JSONRPCSubscriptionKinds.TXOUT_MINT_QUOTE.value],
+                }
+            )
+
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
 
@@ -247,6 +265,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     {
                         "method": "POST",
                         "path": "/v1/transaction",
+                    },
+                    {
+                        "method": "POST",
+                        "path": "/v1/mint/txout",
                     },
                 ]
             }
