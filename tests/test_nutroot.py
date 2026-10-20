@@ -1654,3 +1654,24 @@ async def test_nut17_spent_event_returns_the_exact_nutroot_witness():
     assert state.input_digest == kp["input_digest"]
     assert state.commitment is None
     assert "commitment" not in state.model_dump()
+
+
+def test_unknown_leaf_type_and_commit_with_extra_field_are_rejected():
+    """0xff is never allocated, and a commit leaf carries its hash alone (NUT-10)."""
+    forms = VECTORS["leaf_forms"]
+    for leaf in (forms["leaf_unknown_type"], forms["leaf_commit_with_n"]):
+        with pytest.raises(ValueError):
+            parse_nutroot_leaf(bytes.fromhex(leaf))
+
+
+def test_signing_package_spec_vector():
+    """The spec's nutspA package: quote input locked to a script-only key."""
+    from cashu.core.nuts.nut10_transport import SigningPackage
+
+    v = VECTORS["signing_package"]
+    unsigned = SigningPackage.deserialize(v["package_string"])
+    assert unsigned.serialize() == v["package_string"]
+    assert unsigned.contexts()[0].hex() == v["input_digest"]
+    signed = SigningPackage.deserialize(v["signed_string"])
+    assert signed.contexts()[0].hex() == v["input_digest"]
+    assert signed.spends[0].signatures == v["witness"]["signatures"]
