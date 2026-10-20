@@ -12,11 +12,13 @@ from ..core.crypto.bls import PrivateKey as BlsPrivateKey
 from ..core.crypto.bls import curve_order as BLS_FR_ORDER
 from ..core.crypto.keys import PrivateKey, get_keyset_id_version, is_bls_keyset
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database, LockOptions
 from ..core.errors import NotAllowedError
 from ..core.secret import Secret
 from ..core.settings import settings
 from ..wallet.crud import (
+    allocate_quote_counter,
     bump_secret_derivation,
     get_seed_and_mnemonic,
     store_seed_and_mnemonic,
@@ -26,12 +28,13 @@ from .protocols import SupportsDb, SupportsKeysets
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
 # NUT-13 derivation types. 0x00-0x03 are components of one proof allocation and
-# share the keyset's proof counter; 0x04 has its own quote counter.
+# share the keyset's proof counter; 0x04 and 0x05 share a per-mint quote counter.
 DERIVATION_TYPE_SECRET_KEY = 0x00
 DERIVATION_TYPE_BLINDING_FACTOR = 0x01
 DERIVATION_TYPE_NUMS_OFFSET = 0x02
 DERIVATION_TYPE_LEAF_KEY = 0x03
 DERIVATION_TYPE_QUOTE_LOCK = 0x04
+DERIVATION_TYPE_QUOTE_ID_PREIMAGE = 0x05
 
 
 class WalletSecrets(SupportsDb, SupportsKeysets):
@@ -206,7 +209,6 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         secret = hmac.new(self.seed, base + b"\x00", hashlib.sha256).digest()
         r = hmac.new(self.seed, base + b"\x01", hashlib.sha256).digest()
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
-        logger.trace(f"HMAC-SHA256 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
     def _derive_v3_scalar(
@@ -214,24 +216,31 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         counter: int,
         scope: str,
         derivation_type: int,
-        order: int = SECP256K1_N,
+        order: Optional[int] = SECP256K1_N,
         suffix: bytes = b"",
     ) -> bytes:
         """Derive one V3 scalar by rejection sampling the framed V3 message.
 
         message_v3 = DST || u32_BE(len(scope)) || scope || u64_BE(counter)
                      || derivation_type || u32_BE(attempt) || type_suffix
-        The scope (a keyset id, or the mint identity pubkey for type 0x04) is the one
+        The scope (a keyset id, or the mint identity pubkey for types 0x04-0x05) is the one
         variable-length field, so it is framed; a type may then append its own
         suffix. V2 keeps its unframed message: reframing it would re-derive every
-        deployed secret.
+        deployed secret. With no order, the first digest is used as is.
         """
         if self.seed is None:
             raise RuntimeError("Seed not initialized yet.")
+        if len(self.seed) != 64:
+            raise ValueError("V3 derivation requires a 64-byte BIP39 seed")
         scope_bytes = bytes.fromhex(scope)
         # NUT-13: the full keyset id or the mint identity key, never a short id.
         if len(scope_bytes) != 33:
             raise ValueError("V3 derivation scope must be 33 bytes")
+        if derivation_type in (
+            DERIVATION_TYPE_QUOTE_LOCK,
+            DERIVATION_TYPE_QUOTE_ID_PREIMAGE,
+        ):
+            SecpPublicKey(scope_bytes)
         base = (
             b"Cashu_KDF_HMAC_SHA256"
             + len(scope_bytes).to_bytes(4, byteorder="big", signed=False)
@@ -245,7 +254,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
                 self.seed, base + attempt_bytes + suffix, hashlib.sha256
             ).digest()
             x = int.from_bytes(digest, "big")
-            if x != 0 and x < order:
+            if order is None or (x != 0 and x < order):
                 return digest
         raise RuntimeError(f"V3 derivation failed for type {derivation_type}")
 
@@ -297,6 +306,30 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             self._derive_v3_scalar(counter, mint_pubkey, DERIVATION_TYPE_QUOTE_LOCK)
         )
 
+    def derive_v3_quote_id_preimage(self, counter: int, mint_pubkey: str) -> bytes:
+        """Derive a mint quote id preimage (NUT-13 message type 0x05).
+
+        Same quote counter and scope as the 0x04 lock key. Any 32 bytes is valid,
+        so there is no rejection sampling.
+        """
+        return self._derive_v3_scalar(
+            counter, mint_pubkey, DERIVATION_TYPE_QUOTE_ID_PREIMAGE, order=None
+        )
+
+    async def allocate_v3_quote_key(self, mint_pubkey: str) -> SecpPrivateKey:
+        counter = await allocate_quote_counter(self.db, mint_pubkey)
+        return self.derive_v3_quote_lock_key(counter, mint_pubkey)
+
+    def recover_v3_quote_key(
+        self, pubkey: str, mint_pubkey: str, *, start: int = 0, stop: int = 1000
+    ) -> Optional[SecpPrivateKey]:
+        """Recover a known quote lock by value under its mint identity."""
+        for counter in range(start, stop):
+            candidate = self.derive_v3_quote_lock_key(counter, mint_pubkey)
+            if candidate.public_key.format().hex() == pubkey.lower():
+                return candidate
+        return None
+
     async def _derive_secret_hmac_sha256_v3(
         self, counter: int, keyset_id: str
     ) -> Tuple[bytes, bytes, str]:
@@ -313,7 +346,6 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             counter, keyset_id, DERIVATION_TYPE_BLINDING_FACTOR, BLS_FR_ORDER
         )
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
-        logger.trace(f"HMAC-SHA256 V3 derivation: keyset_id={keyset_id} counter={counter} -> secret={secret.hex()} r={r.hex()}")
         return secret, r, derivation_path
 
     async def generate_n_secrets(

@@ -348,7 +348,8 @@ class Ledger(
         if len(change_outputs) != len(melt_quote.change):
             raise TransactionError("could not reconstruct melt change promises")
         for output, promise in zip(change_outputs, melt_quote.change):
-            promise.dleq = self._generate_dleq(output, promise)
+            if not is_bls_keyset(promise.id):
+                promise.dleq = self._generate_dleq(output, promise)
 
     async def _finalize_melt_paid(
         self,
@@ -786,6 +787,7 @@ class Ledger(
         sum_amount_outputs = sum([b.amount for b in outputs])
         # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
         output_unit = self.keysets[outputs[0].id].unit
+        v3 = is_bls_keyset(outputs[0].id)
 
         quote = await self.get_mint_quote(quote_id)
         if quote.pending:
@@ -801,11 +803,13 @@ class Ledger(
         )
 
         previous_state = quote.state
-        await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+        quote = await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
-            if not quote.amount == sum_amount_outputs:
+            if sum_amount_outputs > (quote.amount_paid if quote.amount_paid is not None else quote.amount) - (quote.amount_issued or 0):
+                raise TransactionError("amount to mint exceeds quote mintable amount")
+            if not v3 and quote.amount != sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
                 raise QuoteExpiredError("quote expired")
@@ -815,11 +819,13 @@ class Ledger(
             promises = await self._sign_blinded_messages(outputs)
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(
-                quote_id=quote_id, state=previous_state
+                quote_id=quote_id, state=previous_state,
+                issued_amount=0,
             )
             raise e
         await self.db_write._unset_mint_quote_pending(
-            quote_id=quote_id, state=MintQuoteState.issued
+            quote_id=quote_id, state=MintQuoteState.issued,
+            issued_amount=sum_amount_outputs,
         )
 
         return promises
@@ -888,25 +894,34 @@ class Ledger(
                 bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
             )
 
+        # A v3 batch commits each quote's amount, so it must name them and issue
+        # exactly their total (NUT-29).
+        v3 = is_bls_keyset(payload.outputs[0].id)
+        if v3 and not payload.quote_amounts:
+            raise TransactionError("a v3 batch must carry quote_amounts")
+        # Every quote input commits its lock key, so one unlocked quote breaks the whole transcript.
+        if v3 and not all(q.pubkey for q in quotes):
+            raise TransactionError("minting on a v3 keyset requires a locked quote.")
+
         # Check amount balance
         if payload.quote_amounts:
             if len(payload.quote_amounts) != len(quotes):
                 raise TransactionError("quote_amounts length must match quotes length")
             for i, quote in enumerate(quotes):
                 if (
-                    quote.method == Method.bolt11.name
+                    not v3 and quote.method == Method.bolt11.name
                     and payload.quote_amounts[i] != quote.amount
                 ):
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
                     )
-                if payload.quote_amounts[i] > quote.amount:
+                if not v3 and payload.quote_amounts[i] > quote.amount:
                     raise TransactionError(
                         f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}"
                     )
 
         quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
-        if Method.bolt11.name in methods:
+        if Method.bolt11.name in methods or v3:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
                     "amount to mint does not match quote amounts sum"
@@ -915,29 +930,32 @@ class Ledger(
             if sum_amount_outputs > sum(quote_amounts):
                 raise TransactionError("amount to mint exceeds quote amounts sum")
 
-        # Signature validation (NUT-20)
-        for i, quote in enumerate(quotes):
-            sig = payload.signatures[i] if payload.signatures else None
-
-            if not quote.pubkey and sig:
-                raise QuoteSignatureInvalidError()
-
-            # The spec says msg_to_sign = quote_id[i] || B_0 || B_1 || ... || B_(n-1)
-            # This logic is inside self._verify_mint_quote_witness, let's reuse it.
-            # V3: the batch is one transaction; every witness signs the digest
-            # covering all quote inputs and outputs.
-            if not self._verify_mint_quote_witness(
-                quote,
-                payload.outputs,
-                sig,
-                batch_quotes=list(zip(payload.quotes, quote_amounts)),
-            ):
-                raise QuoteSignatureInvalidError()
-
-        # Set all quotes to pending
         quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
-
         try:
+            # Signature validation (NUT-20)
+            for i, quote in enumerate(quotes):
+                sig = payload.signatures[i] if payload.signatures else None
+
+                if quote_amounts[i] > (quote.amount_paid if quote.amount_paid is not None else quote.amount) - (quote.amount_issued or 0):
+                    raise TransactionError("quote draw exceeds its mintable amount")
+                if not quote.pubkey and sig:
+                    raise QuoteSignatureInvalidError()
+
+                # The spec says msg_to_sign = quote_id[i] || B_0 || B_1 || ... || B_(n-1)
+                # This logic is inside self._verify_mint_quote_witness, let's reuse it.
+                # V3: the batch is one transaction; every witness signs the digest
+                # covering all quote inputs and outputs.
+                if not self._verify_mint_quote_witness(
+                    quote,
+                    payload.outputs,
+                    sig,
+                    batch_quotes=[
+                        (q.quote, a, q.pubkey, q.amount_issued or 0)
+                        for q, a in zip(quotes, quote_amounts)
+                    ],
+                ):
+                    raise QuoteSignatureInvalidError()
+
             for quote in quotes:
                 if quote.expiry and quote.expiry < int(time.time()):
                     raise QuoteExpiredError("quote expired")
@@ -951,13 +969,15 @@ class Ledger(
         except Exception as e:
             # Revert pending status
             await self.db_write._unset_mint_quotes_pending(
-                quote_ids=payload.quotes, state=MintQuoteState.paid
+                quote_ids=payload.quotes, state=MintQuoteState.paid,
+                issued_amounts={q: 0 for q in payload.quotes},
             )
             raise e
 
         # Set all quotes to issued
         await self.db_write._unset_mint_quotes_pending(
-            quote_ids=payload.quotes, state=MintQuoteState.issued
+            quote_ids=payload.quotes, state=MintQuoteState.issued,
+            issued_amounts=dict(zip(payload.quotes, quote_amounts)),
         )
 
         return promises
@@ -1657,7 +1677,8 @@ class Ledger(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
-                    promise.dleq = self._generate_dleq(output, promise)
+                    if not is_bls_keyset(promise.id):
+                        promise.dleq = self._generate_dleq(output, promise)
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
@@ -1675,11 +1696,7 @@ class Ledger(
             )
         private_key_amount = keyset.private_keys[promise.amount]
         if is_bls_keyset(promise.id):
-            B_ = BlsPublicKey(bytes.fromhex(output.B_))
-            C_, e, s = bls_dhke.step2_bob(B_, private_key_amount)  # type: ignore[arg-type]
-            if C_.format().hex() != promise.C_:
-                raise TransactionError("restored signature does not match promise")
-            return DLEQ(e=e.to_hex(), s=s.to_hex())
+            raise TransactionError("v3 keysets carry no DLEQ")
         else:
             secp_B_ = SecpPublicKey(bytes.fromhex(output.B_))
             secp_C_, secp_e, secp_s = b_dhke.step2_bob(
@@ -1778,7 +1795,8 @@ class Ledger(
             
             try:
                 if is_v3:
-                    C_, e, s = bls_dhke.step2_bob(B_, private_key_amount) # type: ignore
+                    C_ = bls_dhke.step2_bob(B_, private_key_amount) # type: ignore
+                    e, s = None, None
                 else:
                     C_, e, s = b_dhke.step2_bob(B_, private_key_amount) # type: ignore
             except ValueError as exc:
@@ -1805,7 +1823,13 @@ class Ledger(
                     id=keyset_id,
                     amount=amount,
                     C_=C_.format().hex(),
-                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
+                    # NUT-12 is version-scoped: no DLEQ on v3 keysets, whose
+                    # signatures are publicly verifiable by pairing.
+                    dleq=(
+                        None
+                        if is_bls_keyset(keyset_id)
+                        else DLEQ(e=e.to_hex(), s=s.to_hex())
+                    ),
                 )
                 signatures.append(signature)
 

@@ -8,13 +8,17 @@ shared vectors in tests/nutroot_v3_vectors.json.
 """
 
 import hashlib
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from coincurve import PublicKeyXOnly
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .b_dhke import hash_to_curve as legacy_hash_to_curve
+from .bls_dhke import hash_to_curve as bls_hash_to_curve
+from .bls_dhke import secret_to_hash_input
 from .keys import is_bls_keyset
 from .secp import PrivateKey, PublicKey
 
@@ -52,6 +56,12 @@ NUTROOT_MAX_WITNESS_LENGTH = 4096
 NUTROOT_MAX_LEAF_TIME = 2**53 - 1
 
 SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+NUTROOT_NUMS = PublicKey(
+    b"\x02"
+    + hashlib.sha256(
+        PrivateKey((1).to_bytes(32, "big")).public_key.format(False)
+    ).digest()
+)
 
 
 @dataclass
@@ -81,6 +91,14 @@ class NutrootControlBlock(BaseModel):
     internal_key: str = Field(alias="K")
     path: List[str] = Field(default_factory=list, max_length=NUTROOT_MAX_TREE_DEPTH)
 
+    @field_validator("internal_key")
+    @classmethod
+    def validate_internal_key(cls, value: str) -> str:
+        if len(value) != 66 or value[:2] not in ("02", "03"):
+            raise ValueError("Control key must be a 33-byte compressed point")
+        PublicKey(bytes.fromhex(value))
+        return value
+
 
 class NutrootWitness(BaseModel):
     """Strict wire model shared by key-path and script-path witnesses."""
@@ -98,11 +116,27 @@ class NutrootWitness(BaseModel):
             raise ValueError("leaf and control must be provided together")
         if self.leaf is None and len(self.signatures) != 1:
             raise ValueError("key path witness requires exactly one signature")
+        if self.leaf is None and self.preimage is not None:
+            raise ValueError("key path witness cannot carry a preimage")
         return self
 
     @property
     def is_script_path(self) -> bool:
         return self.leaf is not None
+
+
+def verify_nutroot_witness(
+    secret: PublicKey, digest: bytes, witness_json: str, now: Optional[float] = None
+) -> None:
+    if len(witness_json) > NUTROOT_MAX_WITNESS_LENGTH:
+        raise ValueError("Nutroot witness exceeds its length limit")
+    witness = NutrootWitness.model_validate_json(witness_json)
+    if witness.is_script_path:
+        verify_script_path_spend(secret, digest, witness, now=now)
+    elif not PublicKeyXOnly(secret.format()[1:]).verify(
+        bytes.fromhex(witness.signatures[0]), digest
+    ):
+        raise ValueError("Invalid Nutroot key-path signature")
 
 
 def tagged_hash(tag: str, *messages: bytes) -> bytes:
@@ -238,7 +272,11 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
     if type_name == "commit":
         # Digest only: keys or disclosure on a commit leaf are malformed (NUT-10).
         records = list(read_tlv_records(data[2:], unique_ascending=True))
-        if len(records) != 1 or records[0][0] != _FIELD_HASH or len(records[0][1]) != 32:
+        if (
+            len(records) != 1
+            or records[0][0] != _FIELD_HASH
+            or len(records[0][1]) != 32
+        ):
             raise ValueError("commit leaf must carry exactly a 32-byte hash field")
         return NutrootLeaf(type="commit", hash=records[0][1])
     n: Optional[int] = None
@@ -312,6 +350,8 @@ def nutroot_leaf_hash(serialized_leaf: bytes) -> bytes:
 
 def nutroot_branch_hash(a: bytes, b: bytes) -> bytes:
     """Branch of two child hashes, sorted pair, no left/right flags."""
+    if len(a) != 32 or len(b) != 32:
+        raise ValueError("Merkle hashes must be 32 bytes")
     lo, hi = (a, b) if a <= b else (b, a)
     return tagged_hash(NUTROOT_BRANCH_TAG, lo, hi)
 
@@ -338,6 +378,8 @@ def nutroot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
         raise ValueError("Merkle root of zero leaves")
     if len(leaf_hashes) > 2**NUTROOT_MAX_TREE_DEPTH:
         raise ValueError(f"Tree exceeds depth {NUTROOT_MAX_TREE_DEPTH}")
+    if any(len(value) != 32 for value in leaf_hashes):
+        raise ValueError("Merkle hashes must be 32 bytes")
     level = sorted(leaf_hashes)
     while len(level) > 1:
         nxt = [
@@ -353,6 +395,10 @@ def nutroot_merkle_root(leaf_hashes: List[bytes]) -> bytes:
 def nutroot_merkle_path(leaf_hashes: List[bytes], index: int) -> List[bytes]:
     """Merkle path for the leaf at index (an index into the transmitted
     list): sibling hashes on the way up the sorted fold."""
+    if len(leaf_hashes) > 2**NUTROOT_MAX_TREE_DEPTH:
+        raise ValueError(f"Tree exceeds depth {NUTROOT_MAX_TREE_DEPTH}")
+    if any(len(value) != 32 for value in leaf_hashes):
+        raise ValueError("Merkle hashes must be 32 bytes")
     if not 0 <= index < len(leaf_hashes):
         raise ValueError(f"Leaf index out of range: {index}")
     path: List[bytes] = []
@@ -395,6 +441,8 @@ def nutroot_tweak(internal_key: PublicKey, merkle_root: Optional[bytes] = None) 
 
     Omit merkle_root for the empty tweak (aggregated keys, NUT-10).
     """
+    if merkle_root is not None and len(merkle_root) != 32:
+        raise ValueError("Merkle root must be 32 bytes")
     internal_key_bytes = internal_key.format()
     if merkle_root is not None:
         digest = tagged_hash(NUTROOT_TWEAK_TAG, internal_key_bytes, merkle_root)
@@ -457,13 +505,8 @@ def proof_transcript_y(secret: str, keyset_id: str) -> bytes:
     otherwise. A secret never enters a transcript.
     """
     if is_bls_keyset(keyset_id):
-        from .bls_dhke import hash_to_curve as bls_hash_to_curve
-        from .bls_dhke import secret_to_hash_input
-
         return bls_hash_to_curve(secret_to_hash_input(secret)).format()
-    from .b_dhke import hash_to_curve
-
-    return hash_to_curve(secret.encode("utf-8")).format()
+    return legacy_hash_to_curve(secret.encode("utf-8")).format()
 
 
 def keyset_id_transcript_bytes(keyset_id: str) -> bytes:
@@ -476,10 +519,9 @@ def keyset_id_transcript_bytes(keyset_id: str) -> bytes:
     """
     if not keyset_id:
         raise ValueError("Transcript keyset id must be non-empty")
-    try:
+    if len(keyset_id) % 2 == 0 and re.fullmatch(r"[0-9a-f]+", keyset_id):
         return bytes.fromhex(keyset_id)
-    except ValueError:
-        return keyset_id.encode("utf-8")
+    return keyset_id.encode("utf-8")
 
 
 def is_nutroot_point_secret(secret: str, keyset_id: str) -> bool:

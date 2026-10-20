@@ -16,6 +16,9 @@ from pydantic import (
     ConfigDict,
     Field,
     RootModel,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
     model_validator,
 )
 from sqlalchemy import RowMapping
@@ -41,7 +44,11 @@ from .crypto.keys import (
     derive_pubkeys,
     is_bls_keyset,
 )
-from .crypto.nutroot import is_nutroot_point_secret
+from .crypto.nutroot import (
+    NUTROOT_NUMS,
+    is_nutroot_point_secret,
+    parse_nutroot_leaf,
+)
 from .crypto.secp import PrivateKey as SecpPrivateKey
 from .crypto.secp import PublicKey as SecpPublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
@@ -85,21 +92,32 @@ class ProofSpentState(Enum):
 class ProofState(LedgerEvent):
     Y: str
     state: ProofSpentState
-    # Pre-v3: the witness that spent the proof, when the spend needed one.
-    # v3: only for a spend through a leaf carrying disclosure mode 0x01;
-    # private spends return the commitment alone (NUT-07).
+    # The exact witness string stored for the spend. Nutroot witnesses are
+    # reported for both PENDING and SPENT proofs, regardless of disclosure.
     witness: Optional[str] = None
     # NUT-07: input digest a published v3 witness signs (NUT-10).
     input_digest: Optional[str] = None
-    # NUT-07: v3 spend commitment over (Y, input digest, exact witness string).
+    # Accepted from remote mints for compatibility. Local status responses
+    # publish the original witness and digest instead of a commitment.
     commitment: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def serialize_state(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        data = handler(self)
+        if self.commitment is None:
+            data.pop("commitment", None)
+        return data
 
     @model_validator(mode="after")
     def check_witness(self):
-        if self.state != ProofSpentState.spent and any(
+        if self.state == ProofSpentState.unspent and any(
             v is not None for v in (self.witness, self.input_digest, self.commitment)
         ):
-            raise ValueError('Spend fields can only be set if the state is "SPENT"')
+            raise ValueError('Spend fields cannot be set for an "UNSPENT" proof')
+        if self.state == ProofSpentState.pending and self.commitment is not None:
+            raise ValueError('A spend commitment requires the "SPENT" state')
+        if self.state == ProofSpentState.pending and (self.witness is None) != (self.input_digest is None):
+            raise ValueError("Pending Nutroot evidence requires both witness and input digest")
         return self
 
     @property
@@ -158,11 +176,51 @@ class SpendInfo(BaseModel):
     never sent to the mint.
     """
 
+    model_config = ConfigDict(extra="allow")
+
     k: Optional[str] = None
     E: Optional[str] = None
     K: Optional[str] = None
     u: Optional[str] = None
     tree: Optional[List[str]] = None
+
+    @field_validator("k", "u")
+    @classmethod
+    def scalar_hex(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            if len(value) != 64:
+                raise ValueError("Spend-info scalar must be 32 bytes")
+            SecpPrivateKey(bytes.fromhex(value))
+        return value
+
+    @field_validator("E", "K")
+    @classmethod
+    def point_hex(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            if len(value) != 66 or value[:2] not in ("02", "03"):
+                raise ValueError("Spend-info key must be a compressed point")
+            SecpPublicKey(bytes.fromhex(value))
+        return value
+
+    @field_validator("tree")
+    @classmethod
+    def leaf_tree(cls, value: Optional[List[str]]) -> Optional[List[str]]:
+        if value is not None:
+            if not value or len(value) > 8:
+                raise ValueError("Spend-info tree must contain 1 to 8 leaves")
+            for leaf in value:
+                parse_nutroot_leaf(bytes.fromhex(leaf))
+        return value
+
+    @model_validator(mode="after")
+    def shape(self) -> "SpendInfo":
+        if self.k is not None and self.E is not None:
+            raise ValueError("Spend info cannot carry both k and E")
+        if self.tree is not None and not (self.k or self.E or self.K):
+            raise ValueError("Spend-info tree needs an internal key source")
+        if self.u is not None and self.tree is None:
+            raise ValueError("NUMS offset requires a tree")
+        return self
 
 
 class Proof(BaseModel):
@@ -179,9 +237,8 @@ class Proof(BaseModel):
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
     spend_info: Optional[SpendInfo] = None  # nutroot spend info (local-only)
-    # Mint-side: v3 input digest the witness signed (NUT-10), stored with the
-    # spent proof; NUT-07 serves it only for disclosed spends, and it opens
-    # the spend commitment.
+    # Mint-side: v3 input digest the witness signed (NUT-10), stored and
+    # reported alongside the exact witness in proof-state responses.
     digest: Union[None, str] = None
 
     # whether this proof is reserved for sending, used for coin management in the wallet
@@ -207,8 +264,22 @@ class Proof(BaseModel):
         else:
             self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
 
+    @model_serializer(mode="wrap")
+    def serialize_proof(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        data = handler(self)
+        if is_bls_keyset(self.id):
+            data.pop("dleq", None)
+        return data
+
     @classmethod
     def from_dict(cls, proof_dict: dict):
+        if proof_dict.get("spend_info") and isinstance(proof_dict["spend_info"], str):
+            encoded = proof_dict["spend_info"]
+            proof_dict["spend_info"] = (
+                cbor2.loads(base64.b64decode(encoded[5:]))
+                if encoded.startswith("cbor:")
+                else json.loads(encoded)
+            )
         if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], dict):
             proof_dict["dleq"] = DLEQWallet(**proof_dict["dleq"])
         elif proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
@@ -225,8 +296,9 @@ class Proof(BaseModel):
         return_dict = dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
         # optional fields
-        if include_dleq:
-            assert self.dleq, "DLEQ proof is missing"
+        # DLEQ rides only where it exists: v3 proofs carry none (NUT-12 is
+        # version-scoped; they verify by pairing).
+        if include_dleq and self.dleq and not is_bls_keyset(self.id):
             return_dict["dleq"] = self.dleq.model_dump()  # type: ignore
 
         if self.witness:
@@ -234,6 +306,9 @@ class Proof(BaseModel):
 
         if self.p2pk_e:
             return_dict["p2pk_e"] = self.p2pk_e
+
+        if self.spend_info is not None:
+            return_dict["spend_info"] = self.spend_info.model_dump(exclude_none=True)
 
         return return_dict
 
@@ -310,6 +385,13 @@ class BlindedSignature(BaseModel):
     amount: int
     C_: str = Field(..., max_length=MAX_PUBKEY_LEN)  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
+
+    @model_serializer(mode="wrap")
+    def serialize_signature(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        data = handler(self)
+        if is_bls_keyset(self.id):
+            data.pop("dleq", None)
+        return data
 
     @classmethod
     def from_row(cls, row: Row):
@@ -1120,7 +1202,7 @@ class MintKeyset:
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
-            amounts=json.loads(row["amounts"]),
+            amounts=json.loads(row["amounts"]) if row["amounts"] is not None else None,
             balance=row["balance"],
             fees_paid=row["fees_paid"],
             final_expiry=row["final_expiry"],
@@ -1257,8 +1339,19 @@ class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
 
+    @model_validator(mode="after")
+    def strip_v3_witnesses(self) -> "TokenV3Token":
+        self.proofs = [
+            proof.model_copy(update={"witness": None}) if is_bls_keyset(proof.id) else proof
+            for proof in self.proofs
+        ]
+        return self
+
     def to_dict(self, include_dleq=False):
         return_dict = dict(proofs=[p.to_dict(include_dleq) for p in self.proofs])
+        for proof, encoded in zip(self.proofs, return_dict["proofs"]):
+            if is_bls_keyset(proof.id):
+                encoded.pop("witness", None)
         if self.mint:
             return_dict.update(dict(mint=self.mint))  # type: ignore
         return return_dict
@@ -1384,11 +1477,24 @@ class TokenV4SpendInfo(BaseModel):
     """Nutroot spend info in a V4 token: bearer key, DH ephemeral, internal key, NUMS
     offset, leaf tree."""
 
+    model_config = ConfigDict(extra="allow")
+
     k: Optional[bytes] = None
     e: Optional[bytes] = None
     i: Optional[bytes] = None
     u: Optional[bytes] = None
     t: Optional[List[bytes]] = None
+
+    @model_validator(mode="after")
+    def validate_spend_info(self) -> "TokenV4SpendInfo":
+        SpendInfo(
+            k=self.k.hex() if self.k is not None else None,
+            E=self.e.hex() if self.e is not None else None,
+            K=self.i.hex() if self.i is not None else None,
+            u=self.u.hex() if self.u is not None else None,
+            tree=[leaf.hex() for leaf in self.t] if self.t is not None else None,
+        )
+        return self
 
 
 class TokenV4Proof(BaseModel):
@@ -1416,7 +1522,7 @@ class TokenV4Proof(BaseModel):
                     s=bytes.fromhex(proof.dleq.s),
                     r=bytes.fromhex(proof.dleq.r),
                 )
-                if proof.dleq
+                if proof.dleq and not is_bls_keyset(proof.id)
                 else None
             ),
             # A v3 witness signs one input's digest in one transaction, so it means nothing
@@ -1436,6 +1542,7 @@ class TokenV4Proof(BaseModel):
                         if proof.spend_info.tree
                         else None
                     ),
+                    **(proof.spend_info.model_extra or {}),
                 )
                 if proof.spend_info
                 else None
@@ -1448,6 +1555,12 @@ class TokenV4Token(BaseModel):
     i: bytes
     # proofs
     p: List[TokenV4Proof]
+
+    @model_validator(mode="after")
+    def strip_v3_witnesses(self) -> "TokenV4Token":
+        if is_bls_keyset(self.i.hex()):
+            self.p = [proof.model_copy(update={"w": None}) for proof in self.p]
+        return self
 
 
 @dataclass
@@ -1525,7 +1638,8 @@ class TokenV4(Token):
                         E=p.si.e.hex() if p.si.e else None,
                         K=p.si.i.hex() if p.si.i else None,
                         u=p.si.u.hex() if p.si.u else None,
-                        tree=[leaf.hex() for leaf in p.si.t] if p.si.t else None,
+                        tree=[leaf.hex() for leaf in p.si.t] if p.si.t is not None else None,
+                        **(p.si.model_extra or {}),
                     )
                     if p.si
                     else None
@@ -1554,25 +1668,7 @@ class TokenV4(Token):
             tokens.append(
                 TokenV4Token(
                     i=bytes.fromhex(keyset_id),
-                    p=[
-                        TokenV4Proof(
-                            a=p.amount,
-                            s=p.secret,
-                            c=bytes.fromhex(p.C),
-                            d=(
-                                TokenV4DLEQ(
-                                    e=bytes.fromhex(p.dleq.e),
-                                    s=bytes.fromhex(p.dleq.s),
-                                    r=bytes.fromhex(p.dleq.r),
-                                )
-                                if p.dleq
-                                else None
-                            ),
-                            w=p.witness,
-                            pe=bytes.fromhex(p.p2pk_e) if p.p2pk_e else None,
-                        )
-                        for p in proofs
-                    ],
+                    p=[TokenV4Proof.from_proof(p) for p in proofs],
                 )
             )
 
@@ -1594,8 +1690,11 @@ class TokenV4(Token):
         # strip witness if not present
         for token in return_dict["t"]:
             for proof in token["p"]:
+                if is_bls_keyset(token["i"].hex()):
+                    proof.pop("w", None)
+                    proof.pop("d", None)
                 if not proof.get("w"):
-                    del proof["w"]
+                    proof.pop("w", None)
                 # strip pe if not present
                 if not proof.get("pe"):
                     if "pe" in proof:
@@ -1650,32 +1749,7 @@ class TokenV4(Token):
 
     def to_tokenv3(self) -> TokenV3:
         tokenv3 = TokenV3(_memo=self.d, _unit=self.u)
-        for token in self.t:
-            tokenv3.token.append(
-                TokenV3Token(
-                    mint=self.m,
-                    proofs=[
-                        Proof(
-                            id=token.i.hex(),
-                            amount=p.a,
-                            secret=p.s,
-                            C=p.c.hex(),
-                            dleq=(
-                                DLEQWallet(
-                                    e=p.d.e.hex(),
-                                    s=p.d.s.hex(),
-                                    r=p.d.r.hex(),
-                                )
-                                if p.d
-                                else None
-                            ),
-                            witness=p.w,
-                            p2pk_e=p.pe.hex() if p.pe else None,
-                        )
-                        for p in token.p
-                    ],
-                )
-            )
+        tokenv3.token.append(TokenV3Token(mint=self.m, proofs=self.proofs))
         return tokenv3
 
     @classmethod
@@ -1700,6 +1774,9 @@ class AuthProof(BaseModel):
     secret: str = Field(..., max_length=max_secret_length)
     C: str = Field(..., max_length=MAX_PUBKEY_LEN)  # signature
     amount: int = 1  # default amount
+    # Required on version 02 auth keysets: the key-path witness over the
+    # request transcript digest (NUT-22). Absent pre-v3.
+    witness: Optional[str] = None
 
     prefix: ClassVar[str] = "authA"
 
@@ -1714,11 +1791,13 @@ class AuthProof(BaseModel):
 
     @classmethod
     def from_proof(cls, proof: Proof):
-        return cls(id=proof.id, secret=proof.secret, C=proof.C)
+        return cls(id=proof.id, secret=proof.secret, C=proof.C, witness=proof.witness)
 
     def to_base64(self):
         serialize_dict = self.model_dump()
         serialize_dict.pop("amount", None)
+        if serialize_dict.get("witness") is None:
+            serialize_dict.pop("witness", None)
         return self.prefix + base64.urlsafe_b64encode(
             json.dumps(serialize_dict).encode()
         ).decode().rstrip("=")
@@ -1782,6 +1861,34 @@ class NUT10Option(BaseModel):
     t: Optional[List[List[str]]] = None  # tags
 
 
+class NutrootOption(BaseModel):
+    """NUT-18 receiver-keyed locking request for v3 outputs."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    k: str
+    l: Optional[List[str]] = None  # noqa: E741
+    b: Optional[List[str]] = None
+
+    @model_validator(mode="after")
+    def validate_tree(self) -> "NutrootOption":
+        SpendInfo.point_hex(self.k)
+        SpendInfo.leaf_tree(self.l)
+        keys = {
+            key.format().hex()
+            for leaf in self.l or []
+            for key in parse_nutroot_leaf(bytes.fromhex(leaf)).keys
+        }
+        if self.b is not None:
+            for key in self.b:
+                SpendInfo.point_hex(key)
+            if len(self.b) != len(set(self.b)) or not set(self.b) <= keys:
+                raise ValueError("Blind-me keys must be distinct requested leaf keys")
+        if bytes.fromhex(self.k) == NUTROOT_NUMS.format() and not self.l:
+            raise ValueError("NUMS requests need a condition tree")
+        return self
+
+
 class PaymentRequest(BaseModel):
     i: Optional[str] = None  # payment id
     a: Optional[int] = None  # amount
@@ -1791,3 +1898,4 @@ class PaymentRequest(BaseModel):
     d: Optional[str] = None  # description
     t: Optional[List[Transport]] = None  # transports
     nut10: Optional[NUT10Option] = None
+    nutroot: Optional[NutrootOption] = None

@@ -370,3 +370,15 @@ async def m019_add_p2pk_e_to_proofs(db: Database):
     async with db.connect() as conn:
         await conn.execute("ALTER TABLE proofs ADD COLUMN p2pk_e TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN p2pk_e TEXT")
+
+
+async def m020_add_nutroot_wallet_data(db: Database):
+    async with db.connect() as conn:
+        await conn.execute("ALTER TABLE proofs ADD COLUMN spend_info TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN spend_info TEXT")
+        await conn.execute(
+            "CREATE TABLE nutroot_quote_counters (mint_pubkey TEXT PRIMARY KEY, counter TEXT NOT NULL)"
+        )
+        await conn.execute(
+            "CREATE TABLE nutroot_proof_counters (keyset_id TEXT PRIMARY KEY, counter TEXT NOT NULL)"
+        )

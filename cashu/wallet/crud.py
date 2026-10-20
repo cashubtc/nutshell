@@ -1,6 +1,9 @@
+import base64
 import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
+
+import cbor2
 
 from ..core.base import (
     MeltQuote,
@@ -11,7 +14,8 @@ from ..core.base import (
     WalletKeyset,
     WalletMint,
 )
-from ..core.db import Connection, Database
+from ..core.crypto.keys import is_bls_keyset
+from ..core.db import Connection, Database, LockOptions
 
 
 class _UnsetType:
@@ -19,6 +23,13 @@ class _UnsetType:
 
 
 _UNSET = _UnsetType()
+
+
+def _serialize_spend_info(proof: Proof) -> Optional[str]:
+    if proof.spend_info is None:
+        return None
+    encoded = cbor2.dumps(proof.spend_info.model_dump(exclude_none=True))
+    return "cbor:" + base64.b64encode(encoded).decode()
 
 
 async def store_proof(
@@ -29,8 +40,8 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id, p2pk_e)
-        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id, :p2pk_e)
+          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id, p2pk_e, spend_info)
+        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id, :p2pk_e, :spend_info)
         """,
         {
             "id": proof.id,
@@ -43,6 +54,7 @@ async def store_proof(
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
             "p2pk_e": proof.p2pk_e,
+            "spend_info": _serialize_spend_info(proof),
         },
     )
 
@@ -110,8 +122,8 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id, p2pk_e)
-        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id, :p2pk_e)
+          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id, p2pk_e, spend_info)
+        VALUES (:amount, :C, :secret, :time_used, :id, :derivation_path, :mint_id, :melt_id, :p2pk_e, :spend_info)
         """,
         {
             "amount": proof.amount,
@@ -123,6 +135,7 @@ async def invalidate_proof(
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
             "p2pk_e": proof.p2pk_e,
+            "spend_info": _serialize_spend_info(proof),
         },
     )
 
@@ -540,6 +553,24 @@ async def bump_secret_derivation(
     skip: bool = False,
     conn: Optional[Connection] = None,
 ) -> int:
+    if is_bls_keyset(keyset_id):
+        async with db.get_connection(conn, locks=[LockOptions(table="nutroot_proof_counters")]) as locked:
+            row = await locked.fetchone(
+                "SELECT counter FROM nutroot_proof_counters WHERE keyset_id = :id",
+                {"id": keyset_id},
+            )
+            if row is None:
+                row = await locked.fetchone("SELECT counter FROM keysets WHERE id = :id", {"id": keyset_id})
+            counter = int(row["counter"]) if row else 0
+            if by < 0 or counter < 0 or counter + by > 2**64:
+                raise ValueError("Proof allocation exceeds the NUT-13 u64 counter range")
+            if not skip:
+                await locked.execute(
+                    "INSERT INTO nutroot_proof_counters (keyset_id, counter) VALUES (:id, :counter) "
+                    "ON CONFLICT(keyset_id) DO UPDATE SET counter = :counter",
+                    {"id": keyset_id, "counter": str(counter + by)},
+                )
+            return counter
     rows = await (conn or db).fetchone(
         "SELECT counter from keysets WHERE id = :keyset_id", {"keyset_id": keyset_id}
     )
@@ -564,12 +595,38 @@ async def bump_secret_derivation(
     return counter
 
 
+async def allocate_quote_counter(db: Database, mint_pubkey: str) -> int:
+    async with db.get_connection(locks=[LockOptions(table="nutroot_quote_counters")]) as conn:
+        row = await conn.fetchone(
+            "SELECT counter FROM nutroot_quote_counters WHERE mint_pubkey = :key",
+            {"key": mint_pubkey},
+        )
+        counter = int(row["counter"]) if row else 0
+        if not 0 <= counter < 2**64:
+            raise ValueError("Quote counter exceeds the NUT-13 u64 range")
+        await conn.execute(
+            "INSERT INTO nutroot_quote_counters (mint_pubkey, counter) VALUES (:key, :counter) "
+            "ON CONFLICT(mint_pubkey) DO UPDATE SET counter = :counter",
+            {"key": mint_pubkey, "counter": str(counter + 1)},
+        )
+        return counter
+
+
 async def set_secret_derivation(
     db: Database,
     keyset_id: str,
     counter: int,
     conn: Optional[Connection] = None,
 ) -> None:
+    if is_bls_keyset(keyset_id):
+        if not 0 <= counter <= 2**64:
+            raise ValueError("Proof counter is outside the NUT-13 u64 range")
+        await (conn or db).execute(
+            "INSERT INTO nutroot_proof_counters (keyset_id, counter) VALUES (:id, :counter) "
+            "ON CONFLICT(keyset_id) DO UPDATE SET counter = :counter",
+            {"id": keyset_id, "counter": str(counter)},
+        )
+        return
     await (conn or db).execute(
         "UPDATE keysets SET counter = :counter WHERE id = :keyset_id",
         {

@@ -2,11 +2,14 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
+    Amount,
     BlindedMessage,
     MeltQuoteState,
+    Method,
     MintKeyset,
     MintQuoteState,
     Proof,
+    Unit,
 )
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.keys import is_bls_keyset
@@ -635,14 +638,11 @@ async def test_melt_preserves_change_signatures_order_integration(
     await wallet1.mint(128, quote_id=mint_quote.quote)
     assert wallet1.balance >= 64
 
-    invoice_dict = get_real_invoice(64)
-    invoice_payment_request = (
-        invoice_dict["payment_request"]
-        if is_regtest
-        else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    )
-    if type(invoice_payment_request) is dict:
-        invoice_payment_request = invoice_payment_request["payment_request"]
+    if is_regtest:
+        invoice_payment_request = get_real_invoice(64)["payment_request"]
+    else:
+        invoice = await ledger.backends[Method.bolt11][Unit.sat].create_invoice(Amount(Unit.sat, 64))
+        invoice_payment_request = invoice.payment_request
 
     # wallet asks for quote
     _ = await wallet1.melt_quote(invoice_payment_request)

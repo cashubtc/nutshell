@@ -1,5 +1,6 @@
 import gzip
 import zlib
+from contextlib import AsyncExitStack
 
 import brotli
 import zstandard as zstd
@@ -10,12 +11,17 @@ from fastapi.exception_handlers import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette.datastructures import Headers
 from starlette.middleware.base import (
     BaseHTTPMiddleware,
     RequestResponseEndpoint,
 )
 from starlette.middleware.cors import CORSMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from ..core.base import AuthProof
+from ..core.crypto.keys import is_bls_keyset
+from ..core.nuts.nut22 import relative_request_target
 from ..core.settings import settings
 from .limit import _rate_limit_exceeded_handler, limiter_global
 
@@ -50,6 +56,7 @@ def add_middlewares(app: FastAPI):
     if settings.mint_require_auth:
         app.add_middleware(BlindAuthMiddleware)
         app.add_middleware(ClearAuthMiddleware)
+        app.add_middleware(WebSocketAuthMiddleware)
 
 
 class ClearAuthMiddleware(BaseHTTPMiddleware):
@@ -59,7 +66,7 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
         if (
             settings.mint_require_auth
             and auth_ledger.mint_info.requires_clear_auth_path(
-                method=request.method, path=request.url.path
+                method=request.method, path=protected_request_path(request.scope)
             )
         ):
             clear_auth_token = request.headers.get("clear-auth")
@@ -75,6 +82,80 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+def request_target(scope) -> str:
+    """The NUT-10 request target: the path relative to the mint URL, plus the query, as sent.
+
+    The ASGI root_path is the mint's own mount prefix; a proxy that strips its prefix leaves none.
+    """
+    raw_path = scope.get("raw_path")
+    # Some ASGI transports include the query in raw_path.
+    path = (
+        raw_path.split(b"?", 1)[0]
+        if raw_path is not None
+        else scope["path"].encode("utf-8")
+    )
+    target = relative_request_target(path, scope.get("root_path", ""))
+    if scope["query_string"]:
+        target += "?" + scope["query_string"].decode("ascii")
+    return target
+
+
+def protected_request_path(scope: Scope) -> str:
+    """Match protected endpoints against the path used by ASGI routing."""
+    path = scope["path"]
+    root = scope.get("root_path", "").rstrip("/")
+    return (
+        (path[len(root) :] or "/")
+        if root and (path == root or path.startswith(root + "/"))
+        else path
+    )
+
+
+class WebSocketAuthMiddleware:
+    """Authorize a WebSocket's HTTP upgrade before accepting the connection."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "websocket" or not settings.mint_require_auth:
+            await self.app(scope, receive, send)
+            return
+        target = request_target(scope)
+        path = protected_request_path(scope)
+        headers = Headers(scope=scope)
+        async with AsyncExitStack() as authorization:
+            try:
+                if auth_ledger.mint_info.requires_clear_auth_path("GET", path):
+                    token = headers.get("clear-auth")
+                    if token is None:
+                        raise ValueError("Missing clear auth token")
+                    user = await auth_ledger.verify_clear_auth(clear_auth_token=token)
+                    scope.setdefault("state", {})["user"] = user
+                if auth_ledger.mint_info.requires_blind_auth_path("GET", path):
+                    token = headers.get("blind-auth")
+                    if token is None:
+                        raise ValueError("Missing blind auth token")
+                    await authorization.enter_async_context(
+                        auth_ledger.verify_blind_auth(
+                            token,
+                            method="GET",
+                            target=target,
+                            body=b"",
+                        )
+                    )
+            except Exception:
+                await send({"type": "websocket.close", "code": 1008})
+                return
+
+            async def authorized_send(message: Message) -> None:
+                if message["type"] == "websocket.accept":
+                    await authorization.aclose()
+                await send(message)
+
+            await self.app(scope, receive, authorized_send)
+
+
 class BlindAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -82,13 +163,29 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
         if (
             settings.mint_require_auth
             and auth_ledger.mint_info.requires_blind_auth_path(
-                method=request.method, path=request.url.path
+                method=request.method, path=protected_request_path(request.scope)
             )
         ):
             blind_auth_token = request.headers.get("blind-auth")
             if not blind_auth_token:
                 raise Exception("Missing blind auth token.")
-            async with auth_ledger.verify_blind_auth(blind_auth_token):
+            # NUT-22: a version 02 BAT signs the request it authorizes, so the
+            # verifier rebuilds the request transcript from these. The body is
+            # read only for version 02 tokens; Starlette caches the read for
+            # the downstream app.
+            target = request_target(request.scope)
+            body = b""
+            try:
+                if is_bls_keyset(AuthProof.from_base64(blind_auth_token).id):
+                    body = await request.body()
+            except Exception:
+                pass
+            async with auth_ledger.verify_blind_auth(
+                blind_auth_token,
+                method=request.method,
+                target=target,
+                body=body,
+            ):
                 return await call_next(request)
         else:
             return await call_next(request)

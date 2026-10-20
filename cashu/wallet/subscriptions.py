@@ -1,5 +1,5 @@
 import time
-from typing import Callable, List
+from typing import Callable, List, Mapping, Optional
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -24,7 +24,7 @@ class SubscriptionManager:
     id_counter: int = 0
     callback_map: dict[str, Callable] = {}
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, headers: Optional[Mapping[str, str]] = None):
         # parse hostname from url with urlparse
         hostname = urlparse(url).hostname
         port = urlparse(url).port
@@ -32,9 +32,10 @@ class SubscriptionManager:
             hostname = f"{hostname}:{port}"
         scheme = urlparse(url).scheme
         ws_scheme = "wss" if scheme == "https" else "ws"
-        ws_url = f"{ws_scheme}://{hostname}/v1/ws"
+        mount = urlparse(url).path.rstrip("/")
+        ws_url = f"{ws_scheme}://{hostname}{mount}/v1/ws"
         self.url = ws_url
-        self.websocket = WebSocketApp(ws_url, on_message=self._on_message)
+        self.websocket = WebSocketApp(ws_url, on_message=self._on_message, header=dict(headers) if headers else None)
 
     def _on_message(self, ws, message):
         logger.trace(f"Received message: {message}")

@@ -284,14 +284,14 @@ class LedgerVerification(
         if not any(is_nutroot_point_secret(p.secret, p.id) for p in proofs):
             return
         # The transcript names each input by Y (NUT-10); hashed once per proof.
-        ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
+        ys = {(p.id, p.secret): proof_transcript_y(p.secret, p.id) for p in proofs}
         _, proof_contexts, _ = transaction_inputs(
             TransactionShape(
                 proof_inputs=[
                     TranscriptProofInput(
                         amount=p.amount,
                         keyset_id=keyset_id_transcript_bytes(p.id),
-                        Y=ys[p.secret],
+                        Y=ys[(p.id, p.secret)],
                         C=bytes.fromhex(p.C),
                     )
                     for p in proofs
@@ -321,9 +321,9 @@ class LedgerVerification(
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue  # v0-v2 input: NUT-10/11/14 rules apply to it instead
-            digest = proof_contexts[ys[proof.secret]].digest
-            # Stored with the spent proof, opening the NUT-07 commitment: the
-            # witness verifies only against this input digest. A failure below
+            digest = proof_contexts[ys[(proof.id, proof.secret)]].digest
+            # Stored and reported with the exact witness, which verifies only
+            # against this input digest. A failure below
             # aborts the transaction, so nothing unverified is ever persisted.
             proof.digest = digest.hex()
             if proof.witness is None:
@@ -403,6 +403,8 @@ class LedgerVerification(
 
     def _verify_input_witness_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies max length of input witness data"""
+        if is_bls_keyset(proof.id) and proof.dleq is not None:
+            raise TransactionError("V3 proofs cannot carry DLEQ")
         max_length = (
             NUTROOT_MAX_WITNESS_LENGTH
             if is_bls_keyset(proof.id)
@@ -584,13 +586,15 @@ class LedgerVerification(
         if outputs and is_bls_keyset(outputs[0].id):
             # V3: the quote is a transaction input; its lock key signs the
             # quote input digest (key or script path). For batch mints the
-            # digest covers every quote input.
+            # digest covers every quote input. The input commits the amount
+            # issued and the quote's settled amount_issued (NUT-10).
             return nut20.verify_mint_quote_v3(
                 quote.quote,
-                quote.amount,
+                sum(o.amount for o in outputs),
                 outputs,
                 quote.pubkey,
                 signature,
+                quote.amount_issued or 0,
                 batch_quotes=batch_quotes,
             )
         return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)

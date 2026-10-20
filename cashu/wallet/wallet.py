@@ -2,13 +2,14 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
     Amount,
+    AuthProof,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -17,7 +18,9 @@ from ..core.base import (
     Method,
     MintQuote,
     MintQuoteState,
+    NutrootOption,
     Proof,
+    SpendInfo,
     Unit,
     WalletKeyset,
     WalletMint,
@@ -31,9 +34,14 @@ from ..core.crypto.keys import (
     is_supported_keyset_version,
 )
 from ..core.crypto.nutroot import (
+    NutrootControlBlock,
+    NutrootLeaf,
     is_nutroot_point_secret,
     keyset_id_transcript_bytes,
+    nutroot_leaf_hash,
+    nutroot_merkle_path,
     proof_transcript_y,
+    verify_nutroot_witness,
 )
 from ..core.crypto.secp import PrivateKey as SecpPrivateKey
 from ..core.crypto.secp import PublicKey as SecpPublicKey
@@ -42,6 +50,7 @@ from ..core.crypto.transcript import (
     TranscriptBlindedOutput,
     TranscriptProofInput,
     TranscriptQuote,
+    build_transaction_transcript,
     transaction_inputs,
 )
 from ..core.db import Database
@@ -59,7 +68,16 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
-from ..core.nuts import nut20
+from ..core.nutroot import (
+    NutrootOwnership,
+    create_nutroot_witness,
+    create_requested_nutroot_output,
+    nutroot_spendable,
+    resolve_nutroot_ownership,
+    validate_requested_nutroot_output,
+)
+from ..core.nuts import nut20, nut22
+from ..core.nuts.nut10_transport import SigningPackage, SigningSpend
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from . import migrations
@@ -134,7 +152,9 @@ class Wallet(
     unit: Unit
     mint_info: MintInfo  # holds info about mint
     mnemonic: str  # holds mnemonic of the wallet
-    seed: bytes  # holds private key of the wallet generated from the mnemonic
+    seed: bytes = b""  # wallet seed
+    nutroot_private_keys: Tuple[SecpPrivateKey, ...] = ()
+    nutroot_preimages: Dict[bytes, bytes] = {}
     db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
@@ -162,6 +182,7 @@ class Wallet(
         """
         self.db = Database(name, db)
         self.proofs: List[Proof] = []
+        self.nutroot_preimages = {}
         self.name = name
         self.unit = Unit[unit]
         url = sanitize_url(url)
@@ -543,9 +564,9 @@ class Wallet(
             )
 
         # generate a key for signing the quote request
-        privkey_hex, pubkey_hex = nut20.generate_keypair()
+        privkey_hex, pubkey_hex = await self._mint_quote_keypair()
         mint_quote = await super().mint_quote(amount, self.unit, memo, pubkey_hex)
-        subscriptions = SubscriptionManager(self.url)
+        subscriptions = await self._subscription_manager()
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
         ).start()
@@ -592,7 +613,7 @@ class Wallet(
             )
 
         # generate a key for signing the quote request
-        privkey_hex, pubkey_hex = nut20.generate_keypair()
+        privkey_hex, pubkey_hex = await self._mint_quote_keypair()
 
         mint_quote_response = await super().mint_quote(
             amount, self.unit, memo, pubkey_hex
@@ -602,6 +623,37 @@ class Wallet(
         quote.privkey = privkey_hex
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
+
+    async def _subscription_manager(self) -> SubscriptionManager:
+        if not self.mint_info or not self.mint_info.requires_blind_auth_path(
+            "GET", "/v1/ws"
+        ):
+            return SubscriptionManager(self.url)
+        if self.auth_db is None or self.auth_keyset_id is None:
+            raise ValueError("Protected subscriptions require an authentication wallet")
+        proofs = await get_proofs(db=self.auth_db, id=self.auth_keyset_id)
+        if not proofs:
+            raise ValueError("No blind authentication token for the WebSocket upgrade")
+        proof = proofs[0]
+        if is_bls_keyset(proof.id):
+            key = nut22.bat_private_key(proof.derivation_path)
+            if key is None or key.public_key.format().hex() != proof.secret:
+                raise ValueError("Missing private key for the authentication token")
+            proof.witness = nut22.sign_request(key, "GET", "/v1/ws", b"")
+        header = AuthProof.from_proof(proof).to_base64()
+        await invalidate_proof(proof=proof, db=self.auth_db)
+        return SubscriptionManager(self.url, headers={"Blind-auth": header})
+
+    async def _mint_quote_keypair(self) -> Tuple[str, str]:
+        if any(
+            keyset.active and is_bls_keyset(keyset.id)
+            for keyset in self.keysets.values()
+        ):
+            await self.load_mint_info()
+            if self.mint_info.pubkey:
+                private = await self.allocate_v3_quote_key(self.mint_info.pubkey)
+                return private.secret.hex(), private.public_key.format().hex()
+        return nut20.generate_keypair()
 
     async def get_mint_quote(
         self,
@@ -697,7 +749,7 @@ class Wallet(
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
-        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+        quote = await self.get_mint_quote(quote_id)
         if not quote:
             raise Exception("Quote not found.")
         signature: str | None = None
@@ -705,7 +757,11 @@ class Wallet(
             if is_bls_keyset(outputs[0].id):
                 # V3: sign the quote input digest (quote input + outputs).
                 signature = nut20.sign_mint_quote_v3(
-                    quote_id, quote.amount, outputs, quote.privkey
+                    quote_id,
+                    sum(o.amount for o in outputs),
+                    outputs,
+                    quote.privkey,
+                    quote.amount_issued or 0,
                 )
             else:
                 signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
@@ -722,10 +778,14 @@ class Wallet(
         await update_bolt11_mint_quote(
             db=self.db,
             quote=quote_id,
-            state=MintQuoteState.issued,
+            state=(
+                MintQuoteState.paid
+                if is_bls_keyset(outputs[0].id) and (quote.amount_issued or 0) + amount < (quote.amount_paid or quote.amount)
+                else MintQuoteState.issued
+            ),
             paid_time=int(time.time()),
-            amount_paid=quote.amount,
-            amount_issued=quote.amount,
+            amount_paid=quote.amount_paid or quote.amount,
+            amount_issued=(quote.amount_issued or 0) + amount,
             updated_at=int(time.time()),
         )
         # store the mint_id in proofs
@@ -738,14 +798,193 @@ class Wallet(
     async def redeem(
         self,
         proofs: List[Proof],
+        nutroot_request: Optional[NutrootOption] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Redeem proofs by sending them to yourself by calling a split.
         Args:
             proofs (List[Proof]): Proofs to be redeemed.
         """
+        self.validate_nutroot_proofs(proofs, request=nutroot_request)
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
+
+    def _nutroot_ownership(self, proof: Proof) -> NutrootOwnership:
+        keys = list(self.nutroot_private_keys)
+        if self.seed:
+            keys.append(self.private_key)
+        seed_key = None
+        leaf_keys: List[SecpPrivateKey] = []
+        path = proof.derivation_path or ""
+        if path.startswith("HMAC-SHA256:"):
+            _, keyset_id, counter = path.split(":")
+            if keyset_id != proof.id:
+                raise ValueError("Proof derivation path names another keyset")
+            seed_key = self.derive_v3_secret_key(int(counter), keyset_id)
+            if proof.spend_info is not None and proof.spend_info.tree:
+                leaf_keys = [
+                    self.derive_v3_leaf_key(int(counter), keyset_id, i)
+                    for i in range(255)
+                ]
+        return resolve_nutroot_ownership(
+            proof, keys, seed_key=seed_key, leaf_keys=leaf_keys
+        )
+
+    def validate_nutroot_proofs(
+        self,
+        proofs: List[Proof],
+        *,
+        request: Optional[NutrootOption] = None,
+        acceptance_policy: Optional[Callable[[NutrootLeaf], bool]] = None,
+        allow_pending_conditions: bool = False,
+    ) -> None:
+        """Check received spend info, ownership, and the payee's leaf policy."""
+        for proof in proofs:
+            if not is_bls_keyset(proof.id):
+                if request is not None:
+                    raise ValueError("Nutroot payment request needs v3 proofs")
+                continue
+            ownership = self._nutroot_ownership(proof)
+            if request is not None:
+                validate_requested_nutroot_output(proof, request, ownership)
+            if acceptance_policy is not None and any(
+                not acceptance_policy(leaf) for leaf in ownership.leaves
+            ):
+                raise ValueError(
+                    "Condition tree is outside the wallet acceptance policy"
+                )
+            if not nutroot_spendable(
+                ownership,
+                self.nutroot_preimages,
+                allow_pending_conditions=allow_pending_conditions,
+            ):
+                raise ValueError("Wallet cannot spend the received Nutroot proof")
+
+    @staticmethod
+    def _nutroot_transaction(
+        proofs: Sequence[Proof],
+        outputs: Sequence[BlindedMessage],
+        melt_quote_id: Optional[str] = None,
+        melt_quote_amount: Optional[int] = None,
+    ) -> TransactionShape:
+        return TransactionShape(
+            proof_inputs=[
+                TranscriptProofInput(
+                    amount=proof.amount,
+                    keyset_id=keyset_id_transcript_bytes(proof.id),
+                    Y=proof_transcript_y(proof.secret, proof.id),
+                    C=bytes.fromhex(proof.C),
+                )
+                for proof in proofs
+            ],
+            blinded_outputs=[
+                TranscriptBlindedOutput(
+                    amount=output.amount,
+                    keyset_id=keyset_id_transcript_bytes(output.id),
+                    B_=bytes.fromhex(output.B_),
+                )
+                for output in outputs
+            ],
+            melt_quote_outputs=[
+                TranscriptQuote(amount=melt_quote_amount, quote_id=melt_quote_id)
+            ]
+            if melt_quote_id is not None and melt_quote_amount is not None
+            else None,
+        )
+
+    def prepare_nutroot_signing_package(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        leaf_indices: Mapping[str, int],
+        *,
+        melt_quote_id: Optional[str] = None,
+        melt_quote_amount: Optional[int] = None,
+    ) -> SigningPackage:
+        transcript = build_transaction_transcript(
+            self._nutroot_transaction(proofs, outputs, melt_quote_id, melt_quote_amount)
+        )
+        spends = []
+        keys: List[SecpPrivateKey] = []
+        for index, proof in enumerate(proofs):
+            if proof.Y not in leaf_indices:
+                continue
+            ownership = self._nutroot_ownership(proof)
+            info = proof.spend_info
+            if info is None or not info.tree:
+                raise ValueError("Script signing needs the proof's full condition tree")
+            leaf_index = leaf_indices[proof.Y]
+            if not 0 <= leaf_index < len(info.tree):
+                raise ValueError("Signing leaf index is outside the condition tree")
+            hashes = [nutroot_leaf_hash(bytes.fromhex(leaf)) for leaf in info.tree]
+            spends.append(
+                SigningSpend(
+                    input=index,
+                    secret=proof.secret,
+                    leaf=info.tree[leaf_index],
+                    E=info.E,
+                    control=NutrootControlBlock(
+                        K=ownership.internal_key.format().hex(),
+                        path=[
+                            node.hex()
+                            for node in nutroot_merkle_path(hashes, leaf_index)
+                        ],
+                    ),
+                )
+            )
+            keys.extend(ownership.leaf_keys.values())
+        return SigningPackage(transcript=transcript.hex(), spends=spends).sign(keys)
+
+    async def submit_nutroot_swap(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        secrets: List[str],
+        rs: List[PrivateKey],
+        derivation_paths: List[str],
+        package: Optional[SigningPackage] = None,
+        *,
+        preimages: Mapping[int, bytes] = {},
+        spend_infos: Optional[List[Optional[SpendInfo]]] = None,
+    ) -> List[Proof]:
+        """Submit a collaboratively signed swap with the creator's local outputs."""
+        if not outputs or not len(outputs) == len(secrets) == len(rs) == len(
+            derivation_paths
+        ):
+            raise ValueError(
+                "Signed swap outputs need their secrets, factors, and paths"
+            )
+        if spend_infos is not None and len(spend_infos) != len(outputs):
+            raise ValueError("Spend info count must match signed outputs")
+        recreated, _ = self._construct_outputs(
+            [output.amount for output in outputs], secrets, rs, outputs[0].id
+        )
+        if any(
+            (a.id, a.amount, a.B_) != (b.id, b.amount, b.B_)
+            for a, b in zip(outputs, recreated)
+        ):
+            raise ValueError("Signed swap outputs differ from the local secrets")
+        transcript = build_transaction_transcript(
+            self._nutroot_transaction(proofs, outputs)
+        )
+        witnesses = (
+            package.merge([], expected_transcript=transcript, preimages=preimages)
+            if package
+            else {}
+        )
+        signed = [proof.model_copy() for proof in proofs]
+        for index, witness in witnesses.items():
+            signed[index].witness = witness
+        signed = self._attach_nutroot_witnesses(signed, outputs)
+        signed = self.sign_proofs_inplace_swap(signed, outputs)
+        promises = await super().split(signed, outputs)
+        for original, submitted in zip(proofs, signed):
+            original.witness = submitted.witness
+        result = await self._construct_proofs(
+            promises, secrets, rs, derivation_paths, spend_infos=spend_infos
+        )
+        await self.invalidate(proofs)
+        return result
 
     def _attach_nutroot_witnesses(
         self,
@@ -766,38 +1005,9 @@ class Wallet(
             is_nutroot_point_secret(p.secret, p.id) for p in proofs
         ):
             return proofs
-        # The transcript names each input by Y (NUT-10); hashed once per proof.
-        ys = {p.secret: proof_transcript_y(p.secret, p.id) for p in proofs}
         try:
             _, proof_contexts, _ = transaction_inputs(
-                TransactionShape(
-                    proof_inputs=[
-                        TranscriptProofInput(
-                            amount=p.amount,
-                            keyset_id=keyset_id_transcript_bytes(p.id),
-                            Y=ys[p.secret],
-                            C=bytes.fromhex(p.C),
-                        )
-                        for p in proofs
-                    ],
-                    blinded_outputs=[
-                        TranscriptBlindedOutput(
-                            amount=o.amount,
-                            keyset_id=keyset_id_transcript_bytes(o.id),
-                            B_=bytes.fromhex(o.B_),
-                        )
-                        for o in outputs
-                    ],
-                    melt_quote_outputs=(
-                        [
-                            TranscriptQuote(
-                                amount=melt_quote_amount, quote_id=melt_quote_id
-                            )
-                        ]
-                        if melt_quote_id is not None and melt_quote_amount is not None
-                        else None
-                    ),
-                )
+                self._nutroot_transaction(proofs, outputs, melt_quote_id, melt_quote_amount)
             )
         except ValueError:
             # A structurally invalid transaction (eg a repeated input) has no
@@ -807,40 +1017,31 @@ class Wallet(
         for proof in proofs:
             if not is_nutroot_point_secret(proof.secret, proof.id):
                 continue
-            secret_key = self._resolve_v3_secret_key(proof)
-            if secret_key is None:
+            digest = proof_contexts[proof_transcript_y(proof.secret, proof.id)].digest
+            if proof.witness is not None:
+                try:
+                    verify_nutroot_witness(SecpPublicKey(bytes.fromhex(proof.secret)), digest, proof.witness)
+                    continue
+                except ValueError:
+                    pass
+            try:
+                ownership = self._nutroot_ownership(proof)
+            except ValueError:
+                if proof.spend_info is not None:
+                    raise
                 continue
-            digest = proof_contexts[ys[proof.secret]].digest
-            signature = secret_key.sign_schnorr(
-                digest,
-                None,  # type: ignore
+            proof.witness = create_nutroot_witness(
+                proof, digest, ownership, preimages=self.nutroot_preimages
             )
-            proof.witness = json.dumps({"signatures": [signature.hex()]})
         return proofs
 
     def _resolve_v3_secret_key(self, proof: Proof) -> Optional[SecpPrivateKey]:
         """The internal key behind a v3 point secret: bearer spend info first,
         then re-derivation from the stored derivation path. None if neither
         yields a key matching the secret."""
-        if proof.spend_info and proof.spend_info.k:
-            try:
-                secret_key = SecpPrivateKey(bytes.fromhex(proof.spend_info.k))
-                pub = secret_key.public_key
-                if pub and pub.format().hex() == proof.secret:
-                    return secret_key
-            except Exception:
-                pass
-        path = proof.derivation_path or ""
-        if not path.startswith("HMAC-SHA256:"):
-            return None
         try:
-            _, path_keyset_id, counter_str = path.split(":")
-            secret_key = self.derive_v3_secret_key(int(counter_str), path_keyset_id)
-            pub = secret_key.public_key
-            if pub.format().hex() != proof.secret:
-                return None
-            return secret_key
-        except Exception:
+            return self._nutroot_ownership(proof).key_path
+        except ValueError:
             return None
 
     async def split(
@@ -850,6 +1051,7 @@ class Wallet(
         secret_lock: Optional[Secret] = None,
         include_fees: bool = False,
         p2pk_e: Optional[str] = None,
+        nutroot_lock: Optional[NutrootOption] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
@@ -891,7 +1093,15 @@ class Wallet(
         amounts = keep_outputs + send_outputs
 
         # generate secrets for new outputs
-        if secret_lock is None:
+        spend_infos: Optional[List[Optional[SpendInfo]]] = None
+        if nutroot_lock is not None:
+            if not is_bls_keyset(self.keyset_id) or secret_lock is not None or p2pk_e is not None:
+                raise ValueError("Nutroot outputs require a v3 keyset and its locking option")
+            secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
+            spend_infos = [None] * len(amounts)
+            for index in range(len(keep_outputs), len(amounts)):
+                secrets[index], spend_infos[index] = create_requested_nutroot_output(nutroot_lock)
+        elif secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
         else:
             secrets, rs, derivation_paths = await self.generate_locked_secrets(
@@ -932,7 +1142,7 @@ class Wallet(
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = await self._construct_proofs(
-            promises, secrets, rs, derivation_paths
+            promises, secrets, rs, derivation_paths, spend_infos=spend_infos
         )
 
         await self.invalidate(proofs)
@@ -1113,7 +1323,7 @@ class Wallet(
     async def check_proof_state_with_callback(
         self, proofs: List[Proof], callback: Callable
     ) -> Tuple[PostCheckStateResponse, SubscriptionManager]:
-        subscriptions = SubscriptionManager(self.url)
+        subscriptions = await self._subscription_manager()
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
         ).start()
@@ -1134,20 +1344,20 @@ class Wallet(
         bls_proofs: List[Proof] = []
         
         for proof in proofs:
+            if not proof.id or proof.id not in self.keysets:
+                raise ValueError(f"Keyset {proof.id} not known, cannot verify proof.")
+            # v3 proofs verify by pairing and carry no DLEQ (NUT-12 is
+            # version-scoped); pre-v3 proofs keep the DLEQ path.
+            if is_bls_keyset(proof.id):
+                if proof.dleq is not None:
+                    raise ValueError("V3 proofs cannot carry DLEQ")
+                bls_proofs.append(proof)
+                continue
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
-                return
+                continue
             logger.trace("Verifying DLEQ proof.")
-            assert proof.id
-            assert proof.id in self.keysets, (
-                f"Keyset {proof.id} not known, can not verify DLEQ."
-            )
-            
-            is_v3 = is_bls_keyset(proof.id)
-            if is_v3:
-                bls_proofs.append(proof)
-            else:
-                secp_proofs.append(proof)
+            secp_proofs.append(proof)
                 
         if bls_proofs:
             try:
@@ -1159,12 +1369,17 @@ class Wallet(
                     Cs=Cs,
                     secret_msgs=secrets,
                 ):
-                    raise Exception("BLS pairing verification invalid.")
+                    for key, signature, secret in zip(K2s, Cs, secrets):
+                        if not bls_dhke.pairing_verification(
+                            key, signature, secret  # type: ignore[arg-type]
+                        ):
+                            raise ValueError("BLS pairing verification invalid.")
             except Exception as exc:
                 raise Exception(f"BLS pairing verification invalid: {exc}")
                 
         for proof in secp_proofs:
-            assert proof.dleq is not None
+            if proof.dleq is None:
+                raise ValueError("Missing legacy DLEQ proof")
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=SecpPublicKey(bytes.fromhex(proof.C)),
@@ -1184,6 +1399,7 @@ class Wallet(
         secrets: List[str],
         rs: List[PrivateKey],
         derivation_paths: List[str],
+        spend_infos: Optional[List[Optional[SpendInfo]]] = None,
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
@@ -1201,7 +1417,9 @@ class Wallet(
         """
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
-        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
+        if spend_infos is not None and len(spend_infos) != len(promises):
+            raise ValueError("Spend info count must match the returned signatures")
+        for index, (promise, secret, r, path) in enumerate(zip(promises, secrets, rs, derivation_paths)):
             if promise.id not in self.keysets:
                 logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
                 # we don't have the keyset for this promise, so we load all keysets from the mint
@@ -1209,6 +1427,8 @@ class Wallet(
                 assert promise.id in self.keysets, "Could not load keyset."
                 
             is_v3 = is_bls_keyset(promise.id)
+            if is_v3 and promise.dleq is not None:
+                raise ValueError("V3 blind signatures cannot carry DLEQ")
             C_: PublicKey
             C: PublicKey
             B_: PublicKey
@@ -1234,6 +1454,7 @@ class Wallet(
                 C=C.format().hex(),
                 secret=secret,
                 derivation_path=path,
+                spend_info=spend_infos[index] if spend_infos is not None else None,
             )
 
             # if the mint returned a dleq proof, we add it to the proof
@@ -1458,6 +1679,7 @@ class Wallet(
         set_reserved: bool = False,
         include_fees: bool = False,
         p2pk_e: Optional[str] = None,
+        nutroot_lock: Optional[NutrootOption] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -1497,7 +1719,8 @@ class Wallet(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
         keep_proofs, send_proofs = await self.split(
-            swap_proofs, amount, secret_lock, include_fees=include_fees, p2pk_e=p2pk_e
+            swap_proofs, amount, secret_lock, include_fees=include_fees, p2pk_e=p2pk_e,
+            nutroot_lock=nutroot_lock,
         )
         # Bearer spend info: the receiver needs `k` to run the receive cascade
         # and sign the sweep's transaction witness (NUT-10).

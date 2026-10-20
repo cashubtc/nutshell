@@ -1,12 +1,14 @@
 import os
-from typing import Optional
+from typing import Literal, Optional
 
 import pyblst
 
 # BLS12-381 prime subgroup order (Fr modulus). pyblst 0.3.15 keeps this private.
 # https://github.com/OpShin/pyblst/blob/0.3.15/src/lib.rs#L7-L16
-curve_order = 52435875175126190479447740508185965837690552500527637822603658699938581184513
-_G2_HEX = '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8'
+curve_order = (
+    52435875175126190479447740508185965837690552500527637822603658699938581184513
+)
+_G2_HEX = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
 G2 = pyblst.BlstP2Element().uncompress(bytes.fromhex(_G2_HEX))
 
 
@@ -42,9 +44,13 @@ class PrivateKey:
 
 
 class PublicKey:
-    def __init__(self, compressed: bytes = b"", point=None, group="G1"):
+    def __init__(
+        self, compressed: bytes = b"", point=None, group: Literal["G1", "G2"] = "G1"
+    ):
         self.group = group
         try:
+            if group not in ("G1", "G2"):
+                raise ValueError("Unknown BLS group")
             if point is not None:
                 self.point = point
             elif compressed:
@@ -54,8 +60,24 @@ class PublicKey:
                     self.point = pyblst.BlstP2Element().uncompress(compressed)
             else:
                 raise ValueError("Must provide point or compressed bytes")
-        except Exception:
-            raise ValueError("The public key could not be parsed or is invalid.")
+            encoded = self.point.compress()
+            if len(encoded) != (48 if group == "G1" else 96):
+                raise ValueError("Point belongs to a different BLS group")
+            if compressed and encoded != compressed:
+                raise ValueError("Non-canonical BLS point encoding")
+            if self.is_infinity():
+                raise ValueError("BLS identity point is invalid")
+        except Exception as exc:
+            raise ValueError(
+                "The public key could not be parsed or is invalid."
+            ) from exc
+
+    def validate(self, group: Literal["G1", "G2"]) -> None:
+        """Validate an externally supplied point for its protocol role."""
+        if self.group != group:
+            raise ValueError("Point belongs to a different BLS group")
+        # uncompress validates curve and prime-subgroup membership in blst.
+        PublicKey(self.format(), group=group)
 
     def format(self, compressed: bool = True) -> bytes:
         return self.point.compress()
@@ -77,7 +99,9 @@ class PublicKey:
 
     def __mul__(self, scalar):
         if isinstance(scalar, PrivateKey):
-            return PublicKey(point=self.point.scalar_mul(scalar.scalar), group=self.group)
+            return PublicKey(
+                point=self.point.scalar_mul(scalar.scalar), group=self.group
+            )
         elif isinstance(scalar, int):
             return PublicKey(point=self.point.scalar_mul(scalar), group=self.group)
         raise TypeError("Can't multiply with non-scalar")
