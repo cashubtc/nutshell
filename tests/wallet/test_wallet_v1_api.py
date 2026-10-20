@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from cashu.core.base import AuthProof, BlindedMessage, MeltQuoteState, Proof, Unit
+from cashu.core.constants import MAX_PUBKEY_LEN
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.models import (
@@ -856,7 +857,7 @@ async def test_restore_rejects_oversized_mint_response(
     elif field == "dleq":
         signature["dleq"] = {"e": "11" * 33, "s": "22" * 32}
     else:
-        signature["C_"] = "02" + "00" * 33
+        signature["C_"] = "a" * (MAX_PUBKEY_LEN + 1)
 
     async def fake_request(self, method, path, **kwargs):
         assert method == "POST"
