@@ -34,7 +34,7 @@ class PostMintBatchRequest(BaseModel):
         ..., max_length=settings.mint_max_request_length
     )
     signatures: Optional[
-        List[Optional[Annotated[str, Field(max_length=MAX_SIG_LEN)]]]
+        List[Optional[Annotated[str, Field(max_length=MAX_WITNESS_LEN)]]]
     ] = Field(default=None, max_length=settings.mint_max_request_length)
 
 

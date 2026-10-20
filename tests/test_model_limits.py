@@ -5,7 +5,12 @@ import pytest
 from pydantic import ValidationError
 
 from cashu.core.base import BlindedMessage, BlindedSignature, Proof
-from cashu.core.constants import MAX_PUBKEY_LEN, MAX_QUOTE_ID_LEN, MAX_SIG_LEN
+from cashu.core.constants import (
+    MAX_PUBKEY_LEN,
+    MAX_QUOTE_ID_LEN,
+    MAX_SIG_LEN,
+    MAX_WITNESS_LEN,
+)
 from cashu.core.json_rpc.base import (
     JSONRPCNotficationParams,
     JSONRPCSubscribeParams,
@@ -69,7 +74,7 @@ def test_blinded_models_accept_supported_keyset_ids_and_points(keyset_id):
 
 @pytest.mark.parametrize(
     "path,limit",
-    [(("id",), 66), (("C_",), 66), (("dleq", "e"), 64), (("dleq", "s"), 64)],
+    [(("id",), 66), (("C_",), MAX_PUBKEY_LEN), (("dleq", "e"), 64), (("dleq", "s"), 64)],
 )
 @pytest.mark.parametrize("extra", [1, 2_000_000])
 def test_restore_rejects_oversized_signature_fields(path, limit, extra):
@@ -114,7 +119,7 @@ def test_restore_response_accepts_empty_and_valid_responses():
     assert restored.signatures[0].dleq.s == SIGNATURE["dleq"]["s"]
 
 
-@pytest.mark.parametrize("length", [MAX_SIG_LEN + 1, 2_000_000])
+@pytest.mark.parametrize("length", [MAX_WITNESS_LEN + 1, 2_000_000])
 def test_batch_mint_rejects_long_quote_signatures(length):
     with pytest.raises(ValidationError) as exc:
         PostMintBatchRequest(quotes=["quote"], outputs=[], signatures=["a" * length])
@@ -122,7 +127,10 @@ def test_batch_mint_rejects_long_quote_signatures(length):
     assert exc.value.errors(include_input=False)[0]["loc"] == ("signatures", 0)
 
 
-@pytest.mark.parametrize("signatures", [None, [], [None], ["a" * MAX_SIG_LEN, None]])
+@pytest.mark.parametrize(
+    "signatures",
+    [None, [], [None], ["a" * MAX_SIG_LEN, None], ["a" * MAX_WITNESS_LEN]],
+)
 def test_batch_mint_preserves_optional_quote_signatures(signatures):
     request = PostMintBatchRequest(quotes=["quote"], outputs=[], signatures=signatures)
     assert request.signatures == signatures
