@@ -19,18 +19,21 @@ from cashu.core.settings import settings
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("disclosed", [False, True])
+@pytest.mark.parametrize("leaf_type", ["threshold", "after", "hashlock"])
 async def test_pending_and_spent_states_and_events_preserve_original_witnesses(
-    ledger, monkeypatch, disclosed
+    ledger, monkeypatch, leaf_type
 ):
     monkeypatch.setattr(settings, "fakewallet_delay_incoming_payment", 0)
     key = PrivateKey((3).to_bytes(32, "big"))
     leaf = serialize_nutroot_leaf(
         NutrootLeaf(
-            type="threshold",
+            type=leaf_type,
             n=1,
             keys=[key.public_key],
-            disclosure=1 if disclosed else None,
+            time=0 if leaf_type == "after" else None,
+            hash=hashlib.sha256(b"\x07" * 32).digest()
+            if leaf_type == "hashlock"
+            else None,
         )
     )
     secret, info = create_requested_nutroot_output(
@@ -58,9 +61,12 @@ async def test_pending_and_spent_states_and_events_preserve_original_witnesses(
         C=signature.format().hex(),
         spend_info=info,
     )
-    digest = hashlib.sha256(b"pending disclosure").digest()
+    digest = hashlib.sha256(b"pending witness").digest()
     proof.witness = create_nutroot_witness(
-        proof, digest, resolve_nutroot_ownership(proof, [key])
+        proof,
+        digest,
+        resolve_nutroot_ownership(proof, [key]),
+        preimages={hashlib.sha256(b"\x07" * 32).digest(): b"\x07" * 32},
     )
     proof.witness = " \n" + proof.witness + "  "
     proof.digest = digest.hex()

@@ -93,7 +93,7 @@ class ProofState(LedgerEvent):
     Y: str
     state: ProofSpentState
     # The exact witness string stored for the spend. Nutroot witnesses are
-    # reported for both PENDING and SPENT proofs, regardless of disclosure.
+    # reported for both PENDING and SPENT proofs.
     witness: Optional[str] = None
     # NUT-07: input digest a published v3 witness signs (NUT-10).
     input_digest: Optional[str] = None

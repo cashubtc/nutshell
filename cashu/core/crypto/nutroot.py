@@ -3,8 +3,8 @@
 Tagged hashes, canonical TLV, leaf serialization, merkle tree, and tweak
 math per NUT-10. BIP341's
 commitment machinery with Cashu tags and compressed (not x-only) keys.
-Byte-identical with cashu-ts src/crypto/nutroot.ts; both are pinned by the
-shared vectors in tests/nutroot_v3_vectors.json.
+Canonical encodings are pinned by tests/nutroot_v3_vectors.json, with local
+vectors adapted to unconditional witness publication.
 """
 
 import hashlib
@@ -43,7 +43,7 @@ _FIELD_N = 0x02
 _FIELD_KEYS = 0x04
 _FIELD_TIME = 0x06
 _FIELD_HASH = 0x08
-_FIELD_DISCLOSURE = 0x0A
+# Field 0x0A is retired and must not be reused.
 
 # Normative caps from NUT-10. The leaf body excludes the leading version byte.
 NUTROOT_MAX_LEAF_BYTES = 512
@@ -78,9 +78,6 @@ class NutrootLeaf:
     keys: List[PublicKey] = field(default_factory=list)
     time: Optional[int] = None
     hash: Optional[bytes] = None
-    # Disclosure mode (NUT-10): 1 publishes the exercised witness via
-    # NUT-07/NUT-17. Valid on every leaf type; satisfaction is unaffected.
-    disclosure: Optional[int] = None
 
 
 class NutrootControlBlock(BaseModel):
@@ -210,7 +207,7 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
         raise ValueError(f"Unknown leaf type: {leaf.type}")
     if leaf.type == "commit":
         # Digest only: a commit leaf names no signer and is never a spend path.
-        if leaf.n or leaf.keys or leaf.time is not None or leaf.disclosure is not None:
+        if leaf.n or leaf.keys or leaf.time is not None:
             raise ValueError("commit leaf carries only a hash")
         if leaf.hash is None or len(leaf.hash) != 32:
             raise ValueError("commit leaf requires a 32-byte hash")
@@ -243,10 +240,6 @@ def serialize_nutroot_leaf(leaf: NutrootLeaf) -> bytes:
         fields += tlv_record(_FIELD_HASH, leaf.hash)
     elif leaf.hash is not None:
         raise ValueError(f"{leaf.type} leaf must not carry a hash field")
-    if leaf.disclosure is not None:
-        if leaf.disclosure != 0x01:
-            raise ValueError("disclosure mode must be 0x01")
-        fields += tlv_record(_FIELD_DISCLOSURE, bytes([0x01]))
     out = bytes([NUTROOT_LEAF_VERSION, NUTROOT_LEAF_TYPE[leaf.type]]) + fields
     if len(out) - 1 > NUTROOT_MAX_LEAF_BYTES:
         raise ValueError(f"Leaf body exceeds {NUTROOT_MAX_LEAF_BYTES} bytes")
@@ -270,7 +263,7 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
     if type_name is None:
         raise ValueError(f"Unknown leaf type: {data[1]}")
     if type_name == "commit":
-        # Digest only: keys or disclosure on a commit leaf are malformed (NUT-10).
+        # Digest only: every additional field on a commit leaf is malformed.
         records = list(read_tlv_records(data[2:], unique_ascending=True))
         if (
             len(records) != 1
@@ -283,7 +276,6 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
     keys: Optional[List[PublicKey]] = None
     time: Optional[int] = None
     hash_: Optional[bytes] = None
-    disclosure: Optional[int] = None
     for record_type, value in read_tlv_records(data[2:], unique_ascending=True):
         if record_type == _FIELD_N:
             if len(value) != 1 or value[0] == 0:
@@ -317,12 +309,6 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
             if len(value) != 32:
                 raise ValueError("hash field must be 32 bytes")
             hash_ = value
-        elif record_type == _FIELD_DISCLOSURE:
-            # Mode 0x00 and every unallocated mode reject, so a private leaf
-            # has one encoding.
-            if len(value) != 1 or value[0] != 0x01:
-                raise ValueError("disclosure mode must be 0x01")
-            disclosure = value[0]
         else:
             # Odd types are reserved, so an unknown field of either parity rejects.
             raise ValueError(f"Unknown leaf field: {record_type}")
@@ -338,9 +324,7 @@ def parse_nutroot_leaf(data: bytes) -> NutrootLeaf:
         raise ValueError(f"{type_name} leaf must not carry a time field")
     if type_name != "hashlock" and hash_ is not None:
         raise ValueError(f"{type_name} leaf must not carry a hash field")
-    return NutrootLeaf(
-        type=type_name, n=n, keys=keys, time=time, hash=hash_, disclosure=disclosure
-    )
+    return NutrootLeaf(type=type_name, n=n, keys=keys, time=time, hash=hash_)
 
 
 def nutroot_leaf_hash(serialized_leaf: bytes) -> bytes:
@@ -482,21 +466,6 @@ def verify_nutroot_commitment(
     return nutroot_tweak_pubkey(internal_key, root).format() == secret.format()
 
 
-def witness_discloses(witness_json: str) -> bool:
-    """True when a spent v3 witness exercised a leaf carrying disclosure mode 0x01.
-
-    Decides what NUT-07 publishes; a witness that does not parse discloses
-    nothing (fail closed to private).
-    """
-    try:
-        witness = NutrootWitness.model_validate_json(witness_json)
-        if witness.leaf is None:
-            return False  # key path: byte-identical to a bare-key spend
-        return parse_nutroot_leaf(bytes.fromhex(witness.leaf)).disclosure == 0x01
-    except Exception:
-        return False
-
-
 def proof_transcript_y(secret: str, keyset_id: str) -> bytes:
     """The Y a proof input contributes to the transaction transcript (NUT-10).
 
@@ -550,7 +519,7 @@ def verify_script_path_spend(
     Witness shape (NUT-10): {"leaf": hex, "control": {"K": hex, "path": [hex]},
     "signatures": [hex], "preimage": hex?}. Signatures are BIP-340 over the
     input digest. Raises ValueError on any failure (fail closed); returns the
-    parsed leaf so callers can act on its disclosure mode.
+    parsed leaf describing the satisfied conditions.
     """
     if witness.leaf is None or witness.control is None:
         raise ValueError("script path witness requires leaf and control")
