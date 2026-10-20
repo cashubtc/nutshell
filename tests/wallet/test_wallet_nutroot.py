@@ -28,7 +28,6 @@ async def test_nutroot_payment_survives_storage_and_sweeps(tmp_path, script_only
                             type="threshold",
                             n=1,
                             keys=[recipient.private_key.public_key],
-                            disclosure=1,
                         )
                     ).hex()
                 ],

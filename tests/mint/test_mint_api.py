@@ -664,7 +664,7 @@ async def test_api_check_state(ledger: Ledger):
 async def test_api_check_state_v3_serves_witness_digest(
     ledger: Ledger, wallet: Wallet
 ):
-    """Status returns the original v3 witness and digest without a disclosure flag."""
+    """Status returns the original v3 witness and digest for a key-path spend."""
     from cashu.core.base import ProofSpentState
     from cashu.core.crypto.nutroot import (
         keyset_id_transcript_bytes,

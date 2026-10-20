@@ -317,12 +317,12 @@ async def test_v3_wallet_counters_preserve_the_full_u64_range(tmp_path):
         await db.engine.dispose()
 
 
-def test_pending_spends_return_original_witnesses_without_a_disclosure_flag():
+def test_pending_spends_return_original_key_and_script_witnesses():
     vectors = json.loads(
         Path(__file__).with_name("nutroot_v3_vectors.json").read_text()
     )
     p = proof(key(3).public_key.format().hex())
-    for name in ("keypath_private", "disclosed_script_path"):
+    for name in ("key_path", "script_path"):
         vector = vectors["nut07_commitments"][name]
         p.witness = vector["witness"]
         p.digest = vector["input_digest"]

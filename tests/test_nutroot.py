@@ -1,8 +1,4 @@
-"""Nutroot v3 crypto core tests against the shared vectors.
-
-Vectors: tests/nutroot_v3_vectors.json (canonical copy lives in cashu-ts
-test/vectors/nutroot-v3.json; update both in the same commit set).
-"""
+"""Nutroot crypto tests against shared and locally adapted fixed vectors."""
 
 import hashlib
 import json
@@ -1438,29 +1434,40 @@ def test_duplicate_leaves_fold_and_spend():
     )
 
 
-def test_disclosure_field_parses_and_fails_closed():
-    """disclosure (0x0a) accepts mode 0x01 only; a private leaf has one encoding."""
-    lf = VECTORS["leaf_forms"]
-    leaf = parse_nutroot_leaf(bytes.fromhex(lf["threshold_1of1_disclosure"]))
-    assert leaf.disclosure == 0x01
-    assert serialize_nutroot_leaf(leaf).hex() == lf["threshold_1of1_disclosure"]
-    for bad in ("leaf_disclosure_mode0", "leaf_disclosure_empty", "leaf_disclosure_mode2"):
-        with pytest.raises(ValueError, match="disclosure mode"):
-            parse_nutroot_leaf(bytes.fromhex(lf[bad]))
-    with pytest.raises(ValueError, match="disclosure mode"):
-        serialize_nutroot_leaf(
-            NutrootLeaf(
-                type="threshold",
-                n=1,
-                keys=[PublicKey(bytes.fromhex(V_REFUND["carol_pub"]))],
-                disclosure=2,
-            )
-        )
+@pytest.mark.parametrize("leaf_type", ["threshold", "after", "hashlock", "commit"])
+@pytest.mark.parametrize("value", [b"", b"\x00", b"\x01", b"\x02"])
+def test_retired_disclosure_field_is_rejected(leaf_type, value):
+    leaf = NutrootLeaf(
+        type=leaf_type,
+        n=0 if leaf_type == "commit" else 1,
+        keys=[]
+        if leaf_type == "commit"
+        else [PrivateKey((3).to_bytes(32, "big")).public_key],
+        time=0 if leaf_type == "after" else None,
+        hash=b"\x07" * 32 if leaf_type in ("hashlock", "commit") else None,
+    )
+    encoded = serialize_nutroot_leaf(leaf) + tlv_record(0x0A, value)
+    with pytest.raises(ValueError):
+        parse_nutroot_leaf(encoded)
+    internal = PrivateKey((9).to_bytes(32, "big")).public_key
+    secret = nutroot_tweak_pubkey(internal, nutroot_leaf_hash(encoded))
+    digest = hashlib.sha256(b"retired leaf field").digest()
+    witness = nutroot_witness(
+        {
+            "leaf": encoded.hex(),
+            "control": {"K": internal.format().hex(), "path": []},
+            "signatures": [_sign_digest(3, digest)],
+        }
+    )
+    from cashu.core.crypto.nutroot import verify_script_path_spend
+
+    with pytest.raises(ValueError):
+        verify_script_path_spend(secret, digest, witness)
 
 
 def test_auditable_lock_vector_reconstructs():
-    """The canonical auditable lock (NUMS offset, disclosure leaf) matches the vector."""
-    from cashu.core.crypto.nutroot import verify_script_path_spend, witness_discloses
+    """A single-key NUMS lock verifies without a publication flag."""
+    from cashu.core.crypto.nutroot import verify_script_path_spend
     from cashu.core.crypto.transcript import (
         build_transaction_transcript,
         transaction_digest,
@@ -1480,16 +1487,15 @@ def test_auditable_lock_vector_reconstructs():
     assert transaction_digest(tx).hex() == aud["digest"]
     assert hashlib.sha256(context.container).hexdigest() == aud["input_id"]
     assert context.digest.hex() == aud["input_digest"]
-    # The spend's witness verifies and is marked for publication.
+    # The spend's witness verifies without any extra publication field.
     revealed = verify_script_path_spend(
         PublicKey(bytes.fromhex(aud["secret"])),
         bytes.fromhex(aud["input_digest"]),
         NutrootWitness.model_validate_json(aud["witness"]),
     )
-    assert revealed.disclosure == 0x01
-    assert witness_discloses(aud["witness"])
-    # A key-path witness discloses nothing, whatever the tree held.
-    assert not witness_discloses(json.dumps({"signatures": ["00" * 64]}))
+    assert revealed.type == "threshold"
+    assert revealed.n == 1
+    assert [key.format().hex() for key in revealed.keys] == [aud["P"]]
 
 
 def test_commit_leaf_vectors():
@@ -1501,12 +1507,11 @@ def test_commit_leaf_vectors():
     commit = serialize_nutroot_leaf(NutrootLeaf(type="commit", hash=h))
     assert commit.hex() == v["leaf_commit"]
     parsed = parse_nutroot_leaf(commit)
-    assert (parsed.type, parsed.n, parsed.keys, parsed.hash, parsed.disclosure) == (
+    assert (parsed.type, parsed.n, parsed.keys, parsed.hash) == (
         "commit",
         0,
         [],
         h,
-        None,
     )
     threshold = bytes.fromhex(v["leaf_threshold"])
     hashes = [nutroot_leaf_hash(threshold), nutroot_leaf_hash(commit)]
@@ -1559,7 +1564,7 @@ def test_spend_commitment_vectors():
     """NUT-07: tagged_hash(tag, Y || input_digest || SHA256(witness)) over the exact string."""
     from cashu.core.crypto.transcript import spend_commitment
 
-    for name in ("keypath_private", "disclosed_script_path"):
+    for name in ("key_path", "script_path"):
         v = VECTORS["nut07_commitments"][name]
         assert hashlib.sha256(v["witness"].encode()).hexdigest() == v["witness_hash"]
         assert (
@@ -1573,28 +1578,28 @@ def test_spend_commitment_vectors():
 
 
 def test_nut07_spent_state_returns_exact_witnesses_for_all_spend_paths():
-    """Checkstate returns original witnesses without requiring disclosure."""
+    """Checkstate returns original witnesses for both key and script paths."""
     from cashu.core.base import Proof
     from cashu.mint.db.read import _spent_proof_state
 
     v3 = dict(id="02" + "ab" * 32, secret="02" + "79be667e" * 8)
-    kp = VECTORS["nut07_commitments"]["keypath_private"]
-    private = _spent_proof_state(
+    kp = VECTORS["nut07_commitments"]["key_path"]
+    key_path = _spent_proof_state(
         kp["Y"], Proof(**v3, witness=kp["witness"], digest=kp["input_digest"])
     )
-    assert private.witness == kp["witness"]
-    assert private.input_digest == kp["input_digest"]
-    assert private.commitment is None
-    assert "commitment" not in private.model_dump()
+    assert key_path.witness == kp["witness"]
+    assert key_path.input_digest == kp["input_digest"]
+    assert key_path.commitment is None
+    assert "commitment" not in key_path.model_dump()
 
-    aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
-    disclosed = _spent_proof_state(
+    aud = VECTORS["nut07_commitments"]["script_path"]
+    script_path = _spent_proof_state(
         aud["Y"], Proof(**v3, witness=aud["witness"], digest=aud["input_digest"])
     )
-    assert disclosed.witness == aud["witness"]
-    assert disclosed.input_digest == aud["input_digest"]
-    assert disclosed.commitment is None
-    assert "commitment" not in disclosed.model_dump()
+    assert script_path.witness == aud["witness"]
+    assert script_path.input_digest == aud["input_digest"]
+    assert script_path.commitment is None
+    assert "commitment" not in script_path.model_dump()
 
     # Pre-v3: the witness serves as always, whatever digest the row carries.
     legacy = _spent_proof_state(
@@ -1619,7 +1624,7 @@ async def test_nut17_spent_event_returns_the_exact_nutroot_witness():
         async def __aexit__(self, *_):
             return None
 
-    kp = VECTORS["nut07_commitments"]["keypath_private"]
+    kp = VECTORS["nut07_commitments"]["key_path"]
     proof_input = VECTORS["transcript"]["swap"]["tx"]["proof_inputs"][0]
     proof = Proof(
         id=proof_input["keyset_id"],
