@@ -11,6 +11,7 @@ from ...core.base import Proof
 from ...core.crypto.keys import is_bls_keyset
 from ...core.crypto.secp import PrivateKey as SecpPrivateKey
 from ...core.db import Database
+from ...core.nuts.nut22 import BATKEY_PREFIX
 from ..crud import get_mint_by_url, update_mint
 from ..wallet import Wallet
 from .openid_connect.openid_client import AuthorizationFlow, OpenIDClient
@@ -228,11 +229,16 @@ class WalletAuth(Wallet):
 
         amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
         if is_bls_keyset(self.keyset_id):
-            secrets = [SecpPrivateKey().public_key.format().hex() for _ in amounts]
+            # NUT-22: a version 02 BAT is a point secret; the wallet keeps each
+            # fresh private key with its proof (BATKEY derivation record) to
+            # sign the request transcript at presentation.
+            bat_keys = [SecpPrivateKey() for _ in amounts]
+            secrets = [k.public_key.format().hex() for k in bat_keys]
+            derivation_paths = [f"{BATKEY_PREFIX}{k.to_hex()}" for k in bat_keys]
         else:
             secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-        derivation_paths = ["" for _ in amounts]
-        # The selected keyset determines whether blinding factors use secp or BLS.
+            derivation_paths = ["" for _ in amounts]
+        # blinding factors must match the keyset's curve, so let step1 pick them
         outputs, rs = self._construct_outputs(amounts, secrets)
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
         new_proofs = await self._construct_proofs(

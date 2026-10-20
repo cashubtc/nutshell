@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from cashu.core.base import DLEQWallet, Proof, WalletKeyset
+from cashu.core.base import Proof, WalletKeyset
 from cashu.core.crypto import bls_dhke
 from cashu.core.crypto.bls import PrivateKey as BlsPrivateKey
 from cashu.wallet.secrets import WalletSecrets
@@ -71,7 +71,6 @@ async def test_wallet_bls_signature_verification():
         amount=amount,
         C=C.serialize().hex(),
         secret=secret_msg,
-        dleq=DLEQWallet(e="1", s="1", r="1")
     )
     
     wallet.verify_proofs_dleq([valid_proof])
@@ -84,7 +83,6 @@ async def test_wallet_bls_signature_verification():
         amount=amount,
         C=bad_C.serialize().hex(),
         secret=secret_msg,
-        dleq=DLEQWallet(e="1", s="1", r="1")
     )
     
     with pytest.raises(Exception) as exc_info:

@@ -204,6 +204,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             TokenV3: TokenV3 object
         """
 
+        self._attach_bearer_spend_info(proofs)
         # extract all keysets IDs from proofs
         keyset_ids = self._get_proofs_keyset_ids(proofs)
         keysets = {k.id: k for k in self.keysets.values() if k.id in keyset_ids}

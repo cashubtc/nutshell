@@ -7,6 +7,7 @@ from cashu.core.db import Database
 from cashu.core.errors import BlindAuthFailedError
 from cashu.core.migrations import migrate_databases
 from cashu.core.mint_info import MintInfo
+from cashu.core.nuts import nut22
 from cashu.core.settings import settings
 from cashu.mint.auth import migrations as auth_migrations
 from cashu.mint.auth.base import User
@@ -83,20 +84,26 @@ async def test_auth_tokens_mint_and_spend_across_keyset_versions(
         assert len({proof.secret for proof in proofs}) == 2
         assert len(await get_proofs(db=wallet.db)) == 2
 
+        # A version 02 BAT signs the request it authorizes (NUT-22), as the
+        # wallet does at presentation; older BATs are bearer tokens.
+        request = {"method": "POST", "target": "/v1/swap", "body": b"{}"}
         for proof in proofs:
+            bat_key = nut22.bat_private_key(proof.derivation_path)
+            if bat_key is not None:
+                proof.witness = nut22.sign_request(bat_key, **request)
             tampered = proof.model_copy(
                 update={"secret": PrivateKey().public_key.format().hex()}
             )
             with pytest.raises(BlindAuthFailedError):
                 async with ledger.verify_blind_auth(
-                    AuthProof.from_proof(tampered).to_base64()
+                    AuthProof.from_proof(tampered).to_base64(), **request
                 ):
                     pass
             auth_token = AuthProof.from_proof(proof).to_base64()
-            async with ledger.verify_blind_auth(auth_token):
+            async with ledger.verify_blind_auth(auth_token, **request):
                 pass
             with pytest.raises(BlindAuthFailedError):
-                async with ledger.verify_blind_auth(auth_token):
+                async with ledger.verify_blind_auth(auth_token, **request):
                     pass
     finally:
         await wallet.db.engine.dispose()

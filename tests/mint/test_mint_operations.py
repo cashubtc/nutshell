@@ -2,11 +2,14 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
+    Amount,
     BlindedMessage,
     MeltQuoteState,
+    Method,
     MintKeyset,
     MintQuoteState,
     Proof,
+    Unit,
 )
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.keys import is_bls_keyset

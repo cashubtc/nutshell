@@ -183,9 +183,8 @@ async def test_swap(ledger: Ledger, wallet: Wallet):
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
     assert result["signatures"][0]["id"] == ledger.keyset.id
-    assert result["signatures"][0]["dleq"]
-    assert "e" in result["signatures"][0]["dleq"]
-    assert "s" in result["signatures"][0]["dleq"]
+    # NUT-12 is version-scoped: v3 signatures carry no DLEQ.
+    assert result["signatures"][0].get("dleq") is None
 
 
 @pytest.mark.asyncio
@@ -281,7 +280,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     assert mint_quote.privkey
     signature = nut20.sign_mint_quote_v3(
-        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey
+        mint_quote.quote, mint_quote.amount, outputs, mint_quote.privkey, 0
     )
     outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
@@ -299,9 +298,8 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
     assert result["signatures"][0]["id"] == ledger.keyset.id
-    assert result["signatures"][0]["dleq"]
-    assert "e" in result["signatures"][0]["dleq"]
-    assert "s" in result["signatures"][0]["dleq"]
+    # NUT-12 is version-scoped: v3 signatures carry no DLEQ.
+    assert result["signatures"][0].get("dleq") is None
 
 
 @pytest.mark.asyncio
@@ -666,8 +664,7 @@ async def test_api_check_state(ledger: Ledger):
 async def test_api_check_state_v3_serves_witness_digest(
     ledger: Ledger, wallet: Wallet
 ):
-    """A spent v3 proof's state carries the spend commitment (NUT-07); the
-    witness and input digest stay private for an undisclosed key-path spend."""
+    """Status returns the original v3 witness and digest without a disclosure flag."""
     from cashu.core.base import ProofSpentState
     from cashu.core.crypto.nutroot import (
         keyset_id_transcript_bytes,
@@ -677,7 +674,6 @@ async def test_api_check_state_v3_serves_witness_digest(
         TransactionShape,
         TranscriptBlindedOutput,
         TranscriptProofInput,
-        spend_commitment,
         transaction_inputs,
     )
 
@@ -688,6 +684,9 @@ async def test_api_check_state_v3_serves_witness_digest(
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     inputs = wallet.proofs
     wallet._attach_nutroot_witnesses(inputs, outputs)
+    for proof in inputs:
+        assert proof.witness is not None
+        proof.witness = " \n" + proof.witness + "  "
     payload = {
         "inputs": [p.to_dict() for p in inputs],
         "outputs": [o.model_dump() for o in outputs],
@@ -724,20 +723,17 @@ async def test_api_check_state_v3_serves_witness_digest(
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     states = PostCheckStateResponse.model_validate(response.json()).states
     assert states
+    assert all("commitment" not in state for state in response.json()["states"])
     by_y = {p.Y: p for p in inputs}
     for state in states:
         assert state.state == ProofSpentState.spent
-        # No disclosure leaf was exercised: the witness and input digest stay
-        # with the mint, and the commitment binds them for a later opening.
-        assert state.witness is None
-        assert state.input_digest is None
         proof = by_y[state.Y]
         y = proof_transcript_y(proof.secret, proof.id)
         input_digest = proof_contexts[y].digest
         assert proof.witness
-        assert state.commitment == spend_commitment(
-            bytes.fromhex(state.Y), input_digest, proof.witness
-        ).hex()
+        assert state.witness == proof.witness
+        assert state.input_digest == input_digest.hex()
+        assert state.commitment is None
 
 
 @pytest.mark.asyncio
@@ -794,7 +790,8 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     original_proof = next(
         proof for proof in wallet.proofs if proof.secret == secrets[0]
     )
-    assert original_proof.dleq
+    # NUT-12 is version-scoped: v3 proofs carry no DLEQ.
+    assert original_proof.dleq is None
 
     payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
@@ -810,9 +807,7 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     assert len(restore_response.signatures) == 1
     assert len(restore_response.outputs) == 1
     assert restore_response.outputs == outputs
-    assert restore_response.signatures[0].dleq
-    assert restore_response.signatures[0].dleq.e == original_proof.dleq.e
-    assert restore_response.signatures[0].dleq.s == original_proof.dleq.s
+    assert restore_response.signatures[0].dleq is None
 
 
 @pytest.mark.asyncio
@@ -853,7 +848,10 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
     assert mint_quote2.privkey
 
     # Each quote signs its own input digest over the shared batch transcript
-    batch = [(mint_quote1.quote, 64), (mint_quote2.quote, 32)]
+    batch = [
+        (mint_quote1.quote, 64, mint_quote1.pubkey, 0),
+        (mint_quote2.quote, 32, mint_quote2.pubkey, 0),
+    ]
     sig1 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote1.privkey, mint_quote1.quote)
     sig2 = nut20.sign_mint_quote_batch_v3(batch, outputs, mint_quote2.privkey, mint_quote2.quote)
 

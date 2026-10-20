@@ -386,3 +386,15 @@ async def m020_create_ecash_transactions(db: Database):
             );
             """
         )
+
+
+async def m021_add_nutroot_wallet_data(db: Database):
+    async with db.connect() as conn:
+        await conn.execute("ALTER TABLE proofs ADD COLUMN spend_info TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN spend_info TEXT")
+        await conn.execute(
+            "CREATE TABLE nutroot_quote_counters (mint_pubkey TEXT PRIMARY KEY, counter TEXT NOT NULL)"
+        )
+        await conn.execute(
+            "CREATE TABLE nutroot_proof_counters (keyset_id TEXT PRIMARY KEY, counter TEXT NOT NULL)"
+        )

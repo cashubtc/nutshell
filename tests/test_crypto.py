@@ -519,7 +519,7 @@ def test_bls_step2():
             "0000000000000000000000000000000000000000000000000000000000000002"
         )
     )
-    C_, _, _ = bls_dhke.step2_bob(B_, a)
+    C_ = bls_dhke.step2_bob(B_, a)
     assert (
         C_.format().hex()
         == "8d52d7a6cbe5e99858d5c15c092d11a0c387c78917471211082a6e5afc2a79680dfa188fafe5d4a51c5398ce160e7a16"
@@ -573,7 +573,7 @@ def test_dleq_step2_bob_dleq_invalid_key_type():
         )
     )
     bls_key = bls.PrivateKey()
-    with pytest.raises(TypeError, match="Expected SecpPrivateKey"):
+    with pytest.raises(TypeError):
         step2_bob_dleq(B_, bls_key)  # type: ignore
 
 

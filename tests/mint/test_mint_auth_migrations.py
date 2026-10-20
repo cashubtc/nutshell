@@ -4,14 +4,12 @@ from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.mint.auth import migrations as auth_migrations
-from cashu.mint.auth.crud import AuthLedgerCrudSqlite
 from cashu.mint.crud import LedgerCrudSqlite
 
 
 @pytest.mark.asyncio
 async def test_auth_proof_migration_preserves_existing_tokens(tmp_path):
     db = Database("auth", str(tmp_path))
-    old_crud = AuthLedgerCrudSqlite()
     shared_crud = LedgerCrudSqlite()
 
     def proof(secret):
@@ -26,8 +24,18 @@ async def test_auth_proof_migration_preserves_existing_tokens(tmp_path):
     pending = proof("pending-auth-token")
     try:
         await auth_migrations.m001_initial(db)
-        await old_crud.invalidate_proof(db=db, proof=spent)
-        await old_crud.set_proof_pending(db=db, proof=pending)
+        for table, token in (("proofs_used", spent), ("proofs_pending", pending)):
+            await db.execute(
+                f"INSERT INTO {db.table_with_schema(table)} "
+                "(id, amount, c, secret, y) VALUES (:id, :amount, :c, :secret, :y)",
+                {
+                    "id": token.id,
+                    "amount": token.amount,
+                    "c": token.C,
+                    "secret": token.secret,
+                    "y": token.Y,
+                },
+            )
 
         await auth_migrations.m006_add_digest_to_auth_proofs(db)
         loaded_spent = await shared_crud.get_proofs_used(db=db, Ys=[spent.Y])

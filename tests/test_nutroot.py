@@ -451,6 +451,24 @@ async def test_nut13_v3_derivation_type_vectors():
     assert len(derived) == 4
 
 
+def test_nut13_v3_quote_id_preimage_vectors():
+    """Type 0x05 shares the quote lock's counter and scope; its NUT-04 derived id matches."""
+    from cashu.core.crypto.transcript import derived_quote_id
+    from cashu.wallet.secrets import WalletSecrets
+
+    nut13 = VECTORS["nut13_v3"]
+    secrets = WalletSecrets()
+    secrets.seed = bytes.fromhex(nut13["seed_hex"])
+    for lock in nut13["quote_locks"]:
+        preimage = secrets.derive_v3_quote_id_preimage(
+            lock["counter"], nut13["mint_identity"]
+        )
+        assert preimage.hex() == lock["id_preimage"]
+        assert derived_quote_id(preimage) == lock["quote_id"]
+    with pytest.raises(ValueError, match="32 bytes"):
+        derived_quote_id(b"\x00" * 31)
+
+
 def test_v3_secret_must_be_lowercase_hex():
     """One spelling per secret: upper-case hex names the same point but the two
     sides hash it differently, so it is refused rather than accepted twice."""
@@ -530,7 +548,12 @@ def _tx_from_vector(tx: dict):
             for p in tx.get("proof_inputs", [])
         ],
         mint_quote_inputs=[
-            TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
+            TranscriptQuote(
+                amount=q["amount"],
+                quote_id=q["quote_id"],
+                pubkey=bytes.fromhex(q["lock_pubkey"]),
+                issued=q["issued"],
+            )
             for q in tx.get("mint_quote_inputs", [])
         ],
         blinded_outputs=[
@@ -605,46 +628,33 @@ def test_transcript_multi_input_vector_uses_per_input_digests():
 def test_transcript_mixed_keyset_vector_names_inputs_by_y():
     """NUT-10 tests, "Mixed keysets": a pre-v3 input beside a v3 one, each
     named by the Y its own keyset's curve gives; neither secret appears."""
-    from cashu.core.crypto.nutroot import proof_transcript_y
     from cashu.core.crypto.transcript import (
-        TransactionShape,
-        TranscriptBlindedOutput,
-        TranscriptProofInput,
         build_transaction_transcript,
         transaction_inputs,
     )
 
-    inputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b", "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"}, {"amount": 2, "id": "00456a94ab4e1c46", "secret": "d341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6", "C": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"}]
-    outputs = [{"amount": 8, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}, {"amount": 2, "id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6", "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"}]
-    tx = TransactionShape(
-        proof_inputs=[
-            TranscriptProofInput(
-                amount=p["amount"],
-                keyset_id=bytes.fromhex(p["id"]),
-                Y=proof_transcript_y(p["secret"], p["id"]),
-                C=bytes.fromhex(p["C"]),
-            )
-            for p in inputs
-        ],
-        blinded_outputs=[
-            TranscriptBlindedOutput(
-                amount=o["amount"],
-                keyset_id=bytes.fromhex(o["id"]),
-                B_=bytes.fromhex(o["B_"]),
-            )
-            for o in outputs
-        ],
-    )
-    transcript = build_transaction_transcript(tx)
-    assert transcript.hex() == "01008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d033270100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba203005b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd5503005b0100010202002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
-    assert inputs[0]["secret"] not in transcript.hex()
-    assert inputs[1]["secret"].encode().hex() not in transcript.hex()
+    vector = VECTORS["transcript"]["mixed_keysets"]
+    tx = _tx_from_vector(vector["tx"])
+    transcript = build_transaction_transcript(tx).hex()
+    assert transcript == vector["transcript"]
+    for p in vector["tx"]["proof_inputs"]:
+        assert p["secret"] not in transcript
+        assert p["secret"].encode().hex() not in transcript
     digest, proof_contexts, _ = transaction_inputs(tx)
-    assert digest.hex() == "e8eb75f3f209bbf592e7cc7ed727dcd33fe118add5ab7a992a3a2d7a9392d893"
-    v3 = proof_contexts[bytes.fromhex("a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73")]
-    assert v3.digest.hex() == "3f48aab72fb7ec0e29d1fa49e4e194f09110068fe94a95e8553f53755af55837"
-    legacy = proof_contexts[bytes.fromhex("029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae")]
-    assert hashlib.sha256(legacy.container).hexdigest() == "22df4d688b7337f49aa47dd5d0dc6578506229c36908d79608c50d7814d1bd04"
+    assert digest.hex() == vector["digest"]
+    for expected in vector["inputs"]:
+        context = proof_contexts[bytes.fromhex(expected["Y"])]
+        assert context.container.hex() == expected["container"]
+        assert hashlib.sha256(context.container).hexdigest() == expected["input_id"]
+    # Only the v3 input signs its input digest.
+    v3_expected = vector["inputs"][0]
+    v3 = proof_contexts[bytes.fromhex(v3_expected["Y"])]
+    assert v3.digest.hex() == v3_expected["input_digest"]
+    assert verify_schnorr_digest(
+        bytes.fromhex(v3_expected["signature"]),
+        v3.digest,
+        bytes.fromhex(vector["tx"]["proof_inputs"][0]["secret"]),
+    )
 
 
 def test_transcript_rejects_empty_sections():
@@ -728,14 +738,46 @@ def test_quote_key_path_witness_takes_exactly_one_signature():
 
     privkey, pubkey = nut20.generate_keypair()
     _, _, outputs = _swap_vector_proofs_and_outputs()
-    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey)
-    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig)
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey, 0)
+    assert nut20.verify_mint_quote_v3("qid", 8, outputs, pubkey, sig, 0)
     assert nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]})
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig]}), 0
     )
     assert not nut20.verify_mint_quote_v3(
-        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]})
+        "qid", 8, outputs, pubkey, json.dumps({"signatures": [sig, "00" * 64]}), 0
     )
+
+
+def test_quote_witness_with_malformed_lock_key_is_invalid():
+    from cashu.core.nuts import nut20
+
+    privkey, _ = nut20.generate_keypair()
+    _, _, outputs = _swap_vector_proofs_and_outputs()
+    sig = nut20.sign_mint_quote_v3("qid", 8, outputs, privkey, 0)
+    assert not nut20.verify_mint_quote_v3("qid", 8, outputs, "zz", sig, 0)
+    assert not nut20.verify_mint_quote_v3(
+        "qid", 8, outputs, "02" + "00" * 32, sig, 0, batch_quotes=[("qid", 8, "", 0)]
+    )
+
+
+def test_partial_mint_vector_commits_amount_issued():
+    from cashu.core.base import BlindedMessage
+    from cashu.core.nuts import nut20
+
+    vector = VECTORS["transcript"]["partial_mint"]
+    quote = vector["tx"]["mint_quote_inputs"][0]
+    outputs = [
+        BlindedMessage(amount=o["amount"], id=o["keyset_id"], B_=o["B_"])
+        for o in vector["tx"]["blinded_outputs"]
+    ]
+    args = (outputs, vector["lock_pubkey"], vector["signature"])
+    issued = quote["issued"]
+    assert nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args, issued)
+    assert not nut20.verify_mint_quote_v3(
+        quote["quote_id"], vector["quote_amount"], *args, issued
+    )
+    # The quote's state is bound too: the same witness fails at another amount_issued.
+    assert not nut20.verify_mint_quote_v3(quote["quote_id"], quote["amount"], *args, 0)
 
 
 @pytest.mark.asyncio
@@ -748,6 +790,7 @@ async def test_wallet_attaches_nutroot_witnesses():
     n13 = VECTORS["nut13_v3"]
     wallet = Wallet.__new__(Wallet)
     wallet.seed = bytes.fromhex(n13["seed_hex"])
+    wallet.private_key = PrivateKey((1).to_bytes(32, "big"))
     proofs = [
         Proof(
             amount=8,
@@ -989,6 +1032,7 @@ def test_resolve_v3_secret_key_prefers_spend_info():
     n13 = VECTORS["nut13_v3"]
     wallet = Wallet.__new__(Wallet)
     wallet.seed = b"a different seed entirely"
+    wallet.private_key = PrivateKey((1).to_bytes(32, "big"))
     proof = Proof(
         id=n13["keyset_id"],
         amount=8,
@@ -1528,9 +1572,8 @@ def test_spend_commitment_vectors():
         )
 
 
-def test_nut07_spent_state_discloses_only_flagged_spends():
-    """Checkstate: v3 spends return the commitment; the witness and input digest
-    only when the exercised leaf carries disclosure mode 0x01."""
+def test_nut07_spent_state_returns_exact_witnesses_for_all_spend_paths():
+    """Checkstate returns original witnesses without requiring disclosure."""
     from cashu.core.base import Proof
     from cashu.mint.db.read import _spent_proof_state
 
@@ -1539,9 +1582,10 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
     private = _spent_proof_state(
         kp["Y"], Proof(**v3, witness=kp["witness"], digest=kp["input_digest"])
     )
-    assert private.witness is None
-    assert private.input_digest is None
-    assert private.commitment == kp["commitment"]
+    assert private.witness == kp["witness"]
+    assert private.input_digest == kp["input_digest"]
+    assert private.commitment is None
+    assert "commitment" not in private.model_dump()
 
     aud = VECTORS["nut07_commitments"]["disclosed_script_path"]
     disclosed = _spent_proof_state(
@@ -1549,7 +1593,8 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
     )
     assert disclosed.witness == aud["witness"]
     assert disclosed.input_digest == aud["input_digest"]
-    assert disclosed.commitment == aud["commitment"]
+    assert disclosed.commitment is None
+    assert "commitment" not in disclosed.model_dump()
 
     # Pre-v3: the witness serves as always, whatever digest the row carries.
     legacy = _spent_proof_state(
@@ -1562,8 +1607,8 @@ def test_nut07_spent_state_discloses_only_flagged_spends():
 
 
 @pytest.mark.asyncio
-async def test_nut17_spent_event_uses_the_nut07_disclosure_filter():
-    """Live proof_state events must not reopen the witness leak closed by checkstate."""
+async def test_nut17_spent_event_returns_the_exact_nutroot_witness():
+    """Events return the same original witness and digest as status queries."""
     from cashu.core.base import Proof
     from cashu.mint.db.write import DbWriteHelper
 
@@ -1600,6 +1645,7 @@ async def test_nut17_spent_event_uses_the_nut07_disclosure_filter():
 
     state = events.submit.await_args.args[0]
     assert state.Y == kp["Y"]
-    assert state.witness is None
-    assert state.input_digest is None
-    assert state.commitment == kp["commitment"]
+    assert state.witness == kp["witness"]
+    assert state.input_digest == kp["input_digest"]
+    assert state.commitment is None
+    assert "commitment" not in state.model_dump()
