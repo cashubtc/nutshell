@@ -119,6 +119,7 @@ class Ledger(
         self.invoice_listener_tasks: List[asyncio.Task] = []
         self.watchdog_tasks: List[asyncio.Task] = []
         self.regular_tasks: List[asyncio.Task] = []
+        self.melt_tasks: set[asyncio.Task] = set()
 
         if not seed:
             raise Exception("seed not set")
@@ -227,6 +228,15 @@ class Ledger(
         try:
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Payment jobs must finish before their backend or database closes.
+            # In particular, internal melts cannot be reconciled via Lightning.
+            if self.melt_tasks:
+                logger.debug("Waiting for in-flight melt payments")
+                await asyncio.gather(*self.melt_tasks, return_exceptions=True)
+                self.melt_tasks.clear()
+
+            await self.events.cleanup()
 
             logger.debug("Shutting down backends")
             for unitbackends in self.backends.values():
@@ -1371,7 +1381,9 @@ class Ledger(
             except Exception as e:
                 logger.error(f"Error in background melt task: {e}")
 
-        asyncio.create_task(melt_task())
+        task = asyncio.create_task(melt_task())
+        self.melt_tasks.add(task)
+        task.add_done_callback(self.melt_tasks.discard)
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
     async def melt(

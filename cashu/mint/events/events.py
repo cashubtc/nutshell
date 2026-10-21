@@ -19,9 +19,18 @@ class LedgerEventManager:
         _type_: Union[MintQuote, MeltQuote]
     """
 
-    clients: list[LedgerEventClientManager] = []
-
     MAX_CLIENTS = 1000
+
+    def __init__(self) -> None:
+        self.clients: list[LedgerEventClientManager] = []
+
+    async def cleanup(self) -> None:
+        clients = list(self.clients)
+        self.clients.clear()
+        if clients:
+            await asyncio.gather(
+                *(client.cleanup() for client in clients), return_exceptions=True
+            )
 
     def add_client(
         self, websocket: WebSocket, db: Database, crud: LedgerCrud
@@ -58,6 +67,6 @@ class LedgerEventManager:
                 logger.trace(
                     f"Submitting event to sub {sub}: {self.serialize_event(event)}"
                 )
-                asyncio.create_task(
+                client.create_task(
                     client._send_obj(self.serialize_event(event), subId=sub)
                 )

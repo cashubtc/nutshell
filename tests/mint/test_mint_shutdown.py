@@ -12,6 +12,7 @@ from cashu.lightning.clnrest import CLNRestWallet
 from cashu.lightning.fake import FakeWallet
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
+from cashu.mint.events.events import LedgerEventManager
 from cashu.mint.ledger import Ledger
 
 
@@ -26,7 +27,10 @@ def shutdown_ledger(backends=None):
     ledger.invoice_listener_tasks = []
     ledger.watchdog_tasks = []
     ledger.regular_tasks = []
+    ledger.melt_tasks = set()
+    ledger.events = LedgerEventManager()
     ledger.backends = backends or {}
+    cast(Any, ledger).crud = object()
     cast(Any, ledger).db = SimpleNamespace(engine=SimpleNamespace(dispose=AsyncMock()))
     return ledger
 
@@ -237,3 +241,186 @@ def test_fakewallet_invoice_stream_can_restart_on_another_loop(monkeypatch):
 
     for _ in range(2):
         asyncio.run(lifecycle())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish_payment", [False, True])
+async def test_shutdown_owns_background_melts(monkeypatch, finish_payment):
+    from cashu.core.base import MeltQuote, MeltQuoteState
+
+    ledger = shutdown_ledger()
+    quote = MeltQuote(
+        quote="pending-melt",
+        method="bolt11",
+        unit="sat",
+        request="lnbc1",
+        checking_id="payment-hash",
+        amount=1,
+        fee_reserve=1,
+        state=MeltQuoteState.pending,
+    )
+    stopped = asyncio.Event()
+    complete = asyncio.Event()
+
+    async def execute(*args):
+        try:
+            if not finish_payment:
+                await complete.wait()
+        finally:
+            # Payment finalization must complete before the database closes.
+            ledger.db.engine.dispose.assert_not_awaited()
+            stopped.set()
+
+    monkeypatch.setattr(ledger, "_prepare_melt", AsyncMock(return_value=quote))
+    monkeypatch.setattr(ledger, "_execute_melt_payment", execute)
+    response = await ledger.async_melt(proofs=[], quote=quote.quote)
+    tasks = list(ledger.melt_tasks)
+    assert len(tasks) == 1
+    assert response.state == "PENDING"
+    await asyncio.sleep(0)
+
+    if finish_payment:
+        await asyncio.gather(*tasks)
+        assert not ledger.melt_tasks
+    shutdown = asyncio.create_task(ledger.shutdown_ledger())
+    await asyncio.sleep(0)
+    if not finish_payment:
+        assert not shutdown.done()
+        ledger.db.engine.dispose.assert_not_awaited()
+        complete.set()
+    await asyncio.wait_for(shutdown, timeout=1)
+
+    assert stopped.is_set()
+    assert not ledger.melt_tasks
+    assert tasks[0].done()
+    assert not tasks[0].cancelled()
+    ledger.db.engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancels_websocket_snapshots_and_notifications(monkeypatch):
+    from cashu.core.base import MintQuote, MintQuoteState
+    from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+
+    ledger = shutdown_ledger()
+    websocket = SimpleNamespace(send_text=AsyncMock())
+    client = ledger.events.add_client(
+        cast(Any, websocket), ledger.db, cast(Any, object())
+    )
+    finished = set()
+
+    async def snapshot(*args):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.add("snapshot")
+
+    async def send(*args):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.add("notification")
+
+    monkeypatch.setattr(client, "_init_subscriptions", snapshot)
+    websocket.send_text.side_effect = send
+    quote = MintQuote(
+        quote="mint-quote",
+        method="bolt11",
+        request="lnbc1",
+        checking_id="payment-hash",
+        unit="sat",
+        amount=1,
+        state=MintQuoteState.paid,
+    )
+    client.add_subscription(
+        JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE, [quote.quote], "sub-1"
+    )
+    await ledger.events.submit(quote)
+    tasks = list(client.tasks)
+    assert len(tasks) == 2
+    await asyncio.sleep(0)
+
+    async def dispose():
+        assert finished == {"snapshot", "notification"}
+
+    ledger.db.engine.dispose.side_effect = dispose
+    await ledger.shutdown_ledger()
+
+    assert all(task.cancelled() for task in tasks)
+    assert not client.tasks
+    assert not ledger.events.clients
+
+
+@pytest.mark.asyncio
+async def test_websocket_disconnect_awaits_its_tasks(monkeypatch):
+    from fastapi import WebSocketDisconnect
+
+    import cashu.mint.router as router
+    from cashu.mint.events.client import LedgerEventClientManager
+
+    ledger = shutdown_ledger()
+    websocket = SimpleNamespace(client_state=SimpleNamespace(name="DISCONNECTED"))
+    stopped = asyncio.Event()
+
+    async def background():
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+
+    async def start(client):
+        client.create_task(background())
+        await asyncio.sleep(0)
+        raise WebSocketDisconnect()
+
+    monkeypatch.setattr(router, "ledger", ledger)
+    monkeypatch.setattr(router, "limit_websocket", lambda ws: None)
+    monkeypatch.setattr(LedgerEventClientManager, "start", start)
+    await router.websocket_endpoint(cast(Any, websocket))
+
+    assert stopped.is_set()
+    assert not ledger.events.clients
+
+
+def test_event_clients_belong_to_one_ledger():
+    first = LedgerEventManager()
+    second = LedgerEventManager()
+    first.add_client(cast(Any, object()), cast(Any, object()), cast(Any, object()))
+    assert len(first.clients) == 1
+    assert not second.clients
+
+
+@pytest.mark.asyncio
+async def test_spark_cleanup_disconnects_and_allows_reconnection(monkeypatch, tmp_path):
+    import cashu.lightning.sparkl2 as spark
+
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_spark_mnemonic", "test-mnemonic")
+    monkeypatch.setattr(settings, "mint_spark_network", "MAINNET")
+    monkeypatch.setattr(
+        spark.breez_sdk_spark,
+        "default_config",
+        lambda network: SimpleNamespace(prefer_spark_over_lightning=False),
+    )
+    first_sdk = SimpleNamespace(add_event_listener=AsyncMock(), disconnect=AsyncMock())
+    second_sdk = SimpleNamespace(add_event_listener=AsyncMock(), disconnect=AsyncMock())
+    connect = AsyncMock(side_effect=[first_sdk, second_sdk])
+    monkeypatch.setattr(spark.breez_sdk_spark, "connect", connect)
+    wallet = spark.SparkL2Wallet(Unit.sat)
+    await wallet._ensure_sdk()
+    old_queue = wallet.payment_queue
+    assert wallet.sdk is first_sdk
+
+    await wallet.cleanup()
+    first_sdk.disconnect.assert_awaited_once()
+    assert wallet.sdk is None
+    assert wallet.listener is None
+    assert wallet.payment_queue is not old_queue
+    await wallet.cleanup()
+    first_sdk.disconnect.assert_awaited_once()
+
+    await wallet._ensure_sdk()
+    assert wallet.sdk is second_sdk
+    assert wallet.listener is not None
+    await wallet.cleanup()
+    second_sdk.disconnect.assert_awaited_once()

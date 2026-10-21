@@ -111,9 +111,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -494,6 +492,8 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if client and client in ledger.events.clients:
             ledger.events.remove_client(client)
+        if client:
+            await client.cleanup()
         if websocket.client_state.name != "DISCONNECTED":
             await asyncio.wait_for(websocket.close(), timeout=1)
 
