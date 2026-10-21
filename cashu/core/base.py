@@ -996,7 +996,8 @@ class MintKeyset:
         else:
             self.seed = seed
 
-        assert self.seed or self.from_mnemonic, "seed not set"
+        if not self.seed and not self.from_mnemonic:
+            raise Exception("seed not set")
 
         # keep the seed encrypted at rest if a decryption key is set
         if settings.mint_seed_decryption_key and self.seed and not encrypted_seed:
@@ -1052,8 +1053,6 @@ class MintKeyset:
             self.unit = Unit[unit]
 
         # generate keys from seed
-        assert self.derivation_path, "derivation path not set"
-
         self.generate_keys()
 
         logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
@@ -1088,7 +1087,8 @@ class MintKeyset:
 
     def generate_keys(self):
         """Generates keys of a keyset from a seed."""
-        assert self.derivation_path, "derivation path not set"
+        if not self.derivation_path:
+            raise Exception("derivation path not set")
 
         if self.from_mnemonic:
             if not settings.mint_mnemonic:
@@ -1098,10 +1098,10 @@ class MintKeyset:
                 self.derivation_path,
                 self.amounts,
             )
-            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)
-            assert self.public_keys is not None
+            public_keys = derive_pubkeys(self.private_keys, self.amounts)
+            self.public_keys = public_keys
             keyset_id = derive_keyset_id_v2(
-                self.public_keys,
+                public_keys,
                 self.unit.name,
                 self.final_expiry,
                 self.input_fee_ppk,
@@ -1113,7 +1113,8 @@ class MintKeyset:
             self.id = keyset_id
             return
 
-        assert self.seed, "seed not set"
+        if not self.seed:
+            raise Exception("seed not set")
 
         # BEGIN: BACKWARDS COMPATIBILITY < 0.15.0
         # we overwrite keyset id only if it isn't already set in the database
