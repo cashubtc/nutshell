@@ -12,6 +12,7 @@ from bolt11 import (
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -102,6 +103,14 @@ class CLNRestWallet(LightningBackend):
             await self.client.aclose()
         except RuntimeError as e:
             logger.warning(f"Error closing wallet connection: {e}")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         r = await self.client.post("/v1/listfunds", timeout=5)

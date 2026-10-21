@@ -17,6 +17,7 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
 import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
 import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from cashu.core.helpers import fee_reserve
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -110,6 +111,14 @@ class LndRPCWallet(LightningBackend):
 
         if self.supports_mpp:
             logger.info("LndRPCWallet enabling MPP feature")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = bolt11.decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         r = None

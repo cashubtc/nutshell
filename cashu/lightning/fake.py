@@ -19,6 +19,7 @@ from bolt11 import (
 )
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -117,6 +118,14 @@ class FakeWallet(LightningBackend):
         self.assert_unit_supported(unit)
         self.unit = unit
         self._paid_invoices_queue = None
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         return StatusResponse(
