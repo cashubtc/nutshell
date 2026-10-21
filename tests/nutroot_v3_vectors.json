@@ -143,12 +143,26 @@
         "pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
         "id_preimage": "54b61b1f5d56ce358cb3b919a4ed1d41e7aae6892376fb0a4fabc0a65a7d6e68",
         "quote_id": "0118a4cdd84f17f6d59d6bfc8a3bb8be51fb251c661a8211b1f9f77125fb87c5"
+      },
+      {
+        "counter": 2,
+        "privkey": "ae53ad7d7da1ab7a9f1b6725532f1a1cc56d354b6e7f01e1dc65f5da10bf2854",
+        "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+        "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+        "quote_id": "48f5284dd55d3baae4c43a5c6cf0deb0eba0a1c7e01e788f453e24f48f109815"
+      },
+      {
+        "counter": 3,
+        "privkey": "b00007547a668f8db818741d55aa4a7223c912f50387dd0e413222f9d3dc1b38",
+        "pubkey": "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2",
+        "id_preimage": "132004e11a17cea14291ed197bef25252fc1d5340fb23b401f4ac9d399d07b8a",
+        "quote_id": "7db21586f5bfd8958961cd9a4ac97232ab3756aefb39a6a3e0cfa44adbec52ae"
       }
     ],
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued by this transaction, 02 quote id utf8, 03 lock key, 04 amount_issued before this transaction), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8), 23 mint quote output (01 amount, 02 lock key, 03 quote id utf8: hex(tagged_hash(\"Cashu_QuoteId\", id_preimage)), or without one hex(tagged_hash(\"Cashu_InputQuoteId\", SHA256(input containers) || u32_BE(k)))). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -415,6 +429,108 @@
           "input_id": "efbdd5d14874cb021fc962d93a9848553ca65ae101e9b57f6678aa37ffe1ebd9"
         }
       ]
+    },
+    "mint_quote_to_melt": {
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-mint-0001",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+            "issued": 0
+          }
+        ],
+        "melt_quote_outputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-melt-0001"
+          }
+        ]
+      },
+      "transcript": "12003d0100010802000f71756f74652d6d696e742d303030310300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d2098120400002200160100010802000f71756f74652d6d656c742d30303031",
+      "digest": "8c54caecbdd6fdc5ae77bea97ed63dbf94a6919d6bc5d71cd7145765b52e49f3",
+      "input_id": "d294012dd54976b05eb3e36eb218b9a6d66b19d79ec122944a35b99b8ddd8839",
+      "input_digest": "492728212791e2222a327b9c4fe6c17e2da0e9e7d1aebbe0062c3585909edb57"
+    },
+    "proof_to_two_fixed_txouts": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+            "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
+            "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+          }
+        ],
+        "mint_quote_outputs": [
+          {
+            "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+            "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+            "amount": 3
+          },
+          {
+            "id_preimage": "132004e11a17cea14291ed197bef25252fc1d5340fb23b401f4ac9d399d07b8a",
+            "pubkey": "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2",
+            "amount": 5
+          }
+        ]
+      },
+      "mint_quote_output_containers": [
+        "23006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b03004034386635323834646435356433626161653463343361356336636630646562306562613061316337653031653738386634353365323466343866313039383135",
+        "23006b0100010502002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004037646232313538366635626664383935383936316364396134616339373233326162333735366165666233396136613365306366613434616462656335326165"
+      ],
+      "quote_ids": [
+        "48f5284dd55d3baae4c43a5c6cf0deb0eba0a1c7e01e788f453e24f48f109815",
+        "7db21586f5bfd8958961cd9a4ac97232ab3756aefb39a6a3e0cfa44adbec52ae"
+      ],
+      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b0300403438663532383464643535643362616165346334336135633663663064656230656261306131633765303165373838663435336532346634386631303938313523006b0100010502002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004037646232313538366635626664383935383936316364396134616339373233326162333735366165666233396136613365306366613434616462656335326165",
+      "digest": "1e96a6c5f15dffea09102e335b02923c17f5c91fef9410d3d874ca1be04fa85f",
+      "input_id": "900fb575d55eed27f7f52db079a2bf4843e674c461726eca70b90943cb3c7d07",
+      "input_digest": "35e5ebc93588d09d19b7595d732210c3f462d98363f3aaead6a8d6d00d7d412f"
+    },
+    "proof_to_input_bound_txout": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+            "secret": "02e6e7cfa7b82d4b3b449fa6466c893469a727d0214d48db4956a6054b8022a29b",
+            "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+          }
+        ],
+        "mint_quote_inputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-mint-0001",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+            "issued": 0
+          }
+        ],
+        "mint_quote_outputs": [
+          {
+            "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+            "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+            "amount": 3
+          },
+          {
+            "pubkey": "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2",
+            "amount": 13
+          }
+        ]
+      },
+      "mint_quote_output_containers": [
+        "23006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b03004034386635323834646435356433626161653463343361356336636630646562306562613061316337653031653738386634353365323466343866313039383135",
+        "23006b0100010d02002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004035356238373034323238333037616163666139616331393234336539383732633861636565653636373366396637623238623131353332303336396435653134"
+      ],
+      "quote_ids": [
+        "48f5284dd55d3baae4c43a5c6cf0deb0eba0a1c7e01e788f453e24f48f109815",
+        "55b8704228307aacfa9ac19243e9872c8aceee6673f9f7b28b115320369d5e14"
+      ],
+      "input_section_hash": "e3e06afdc3dfecf19c58797baebc07b939aa70f4f35f89685a91e699d15e171f",
+      "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332712003d0100010802000f71756f74652d6d696e742d303030310300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d20981204000023006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b0300403438663532383464643535643362616165346334336135633663663064656230656261306131633765303165373838663435336532346634386631303938313523006b0100010d02002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004035356238373034323238333037616163666139616331393234336539383732633861636565653636373366396637623238623131353332303336396435653134",
+      "digest": "49d39125cfa48a8bfc262286981a80e7d4d2366bed606cb86618a2b1479b4a64",
+      "input_id": "900fb575d55eed27f7f52db079a2bf4843e674c461726eca70b90943cb3c7d07",
+      "input_digest": "788bfa90df7349b1db06750fcf53f230a3c85f1d319c4776ac3024f34c1873ae"
     }
   },
   "tokens_v4": {
@@ -512,7 +628,8 @@
     "duplicate_pair_root": "1eaf291448e2f3c3a4fc00bfd591917bbb807e63af0fb905d054002bddd2cbc6",
     "duplicate_pair_internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
     "duplicate_pair_secret": "03dd2f11ab23b670222ada50325b5d49cd07e1d7a721d9b52fa2039df1f1b0dbfd",
-    "leaf_unknown_field": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9090004deadbeef"
+    "leaf_unknown_field": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9090004deadbeef",
+    "leaf_unknown_type": "00ff0200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
   },
   "auditable_lock": {
     "comment": "Single-key script-only lock: NUMS offset u = 7 and one threshold leaf n = 1 to test key 3, with unconditional witness publication.",
@@ -588,5 +705,114 @@
     "signing_package_signed": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWM0NWY0OTE5Njk3ZGM2ZmQ2YjBkYTEwNzE2YzNjMDdiOTQ3OWUyZjhjMzIxOWY0MzQxMjI2ZGI1MWQ0ZTMxZWEwZjkxY2IyOGZkYmYxZDUxYzI4NWViZmVhM2EwOGE1MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyIwNjQzODNjYzE0MjgyMGJhMjUxNjI0M2M0ZGFjMjc1ZTE4ZTdiMmZhMTBlMGI2ZDQwYTNiOGQxOWIwYTIwOWQ5YjRkMmQwZTIxMmI5YjliMjZiMjMyM2YyMjEwNzMzZjM0YTc3ZjlkMTdmMmU3ZjlmZTFhODI3MTYxNDA1ZTJmNiJdfV19",
     "spend_receipt": "nutrcAeyJ0b2tlbiI6ImNhc2h1Qm8yRnRjV2gwZEhCek9pOHZiV2x1ZEM1MFpYTjBZWFZqYzJGMFlYU0JvbUZwU0FLMzRIZlFJUHEtWVhDQnBHRmhDR0Z6ZUVJd01tVTJaVGRqWm1FM1lqZ3laRFJpTTJJME5EbG1ZVFkwTmpaak9Ea3pORFk1WVRjeU4yUXdNakUwWkRRNFpHSTBPVFUyWVRZd05UUmlPREF5TW1FeU9XSmhZMWd3aE5HM0tScmxjMzg4aFJxalBLX2c5Nl9yWE10Tm9JYkVncnVGdDFKZVlWUl9HMXB0R2dHeF90SDVZTkdwMERNblluTnBvV0ZyV0NCSEdXM0FnUlVNNFRfUTVIaTR0eGd4dUNXLU9KSVJ5Y1ZxZ0dLbUd2Y0RSdyIsInJlY2VpcHRzIjpbeyJZIjoiYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczIiwia2V5c2V0SWQiOiIwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYiLCJpbnB1dERpZ2VzdCI6ImVjYTY3YjY4MDAxNWQ0MmZmYjkzMzliOGMwNDc1YTkwZDE2MmQxODliZDM2YTE1ZDhiNjkxMGRlNDg5MjdlZGQiLCJ3aXRuZXNzIjoie1wic2lnbmF0dXJlc1wiOltcIjViNGIyY2JkYjVlYTc1ZGQyYTY0NTFiZjJmMzQ4ZThiODM3NDM4Mzc1ZGQ1ZTc4YmE1Y2IyZjNjNTQ5MjU4ZGY4ZmYyNzRlOGRlOTk4N2U3ZGFiODhjMjIxZjBkZTgyMDU0NmU0MjkwN2NlYzgxNmUyYjI5MGFmODE0MDMwYTk0XCJdfSIsImNvbW1pdG1lbnQiOiJlYjNkY2U4MjMyMjAxYWE2OWY0MzQ0Zjg5ZTA3ZGJmYTY2OTBjMTBjZmIyNmVmZjllZjQ4YThiZTZlZmJmNTIyIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczMDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIn1dfQ"
   },
-  "local_changes": "NUMS locks, script witnesses and signing packages use unconditional witness publication; affected values were regenerated with hashlib, coincurve and pyblst independently of the Cashu helpers."
+  "local_changes": "NUMS locks, script witnesses and signing packages use unconditional witness publication; affected values were regenerated with hashlib, coincurve and pyblst independently of the Cashu helpers.",
+  "template_lock": {
+    "comment": "Template covenant: NUMS offset u = 7, one template leaf n = 1 to test key 3 whose dests are the lock keys of the two fixed txout quotes of proof_to_two_fixed_txouts, spent into exactly those outputs. rejected_outputs locks the second to test key 4 instead, which dests does not list, so the witness is rejected.",
+    "u": "0000000000000000000000000000000000000000000000000000000000000007",
+    "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+    "dests": [
+      "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+      "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2"
+    ],
+    "leaf": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90c004203db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2",
+    "merkle_root": "8d41634c46c8ee248a0b8bf65c2a4cd883ece04925e366205e6385cb3e41413d",
+    "tweak": "41e5456a9808ef698ad6613fe86647c48d9b75ca0f8abe91a3d01debbbff0115",
+    "secret": "03a07a07169b3dbad5ea5e6f7771acb326e788e42e38948d9d2d5f5d3f29b38cf1",
+    "Y": "88bab7f9ec6d4405cf2382ae36c9c9dc20c62b77c9c5f8b402e9352d3db6bde71d56f0ea6ef7c939892cccced4e7d1c1",
+    "tx": {
+      "proof_inputs": [
+        {
+          "amount": 8,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "secret": "03a07a07169b3dbad5ea5e6f7771acb326e788e42e38948d9d2d5f5d3f29b38cf1",
+          "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+        }
+      ],
+      "mint_quote_outputs": [
+        {
+          "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+          "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+          "amount": 3
+        },
+        {
+          "id_preimage": "132004e11a17cea14291ed197bef25252fc1d5340fb23b401f4ac9d399d07b8a",
+          "pubkey": "02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2",
+          "amount": 5
+        }
+      ]
+    },
+    "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f603003088bab7f9ec6d4405cf2382ae36c9c9dc20c62b77c9c5f8b402e9352d3db6bde71d56f0ea6ef7c939892cccced4e7d1c104003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723006b0100010302002103db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b0300403438663532383464643535643362616165346334336135633663663064656230656261306131633765303165373838663435336532346634386631303938313523006b0100010502002102ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae203004037646232313538366635626664383935383936316364396134616339373233326162333735366165666233396136613365306366613434616462656335326165",
+    "digest": "7431ff2a0c9cda33cd86db4473041cb2577c137e4ce122c862829f623774d3de",
+    "input_id": "c7f25fbb091291c9c8e26f68c4b3d9a27a37449ad1923be3b3aa276a25636c29",
+    "input_digest": "7dc8094f0a3ca7dd1df79a8289fcbd43f71e9b4202b8a62fc860df7a50dc9f4e",
+    "witness": "{\"leaf\":\"00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90c004203db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b02ccdef4b1ff9e02ee1c142505aa501f2ae3ef30ad9837234d501c26e974f18ae2\",\"control\":{\"K\":\"028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407\",\"path\":[]},\"signatures\":[\"9eafc4d00d4017c0946531e79c772de23234b7682a1839d46e1f933ba0b97854b1b95e9202f8fd7b1054a33b86690cab6eb352bc8a5a785635c7ddaeb267d8be\"]}",
+    "rejected_outputs": {
+      "mint_quote_outputs": [
+        {
+          "id_preimage": "2caf99f5aef46b625beb02484fc76b467cd9c025c68ce8af02b70b65b6d21f1d",
+          "pubkey": "03db67a892bc5c2c37c1a7979ba28706732deef4b92d69a5f68ad0ab448126d38b",
+          "amount": 3
+        },
+        {
+          "id_preimage": "132004e11a17cea14291ed197bef25252fc1d5340fb23b401f4ac9d399d07b8a",
+          "pubkey": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+          "amount": 5
+        }
+      ]
+    }
+  },
+  "template_escrow": {
+    "comment": "Arbiter escrow: NUMS offset u = 7 and three leaves. arbiter is a template leaf n = 1 to the arbiter (key 4) with dests buyer (key 3) and seller (key 5); refund is an after leaf to the buyer at receiver_keyed_refund.refund_time; coop is a 2-of-2 threshold of buyer and seller. The fold promotes the odd leaf. The spend is the swap proof under this secret into a split the seller built (5 sat to the seller under id_preimage 55..55, 3 to the buyer under 33..33), signed by the arbiter. self_deal is a fixed txout quote of the whole 8 to the arbiter itself, which dests does not list.",
+    "buyer": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "seller": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+    "arbiter": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "leaf_arbiter": "00050200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd130c004202f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+    "leaf_refund": "00020200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f906000468a3be80",
+    "leaf_coop": "00010200010204004202f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+    "leaf_hash_arbiter": "6a250690c3dacdbb0f3262ed8e7b6cf635cae6084f13213715cbb75c0019d9b0",
+    "leaf_hash_refund": "c63d3a44d8775d6fbbe6c92137749831f2e4af57747defbc29ce0933cb77e1d3",
+    "leaf_hash_coop": "dfa245f0b825b4ea746ee82f6f41de614a7ceb00e54760327218e5e4487b5c4b",
+    "u": "0000000000000000000000000000000000000000000000000000000000000007",
+    "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+    "merkle_root": "5624fbc52d2041cf6bf0b72dc1712a6dc6499a228845718a52848eebb891d14b",
+    "tweak": "1c2eff2c35b24cda8445026bfd459011ea82092fc13fbe9cf0db6b1af9ae5f5a",
+    "secret": "022d32ec64d123475fac4593830f2e26d6ce1dc3768f6211d60f14d1eba6e06292",
+    "Y": "a0e1a56e974d03e59105e8359456dd8562adade1da9d6c38d4b4ec55a0fab16c2bd171ab782e043e8073d3e3a2628dd4",
+    "tx": {
+      "proof_inputs": [
+        {
+          "amount": 8,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "secret": "022d32ec64d123475fac4593830f2e26d6ce1dc3768f6211d60f14d1eba6e06292",
+          "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+        }
+      ],
+      "mint_quote_outputs": [
+        {
+          "id_preimage": "5555555555555555555555555555555555555555555555555555555555555555",
+          "pubkey": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+          "amount": 5
+        },
+        {
+          "id_preimage": "3333333333333333333333333333333333333333333333333333333333333333",
+          "pubkey": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+          "amount": 3
+        }
+      ]
+    },
+    "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0e1a56e974d03e59105e8359456dd8562adade1da9d6c38d4b4ec55a0fab16c2bd171ab782e043e8073d3e3a2628dd404003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332723006b01000105020021022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe40300403465333864616163643131616536373766333264623362353834373363623665343332616161656531653065346131373039313961656165313334336635656623006b0100010302002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f903004061366366373066636263396461633261333137343236323463653136383761353733613264323833613238613330363138363638376361336234636434313939",
+    "digest": "191f1ee87fe691172ee533a18975538fdcf90a4119d997d422e9137b59e2ed73",
+    "input_id": "e34b281fd3ade8e3c78cfd147011cb8e00899913e12b637d59b9ad53885b2dd7",
+    "input_digest": "f0f868802d92c310291c5b831d1bfb598f21a47c3dfc7ac72b5f7e03b7ca272b",
+    "witness": "{\"leaf\":\"00050200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd130c004202f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4\",\"control\":{\"K\":\"028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407\",\"path\":[\"c63d3a44d8775d6fbbe6c92137749831f2e4af57747defbc29ce0933cb77e1d3\",\"dfa245f0b825b4ea746ee82f6f41de614a7ceb00e54760327218e5e4487b5c4b\"]},\"signatures\":[\"e6bdbdcea86847c3e974e0f1d327adf3fd85fa07361385e365b372c6e82eec5227d2c022d5b7bd5d21f042b7ae60fe48d6c418d0850d720ff510c4b27f56111e\"]}",
+    "self_deal": {
+      "mint_quote_outputs": [
+        {
+          "id_preimage": "4444444444444444444444444444444444444444444444444444444444444444",
+          "pubkey": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+          "amount": 8
+        }
+      ]
+    }
+  }
 }

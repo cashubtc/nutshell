@@ -48,6 +48,7 @@ from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.crypto.transcript import (
     TransactionShape,
     TranscriptBlindedOutput,
+    TranscriptMintQuoteOutput,
     TranscriptProofInput,
     TranscriptQuote,
     build_transaction_transcript,
@@ -67,6 +68,7 @@ from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
+    TransactionMintQuoteOutput,
 )
 from ..core.nutroot import (
     NutrootOwnership,
@@ -866,6 +868,7 @@ class Wallet(
         outputs: Sequence[BlindedMessage],
         melt_quote_id: Optional[str] = None,
         melt_quote_amount: Optional[int] = None,
+        mint_quote_outputs: Optional[List[TransactionMintQuoteOutput]] = None,
     ) -> TransactionShape:
         return TransactionShape(
             proof_inputs=[
@@ -890,6 +893,12 @@ class Wallet(
             ]
             if melt_quote_id is not None and melt_quote_amount is not None
             else None,
+            mint_quote_outputs=[
+                TranscriptMintQuoteOutput(
+                    pubkey=bytes.fromhex(c.pubkey), amount=c.amount, quote_id=c.quote_id
+                )
+                for c in mint_quote_outputs or []
+            ],
         )
 
     def prepare_nutroot_signing_package(
@@ -992,6 +1001,7 @@ class Wallet(
         outputs: List[BlindedMessage],
         melt_quote_id: Optional[str] = None,
         melt_quote_amount: Optional[int] = None,
+        mint_quote_outputs: Optional[List[TransactionMintQuoteOutput]] = None,
     ) -> List[Proof]:
         """Attach nutroot transaction witnesses to v3 point-secret inputs (NUT-10).
 
@@ -1007,7 +1017,13 @@ class Wallet(
             return proofs
         try:
             _, proof_contexts, _ = transaction_inputs(
-                self._nutroot_transaction(proofs, outputs, melt_quote_id, melt_quote_amount)
+                self._nutroot_transaction(
+                    proofs,
+                    outputs,
+                    melt_quote_id,
+                    melt_quote_amount,
+                    mint_quote_outputs,
+                )
             )
         except ValueError:
             # A structurally invalid transaction (eg a repeated input) has no
