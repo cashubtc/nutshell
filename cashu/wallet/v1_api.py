@@ -30,6 +30,7 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMeltRequestOptionAmountless,
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
     PostMintQuoteRequest,
@@ -460,11 +461,19 @@ class LedgerAPI(SupportsAuth):
     ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
-        assert invoice_obj.amount_msat, "invoice must have amount"
-
-        # add mpp amount for partial melts
         melt_options = None
-        if amount_msat:
+        if not invoice_obj.amount_msat:
+            assert self.mint_info
+            if amount_msat is None:
+                raise ValueError(
+                    "Amountless invoice requires an amount in millisatoshis."
+                )
+            if not self.mint_info.supports_amountless("bolt11", unit):
+                raise ValueError("Mint does not support amountless invoices.")
+            melt_options = PostMeltRequestOptions(
+                amountless=PostMeltRequestOptionAmountless(amount_msat=amount_msat)
+            )
+        elif amount_msat is not None:
             melt_options = PostMeltRequestOptions(
                 mpp=PostMeltRequestOptionMpp(amount=amount_msat)
             )
@@ -476,7 +485,7 @@ class LedgerAPI(SupportsAuth):
         resp = await self._request(
             POST,
             "melt/quote/bolt11",
-            json=payload.model_dump(),
+            json=payload.model_dump(exclude_none=True),
         )
 
         # if mint doesn't support v1 melt-quote endpoint, fail explicitly

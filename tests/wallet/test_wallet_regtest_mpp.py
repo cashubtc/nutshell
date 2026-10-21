@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 import threading
 from typing import List
 
@@ -7,6 +9,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof
+from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -15,11 +18,14 @@ from tests.helpers import (
     SLEEP_TIME,
     assert_err,
     cancel_invoice,
+    docker_clightning_cli,
+    docker_lightning_cli,
     get_hold_invoice,
     get_real_invoice,
     is_fake,
     partial_pay_real_invoice,
     pay_if_regtest,
+    run_cmd_json,
 )
 
 
@@ -245,6 +251,8 @@ async def test_regtest_pay_mpp_cancel_payment_pay_partial_invoice(
             MeltQuote(
                 request=invoice,
                 amount=amount,
+                amount_msat=amount * 1000,
+                amount_option_type="nut-15",
                 fee_reserve=0,
                 quote="",
                 method="bolt11",
@@ -265,3 +273,60 @@ async def test_regtest_pay_mpp_cancel_payment_pay_partial_invoice(
 
     result = await payment_task
     assert result.failed
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.mint_backend_bolt11_sat
+    not in {"LndRestWallet", "LndRPCWallet", "CLNRestWallet"},
+    reason="requires an MPP regtest backend and a companion CLN node",
+)
+async def test_regtest_mpp_fractional_satoshi_settlement(tmp_path):
+    wallet = await Wallet.with_db(url=SERVER_ENDPOINT, db=str(tmp_path))
+    await wallet.load_mint()
+    assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)
+    funding = await wallet.request_mint(64)
+    await pay_if_regtest(funding.request)
+    await wallet.mint(64, quote_id=funding.quote)
+    invoice = get_real_invoice(64)["payment_request"]
+    payment_hash = bolt11.decode(invoice).payment_hash
+    quote = await wallet.melt_quote(invoice, amount_msat=16_001)
+    assert quote.amount == 17
+    _, proofs = await wallet.swap_to_send(
+        wallet.proofs, quote.amount + quote.fee_reserve
+    )
+
+    # A second node supplies the remainder of the same 64,000 msat invoice.
+    companion = await asyncio.create_subprocess_exec(
+        *docker_clightning_cli(1),
+        "--notifications=none",
+        "-k",
+        "xpay",
+        f"invstring={invoice}",
+        "partial_msat=47999",
+        "retry_for=30",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        paid = await asyncio.wait_for(
+            wallet.melt(proofs, invoice, quote.fee_reserve, quote.quote), timeout=45
+        )
+        stdout, stderr = await asyncio.wait_for(companion.communicate(), timeout=45)
+        assert companion.returncode == 0, stderr.decode()
+        assert int(json.loads(stdout)["amount_msat"]) == 47_999
+        assert paid.state == MeltQuoteState.paid.value
+        assert paid.payment_preimage
+        assert (
+            hashlib.sha256(bytes.fromhex(paid.payment_preimage)).hexdigest()
+            == payment_hash
+        )
+        received = run_cmd_json([*docker_lightning_cli, "lookupinvoice", payment_hash])
+        assert received["state"] == "SETTLED"
+        assert int(received["amt_paid_msat"]) == 64_000
+        assert sorted(int(h["amt_msat"]) for h in received["htlcs"]) == [16_001, 47_999]
+        assert wallet.balance == 47  # 17 sat charged; unused fee reserve returned.
+    finally:
+        if companion.returncode is None:
+            companion.terminate()
+            await companion.communicate()
