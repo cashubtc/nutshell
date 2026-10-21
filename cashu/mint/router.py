@@ -27,6 +27,8 @@ from ..core.models import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
+    PostMintQuotesByPubkeyRequest,
+    PostMintQuotesByPubkeyResponse,
     PostMintRequest,
     PostMintResponse,
     PostRestoreRequest,
@@ -387,6 +389,31 @@ async def mint_quote(
         updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/quote/bolt11/pubkey",
+    summary="Get mint quotes by pubkey",
+    response_model=PostMintQuotesByPubkeyResponse,
+    response_description="Get a page of mint quotes for authenticated public keys.",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_mint_quotes_by_pubkey(
+    request: Request, payload: PostMintQuotesByPubkeyRequest
+) -> PostMintQuotesByPubkeyResponse:
+    """
+    Get mint quotes by pubkey.
+    """
+    logger.trace(f"> POST /v1/mint/quote/bolt11/pubkey: payload={payload}")
+    mint_quotes, next_cursor = await ledger.mint_quotes_by_pubkey(payload)
+    quotes_response = [
+        PostMintQuoteResponse.from_mint_quote(mint_quote) for mint_quote in mint_quotes
+    ]
+    resp = PostMintQuotesByPubkeyResponse(
+        quotes=quotes_response, next_cursor=next_cursor
+    )
+    logger.trace(f"< POST /v1/mint/quote/bolt11/pubkey: {resp}")
     return resp
 
 

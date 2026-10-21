@@ -1,4 +1,5 @@
 import asyncio
+import time
 from unittest.mock import AsyncMock
 
 import pytest
@@ -611,3 +612,172 @@ async def test_mint_quote_paid_time_update(wallet: Wallet, ledger: Ledger):
     assert quote.paid_time >= quote.created_time
     # Ensure it's recent (within last minute)
     assert quote.paid_time > int(time.time()) - 60
+
+
+@pytest.mark.asyncio
+async def test_crud_get_mint_quotes_by_pubkeys(ledger: Ledger):
+    import time
+
+    from cashu.core.base import MintQuote
+
+    pubkey1 = "02" + "00" * 32
+    pubkey2 = "03" + "00" * 32
+
+    quote1 = MintQuote(
+        quote="quote_pubkey_1",
+        method="bolt11",
+        request="lnbc1",
+        checking_id="chk1",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.unpaid,
+        pubkey=pubkey1,
+        created_time=int(time.time()) - 100,
+    )
+    quote2 = MintQuote(
+        quote="quote_pubkey_2",
+        method="bolt11",
+        request="lnbc2",
+        checking_id="chk2",
+        unit="sat",
+        amount=200,
+        state=MintQuoteState.paid,
+        pubkey=pubkey1,
+        created_time=int(time.time()),
+    )
+    quote3 = MintQuote(
+        quote="quote_pubkey_3",
+        method="bolt11",
+        request="lnbc3",
+        checking_id="chk3",
+        unit="sat",
+        amount=300,
+        state=MintQuoteState.unpaid,
+        pubkey=pubkey2,
+        created_time=int(time.time()) + 100,
+    )
+    quote4 = MintQuote(
+        quote="quote_pubkey_other_method",
+        method="custom",
+        request="custom1",
+        checking_id="chk4",
+        unit="sat",
+        amount=400,
+        state=MintQuoteState.unpaid,
+        pubkey=pubkey1,
+        created_time=int(time.time()) + 200,
+    )
+
+    await ledger.crud.store_mint_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_mint_quote(quote=quote2, db=ledger.db)
+    await ledger.crud.store_mint_quote(quote=quote3, db=ledger.db)
+    await ledger.crud.store_mint_quote(quote=quote4, db=ledger.db)
+
+    # Results are sorted by immutable quote IDs.
+    quotes_1 = await ledger.crud.get_mint_quotes_by_pubkeys(
+        pubkeys=[pubkey1], method="bolt11", db=ledger.db, limit=100
+    )
+    assert len(quotes_1) == 2
+    assert quotes_1[0].quote == "quote_pubkey_1"
+    assert quotes_1[1].quote == "quote_pubkey_2"
+
+    # Test multiple pubkeys
+    quotes_1_and_2 = await ledger.crud.get_mint_quotes_by_pubkeys(
+        pubkeys=[pubkey1, pubkey2], method="bolt11", db=ledger.db, limit=100
+    )
+    assert len(quotes_1_and_2) == 3
+    assert [q.quote for q in quotes_1_and_2] == [
+        "quote_pubkey_1",
+        "quote_pubkey_2",
+        "quote_pubkey_3",
+    ]
+
+    # Test no pubkeys
+    quotes_empty = await ledger.crud.get_mint_quotes_by_pubkeys(
+        pubkeys=[], method="bolt11", db=ledger.db, limit=100
+    )
+    assert len(quotes_empty) == 0
+
+    # Test unknown pubkey
+    quotes_unknown = await ledger.crud.get_mint_quotes_by_pubkeys(
+        pubkeys=["02" + "11" * 32], method="bolt11", db=ledger.db, limit=100
+    )
+    assert len(quotes_unknown) == 0
+
+
+@pytest.mark.asyncio
+async def test_ledger_get_mint_quotes_by_pubkeys(ledger: Ledger):
+    from hashlib import sha256
+
+    from cashu.core.crypto.secp import PrivateKey
+    from cashu.core.models import PostMintQuoteRequest, PostMintQuotesByPubkeyRequest
+    from cashu.core.nuts import nutxx
+
+    privkey = PrivateKey()
+    pubkey = privkey.public_key.format(compressed=True).hex()
+
+    # Create two mint quotes for the same pubkey
+    response1 = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=64, unit="sat", pubkey=pubkey)
+    )
+    response2 = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=128, unit="sat", pubkey=pubkey)
+    )
+
+    timestamp = int(time.time())
+    signature = privkey.sign_schnorr(
+        sha256(
+            nutxx.construct_message(ledger.pubkey.format().hex(), pubkey, timestamp)
+        ).digest()
+    ).hex()
+    payload = PostMintQuotesByPubkeyRequest(
+        pubkeys=[pubkey], pubkey_signatures=[signature], timestamp=timestamp
+    )
+
+    # Fetch quotes via Ledger
+    quotes, next_cursor = await ledger.mint_quotes_by_pubkey(payload)
+    assert next_cursor is None
+
+    assert len(quotes) == 2
+    fetched_quote_ids = {q.quote for q in quotes}
+    assert response1.quote in fetched_quote_ids
+    assert response2.quote in fetched_quote_ids
+
+    other_mint = PrivateKey()
+    other_mint_signature = privkey.sign_schnorr(
+        sha256(
+            nutxx.construct_message(
+                other_mint.public_key.format().hex(), pubkey, timestamp
+            )
+        ).digest()
+    ).hex()
+    await assert_err(
+        ledger.mint_quotes_by_pubkey(
+            PostMintQuotesByPubkeyRequest(
+                pubkeys=[pubkey],
+                pubkey_signatures=[other_mint_signature],
+                timestamp=timestamp,
+            )
+        ),
+        "Mint quote lookup signature missing or invalid",
+    )
+
+    # Test error cases
+    bad_signature = "00" * 64
+    await assert_err(
+        ledger.mint_quotes_by_pubkey(
+            PostMintQuotesByPubkeyRequest(
+                pubkeys=[pubkey], pubkey_signatures=[bad_signature], timestamp=timestamp
+            )
+        ),
+        "Mint quote lookup signature missing or invalid",
+    )
+
+    await assert_err(
+        ledger.mint_quotes_by_pubkey(
+            PostMintQuotesByPubkeyRequest(
+                pubkeys=[pubkey], pubkey_signatures=[], timestamp=timestamp
+            )
+        ),
+        "Mint quote lookup signature missing or invalid",
+    )
