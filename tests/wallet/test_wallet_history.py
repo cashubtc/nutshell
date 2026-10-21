@@ -8,21 +8,46 @@ import pytest
 import pytest_asyncio
 from click.testing import CliRunner
 
-from cashu.core.base import Amount, MintQuote, MintQuoteState, Unit
+from cashu.core.base import (
+    Amount,
+    MeltQuote,
+    MeltQuoteState,
+    MintQuote,
+    MintQuoteState,
+    Unit,
+)
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
+from cashu.core.models import PostMeltQuoteResponse
 from cashu.core.settings import settings
 from cashu.lightning.fake import FakeWallet
 from cashu.wallet import migrations
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.crud import (
     get_history,
+    store_bolt11_melt_quote,
     store_bolt11_mint_quote,
     store_ecash_transaction,
 )
 from cashu.wallet.helpers import deserialize_token_from_string, receive, send
 from cashu.wallet.wallet import Wallet
 from tests.helpers import is_fake
+
+
+@pytest.mark.parametrize("preimage", [None, "ab" * 32], ids=["missing", "supplied"])
+def test_melt_response_retains_preimage(preimage):
+    response = PostMeltQuoteResponse(
+        quote="paid-quote",
+        amount=8,
+        unit="sat",
+        request="test-payment-request",
+        fee_reserve=0,
+        state="PAID",
+        expiry=None,
+        payment_preimage=preimage,
+    )
+    quote = MeltQuote.from_resp_wallet(response, "https://mint.test")
+    assert quote.payment_preimage == preimage
 
 
 @pytest_asyncio.fixture
@@ -134,7 +159,9 @@ async def test_real_transfer_melt_and_reload(wallets):
     proofs, _ = await sender.select_to_send(
         sender.proofs, quote.amount + quote.fee_reserve, include_fees=True
     )
-    await sender.melt(proofs, invoice.payment_request, quote.fee_reserve, quote.quote)
+    response = await sender.melt(
+        proofs, invoice.payment_request, quote.fee_reserve, quote.quote
+    )
     rows = await get_history(sender.db)
     assert sorted((r["type"], r["amount"]) for r in rows) == [
         ("melt", -8),
@@ -142,6 +169,17 @@ async def test_real_transfer_melt_and_reload(wallets):
         ("send", -16),
     ]
     assert all(r["mint"] == sender.url and r["unit"] == "sat" for r in rows)
+    mint_row = next(r for r in rows if r["type"] == "mint")
+    assert mint_row["method"] == "bolt11"
+    assert mint_row["reference"]
+    melt_row = next(r for r in rows if r["type"] == "melt")
+    assert melt_row["reference"] == quote.quote
+    assert melt_row["request"] == invoice.payment_request
+    assert melt_row["payment_preimage"] == response.payment_preimage
+    send_row = next(r for r in rows if r["type"] == "send")
+    assert send_row["method"] is None
+    assert send_row["request"] is None
+    assert send_row["payment_preimage"] is None
     assert [(r["type"], r["amount"]) for r in await get_history(receiver.db)] == [
         ("receive", 16)
     ]
@@ -239,6 +277,27 @@ def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch
                 mint="https://sat.test",
             ),
         )
+        for name, preimage in [
+            ("missing", None),
+            ("empty", ""),
+            ("supplied", "ab" * 32),
+        ]:
+            await store_bolt11_melt_quote(
+                db,
+                MeltQuote(
+                    quote=f"melt-{name}",
+                    method="bolt11",
+                    request=f"test-request-{name}",
+                    checking_id="",
+                    unit="sat",
+                    amount=2,
+                    fee_reserve=0,
+                    state=MeltQuoteState.paid,
+                    mint="https://sat.test",
+                    paid_time=100,
+                    payment_preimage=preimage,
+                ),
+            )
         await db.engine.dispose()
 
     asyncio.run(add_rows())
@@ -249,6 +308,15 @@ def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch
     assert result.exit_code == 0, result.output
     assert "+$1.23 USD" in result.output and "https://usd.test" in result.output
     assert "+8 sat" in result.output and "unknown" in result.output
+    assert "Payment method: bolt11" in result.output
+    assert "Quote ID: legacy" in result.output
+    for name in ("missing", "empty", "supplied"):
+        assert f"Payment request: test-request-{name}" in result.output
+    assert (
+        f"Payment request: test-request-supplied\n  Preimage: {'ab' * 32}"
+        in result.output
+    )
+    assert result.output.count("  Preimage:") == 1
     assert "Time (UTC)" in result.output
     assert runner.invoke(cli, args).output == result.output
     with sqlite3.connect(path) as db:
