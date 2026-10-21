@@ -63,11 +63,6 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
 
         logger.info(f"Attempting keyset rotation for unit {str(unit)}")
 
-        if settings.mint_mnemonic:
-            return await self.activate_mnemonic_keyset(
-                unit, max_order, input_fee_ppk, final_expiry
-            )
-
         # Select keyset with the greatest counter
         selected_keyset = None
         selected_keyset_counter = -1
@@ -87,6 +82,11 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
             )
             raise Exception(
                 f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+            )
+
+        if settings.mint_mnemonic:
+            return await self.activate_mnemonic_keyset(
+                unit, max_order, input_fee_ppk, final_expiry
             )
 
         logger.info(f"Rotating keyset {selected_keyset.id}")
@@ -147,7 +147,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
             if keyset.from_mnemonic and keyset.unit == unit
         ]
         derivation_path = derive_bip39_derivation_path(
-            unit.name, max(counters, default=-1) + 1
+            unit.name, max(counters, default=0) + 1
         )
         amounts = [2**i for i in range(max_order)] if max_order else self.amounts
 
@@ -292,6 +292,9 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
             for unit in Unit
             if any(unit in backends for backends in self.backends.values())
         ]
+        if not units:
+            raise KeysetError("No backends are set.")
+
         for unit in units:
             active_keysets = [
                 k for k in self.keysets.values() if k.active and k.unit == unit

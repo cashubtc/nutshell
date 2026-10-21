@@ -63,6 +63,8 @@ async def test_mnemonic_mint_activates_a_keyset_per_unit(tmp_path, monkeypatch):
 
     ledger = await start_ledger(db, None, backends)
     assert {k.unit for k in ledger.keysets.values() if k.active} == {Unit.sat, Unit.usd}
+    # each unit's first keyset is at index 1
+    assert all(k.derivation_path.endswith("/1'") for k in ledger.keysets.values())
 
     # a restart loads the same keysets, derived from the mnemonic instead of stored
     restarted = await start_ledger(db, None, backends)
@@ -85,6 +87,10 @@ async def test_rotation_switches_unit_to_mnemonic(ledger: Ledger, monkeypatch):
 
     keyset = await mnemonic_ledger.rotate_next_keyset(Unit.sat)
     assert keyset.from_mnemonic
+
+    # a unit without an active keyset can't be rotated
+    with pytest.raises(Exception, match="Couldn't find suitable keyset"):
+        await mnemonic_ledger.rotate_next_keyset(Unit.eur)
 
     # after a restart, sat only signs with the new keyset and usd is untouched
     restarted = await start_ledger(
