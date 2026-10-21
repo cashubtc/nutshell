@@ -58,6 +58,7 @@ from .crud import (
     set_secret_derivation,
     store_bolt11_melt_quote,
     store_bolt11_mint_quote,
+    store_ecash_transaction,
     store_keyset,
     store_mint,
     store_proof,
@@ -720,7 +721,20 @@ class Wallet(
         """
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
-        return await self.split(proofs=proofs, amount=0)
+        # Own-token reclaims and refreshes are not outside income.
+        local_secrets = {p.secret for p in await get_proofs(db=self.db)}
+        owned_amount = sum(p.amount for p in proofs if p.secret in local_secrets)
+        keep_proofs, send_proofs = await self.split(proofs=proofs, amount=0)
+        received_amount = sum_proofs(keep_proofs) - owned_amount
+        if received_amount > 0:
+            await store_ecash_transaction(
+                self.db,
+                tx_type="receive",
+                amount=received_amount,
+                unit=self.unit.name,
+                mint=self.url,
+            )
+        return keep_proofs, send_proofs
 
     async def split(
         self,

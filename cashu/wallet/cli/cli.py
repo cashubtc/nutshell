@@ -39,6 +39,7 @@ from ...wallet.crud import (
     get_bolt11_melt_quotes,
     get_bolt11_mint_quote,
     get_bolt11_mint_quotes,
+    get_history,
     get_reserved_proofs,
     get_seed_and_mnemonic,
 )
@@ -230,8 +231,8 @@ async def cli(
             ctx.obj["HOST"], db_path, name=walletname, unit=unit
         )
 
-    # if we have never seen this mint before, we load its information
-    if not wallet.mint_info:
+    # History does not need mint metadata or keysets.
+    if ctx.invoked_subcommand != "history" and not wallet.mint_info:
         await wallet.load_mint()
 
     assert wallet, "Wallet not found."
@@ -1233,6 +1234,42 @@ async def locks(ctx: Context):
     print(f"Lock: {lock_str}")
     print("")
     return True
+
+
+@cli.command(
+    "history",
+    help=(
+        "Show local wallet activity. Sends are token exports, not confirmed "
+        "recipient payments. Lightning amounts are quote totals; fees are excluded."
+    ),
+)
+@click.pass_context
+@coro
+async def history(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    entries = await get_history(wallet.db)
+    if not entries:
+        print("No transaction history.")
+        return
+    print(f"{'Type':<8} {'Amount':>18}  {'Time (UTC)':<19}  Mint")
+    for entry in entries:
+        amount = entry["amount"]
+        sign = "+" if amount >= 0 else "-"
+        formatted_amount = sign + Unit[entry["unit"]].str(abs(amount))
+        timestamp = entry["created_time"]
+        date = (
+            datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            if timestamp is not None
+            else "unknown"
+        )
+        print(f"{entry['type']:<8} {formatted_amount:>18}  {date:<19}  {entry['mint']}")
+        if entry["type"] == "mint":
+            print(f"  Payment method: {entry['method']}")
+            print(f"  Quote ID: {entry['reference']}")
+        elif entry["type"] == "melt":
+            print(f"  Payment request: {entry['request']}")
+            if entry["payment_preimage"]:
+                print(f"  Preimage: {entry['payment_preimage']}")
 
 
 @cli.command("invoices", help="List of all invoices.")
