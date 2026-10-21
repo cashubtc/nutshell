@@ -26,7 +26,7 @@ from ...core.errors import (
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
-from .read import DbReadHelper
+from .read import DbReadHelper, _pending_proof_state, _spent_proof_state
 
 
 def _uuid7() -> str:
@@ -61,12 +61,25 @@ class DbWriteHelper:
         self.db_read = db_read
 
     @staticmethod
-    def _set_mint_quote_state(quote: MintQuote, state: MintQuoteState) -> None:
+    def _set_mint_quote_state(
+        quote: MintQuote, state: MintQuoteState, issued_amount: Optional[int] = None
+    ) -> None:
         """Set a mint quote state and its corresponding timestamps."""
         now = int(time.time())
-        quote.state = state
+        if issued_amount is None:
+            quote.state = state
+        else:
+            paid = quote.amount_paid if quote.amount_paid is not None else quote.amount
+            issued = (quote.amount_issued or 0) + issued_amount
+            if issued_amount < 0 or issued > paid:
+                raise TransactionError("Quote draw exceeds its mintable amount")
+            quote.amount_paid = paid
+            quote.amount_issued = issued
+            quote.state_val = (
+                MintQuoteState.issued if issued == paid else MintQuoteState.paid
+            )
         quote.updated_at = now
-        if state == MintQuoteState.issued and not quote.issued_time:
+        if quote.state == MintQuoteState.issued and not quote.issued_time:
             quote.issued_time = now
 
     async def _verify_spent_proofs_and_set_pending(
@@ -128,7 +141,7 @@ class DbWriteHelper:
             logger.error(f"Failed to set proofs pending: {e}")
             raise e
         for p in proofs:
-            await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
+            await self.events.submit(_pending_proof_state(p.Y, p))
 
     async def _unset_proofs_pending(
         self,
@@ -299,7 +312,7 @@ class DbWriteHelper:
         return quotes
 
     async def _unset_mint_quote_pending(
-        self, quote_id: str, state: MintQuoteState
+        self, quote_id: str, state: MintQuoteState, issued_amount: Optional[int] = None
     ) -> MintQuote:
         """Unsets the mint quote as pending.
 
@@ -328,7 +341,7 @@ class DbWriteHelper:
                     f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
                 )
             # set the quote to previous state
-            self._set_mint_quote_state(quote, state)
+            self._set_mint_quote_state(quote, state, issued_amount=issued_amount)
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
@@ -338,7 +351,8 @@ class DbWriteHelper:
         return quote
 
     async def _unset_mint_quotes_pending(
-        self, quote_ids: List[str], state: MintQuoteState
+        self, quote_ids: List[str], state: MintQuoteState,
+        issued_amounts: Optional[Dict[str, int]] = None,
     ) -> List[MintQuote]:
         """Unsets multiple mint quotes as pending.
 
@@ -377,7 +391,10 @@ class DbWriteHelper:
                         f"Mint quote {quote_id} not pending: {quote.state.value}. Cannot set as {state.value}."
                     )
                 # set the quote to previous state
-                self._set_mint_quote_state(quote, state)
+                self._set_mint_quote_state(
+                    quote, state,
+                    issued_amount=issued_amounts[quote_id] if issued_amounts is not None else None,
+                )
                 logger.trace(f"crud: setting quote {quote_id} as {state.value}")
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 quotes.append(quote)
@@ -687,13 +704,7 @@ class DbWriteHelper:
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
                 if emit_events:
-                    await self.events.submit(
-                        ProofState(
-                            Y=p.Y,
-                            state=ProofSpentState.spent,
-                            witness=p.witness or None,
-                        )
-                    )
+                    await self.events.submit(_spent_proof_state(p.Y, p))
 
             # Update fees
             if keyset_fees:

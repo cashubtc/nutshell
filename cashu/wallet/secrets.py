@@ -8,17 +8,33 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
-from ..core.crypto.keys import get_keyset_id_version
-from ..core.crypto.secp import PrivateKey
+from ..core.crypto.bls import PrivateKey as BlsPrivateKey
+from ..core.crypto.bls import curve_order as BLS_FR_ORDER
+from ..core.crypto.keys import PrivateKey, get_keyset_id_version, is_bls_keyset
+from ..core.crypto.secp import PrivateKey as SecpPrivateKey
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database, LockOptions
+from ..core.errors import NotAllowedError
 from ..core.secret import Secret
 from ..core.settings import settings
 from ..wallet.crud import (
+    allocate_quote_counter,
     bump_secret_derivation,
     get_seed_and_mnemonic,
     store_seed_and_mnemonic,
 )
 from .protocols import SupportsDb, SupportsKeysets
+
+SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+# NUT-13 derivation types. 0x00-0x03 are components of one proof allocation and
+# share the keyset's proof counter; 0x04 and 0x05 share a per-mint quote counter.
+DERIVATION_TYPE_SECRET_KEY = 0x00
+DERIVATION_TYPE_BLINDING_FACTOR = 0x01
+DERIVATION_TYPE_NUMS_OFFSET = 0x02
+DERIVATION_TYPE_LEAF_KEY = 0x03
+DERIVATION_TYPE_QUOTE_LOCK = 0x04
+DERIVATION_TYPE_QUOTE_ID_PREIMAGE = 0x05
 
 
 class WalletSecrets(SupportsDb, SupportsKeysets):
@@ -88,7 +104,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         try:
             self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(
+            self.private_key = SecpPrivateKey(
                 self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
             )
         except ValueError:
@@ -130,7 +146,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         elif version == "01":
             # HMAC-SHA256 derivation for version 01 keysets (per NUT-13 test vectors)
             return await self._derive_secret_hmac_sha256(counter, keyset_id)
+        elif version == "02":
+            # HMAC-SHA256 derivation for version 02 keysets (with BLS rejection sampling)
+            return await self._derive_secret_hmac_sha256_v3(counter, keyset_id)
         else:
+            try:
+                if int(version) >= 2:
+                    return await self._derive_secret_hmac_sha256(counter, keyset_id)
+            except ValueError:
+                pass
             raise ValueError(f"Unsupported keyset version: {version}")
 
     async def _derive_secret_bip32(
@@ -187,6 +211,143 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
         return secret, r, derivation_path
 
+    def _derive_v3_scalar(
+        self,
+        counter: int,
+        scope: str,
+        derivation_type: int,
+        order: Optional[int] = SECP256K1_N,
+        suffix: bytes = b"",
+    ) -> bytes:
+        """Derive one V3 scalar by rejection sampling the framed V3 message.
+
+        message_v3 = DST || u32_BE(len(scope)) || scope || u64_BE(counter)
+                     || derivation_type || u32_BE(attempt) || type_suffix
+        The scope (a keyset id, or the mint identity pubkey for types 0x04-0x05) is the one
+        variable-length field, so it is framed; a type may then append its own
+        suffix. V2 keeps its unframed message: reframing it would re-derive every
+        deployed secret. With no order, the first digest is used as is.
+        """
+        if self.seed is None:
+            raise RuntimeError("Seed not initialized yet.")
+        if len(self.seed) != 64:
+            raise ValueError("V3 derivation requires a 64-byte BIP39 seed")
+        scope_bytes = bytes.fromhex(scope)
+        # NUT-13: the full keyset id or the mint identity key, never a short id.
+        if len(scope_bytes) != 33:
+            raise ValueError("V3 derivation scope must be 33 bytes")
+        if derivation_type in (
+            DERIVATION_TYPE_QUOTE_LOCK,
+            DERIVATION_TYPE_QUOTE_ID_PREIMAGE,
+        ):
+            SecpPublicKey(scope_bytes)
+        base = (
+            b"Cashu_KDF_HMAC_SHA256"
+            + len(scope_bytes).to_bytes(4, byteorder="big", signed=False)
+            + scope_bytes
+            + counter.to_bytes(8, byteorder="big", signed=False)
+            + bytes([derivation_type])
+        )
+        for attempt in range(65536):
+            attempt_bytes = attempt.to_bytes(4, byteorder="big", signed=False)
+            digest = hmac.new(
+                self.seed, base + attempt_bytes + suffix, hashlib.sha256
+            ).digest()
+            x = int.from_bytes(digest, "big")
+            if order is None or (x != 0 and x < order):
+                return digest
+        raise RuntimeError(f"V3 derivation failed for type {derivation_type}")
+
+    def derive_v3_secret_key(self, counter: int, keyset_id: str) -> SecpPrivateKey:
+        """Derive the internal private key behind a v3 point secret (type 0x00)."""
+        return SecpPrivateKey(
+            self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_SECRET_KEY)
+        )
+
+    def derive_v3_nums_offset(self, counter: int, keyset_id: str) -> SecpPrivateKey:
+        """Derive the NUMS offset u for a self-owned script-only secret (type 0x02).
+
+        Shares the proof's counter with the secret key and blinding factor, so reusing a
+        counter repeats B_ and the mint refuses it.
+        """
+        return SecpPrivateKey(
+            self._derive_v3_scalar(counter, keyset_id, DERIVATION_TYPE_NUMS_OFFSET)
+        )
+
+    def derive_v3_leaf_key(
+        self, counter: int, keyset_id: str, index: int
+    ) -> SecpPrivateKey:
+        """Derive a self-owned leaf key at index i (type 0x03).
+
+        `i` has no canonical meaning and must not be read from a leaf's position:
+        recover by deriving candidates and matching the tree's keys by value.
+        """
+        return SecpPrivateKey(
+            self._derive_v3_scalar(
+                counter,
+                keyset_id,
+                DERIVATION_TYPE_LEAF_KEY,
+                suffix=index.to_bytes(4, byteorder="big", signed=False),
+            )
+        )
+
+    def derive_v3_quote_lock_key(
+        self, counter: int, mint_pubkey: str
+    ) -> SecpPrivateKey:
+        """Derive a mint quote lock key (NUT-13 message type 0x04).
+
+        Scoped to the mint's NUT-06 identity pubkey, not a keyset: a quote is
+        requested before one is chosen, and one seed and counter must never yield
+        the same key at two mints. The counter is per mint and never the proof
+        counter, because a quote may mint nothing and a lock key may be handed over
+        for delegated minting.
+        """
+        return SecpPrivateKey(
+            self._derive_v3_scalar(counter, mint_pubkey, DERIVATION_TYPE_QUOTE_LOCK)
+        )
+
+    def derive_v3_quote_id_preimage(self, counter: int, mint_pubkey: str) -> bytes:
+        """Derive a mint quote id preimage (NUT-13 message type 0x05).
+
+        Same quote counter and scope as the 0x04 lock key. Any 32 bytes is valid,
+        so there is no rejection sampling.
+        """
+        return self._derive_v3_scalar(
+            counter, mint_pubkey, DERIVATION_TYPE_QUOTE_ID_PREIMAGE, order=None
+        )
+
+    async def allocate_v3_quote_key(self, mint_pubkey: str) -> SecpPrivateKey:
+        counter = await allocate_quote_counter(self.db, mint_pubkey)
+        return self.derive_v3_quote_lock_key(counter, mint_pubkey)
+
+    def recover_v3_quote_key(
+        self, pubkey: str, mint_pubkey: str, *, start: int = 0, stop: int = 1000
+    ) -> Optional[SecpPrivateKey]:
+        """Recover a known quote lock by value under its mint identity."""
+        for counter in range(start, stop):
+            candidate = self.derive_v3_quote_lock_key(counter, mint_pubkey)
+            if candidate.public_key.format().hex() == pubkey.lower():
+                return candidate
+        return None
+
+    async def _derive_secret_hmac_sha256_v3(
+        self, counter: int, keyset_id: str
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        Derives secret and blinding factor using HMAC-SHA256 derivation for keyset version "02".
+        NUT-13:
+        - type 0x00: the first digest that is a valid secp256k1 private key is
+          the internal key k; the secret is K = k*G compressed.
+        - type 0x01: BLS Fr rejection sampling.
+        """
+        secret_key = self.derive_v3_secret_key(counter, keyset_id)
+        secret = secret_key.public_key.format()
+        r = self._derive_v3_scalar(
+            counter, keyset_id, DERIVATION_TYPE_BLINDING_FACTOR, BLS_FR_ORDER
+        )
+        derivation_path = f"HMAC-SHA256:{keyset_id}:{counter}"
+        return secret, r, derivation_path
+
     async def generate_n_secrets(
         self, n: int = 1, skip_bump: bool = False
     ) -> Tuple[List[str], List[PrivateKey], List[str]]:
@@ -222,7 +383,15 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             # secrets are supplied as str
             secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
             # rs are supplied as PrivateKey
-            rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+            rs: List[PrivateKey] = []
+            if is_bls_keyset(self.keyset_id):
+                rs = [
+                    BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ] # type: ignore[assignment]
+            else:
+                rs = [
+                    SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths
+                ] # type: ignore[assignment]
 
             derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
 
@@ -255,7 +424,11 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
-        rs = [PrivateKey(s[1]) for s in secrets_rs_derivationpaths]
+        rs: List[PrivateKey] = []
+        if is_bls_keyset(keyset_id or self.keyset_id):
+            rs = [BlsPrivateKey(s[1]) for s in secrets_rs_derivationpaths] # type: ignore[assignment]
+        else:
+            rs = [SecpPrivateKey(s[1]) for s in secrets_rs_derivationpaths] # type: ignore[assignment]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
         return secrets, rs, derivation_paths
 
@@ -270,7 +443,18 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         Returns:
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+
+        Raises:
+            NotAllowedError: If the keyset is v3. NUT-10 well-known secrets are a
+                pre-v3 construction: a v3 secret is itself a key, so a lock is
+                expressed by the secret rather than by a condition inside it.
         """
+        if is_bls_keyset(self.keyset_id):
+            raise NotAllowedError(
+                "Well-known secret locks (P2PK, HTLC) need a pre-v3 keyset. The active"
+                f" keyset {self.keyset_id} is v3, which locks a proof to a key"
+                " directly (NUT-10 nutroot secrets)."
+            )
         rs: List[PrivateKey] = []
         # generate secrets for receiver
         secret_locks = [secret_lock.serialize() for i in range(len(send_outputs))]

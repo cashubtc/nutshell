@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.21.0"
+VERSION = "0.22.0"
 
 
 def find_env_file():

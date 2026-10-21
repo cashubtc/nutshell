@@ -1,0 +1,84 @@
+{
+  "source": "https://github.com/cashubtc/nuts/tree/9800f3364ada781bef5fb43c4417e3337a5d0c07/tests",
+  "signing_package": {
+    "version": "nutspA",
+    "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030ac45f4919697dc6fd6b0da10716c3c07b9479e2f8c3219f4341226db51d4e31ea0f91cb28fdbf1d51c285ebfea3a08a504003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332721004b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+    "spends": [
+      {
+        "input": 0,
+        "secret": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+        "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        "control": {
+          "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+          "path": []
+        },
+        "signatures": []
+      }
+    ]
+  },
+  "receipt": {
+    "token": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAK34HfQIPq-YXCBpGFhCGFzeEIwMmU2ZTdjZmE3YjgyZDRiM2I0NDlmYTY0NjZjODkzNDY5YTcyN2QwMjE0ZDQ4ZGI0OTU2YTYwNTRiODAyMmEyOWJhY1gwhNG3KRrlc388hRqjPK_g96_rXMtNoIbEgruFt1JeYVR_G1ptGgGx_tH5YNGp0DMnYnNpoWFrWCBHGW3AgRUM4T_Q5Hi4txgxuCW-OJIRycVqgGKmGvcDRw",
+    "receipts": [
+      {
+        "Y": "a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a73",
+        "keysetId": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+        "inputDigest": "eca67b680015d42ffb9339b8c0475a90d162d189bd36a15d8b6910de48927edd",
+        "witness": "{\"signatures\":[\"5b4b2cbdb5ea75dd2a6451bf2f348e8b837438375dd5e78ba5cb2f3c549258df8ff274e8de9987e7dab88c221f0de820546e42907cec816e2b290af814030a94\"]}",
+        "commitment": "eb3dce8232201aa69f4344f89e07dbfa6690c10cfb26eff9ef48a8be6efbf522",
+        "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030a0acf939f033e3d0ae9b5f784341fada38367eec190edfb34e1f0cce9050c80672dbee77a7512b7243544c85ae290a7304003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332721004b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee"
+      }
+    ]
+  },
+  "request": {
+    "a": 8,
+    "u": "sat",
+    "nutroot": {
+      "k": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "l": [
+        "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+      ],
+      "b": [
+        "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13"
+      ]
+    }
+  },
+  "nums_request": {
+    "a": 8,
+    "u": "sat",
+    "nutroot": {
+      "k": "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
+      "l": [
+        "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+      ],
+      "b": [
+        "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13"
+      ]
+    }
+  },
+  "nums_outputs": [
+    {
+      "secret": "02fb23814e330739413a6e3982a21916002962002bc101ac105a28e0cf3bcb46d1",
+      "spend_info": {
+        "E": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+        "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+        "u": "0000000000000000000000000000000000000000000000000000000000000007",
+        "tree": [
+          "000202000101040021039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca8106000468a3be80"
+        ]
+      }
+    },
+    {
+      "secret": "030b5dc180dd2ef76be0f0319fc5c254511fede8c8563a823d3b0fcd6f9012a0b2",
+      "spend_info": {
+        "K": "03b948fab26606a34380c4515ece4c27d25fcf53eb95d1041630ab44f2be4f7331",
+        "u": "0000000000000000000000000000000000000000000000000000000000000009",
+        "tree": [
+          "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+        ]
+      }
+    }
+  ],
+  "nums_request_creqA": "creqAo2FhCGF1Y3NhdGdudXRyb290o2FreEIwMjUwOTI5Yjc0YzFhMDQ5NTRiNzhiNGI2MDM1ZTk3YTVlMDc4YTVhMGYyOGVjOTZkNTQ3YmZlZTlhY2U4MDNhYzBhbIF4YjAwMDIwMjAwMDEwMTA0MDAyMTAyZTQ5M2RiZjFjMTBkODBmMzU4MWU0OTA0OTMwYjE0MDRjYzZjMTM5MDBlZTA3NTg0NzRmYTk0YWJlOGM0Y2QxMzA2MDAwNDY4YTNiZTgwYWKBeEIwMmU0OTNkYmYxYzEwZDgwZjM1ODFlNDkwNDkzMGIxNDA0Y2M2YzEzOTAwZWUwNzU4NDc0ZmE5NGFiZThjNGNkMTM=",
+  "request_creqb": "CREQB1QGQQSQQQQQQQQQQQPQPSQQGQPVQ8CQGQYYP0JVY2QXF93SCSFY6YLP0CN4FZNDF3EPZCXMUEKZRQRUGNHNSRD7GZQQCSQQSZQQQSZPQQYYPWFY7M78QSMQ8NTQ0YJPYNPV2QFNRVZWGQACR4S360499TARZV6YCXQQZX3GA7SQPSQGGZUJFAHUWPPKQ0XKQ7FYZFXZC5QNXXCYUSPMS8TPR5L222H6XYE5FSC2L8YN",
+  "local_changes": "NUMS locks, script witnesses and signing packages use unconditional witness publication; affected values were regenerated with hashlib, coincurve and pyblst independently of the Cashu helpers."
+}

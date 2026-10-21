@@ -77,7 +77,8 @@ async def msat_ledger(ledger: Ledger, monkeypatch, sub_sat_channel):
         {Method.bolt11: {**ledger.backends[Method.bolt11], Unit.msat: backend}},
     )
     monkeypatch.setattr(settings, "mint_quote_backend_check_rate_limit", 0)
-    await ledger.activate_keyset(derivation_path="m/0'/1'/0'")
+    # plain secrets need a pre-v3 keyset
+    await ledger.activate_keyset(derivation_path="m/0'/1'/1'", version="0.20.0")
     try:
         yield ledger
     finally:

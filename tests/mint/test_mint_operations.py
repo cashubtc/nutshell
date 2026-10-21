@@ -1,8 +1,18 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import BlindedMessage, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    Amount,
+    BlindedMessage,
+    MeltQuoteState,
+    Method,
+    MintKeyset,
+    MintQuoteState,
+    Proof,
+    Unit,
+)
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     MintingDisabledError,
@@ -20,7 +30,13 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+    use_v2_keyset,
+)
 
 
 async def assert_err(f, msg):
@@ -34,19 +50,27 @@ async def assert_err(f, msg):
     raise Exception(f"Expected error: {msg}, got no error")
 
 
-def _unissued_proof(ledger: Ledger, amount: int, secret: str) -> Proof:
+def _unissued_proof(keyset: MintKeyset, amount: int, secret: str) -> Proof:
     """Create a valid proof without recording a corresponding issuance."""
-    C = (
-        (hash_to_curve(secret.encode()) * ledger.keyset.private_keys[amount])
-        .format()
-        .hex()
-    )
-    return Proof(id=ledger.keyset.id, amount=amount, secret=secret, C=C)
+    C = (hash_to_curve(secret.encode()) * keyset.private_keys[amount]).format().hex()
+    return Proof(id=keyset.id, amount=amount, secret=secret, C=C)
 
 
-def _output(ledger: Ledger, amount: int, secret: str) -> BlindedMessage:
+def _output(keyset: MintKeyset, amount: int, secret: str) -> BlindedMessage:
     B_, _ = step1_alice(secret)
-    return BlindedMessage(id=ledger.keyset.id, amount=amount, B_=B_.format().hex())
+    return BlindedMessage(id=keyset.id, amount=amount, B_=B_.format().hex())
+
+
+@pytest.fixture
+def v2_keyset(ledger: Ledger) -> MintKeyset:
+    # These balance tests construct legacy proofs and outputs without v3 witnesses.
+    return next(
+        keyset
+        for keyset in ledger.keysets.values()
+        if keyset.active
+        and keyset.unit == ledger.keyset.unit
+        and not is_bls_keyset(keyset.id)
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -57,7 +81,28 @@ async def wallet1(ledger: Ledger):
         name="wallet1",
     )
     await wallet1.load_mint()
+    # Inherited tests: pre-v3 secrets and no nutroot witnesses.
+    await use_v2_keyset(wallet1)
     yield wallet1
+
+
+async def melt_signed(ledger, signer_wallet, *, proofs, quote, outputs=None, **kwargs):
+    """ledger.melt with client-side nutroot witnesses attached (NUT-10)."""
+    quote_obj = await ledger.crud.get_melt_quote(quote_id=quote, db=ledger.db)
+    if quote_obj is not None:
+        signer_wallet._attach_nutroot_witnesses(
+            proofs,
+            outputs or [],
+            melt_quote_id=quote,
+            melt_quote_amount=quote_obj.amount + quote_obj.fee_reserve,
+        )
+    return await ledger.melt(proofs=proofs, quote=quote, outputs=outputs, **kwargs)
+
+
+async def swap_signed(ledger, signer_wallet, *, proofs, outputs):
+    """ledger.swap with client-side nutroot witnesses attached (NUT-10)."""
+    signer_wallet._attach_nutroot_witnesses(proofs, outputs)
+    return await ledger.swap(proofs=proofs, outputs=outputs)
 
 
 @pytest.mark.asyncio
@@ -96,7 +141,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+    await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.state == MeltQuoteState.paid, (
@@ -143,7 +188,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert melt_quote.state != MeltQuoteState.paid, "melt quote should not be paid"
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+    await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.state == MeltQuoteState.paid, (
@@ -170,9 +215,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     assert wallet_mint_quote.privkey
-    signature = nut20.sign_mint_quote(
-        mint_quote.quote, outputs, wallet_mint_quote.privkey
-    )
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, wallet_mint_quote.privkey)
     await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     await assert_err(
@@ -233,22 +276,24 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
         [p.amount for p in send_proofs], secrets, rs
     )
 
-    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
+    promises = await swap_signed(ledger, wallet1, proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
 
 @pytest.mark.asyncio
-async def test_swap_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
-    proof = _unissued_proof(ledger, 8, "unissued-swap-proof")
-    output = _output(ledger, 8, "unissued-swap-output")
+async def test_swap_rejects_unissued_proof_above_keyset_balance(
+    ledger: Ledger, v2_keyset: MintKeyset
+):
+    proof = _unissued_proof(v2_keyset, 8, "unissued-swap-proof")
+    output = _output(v2_keyset, 8, "unissued-swap-output")
 
     with pytest.raises(
         TransactionError, match="keyset balance is insufficient for redemption"
     ):
         await ledger.swap(proofs=[proof], outputs=[output])
 
-    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    balance, _ = await ledger.crud.get_balance(v2_keyset, ledger.db)
     assert balance.amount == 0
     assert not await ledger.crud.get_proofs_pending(Ys=[proof.Y], db=ledger.db)
     assert not await ledger.crud.get_proofs_used(Ys=[proof.Y], db=ledger.db)
@@ -256,9 +301,11 @@ async def test_swap_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_melt_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
+async def test_melt_rejects_unissued_proof_above_keyset_balance(
+    ledger: Ledger, v2_keyset: MintKeyset
+):
     amount = 8
-    proof = _unissued_proof(ledger, amount, "unissued-melt-proof")
+    proof = _unissued_proof(v2_keyset, amount, "unissued-melt-proof")
     mint_quote = await ledger.mint_quote(
         PostMintQuoteRequest(amount=amount, unit="sat")
     )
@@ -271,7 +318,7 @@ async def test_melt_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
     ):
         await ledger.melt(proofs=[proof], quote=melt_quote.quote)
 
-    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    balance, _ = await ledger.crud.get_balance(v2_keyset, ledger.db)
     stored_quote = await ledger.get_melt_quote(melt_quote.quote)
     assert balance.amount == 0
     assert stored_quote.unpaid
@@ -281,34 +328,34 @@ async def test_melt_rejects_unissued_proof_above_keyset_balance(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_keyset_redemption_reserves_exact_balance_and_rolls_back_groups(
-    ledger: Ledger,
+    ledger: Ledger, v2_keyset: MintKeyset
 ):
     amount = 8
-    exact_proof = _unissued_proof(ledger, amount, "exact-keyset-balance-proof")
+    exact_proof = _unissued_proof(v2_keyset, amount, "exact-keyset-balance-proof")
     await ledger.crud.bump_keyset_balance(
-        db=ledger.db, keyset=ledger.keyset, amount=amount
+        db=ledger.db, keyset=v2_keyset, amount=amount
     )
 
     await ledger.db_write._verify_spent_proofs_and_set_pending(
         [exact_proof], keysets=ledger.keysets
     )
-    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    balance, _ = await ledger.crud.get_balance(v2_keyset, ledger.db)
     assert balance.amount == 0
     assert await ledger.crud.get_proofs_pending(Ys=[exact_proof.Y], db=ledger.db)
 
     await ledger.db_write.finalize_pending_proofs([exact_proof], keysets=ledger.keysets)
-    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    balance, _ = await ledger.crud.get_balance(v2_keyset, ledger.db)
     assert balance.amount == 0
     assert not await ledger.crud.get_proofs_pending(Ys=[exact_proof.Y], db=ledger.db)
     assert await ledger.crud.get_proofs_used(Ys=[exact_proof.Y], db=ledger.db)
 
     await ledger.crud.bump_keyset_balance(
-        db=ledger.db, keyset=ledger.keyset, amount=amount
+        db=ledger.db, keyset=v2_keyset, amount=amount
     )
 
     proofs = [
-        _unissued_proof(ledger, amount, "grouped-keyset-balance-proof-1"),
-        _unissued_proof(ledger, amount, "grouped-keyset-balance-proof-2"),
+        _unissued_proof(v2_keyset, amount, "grouped-keyset-balance-proof-1"),
+        _unissued_proof(v2_keyset, amount, "grouped-keyset-balance-proof-2"),
     ]
     with pytest.raises(
         TransactionError, match="keyset balance is insufficient for redemption"
@@ -317,14 +364,14 @@ async def test_keyset_redemption_reserves_exact_balance_and_rolls_back_groups(
             proofs, keysets=ledger.keysets
         )
 
-    balance, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    balance, _ = await ledger.crud.get_balance(v2_keyset, ledger.db)
     assert balance.amount == amount
     assert not await ledger.crud.get_proofs_pending(
         Ys=[proof.Y for proof in proofs], db=ledger.db
     )
     with pytest.raises(ValueError, match="debit amount must be positive"):
         await ledger.crud.try_debit_keyset_balance(
-            db=ledger.db, keyset=ledger.keyset, amount=0
+            db=ledger.db, keyset=v2_keyset, amount=0
         )
 
 
@@ -342,7 +389,7 @@ async def test_verify_inputs_rejects_double_spent_proofs(
     outputs, rs = wallet1._construct_outputs(
         [p.amount for p in send_proofs], secrets, rs
     )
-    await ledger.swap(proofs=send_proofs, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=send_proofs, outputs=outputs)
 
     with pytest.raises(ProofsAlreadySpentError):
         await ledger._verify_inputs(send_proofs)
@@ -432,11 +479,11 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.swap(proofs=inputs1, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=inputs1, outputs=outputs)
 
     # try to spend other proofs with the same outputs again
     await assert_err(
-        ledger.swap(proofs=inputs2, outputs=outputs),
+        swap_signed(ledger, wallet1, proofs=inputs2, outputs=outputs),
         OutputsAlreadySignedError.detail,
     )
 
@@ -447,7 +494,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.swap(proofs=inputs2, outputs=outputs)
+    await swap_signed(ledger, wallet1, proofs=inputs2, outputs=outputs)
 
 
 @pytest.mark.asyncio
@@ -500,7 +547,9 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
     )
     await assert_err(
-        ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
+        melt_signed(
+            ledger, wallet1, proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+        ),
         OutputsAlreadySignedError.detail,
     )
 
@@ -558,8 +607,8 @@ async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledge
 
     # make sure we have more inputs than the melt quote needs
     assert sum_proofs(wallet1.proofs) >= melt_quote.amount + melt_quote.fee_reserve
-    melt_resp = await ledger.melt(
-        proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+    melt_resp = await melt_signed(
+        ledger, wallet1, proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
     )
     # we get 2 sats back because we overpaid
     assert melt_resp.change
@@ -589,14 +638,11 @@ async def test_melt_preserves_change_signatures_order_integration(
     await wallet1.mint(128, quote_id=mint_quote.quote)
     assert wallet1.balance >= 64
 
-    invoice_dict = get_real_invoice(64)
-    invoice_payment_request = (
-        invoice_dict["payment_request"]
-        if is_regtest
-        else "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
-    )
-    if type(invoice_payment_request) is dict:
-        invoice_payment_request = invoice_payment_request["payment_request"]
+    if is_regtest:
+        invoice_payment_request = get_real_invoice(64)["payment_request"]
+    else:
+        invoice = await ledger.backends[Method.bolt11][Unit.sat].create_invoice(Amount(Unit.sat, 64))
+        invoice_payment_request = invoice.payment_request
 
     # wallet asks for quote
     _ = await wallet1.melt_quote(invoice_payment_request)
@@ -630,9 +676,7 @@ async def test_melt_preserves_change_signatures_order_integration(
     settings.fakewallet_payment_state_exception = False
 
     # Call melt with outputs
-    melt_response = await ledger.melt(
-        proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs
-    )
+    melt_response = await melt_signed(ledger, wallet1, proofs=send_proofs, quote=melt_quote_internal.quote, outputs=outputs)
     assert melt_response.state == MeltQuoteState.pending.value
 
     # Now fake that payment settled

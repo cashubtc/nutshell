@@ -12,7 +12,8 @@ from bech32 import (
     bech32_encode as _bech32_encode,
 )
 
-from ..base import NUT10Option, PaymentRequest, Transport, Unit
+from ..base import NUT10Option, NutrootOption, PaymentRequest, Transport, Unit
+from ..crypto.nutroot import read_tlv_records
 
 BECH32M_CONST = 0x2BC830A3
 HRP = "creqb"
@@ -248,6 +249,38 @@ def _decode_nut10(data: bytes) -> NUT10Option:
         t=tags if tags else None,
     )
 
+
+def _encode_nutroot(option: NutrootOption) -> bytes:
+    return (
+        _tlv_entry(0x01, bytes.fromhex(option.k))
+        + b"".join(_tlv_entry(0x02, bytes.fromhex(leaf)) for leaf in option.l or [])
+        + b"".join(_tlv_entry(0x03, bytes.fromhex(key)) for key in option.b or [])
+    )
+
+
+def _decode_nutroot(data: bytes) -> NutrootOption:
+    key: Optional[str] = None
+    leaves: List[str] = []
+    blind_keys: List[str] = []
+    previous = 0
+    for tag, value in read_tlv_records(data):
+        if tag < previous:
+            raise ValueError("Nutroot request fields must ascend")
+        previous = tag
+        if tag == 0x01:
+            if key is not None:
+                raise ValueError("Nutroot request repeats its receiver key")
+            key = value.hex()
+        elif tag == 0x02:
+            leaves.append(value.hex())
+        elif tag == 0x03:
+            blind_keys.append(value.hex())
+        else:
+            raise ValueError("Unknown Nutroot request field")
+    if key is None:
+        raise ValueError("Nutroot request needs a receiver key")
+    return NutrootOption(k=key, l=leaves or None, b=blind_keys or None)
+
 # ─── PaymentRequest <-> TLV bytes ───────────────────────────────────
 
 def _pr_to_tlv(pr: PaymentRequest) -> bytes:
@@ -273,6 +306,8 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
             out += _tlv_entry(0x07, _encode_transport(tr))
     if pr.nut10 is not None:
         out += _tlv_entry(0x08, _encode_nut10(pr.nut10))
+    if pr.nutroot is not None:
+        out += _tlv_entry(0x0B, _encode_nutroot(pr.nutroot))
     return out
 
 def _tlv_to_pr(data: bytes) -> PaymentRequest:
@@ -307,6 +342,10 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
             transports.append(_decode_transport(val))
         elif tag == 0x08:
             kwargs["nut10"] = _decode_nut10(val)
+        elif tag == 0x0B:
+            if "nutroot" in kwargs:
+                raise ValueError("Payment request repeats its Nutroot option")
+            kwargs["nutroot"] = _decode_nutroot(val)
 
     if mints:
         kwargs["m"] = mints

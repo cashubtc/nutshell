@@ -1,6 +1,12 @@
 import json
+from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
+import pytest
+
+from cashu.core.base import AuthProof, Proof
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
@@ -8,13 +14,16 @@ from cashu.core.json_rpc.base import (
     JSONRPCResponse,
     JSONRPCSubscriptionKinds,
 )
+from cashu.core.nuts import nut22
 from cashu.wallet.subscriptions import SubscriptionManager
+from cashu.wallet.wallet import Wallet
 
 
 class FakeWebSocketApp:
-    def __init__(self, url, on_message=None):
+    def __init__(self, url, on_message=None, header=None):
         self.url = url
         self.on_message = on_message
+        self.headers = header
         self.sent: list[str] = []
         self.keep_running = True
         self.sock = type("Sock", (), {"connected": True})()
@@ -30,6 +39,26 @@ class FakeWebSocketApp:
         return None
 
 
+@pytest.mark.asyncio
+async def test_wallet_signs_a_bat_for_the_websocket_upgrade(monkeypatch):
+    monkeypatch.setattr("cashu.wallet.subscriptions.WebSocketApp", FakeWebSocketApp)
+    key = PrivateKey((3).to_bytes(32, "big"))
+    proof = Proof(id="02" + "ab" * 32, amount=1, secret=key.public_key.format().hex(), C="aa" * 48, derivation_path=nut22.BATKEY_PREFIX + key.to_hex())
+    monkeypatch.setattr("cashu.wallet.wallet.get_proofs", AsyncMock(return_value=[proof]))
+    invalidate = AsyncMock()
+    monkeypatch.setattr("cashu.wallet.wallet.invalidate_proof", invalidate)
+    wallet = Wallet.__new__(Wallet)
+    wallet.url = "https://mint.test/cashu"
+    wallet.mint_info = SimpleNamespace(requires_blind_auth_path=lambda method, path: method == "GET" and path == "/v1/ws")
+    wallet.auth_db, wallet.auth_keyset_id = object(), proof.id
+    manager = await wallet._subscription_manager()
+    presented = AuthProof.from_base64(manager.websocket.headers["Blind-auth"])
+    assert manager.url == "wss://mint.test/cashu/v1/ws"
+    assert nut22.verify_bat_request_witness(presented, "GET", "/v1/ws", b"")
+    assert not nut22.verify_bat_request_witness(presented, "POST", "/v1/ws", b"")
+    invalidate.assert_awaited_once_with(proof=proof, db=wallet.auth_db)
+
+
 def test_subscription_manager_builds_websocket_url(monkeypatch):
     monkeypatch.setattr("cashu.wallet.subscriptions.WebSocketApp", FakeWebSocketApp)
 
@@ -38,6 +67,9 @@ def test_subscription_manager_builds_websocket_url(monkeypatch):
 
     assert http_mgr.url == "ws://mint.test/v1/ws"
     assert https_mgr.url == "wss://mint.test:444/v1/ws"
+    protected = SubscriptionManager("https://mint.test:444/cashu", headers={"Blind-auth": "authAexample"})
+    assert protected.url == "wss://mint.test:444/cashu/v1/ws"
+    assert protected.websocket.headers == {"Blind-auth": "authAexample"}
 
 
 def test_subscription_manager_subscribe_and_close(monkeypatch):

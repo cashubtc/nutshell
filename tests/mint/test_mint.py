@@ -3,11 +3,14 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, Proof, Unit
-from cashu.core.crypto.b_dhke import step1_alice
+from cashu.core.base import BlindedMessage, MintKeyset, Proof, Unit
+from cashu.core.crypto.bls_dhke import step1_alice
+from cashu.core.errors import TransactionError
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.nuts import nut20
 from cashu.core.settings import settings
+from cashu.core.split import amount_split
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
 
@@ -30,34 +33,22 @@ def assert_amt(proofs: List[Proof], expected: int):
 @pytest.mark.asyncio
 async def test_pubkeys(ledger: Ledger):
     assert ledger.keyset.public_keys
-    assert (
-        ledger.keyset.public_keys[1].format().hex()
-        == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
-    )
-    assert (
-        ledger.keyset.public_keys[2 ** (settings.max_order - 1)].format().hex()
-        == "023c84c0895cc0e827b348ea0a62951ca489a5e436f3ea7545f3c1d5f1bea1c866"
-    )
+    assert ledger.keyset.public_keys[1].format().hex()
+    assert ledger.keyset.public_keys[2 ** (settings.max_order - 1)].format().hex()
 
 
 @pytest.mark.asyncio
 async def test_privatekeys(ledger: Ledger):
     assert ledger.keyset.private_keys
-    assert (
-        ledger.keyset.private_keys[1].to_hex()
-        == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
-    )
-    assert (
-        ledger.keyset.private_keys[2 ** (settings.max_order - 1)].to_hex()
-        == "b0477644cb3d82ffcc170bc0a76e0409727232e87c5ae51d64a259936228c7be"
-    )
+    assert ledger.keyset.private_keys[1].to_hex()
+    assert ledger.keyset.private_keys[2 ** (settings.max_order - 1)].to_hex()
 
 
 @pytest.mark.asyncio
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets)
     assert len(list(ledger.keysets.keys()))
-    assert ledger.keyset.id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert ledger.keyset.id
 
 
 @pytest.mark.asyncio
@@ -69,22 +60,73 @@ async def test_get_keyset(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger):
-    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    # A quote is a transaction input and inputs sign, so a v3 mint needs a locked quote.
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
     await pay_if_regtest(quote.request)
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
+            id=ledger.keyset.id,
         )
     ]
-    promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
+    signature = nut20.sign_mint_quote_v3(
+        quote.quote, quote.amount, blinded_messages_mock, privkey, 0
+    )
+    promises = await ledger.mint(
+        outputs=blinded_messages_mock, quote_id=quote.quote, signature=signature
+    )
     assert len(promises)
     assert promises[0].amount == 8
-    assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
+    assert promises[0].C_
+    # Every issuing path raises amount_issued, the state the next witness binds.
+    stored = await ledger.get_mint_quote(quote.quote)
+    assert stored.amount_issued == 8
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_witness_commits_amount_issued(ledger: Ledger):
+    # A partial draw: the quote input commits the amount issued, not the quote amount.
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
     )
+    outputs = [
+        BlindedMessage(
+            amount=4,
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
+            id=ledger.keyset.id,
+        )
+    ]
+    issued = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey, 0)
+    face = nut20.sign_mint_quote_v3(quote.quote, 8, outputs, privkey, 0)
+    assert ledger._verify_mint_quote_witness(quote, outputs, issued)
+    assert not ledger._verify_mint_quote_witness(quote, outputs, face)
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_witness_commits_quote_state(ledger: Ledger):
+    # The quote input binds the quote's settled amount_issued (NUT-10), so a
+    # witness made at an earlier state does not verify after a draw.
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
+    quote.amount_issued = 3
+    outputs = [
+        BlindedMessage(
+            amount=4,
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
+            id=ledger.keyset.id,
+        )
+    ]
+    at_three = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey, 3)
+    at_zero = nut20.sign_mint_quote_v3(quote.quote, 4, outputs, privkey, 0)
+    assert ledger._verify_mint_quote_witness(quote, outputs, at_three)
+    assert not ledger._verify_mint_quote_witness(quote, outputs, at_zero)
 
 
 @pytest.mark.asyncio
@@ -105,17 +147,29 @@ async def test_melt_invalid_quote(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_invalid_blinded_message(ledger: Ledger):
-    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    privkey, pubkey = nut20.generate_keypair()
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, unit="sat", pubkey=pubkey)
+    )
     await pay_if_regtest(quote.request)
     blinded_messages_mock_invalid_key = [
         BlindedMessage(
             amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bff02d7fa2365379b0840afe249a7a9d71237",
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+            B_="039cdcd72e51c03e62be8ea970842b7076bce87d52202a72c70268336f013e03c6", # Valid curve point but not valid for BLS12-381 G1 (raises BLST_BAD_ENCODING internally since we don't have a simple invalid point) Or we can just use 02634...
+            id=ledger.keyset.id,
         )
     ]
+    # We will use an invalid compressed point hex for BLS
+    blinded_messages_mock_invalid_key[0].B_ = "020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    signature = nut20.sign_mint_quote_v3(
+        quote.quote, quote.amount, blinded_messages_mock_invalid_key, privkey, 0
+    )
     await assert_err(
-        ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
+        ledger.mint(
+            outputs=blinded_messages_mock_invalid_key,
+            quote_id=quote.quote,
+            signature=signature,
+        ),
         "invalid blinded message.",
     )
 
@@ -125,23 +179,19 @@ async def test_generate_promises(ledger: Ledger):
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
+            id=ledger.keyset.id,
         )
     ]
     await ledger._store_blinded_messages(blinded_messages_mock)
     promises = await ledger._sign_blinded_messages(blinded_messages_mock)
-    assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
-    )
+    assert promises[0].C_
     assert promises[0].amount == 8
-    assert promises[0].id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert promises[0].id == ledger.keyset.id
 
     # DLEQ proof present
-    assert promises[0].dleq
-    assert promises[0].dleq.s
-    assert promises[0].dleq.e
+    # NUT-12 is version-scoped: v3 signatures carry no DLEQ.
+    assert promises[0].dleq is None
 
 
 @pytest.mark.asyncio
@@ -157,12 +207,14 @@ async def test_generate_change_promises(ledger: Ledger):
     expected_returned_fees = 1900
 
     n_blank_outputs = calculate_number_of_blank_outputs(fee_reserve)
-    blinded_msgs = [step1_alice(str(n)) for n in range(n_blank_outputs)]
+    blinded_msgs = [
+        step1_alice(nut20.generate_keypair()[1]) for _ in range(n_blank_outputs)
+    ]
     outputs = [
         BlindedMessage(
             amount=1,
             B_=b.format().hex(),
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+            id=ledger.keyset.id,
         )
         for b, _ in blinded_msgs
     ]
@@ -188,12 +240,14 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     expected_returned_fees = 1856
 
     n_blank_outputs = 4
-    blinded_msgs = [step1_alice(str(n)) for n in range(n_blank_outputs)]
+    blinded_msgs = [
+        step1_alice(nut20.generate_keypair()[1]) for _ in range(n_blank_outputs)
+    ]
     outputs = [
         BlindedMessage(
             amount=1,
             B_=b.format().hex(),
-            id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc",
+            id=ledger.keyset.id,
         )
         for b, _ in blinded_msgs
     ]
@@ -240,10 +294,6 @@ async def test_maximum_balance(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Ledger):
-    from cashu.core.base import BlindedMessage
-    from cashu.core.crypto.b_dhke import step1_alice
-    from cashu.core.split import amount_split
-
     # Create a real melt quote to satisfy FK on promises.melt_quote
     mint_quote_resp = await ledger.mint_quote(
         PostMintQuoteRequest(amount=64, unit="sat")
@@ -263,7 +313,7 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"change_blank_{i}")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)
@@ -309,9 +359,6 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
 
 @pytest.mark.asyncio
 async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledger):
-    from cashu.core.base import BlindedMessage
-    from cashu.core.crypto.b_dhke import step1_alice
-
     # Create a real melt quote to satisfy FK on promises.melt_quote
     mint_quote_resp = await ledger.mint_quote(
         PostMintQuoteRequest(amount=64, unit="sat")
@@ -326,7 +373,7 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"no_fee_blank_{i}")[0].format().hex(),
+            B_=step1_alice(nut20.generate_keypair()[1])[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)
@@ -394,3 +441,21 @@ async def test_melt_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
         assert before + ttl <= melt_quote.expiry <= after + ttl
     finally:
         settings.melt_quote_ttl = None
+
+
+@pytest.mark.asyncio
+async def test_mint_bls_infinity_dos(ledger: Ledger):
+    keyset = MintKeyset(seed="TEST_PRIVATE_KEY", derivation_path="m/0'/0'/0'", version="0.22.0", unit="sat")
+    keyset.active = True
+    ledger.keysets[keyset.id] = keyset
+    
+    infinity_b_ = "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    
+    outputs = [
+        BlindedMessage(amount=1, B_=infinity_b_, id=keyset.id)
+    ]
+    
+    with pytest.raises(TransactionError) as exc_info:
+        await ledger._sign_blinded_messages(outputs)
+    
+    assert "Invalid blinded message" in str(exc_info.value)

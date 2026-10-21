@@ -8,7 +8,7 @@ from cashu.lightning.fake import FakeInvoiceDescription, FakeWallet
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_fake_invoice, is_fake
+from tests.helpers import get_fake_invoice, is_fake, use_v2_keyset
 
 pytestmark = pytest.mark.skipif(not is_fake, reason="only fakewallet")
 
@@ -35,6 +35,7 @@ async def wallet(ledger: Ledger):
         name="wallet_fake_invoice_states",
     )
     await wallet1.load_mint()
+    await use_v2_keyset(wallet1)
     yield wallet1
 
 

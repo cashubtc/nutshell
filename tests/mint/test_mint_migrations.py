@@ -11,7 +11,8 @@ from cashu.core.base import (
     MintQuote,
     MintQuoteState,
 )
-from cashu.core.crypto.b_dhke import step1_alice
+from cashu.core.crypto.bls_dhke import step1_alice
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.mint import migrations as mint_migrations
@@ -211,6 +212,47 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
         second_attempt = await db_write._set_melt_quote_pending(unpaid)
         assert second_attempt.attempt != first_attempt.attempt
         assert uuid.UUID(second_attempt.attempt).version == 7
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_m041_adds_proof_digests_after_main_seed_cleanup(tmp_path):
+    db = Database("mint", str(tmp_path / "proof_digest_migration"))
+    main_migrations = SimpleNamespace(
+        **{
+            name: value
+            for name, value in vars(mint_migrations).items()
+            if name != "m041_add_digest_to_proofs"
+        }
+    )
+    try:
+        await migrate_databases(db, main_migrations)
+        version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
+        assert version and version["version"] == 40
+        for table in ("proofs_used", "proofs_pending"):
+            await db.execute(
+                f"INSERT INTO {db.table_with_schema(table)} "
+                "(id, amount, c, secret, y) VALUES (:id, :amount, :c, :secret, :y)",
+                {
+                    "id": "0011223344556677",
+                    "amount": 1,
+                    "c": "legacy-signature",
+                    "secret": "legacy-secret",
+                    "y": "legacy-y",
+                },
+            )
+
+        await migrate_databases(db, mint_migrations)
+        version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
+        assert version and version["version"] == 41
+        for table in ("proofs_used", "proofs_pending"):
+            row = await db.fetchone(
+                f"SELECT c, secret, digest FROM {db.table_with_schema(table)}"
+            )
+            assert row and row["c"] == "legacy-signature"
+            assert row["secret"] == "legacy-secret"
+            assert row["digest"] is None
     finally:
         await db.engine.dispose()
 
@@ -428,7 +470,7 @@ async def test_fresh_auth_ledger_uses_shared_crud(tmp_path):
     user = User(id="alice")
     await ledger.auth_crud.create_user(db=db, user=user)
 
-    B_, _ = step1_alice("auth token")
+    B_, _ = step1_alice(PrivateKey().public_key.format().hex())
     signatures = await ledger.mint_blind_auth(
         outputs=[BlindedMessage(id=ledger.keyset.id, amount=1, B_=B_.format().hex())],
         user=user,

@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from loguru import logger
 
-from ..core.base import Token, TokenV3, TokenV4
+from ..core.base import NutrootOption, Token, TokenV3, TokenV4
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
@@ -144,12 +144,15 @@ async def send(
     force_swap: bool = False,
     refund_pubkeys: Optional[List[str]] = None,
     timelock_seconds: Optional[int] = None,
+    nutroot_lock: Optional[NutrootOption] = None,
 ):
     """
     Prints token to send to stdout.
     """
     secret_lock = None
     p2pk_e = None
+    if nutroot_lock is not None and (lock or offline):
+        raise ValueError("Nutroot request requires an online swap with its own locking option")
     if lock:
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
@@ -198,13 +201,15 @@ async def send(
     await wallet.load_proofs()
 
     await wallet.load_mint()
-    if secret_lock or force_swap:
+    if secret_lock or force_swap or nutroot_lock is not None:
         _, send_proofs = await wallet.swap_to_send(
             wallet.proofs,
             amount,
             set_reserved=False,  # we set reserved later
             secret_lock=secret_lock,
             p2pk_e=p2pk_e,
+            nutroot_lock=nutroot_lock,
+            include_fees=include_fees,
         )
     else:
         send_proofs, fees = await wallet.select_to_send(

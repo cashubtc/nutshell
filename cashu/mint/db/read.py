@@ -1,9 +1,30 @@
 from typing import Dict, List, Optional
 
 from ...core.base import Proof, ProofSpentState, ProofState
+from ...core.crypto.keys import is_bls_keyset
 from ...core.db import Connection, Database
 from ...core.errors import ProofsAlreadySpentError
 from ..crud import LedgerCrud
+
+
+def _spent_proof_state(Y: str, proof: Proof) -> ProofState:
+    """Return the exact stored witness, including Nutroot key-path spends."""
+    return ProofState(
+        Y=Y,
+        state=ProofSpentState.spent,
+        witness=proof.witness,
+        input_digest=proof.digest if is_bls_keyset(proof.id) else None,
+    )
+
+
+def _pending_proof_state(Y: str, proof: Proof) -> ProofState:
+    nutroot = is_bls_keyset(proof.id)
+    return ProofState(
+        Y=Y,
+        state=ProofSpentState.pending,
+        witness=proof.witness if nutroot else None,
+        input_digest=proof.digest if nutroot else None,
+    )
 
 
 class DbReadHelper:
@@ -65,15 +86,9 @@ class DbReadHelper:
                 if Y not in proofs_spent and Y not in proofs_pending:
                     states.append(ProofState(Y=Y, state=ProofSpentState.unspent))
                 elif Y not in proofs_spent and Y in proofs_pending:
-                    states.append(ProofState(Y=Y, state=ProofSpentState.pending))
+                    states.append(_pending_proof_state(Y, proofs_pending[Y]))
                 else:
-                    states.append(
-                        ProofState(
-                            Y=Y,
-                            state=ProofSpentState.spent,
-                            witness=proofs_spent[Y].witness,
-                        )
-                    )
+                    states.append(_spent_proof_state(Y, proofs_spent[Y]))
         return states
 
     async def _verify_proofs_spendable(

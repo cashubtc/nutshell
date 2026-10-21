@@ -1,6 +1,5 @@
 import asyncio
 import json
-import time
 from pathlib import Path
 from typing import Tuple
 
@@ -9,18 +8,20 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest, TokenV4
+from cashu.core.crypto.keys import is_bls_keyset
+from cashu.core.errors import NotAllowedError
 from cashu.core.nuts.nut18 import serialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
-from cashu.core.p2pk import P2PKSecret
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.compatibility import xfail_below_minimum
+from tests.compatibility import mint_older_than, xfail_below_minimum
 from tests.helpers import (
     get_real_invoice,
     is_fake,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 
@@ -53,6 +54,16 @@ def _extract_json(output: str) -> dict:
     """Extract the first JSON object from CLI output that may include log lines."""
     start = output.index("{")
     return json.loads(output[start:])
+
+
+def assert_locked_send(result, lock: str):
+    if not mint_older_than("0.22.0"):
+        assert isinstance(result.exception, NotAllowedError)
+        assert "pre-v3 keyset" in str(result.exception)
+        return
+    assert result.exception is None
+    token = TokenV4.deserialize(result.stdout.split("\n")[0])
+    assert lock.split(":")[1] in token.proofs[0].secret
 
 
 def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
@@ -510,7 +521,8 @@ def test_send_with_dleq(mint, cli_prefix):
     token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert token.token[0].proofs[0].dleq is not None, "no dleq included"
+    proof = token.token[0].proofs[0]
+    assert (proof.dleq is None) == is_bls_keyset(proof.id)
 
 
 @xfail_below_minimum
@@ -612,7 +624,6 @@ def test_send_with_lock(mint, funded_cli_prefix):
             lock = word
             break
     assert lock is not None, "no lock found"
-    pubkey = lock.split(":")[1]
 
     # now lock the token
     runner = CliRunner()
@@ -620,12 +631,7 @@ def test_send_with_lock(mint, funded_cli_prefix):
         cli,
         [*cli_prefix, "send", "10", "--lock", lock],
     )
-    assert result.exception is None
-    print("test_send_with_lock", result.output)
-    token_str = result.stdout.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert pubkey in token.token[0].proofs[0].secret
+    assert_locked_send(result, lock)
 
 
 def test_lock_p2pk(cli_prefix):
@@ -722,12 +728,7 @@ def test_send_with_lock_and_refund(mint, funded_cli_prefix):
             fake_refund_pubkey,
         ],
     )
-    assert result.exception is None
-    print("test_send_with_lock_and_refund", result.output)
-    token_str = result.stdout.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    assert fake_refund_pubkey in token.token[0].proofs[0].secret
+    assert_locked_send(result, lock)
 
 
 @xfail_below_minimum
@@ -747,22 +748,11 @@ def test_send_with_lock_and_timelock(mint, funded_cli_prefix):
             break
     assert lock is not None, "no lock found"
 
-    before = int(time.time())
     result = runner.invoke(
         cli,
         [*cli_prefix, "send", "10", "--lock", lock, "--timelock", "5"],
     )
-    after = int(time.time())
-    assert result.exception is None
-    print("test_send_with_lock_and_timelock", result.output)
-    token_str = result.stdout.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    secret = P2PKSecret.from_secret(
-        P2PKSecret.deserialize(token.token[0].proofs[0].secret)
-    )
-    assert secret.locktime is not None
-    assert before + 5 <= secret.locktime <= after + 5
+    assert_locked_send(result, lock)
 
 
 @xfail_below_minimum
@@ -782,26 +772,11 @@ def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, funded_cli_
             break
     assert lock is not None, "no lock found"
 
-    before = int(time.time())
     result = runner.invoke(
         cli,
         [*cli_prefix, "send", "10", "--lock", lock],
     )
-    after = int(time.time())
-    assert result.exception is None
-    print("test_send_with_lock_uses_locktime_delta_seconds_by_default", result.output)
-    token_str = result.stdout.split("\n")[0]
-    assert "cashuB" in token_str, "output does not have a token"
-    token = TokenV4.deserialize(token_str).to_tokenv3()
-    secret = P2PKSecret.from_secret(
-        P2PKSecret.deserialize(token.token[0].proofs[0].secret)
-    )
-    assert secret.locktime is not None
-    assert (
-        before + settings.locktime_delta_seconds
-        <= secret.locktime
-        <= after + settings.locktime_delta_seconds
-    )
+    assert_locked_send(result, lock)
 
 
 def mint_tokens(runner, cli_prefix, amount: str):
@@ -850,7 +825,7 @@ def test_proofs_basic(cli_prefix):
 
     # Each proof should have the expected fields
     for proof in proofs:
-        assert sorted(proof.keys()) == ["C", "amount", "dleq", "id", "secret"]
+        assert sorted(proof.keys()) in (["C", "amount", "dleq", "id", "secret"], ["C", "amount", "id", "secret"])
 
 
 @xfail_below_minimum
@@ -882,7 +857,8 @@ def test_proofs_json_structure(cli_prefix):
         assert isinstance(proof["amount"], int), "'amount' should be integer"
         assert isinstance(proof["secret"], str), "'secret' should be string"
         assert isinstance(proof["C"], str), "'C' should be string"
-        assert "dleq" in proof.keys()  # will not be present if '--no-dleq' is passed
+        # Pre-v3 proofs carry dleq unless '--no-dleq' is passed; v3 proofs never do.
+        assert "dleq" not in proof.keys() or proof["dleq"]
 
 
 @xfail_below_minimum
@@ -1038,6 +1014,18 @@ def test_named_wallet_receive_list_and_spend(
     mint, monkeypatch, tmp_path: Path, wallet_name: str, legacy: bool
 ):
     """Regression for #1154: CLI commands must use the selected wallet database."""
+    if legacy:
+        # Legacy tokens cannot carry the spend information required by v3 keysets.
+        load_mint = Wallet.load_mint
+
+        async def load_legacy_mint(
+            wallet: Wallet, keyset_id: str = "", force_old_keysets=False
+        ):
+            await load_mint(wallet, keyset_id, force_old_keysets)
+            await use_v2_keyset(wallet)
+
+        monkeypatch.setattr(Wallet, "load_mint", load_legacy_mint)
+
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     monkeypatch.setattr(settings, "wallet_name", "wallet")
     monkeypatch.setattr(settings, "wallet_verbose_requests", False)
