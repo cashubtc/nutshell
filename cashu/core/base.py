@@ -1106,8 +1106,7 @@ class MintKeyset:
                 self.final_expiry,
                 self.input_fee_ppk,
             )
-            # the stored ID commits to the keys the keyset was created with, so a
-            # mismatch means MINT_MNEMONIC is not the mnemonic it was derived from
+            # a keyset loaded from the db must derive to its stored id
             if self.id and self.id != keyset_id:
                 raise Exception(f"Keyset {self.id} was not derived from MINT_MNEMONIC.")
             self.id = keyset_id
