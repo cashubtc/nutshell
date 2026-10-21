@@ -52,21 +52,27 @@ async def test_clear_auth_middleware_skips_unprotected_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_clear_auth_middleware_requires_header_on_protected_paths(monkeypatch):
+@pytest.mark.parametrize(
+    "host", [b"testserver", b"testserver?x", b"testserver#x", b"testserver/x"]
+)
+async def test_clear_auth_middleware_requires_header_on_protected_paths(
+    monkeypatch, host
+):
     middleware = ClearAuthMiddleware(FastAPI())
     monkeypatch.setattr(settings, "mint_require_auth", True)
-    fake_auth_ledger = SimpleNamespace(
-        mint_info=SimpleNamespace(
-            requires_clear_auth_path=lambda method, path: True,
-        )
+    monkeypatch.setattr(
+        settings,
+        "mint_auth_oicd_discovery_url",
+        "https://example.com/.well-known/openid-configuration",
     )
-    monkeypatch.setattr("cashu.mint.middleware.auth_ledger", fake_auth_ledger)
+    request = _request("/v1/auth/blind/mint", [(b"host", host)])
+    request.scope["method"] = "POST"
 
     async def call_next(request: Request) -> Response:
         raise AssertionError("call_next should not be reached")
 
     with pytest.raises(Exception, match="Missing clear auth token"):
-        await middleware.dispatch(_request("/v1/auth/blind/mint"), call_next)
+        await middleware.dispatch(request, call_next)
 
 
 @pytest.mark.asyncio
@@ -141,21 +147,27 @@ async def test_blind_auth_middleware_skips_unprotected_paths(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_blind_auth_middleware_requires_header_on_protected_paths(monkeypatch):
+@pytest.mark.parametrize(
+    "host", [b"testserver", b"testserver?x", b"testserver#x", b"testserver/x"]
+)
+async def test_blind_auth_middleware_requires_header_on_protected_paths(
+    monkeypatch, host
+):
     middleware = BlindAuthMiddleware(FastAPI())
     monkeypatch.setattr(settings, "mint_require_auth", True)
-    fake_auth_ledger = SimpleNamespace(
-        mint_info=SimpleNamespace(
-            requires_blind_auth_path=lambda method, path: True,
-        )
+    monkeypatch.setattr(
+        settings,
+        "mint_auth_oicd_discovery_url",
+        "https://example.com/.well-known/openid-configuration",
     )
-    monkeypatch.setattr("cashu.mint.middleware.auth_ledger", fake_auth_ledger)
+    request = _request("/v1/mint/quote/bolt11", [(b"host", host)])
+    request.scope["method"] = "POST"
 
     async def call_next(request: Request) -> Response:
         raise AssertionError("call_next should not be reached")
 
     with pytest.raises(Exception, match="Missing blind auth token"):
-        await middleware.dispatch(_request("/v1/mint/quote/bolt11"), call_next)
+        await middleware.dispatch(request, call_next)
 
 
 @pytest.mark.asyncio
