@@ -252,7 +252,9 @@ async def test_rotate_next_keyset_and_limit_updates():
     rpc = _rpc_with_ledger(ledger)
 
     response = await rpc.RotateNextKeyset(
-        SimpleNamespace(unit="sat", input_fee_ppk=2, final_expiry=456, max_order=10),
+        rpc_module.management_pb2.RotateNextKeysetRequest(
+            unit="sat", input_fee_ppk=2, final_expiry=456, max_order=10
+        ),
         None,
     )
     assert response.id == "keyset-1"
