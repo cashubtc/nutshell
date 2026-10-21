@@ -8,13 +8,14 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest, TokenV4
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.errors import NotAllowedError
 from cashu.core.nuts.nut18 import serialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.compatibility import xfail_below_minimum
+from tests.compatibility import mint_older_than, xfail_below_minimum
 from tests.helpers import (
     get_real_invoice,
     is_fake,
@@ -53,6 +54,16 @@ def _extract_json(output: str) -> dict:
     """Extract the first JSON object from CLI output that may include log lines."""
     start = output.index("{")
     return json.loads(output[start:])
+
+
+def assert_locked_send(result, lock: str):
+    if not mint_older_than("0.22.0"):
+        assert isinstance(result.exception, NotAllowedError)
+        assert "pre-v3 keyset" in str(result.exception)
+        return
+    assert result.exception is None
+    token = TokenV4.deserialize(result.stdout.split("\n")[0])
+    assert lock.split(":")[1] in token.proofs[0].secret
 
 
 def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
@@ -510,8 +521,8 @@ def test_send_with_dleq(mint, cli_prefix):
     token_str = result.stdout.split("\n")[0]
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
-    # NUT-12 is version-scoped: v3 proofs carry no DLEQ even when requested.
-    assert token.token[0].proofs[0].dleq is None
+    proof = token.token[0].proofs[0]
+    assert (proof.dleq is None) == is_bls_keyset(proof.id)
 
 
 @xfail_below_minimum
@@ -620,12 +631,7 @@ def test_send_with_lock(mint, funded_cli_prefix):
         cli,
         [*cli_prefix, "send", "10", "--lock", lock],
     )
-    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
-    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
-    # send locks a proof to the recipient's key directly; the wallet cannot build
-    # that yet, so --lock has no v3 form.
-    assert isinstance(result.exception, NotAllowedError)
-    assert "pre-v3 keyset" in str(result.exception)
+    assert_locked_send(result, lock)
 
 
 def test_lock_p2pk(cli_prefix):
@@ -722,12 +728,7 @@ def test_send_with_lock_and_refund(mint, funded_cli_prefix):
             fake_refund_pubkey,
         ],
     )
-    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
-    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
-    # send locks a proof to the recipient's key directly; the wallet cannot build
-    # that yet, so --lock has no v3 form.
-    assert isinstance(result.exception, NotAllowedError)
-    assert "pre-v3 keyset" in str(result.exception)
+    assert_locked_send(result, lock)
 
 
 @xfail_below_minimum
@@ -751,12 +752,7 @@ def test_send_with_lock_and_timelock(mint, funded_cli_prefix):
         cli,
         [*cli_prefix, "send", "10", "--lock", lock, "--timelock", "5"],
     )
-    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
-    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
-    # send locks a proof to the recipient's key directly; the wallet cannot build
-    # that yet, so --lock has no v3 form.
-    assert isinstance(result.exception, NotAllowedError)
-    assert "pre-v3 keyset" in str(result.exception)
+    assert_locked_send(result, lock)
 
 
 @xfail_below_minimum
@@ -780,12 +776,7 @@ def test_send_with_lock_uses_locktime_delta_seconds_by_default(mint, funded_cli_
         cli,
         [*cli_prefix, "send", "10", "--lock", lock],
     )
-    # The active keyset is v3. NUT-10 well-known secrets are a pre-v3 construction,
-    # so the CLI refuses rather than emitting a lock the mint would reject. A v3
-    # send locks a proof to the recipient's key directly; the wallet cannot build
-    # that yet, so --lock has no v3 form.
-    assert isinstance(result.exception, NotAllowedError)
-    assert "pre-v3 keyset" in str(result.exception)
+    assert_locked_send(result, lock)
 
 
 def mint_tokens(runner, cli_prefix, amount: str):

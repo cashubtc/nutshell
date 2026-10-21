@@ -14,6 +14,7 @@ from cashu.core.base import (
     ProofState,
     Unit,
 )
+from cashu.core.constants import MAX_PUBKEY_LEN
 from cashu.core.errors import NotAllowedError
 from cashu.core.settings import settings
 from cashu.mint import app as app_module
@@ -468,7 +469,11 @@ def test_router_rejects_oversized_blinded_points_before_ledger(monkeypatch, path
         json={
             **fields,
             "outputs": [
-                {"id": "00deadbeefdeadbe", "amount": 1, "B_": "02" + "00" * 33}
+                {
+                    "id": "00deadbeefdeadbe",
+                    "amount": 1,
+                    "B_": "02" + "00" * (MAX_PUBKEY_LEN // 2),
+                }
             ],
         },
     )

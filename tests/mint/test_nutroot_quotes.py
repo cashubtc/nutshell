@@ -16,6 +16,7 @@ from cashu.core.nutroot import (
 )
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
+from tests.helpers import pay_if_regtest
 
 
 @pytest.fixture(autouse=True)
@@ -37,11 +38,13 @@ def outputs(ledger, amounts, start):
 
 
 async def quote(ledger, lock):
-    return await ledger.mint_quote(
+    result = await ledger.mint_quote(
         PostMintQuoteRequest(
             unit="sat", amount=8, pubkey=lock.public_key.format().hex()
         )
     )
+    await pay_if_regtest(result.request)
+    return result
 
 
 @pytest.mark.asyncio
@@ -85,6 +88,7 @@ async def test_v3_quote_can_mint_using_its_script_path(ledger):
         NutrootOption(k=NUTROOT_NUMS.format().hex(), l=[leaf.hex()])
     )
     q = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=8, pubkey=lock))
+    await pay_if_regtest(q.request)
     out = outputs(ledger, [8], 150)
     proof = Proof(
         id=ledger.keyset.id, amount=8, secret=lock, C="aa" * 48, spend_info=info

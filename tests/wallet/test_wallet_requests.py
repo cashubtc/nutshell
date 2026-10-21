@@ -5,8 +5,9 @@ import pytest_asyncio
 import respx
 from httpx import Request, Response
 
-from cashu.core.base import BlindedSignature
-from cashu.core.crypto.bls_dhke import hash_to_curve
+from cashu.core.base import DLEQ, BlindedSignature
+from cashu.core.crypto import b_dhke, bls_dhke
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
@@ -33,20 +34,21 @@ async def test_swap_outputs_are_sorted(wallet1: Wallet):
     assert wallet1.balance == 16
 
     test_url = f"{wallet1.url}/v1/swap"
-    key = hash_to_curve(b"test")
+    bls = is_bls_keyset(wallet1.keyset_id)
+    key = (bls_dhke if bls else b_dhke).hash_to_curve(b"test")
     mock_blind_signature = BlindedSignature(
         id=wallet1.keyset_id,
         amount=8,
         C_=key.format().hex(),
+        dleq=None if bls else DLEQ(e="00" * 31 + "01", s="00" * 31 + "01"),
     )
     mock_response_data = {"signatures": [mock_blind_signature.model_dump()]}
     with respx.mock() as mock:
         route = mock.post(test_url).mock(
             return_value=Response(200, json=mock_response_data)
         )
-        # The mocked response's C_ is garbage; receive-side pairing
-        # verification rejects it, after the request under test was sent.
-        with pytest.raises(Exception, match="pairing"):
+        # Reject the invalid signature after sending the request under test.
+        with pytest.raises(Exception, match="pairing" if bls else "DLEQ proof invalid"):
             await wallet1.select_to_send(wallet1.proofs, 5)
 
         assert route.called

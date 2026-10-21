@@ -16,6 +16,7 @@ from cashu.core.nutroot import (
 )
 from cashu.core.nuts import nut20
 from cashu.core.settings import settings
+from tests.helpers import pay_if_regtest
 
 
 @pytest.mark.asyncio
@@ -44,6 +45,7 @@ async def test_pending_and_spent_states_and_events_preserve_original_witnesses(
     quote = await ledger.mint_quote(
         PostMintQuoteRequest(unit="sat", amount=8, pubkey=key.public_key.format().hex())
     )
+    await pay_if_regtest(quote.request)
     signatures = await ledger.mint(
         outputs=[output],
         quote_id=quote.quote,
