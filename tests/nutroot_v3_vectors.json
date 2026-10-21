@@ -148,7 +148,7 @@
     "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
   },
   "transcript": {
-    "comment": "Transaction transcript (NUT-10). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount issued, 02 quote id utf8, 03 lock key), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "comment": "Transaction transcript (NUT-00). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount, 02 quote id utf8, 03 lock key, 04 issued), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
     "swap": {
       "tx": {
         "proof_inputs": [
@@ -512,7 +512,9 @@
     "duplicate_pair_root": "1eaf291448e2f3c3a4fc00bfd591917bbb807e63af0fb905d054002bddd2cbc6",
     "duplicate_pair_internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
     "duplicate_pair_secret": "03dd2f11ab23b670222ada50325b5d49cd07e1d7a721d9b52fa2039df1f1b0dbfd",
-    "leaf_unknown_field": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9090004deadbeef"
+    "leaf_unknown_field": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9090004deadbeef",
+    "leaf_unknown_type": "00ff0200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "leaf_commit_with_n": "00040200010108002064451ff981aa92887b070762e97302df00a0ab97a853c323394b0a9cfaf46fae"
   },
   "auditable_lock": {
     "comment": "Single-key script-only lock: NUMS offset u = 7 and one threshold leaf n = 1 to test key 3, with unconditional witness publication.",
@@ -553,7 +555,7 @@
     "witness": "{\"leaf\":\"00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"control\":{\"K\":\"028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407\",\"path\":[]},\"signatures\":[\"064383cc142820ba2516243c4dac275e18e7b2fa10e0b6d40a3b8d19b0a209d9b4d2d0e212b9b9b26b2323f2210733f34a77f9d17f2e7f9fe1a827161405e2f6\"]}"
   },
   "commit_leaf": {
-    "comment": "NUT-10 commit leaf (type 0x04) beside the auditable lock: same NUMS K (u = 7) and threshold leaf, plus a commit leaf whose hash is SHA256(\"external data\"). Never a spend path; the threshold leaf's merkle path is the commit hash.",
+    "comment": "NUT-10 commit leaf (type 0x04): NUMS offset u = 7 over threshold_1of1 (key 3) and a commit leaf of SHA256(\"external data\"). Key 3 spends through the threshold leaf with path [leaf_hash_commit]; a witness revealing the commit leaf is rejected.",
     "u": "0000000000000000000000000000000000000000000000000000000000000007",
     "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
     "hash": "64451ff981aa92887b070762e97302df00a0ab97a853c323394b0a9cfaf46fae",
@@ -588,5 +590,41 @@
     "signing_package_signed": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWM0NWY0OTE5Njk3ZGM2ZmQ2YjBkYTEwNzE2YzNjMDdiOTQ3OWUyZjhjMzIxOWY0MzQxMjI2ZGI1MWQ0ZTMxZWEwZjkxY2IyOGZkYmYxZDUxYzI4NWViZmVhM2EwOGE1MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyIwNjQzODNjYzE0MjgyMGJhMjUxNjI0M2M0ZGFjMjc1ZTE4ZTdiMmZhMTBlMGI2ZDQwYTNiOGQxOWIwYTIwOWQ5YjRkMmQwZTIxMmI5YjliMjZiMjMyM2YyMjEwNzMzZjM0YTc3ZjlkMTdmMmU3ZjlmZTFhODI3MTYxNDA1ZTJmNiJdfV19",
     "spend_receipt": "nutrcAeyJ0b2tlbiI6ImNhc2h1Qm8yRnRjV2gwZEhCek9pOHZiV2x1ZEM1MFpYTjBZWFZqYzJGMFlYU0JvbUZwU0FLMzRIZlFJUHEtWVhDQnBHRmhDR0Z6ZUVJd01tVTJaVGRqWm1FM1lqZ3laRFJpTTJJME5EbG1ZVFkwTmpaak9Ea3pORFk1WVRjeU4yUXdNakUwWkRRNFpHSTBPVFUyWVRZd05UUmlPREF5TW1FeU9XSmhZMWd3aE5HM0tScmxjMzg4aFJxalBLX2c5Nl9yWE10Tm9JYkVncnVGdDFKZVlWUl9HMXB0R2dHeF90SDVZTkdwMERNblluTnBvV0ZyV0NCSEdXM0FnUlVNNFRfUTVIaTR0eGd4dUNXLU9KSVJ5Y1ZxZ0dLbUd2Y0RSdyIsInJlY2VpcHRzIjpbeyJZIjoiYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczIiwia2V5c2V0SWQiOiIwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYiLCJpbnB1dERpZ2VzdCI6ImVjYTY3YjY4MDAxNWQ0MmZmYjkzMzliOGMwNDc1YTkwZDE2MmQxODliZDM2YTE1ZDhiNjkxMGRlNDg5MjdlZGQiLCJ3aXRuZXNzIjoie1wic2lnbmF0dXJlc1wiOltcIjViNGIyY2JkYjVlYTc1ZGQyYTY0NTFiZjJmMzQ4ZThiODM3NDM4Mzc1ZGQ1ZTc4YmE1Y2IyZjNjNTQ5MjU4ZGY4ZmYyNzRlOGRlOTk4N2U3ZGFiODhjMjIxZjBkZTgyMDU0NmU0MjkwN2NlYzgxNmUyYjI5MGFmODE0MDMwYTk0XCJdfSIsImNvbW1pdG1lbnQiOiJlYjNkY2U4MjMyMjAxYWE2OWY0MzQ0Zjg5ZTA3ZGJmYTY2OTBjMTBjZmIyNmVmZjllZjQ4YThiZTZlZmJmNTIyIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczMDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIn1dfQ"
   },
-  "local_changes": "NUMS locks, script witnesses and signing packages use unconditional witness publication; affected values were regenerated with hashlib, coincurve and pyblst independently of the Cashu helpers."
+  "local_changes": "NUMS locks, script witnesses and signing packages use unconditional witness publication; affected values were regenerated with hashlib, coincurve and pyblst independently of the Cashu helpers.",
+  "signing_package": {
+    "comment": "NUT-XX signing package: the mint vector with its quote locked to a script-only key (NUMS offset u = 7, threshold_1of1 key 3). Strings are the prefix plus base64url of the JSON.",
+    "lock_key": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+    "transcript": "12003d0100010802000f71756f74652d6d696e742d30303031030021034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af27604000021004b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+    "digest": "1b6a4f3f56d3808cb81d176a5f9959ebe5dc9251de66056794000ad758a9eb84",
+    "input_id": "a639745001afaad8964370e8ddc1406bbf14d478c6d56819f188c9b10392fe45",
+    "input_digest": "1e0acf51dc92e81c87ad238eea380c8238373aee3e2a30167547ce20c9212a50",
+    "package": {
+      "version": "nutspA",
+      "transcript": "12003d0100010802000f71756f74652d6d696e742d30303031030021034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af27604000021004b0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+      "spends": [
+        {
+          "input": 0,
+          "secret": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+          "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+          "control": {
+            "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+            "path": []
+          },
+          "signatures": []
+        }
+      ]
+    },
+    "package_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6W119XX0",
+    "signed_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyIxMWVkYWYzNjA4YTZiMWZiZWMxOWYxODI2ZTU4YWNlMDljYTUxYWFmYmI3YWQxMTJhMGIwYjhmODc4Nzk2N2Q5OGVlYTI5MzZiYjU1MDUzZGQ0NjNkYmU0N2MyZjIzZjM3ZTU0NzVhZTRlYmU5MmIzMjhkZjU0ZTgwYzdkOTIwNiJdfV19",
+    "witness": {
+      "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "control": {
+        "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+        "path": []
+      },
+      "signatures": [
+        "11edaf3608a6b1fbec19f1826e58ace09ca51aafbb7ad112a0b0b8f8787967d98eea2936bb55053dd463dbe47c2f23f37e5475ae4ebe92b328df54e80c7d9206"
+      ]
+    }
+  }
 }
