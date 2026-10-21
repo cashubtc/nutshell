@@ -51,6 +51,9 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+mutants/
+mutation-baseline.json
+mutation-*-baseline.json
 
 # Translations
 *.mo
@@ -145,3 +148,4 @@ tor-data
 *.pem
 
 junit.xml
+googleapis/

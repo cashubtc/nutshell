@@ -1,3 +1,4 @@
+import time
 from typing import List
 
 import pytest
@@ -115,7 +116,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     ]
     await assert_err(
         ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
-        "The public key could not be parsed or is invalid.",
+        "invalid blinded message.",
     )
 
 
@@ -350,8 +351,8 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     remaining_unsigned = await ledger.crud.get_blinded_messages_melt_id(
         db=ledger.db, melt_id=melt_id
     )
-    # With zero fee nothing is signed or deleted; blanks stay pending.
-    assert len(remaining_unsigned) == n_blank
+    # Staged blank outputs should be cleaned up
+    assert len(remaining_unsigned) == 0
 
     async with ledger.db.connect() as conn:
         rows = await conn.fetchall(
@@ -361,5 +362,35 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
             """,
             {"melt_id": melt_id},
         )
-    assert len(rows) == n_blank
-    assert all(row["c_"] is None for row in rows)
+    assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_mint_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
+    ttl = 900  # 15 minutes
+    settings.mint_quote_ttl = ttl
+    try:
+        before = int(time.time())
+        quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+        after = int(time.time())
+        assert quote.expiry is not None
+        assert before + ttl <= quote.expiry <= after + ttl
+    finally:
+        settings.mint_quote_ttl = None
+
+
+@pytest.mark.asyncio
+async def test_melt_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
+    ttl = 600  # 10 minutes
+    settings.melt_quote_ttl = ttl
+    try:
+        mint_quote = await ledger.mint_quote(PostMintQuoteRequest(amount=64, unit="sat"))
+        before = int(time.time())
+        melt_quote = await ledger.melt_quote(
+            PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+        )
+        after = int(time.time())
+        assert melt_quote.expiry is not None
+        assert before + ttl <= melt_quote.expiry <= after + ttl
+    finally:
+        settings.melt_quote_ttl = None

@@ -11,6 +11,7 @@ from cashu.core.errors import CashuError
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
+from tests.compatibility import mint_older_than
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import pay_if_regtest
 
@@ -85,6 +86,10 @@ async def wallet3():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    mint_older_than("0.20.0"),
+    reason="Expected secrets derive from the version 01 keyset ID of mints >= 0.20.0",
+)
 async def test_bump_secret_derivation(wallet3: Wallet):
     await wallet3._init_private_key(
         "half depart obvious quality work element tank gorilla view sugar picture"
@@ -92,7 +97,10 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     )
     secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
-    assert wallet3.keyset_id == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    assert (
+        wallet3.keyset_id
+        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
+    )
     assert secrets1 == secrets2
     assert [r.to_hex() for r in rs1] == [r.to_hex() for r in rs2]
     assert derivation_paths1 == derivation_paths2
@@ -394,3 +402,38 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.balance == 108
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_restore_promises_derivation_paths_subset(wallet3: Wallet):
+    """Restored proofs get derivation_path that matches their secret (subset restore)."""
+    await reset_wallet_db(wallet3)
+
+    # Advance counter so next mint uses indices 21+; restore then returns a subset.
+    await wallet3.restore_promises_from_to(wallet3.keyset_id, 0, 20)
+
+    mint_quote = await wallet3.request_mint(21)
+    await pay_if_regtest(mint_quote.request)
+    await wallet3.mint(21, quote_id=mint_quote.quote)
+    assert wallet3.balance > 0
+
+    restore_from, restore_to = 0, 40
+    secrets, _, derivation_paths = await wallet3.generate_secrets_from_to(
+        restore_from, restore_to
+    )
+    secret_to_path = dict(zip(secrets, derivation_paths))
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs()
+    wallet3.proofs = []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises_from_to(wallet3.keyset_id, restore_from, restore_to)
+
+    assert len(wallet3.proofs) >= 1
+    for proof in wallet3.proofs:
+        expected_path = secret_to_path.get(proof.secret)
+        assert expected_path is not None
+        assert proof.derivation_path == expected_path, (
+            f"derivation_path {proof.derivation_path!r} does not match secret "
+            f"(expected {expected_path!r})"
+        )

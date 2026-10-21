@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from cashu.core.base import MintQuoteState
-from cashu.core.errors import CashuError
+from cashu.core.errors import CashuError, QuoteAlreadyIssuedError
 from cashu.core.nostr import create_nip98_header, derive_nostr_keypair, get_npub
 from cashu.core.settings import settings
 from cashu.wallet.crud import get_bolt11_mint_quote, update_bolt11_mint_quote
@@ -188,7 +188,10 @@ class NpubCash:
                 minted_proofs.extend(proofs)
             except Exception as e:
                 # If the mint returns an error that the quote is already issued, we assume it is issued
-                if "Code: 11000" in str(e) or (isinstance(e, CashuError) and e.code == 11000):
+                code = QuoteAlreadyIssuedError.code
+                if f"Code: {code}" in str(e) or (
+                    isinstance(e, CashuError) and e.code == code
+                ):
                     print(f"Quote {quote_id} already issued (mint). Updating local state.")
                     await update_bolt11_mint_quote(
                         db=self.wallet.db,

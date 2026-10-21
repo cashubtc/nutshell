@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -58,6 +59,7 @@ def _dummy_ledger():
         icon_url="https://mint.test/icon.png",
         tos_url="https://mint.test/tos",
         motd="Hello",
+        max_array_length=1000,
     )
 
     async def mint_quote(payload):
@@ -66,10 +68,14 @@ def _dummy_ledger():
             request="lnbc1",
             amount=payload.amount,
             unit=payload.unit,
+            method="bolt11",
             paid=False,
             state=SimpleNamespace(value="UNPAID"),
             expiry=123,
             pubkey=payload.pubkey,
+            amount_paid=0,
+            amount_issued=0,
+            updated_at=123,
         )
 
     async def get_mint_quote(quote):
@@ -78,10 +84,14 @@ def _dummy_ledger():
             request="lnbc1",
             amount=1,
             unit="sat",
+            method="bolt11",
             paid=False,
             state=SimpleNamespace(value="UNPAID"),
             expiry=123,
             pubkey=None,
+            amount_paid=0,
+            amount_issued=0,
+            updated_at=123,
         )
 
     async def melt_quote(payload):
@@ -89,6 +99,7 @@ def _dummy_ledger():
             quote="melt-1",
             amount=1,
             unit="sat",
+            method="bolt11",
             request=payload.request,
             fee_reserve=1,
             state="UNPAID",
@@ -98,8 +109,10 @@ def _dummy_ledger():
     async def get_melt_quote(quote):
         return SimpleNamespace(
             quote=quote,
+            attempt="internal-attempt-nonce",
             amount=1,
             unit="sat",
+            method="bolt11",
             request="lnbc1",
             fee_reserve=1,
             paid=False,
@@ -114,6 +127,7 @@ def _dummy_ledger():
             quote=quote,
             amount=1,
             unit="sat",
+            method="bolt11",
             request="lnbc1",
             fee_reserve=1,
             state="PAID",
@@ -150,6 +164,25 @@ def test_create_app_sets_metadata():
     app = app_module.create_app()
     assert app.title == "Nutshell Mint"
     assert app.version == settings.version
+
+
+def test_app_does_not_mount_v0_mint_routes():
+    paths = {route.path for route in app_module.app.routes}
+    assert "/v1/info" in paths
+    assert not paths.intersection(
+        {
+            "/info",
+            "/keys",
+            "/keys/{idBase64Urlsafe}",
+            "/keysets",
+            "/mint",
+            "/melt",
+            "/checkfees",
+            "/split",
+            "/check",
+            "/restore",
+        }
+    )
 
 
 def test_catch_exceptions_maps_cashu_errors_to_json():
@@ -321,6 +354,8 @@ def test_router_quote_routes_and_swap(monkeypatch):
     )
     assert mint_quote.status_code == 200
     assert mint_quote.json()["quote"] == "quote-1"
+    assert mint_quote.json()["method"] == "bolt11"
+    assert "pubkey" not in mint_quote.json()
 
     melt_quote = client.post(
         "/v1/melt/quote/bolt11",
@@ -328,10 +363,13 @@ def test_router_quote_routes_and_swap(monkeypatch):
     )
     assert melt_quote.status_code == 200
     assert melt_quote.json()["quote"] == "melt-1"
+    assert melt_quote.json()["method"] == "bolt11"
 
     melt_get = client.get("/v1/melt/quote/bolt11/melt-1")
     assert melt_get.status_code == 200
     assert melt_get.json()["quote"] == "melt-1"
+    assert melt_get.json()["method"] == "bolt11"
+    assert "attempt" not in melt_get.json()
 
     swap = client.post(
         "/v1/swap",
@@ -408,3 +446,106 @@ async def test_redis_cache_hit_and_miss(monkeypatch):
     assert cache.initialized is True
     await cache.disconnect()
     assert closed is True
+
+
+@pytest.mark.parametrize(
+    "path,fields",
+    [
+        ("/v1/mint/bolt11/batch", {"quotes": ["unpaid-quote"]}),
+        ("/v1/swap", {"inputs": []}),
+        ("/v1/mint/bolt11", {"quote": "unpaid-quote"}),
+        ("/v1/melt/bolt11", {"quote": "unpaid-quote", "inputs": []}),
+        ("/v1/restore", {}),
+    ],
+)
+def test_router_rejects_oversized_blinded_points_before_ledger(monkeypatch, path, fields):
+    monkeypatch.setattr(settings, "mint_rate_limit", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
+    client = TestClient(_build_router_app())
+
+    response = client.post(
+        path,
+        json={
+            **fields,
+            "outputs": [
+                {"id": "00deadbeefdeadbe", "amount": 1, "B_": "02" + "00" * 33}
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "outputs", 0, "B_"]
+
+
+@pytest.mark.parametrize(
+    "path,fields",
+    [
+        ("/v1/swap", {"inputs": []}),
+        ("/v1/mint/bolt11/batch", {"quotes": ["unpaid-quote"]}),
+    ],
+)
+def test_oversized_point_is_not_rendered_in_validation_errors(monkeypatch, path, fields):
+    monkeypatch.setattr(settings, "mint_rate_limit", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
+    captured = []
+    monkeypatch.setattr(middleware_module.logger, "error", captured.append)
+    point = "02" + "00" * 1_000_000
+    client = TestClient(_build_router_app())
+
+    response = client.post(
+        path,
+        json={
+            **fields,
+            "outputs": [{"id": "00deadbeefdeadbe", "amount": 1, "B_": point}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["type"] == "string_too_long"
+    assert "input" not in response.json()["detail"][0]
+    assert len(response.content) < 1024
+    assert len(captured) == 1
+    assert "input" not in captured[0]["errors"][0]
+    assert len(str(captured[0])) < 1024
+
+
+@pytest.mark.parametrize(
+    "path,fields",
+    [("/v1/swap", {}), ("/v1/melt/bolt11", {"quote": "quote"})],
+)
+@pytest.mark.parametrize("length", [settings.mint_max_secret_length + 1, 2_000_000])
+@pytest.mark.parametrize("index", [0, 1])
+def test_router_rejects_long_secrets_before_hashing(
+    monkeypatch, path, fields, length, index
+):
+    monkeypatch.setattr(settings, "mint_rate_limit", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
+    hashed = Mock(side_effect=AssertionError("rejected secret must not be hashed"))
+    monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
+    client = TestClient(_build_router_app())
+
+    response = client.post(
+        path,
+        json={
+            **fields,
+            "inputs": [{"secret": "valid"}] * index + [
+                {
+                    "id": "00deadbeefdeadbe",
+                    "amount": 1,
+                    "C": "aa",
+                    "secret": "x" * length,
+                }
+            ],
+            "outputs": [],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "inputs", index, "secret"]
+    assert response.json()["detail"][0]["type"] == "string_too_long"
+    assert "input" not in response.json()["detail"][0]
+    assert len(response.content) < 1024
+    hashed.assert_not_called()

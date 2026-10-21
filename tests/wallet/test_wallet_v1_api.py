@@ -1,12 +1,19 @@
 from types import MethodType
 from typing import Any, cast
+from unittest.mock import Mock
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from cashu.core.base import BlindedMessage, MeltQuoteState, Proof, Unit
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.db import Database
+from cashu.core.models import (
+    GetInfoResponse,
+    PostMeltQuoteResponse,
+    PostMintQuoteResponse,
+)
 from cashu.core.settings import settings
 from cashu.wallet.v1_api import LedgerAPI
 
@@ -258,11 +265,74 @@ async def test_get_info_uses_unprefixed_path(monkeypatch, api: LedgerAPI):
         assert method == "GET"
         assert path == "/v1/info"
         assert kwargs["noprefix"] is True
-        return _response(200, {"name": "MintName", "version": "1.0.0"})
+        return _response(
+            200,
+            {
+                "name": "MintName",
+                "version": "1.0.0",
+                "contact": [{"method": "email", "info": "mint@example.com"}],
+            },
+        )
 
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     mint_info = await api._get_info()
     assert mint_info.name == "MintName"
+    assert mint_info.contact
+    assert mint_info.contact[0].method == "email"
+    assert mint_info.contact[0].info == "mint@example.com"
+
+
+def test_get_info_rejects_deprecated_contact_shape():
+    with pytest.raises(ValidationError):
+        GetInfoResponse.model_validate({"contact": [["email", "mint@example.com"]]})
+
+
+@pytest.mark.parametrize("missing", ["amount", "unit", "method", "state"])
+def test_mint_quote_response_requires_current_fields(missing: str):
+    response = {
+        "quote": "q-1",
+        "request": "lnbc1",
+        "amount": 1,
+        "unit": "sat",
+        "method": "bolt11",
+        "state": "UNPAID",
+    }
+    del response[missing]
+
+    with pytest.raises(ValidationError):
+        PostMintQuoteResponse.model_validate(response)
+
+
+@pytest.mark.parametrize("missing", ["unit", "request", "state"])
+def test_melt_quote_response_requires_current_fields(missing: str):
+    response = {
+        "quote": "q-1",
+        "amount": 1,
+        "unit": "sat",
+        "method": "bolt11",
+        "request": "lnbc1",
+        "fee_reserve": 1,
+        "state": "UNPAID",
+        "expiry": None,
+    }
+    del response[missing]
+
+    with pytest.raises(ValidationError):
+        PostMeltQuoteResponse.model_validate(response)
+
+
+def test_melt_quote_response_allows_legacy_missing_method():
+    response = {
+        "quote": "q-1",
+        "amount": 1,
+        "unit": "sat",
+        "request": "lnbc1",
+        "fee_reserve": 1,
+        "state": "UNPAID",
+        "expiry": None,
+    }
+
+    assert PostMeltQuoteResponse.model_validate(response).method is None
 
 
 @pytest.mark.asyncio
@@ -362,6 +432,7 @@ async def test_mint_quote_loads_mint_and_parses_response(monkeypatch, api: Ledge
                 "request": "lnbc1",
                 "amount": 21,
                 "unit": "sat",
+                "method": "bolt11",
                 "state": "UNPAID",
                 "expiry": 123,
             },
@@ -476,6 +547,34 @@ async def test_mint_and_split_and_state_and_restore_paths(monkeypatch, api: Ledg
     mint_payload = [c for c in requests if c[1] == "mint/bolt11"][0][2]["json"]
     assert set(mint_payload.keys()) == {"quote", "outputs", "signature"}
     assert set(mint_payload["outputs"][0].keys()) == {"id", "amount", "B_"}
+    checkstate_payload = [c for c in requests if c[1] == "checkstate"][0][2]["json"]
+    assert checkstate_payload == {"Ys": [proof.Y]}
+
+
+@pytest.mark.asyncio
+async def test_check_proof_state_does_not_retry_with_secrets(
+    monkeypatch, api: LedgerAPI
+):
+    proof = Proof(
+        id="kid", amount=1, C=PrivateKey().public_key.format().hex(), secret="s1"
+    )
+    cast(Any, api).keysets = {"kid": object()}
+    requests = []
+
+    async def fake_request(self, method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        return _response(422, {"detail": "invalid current request"})
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    with pytest.raises(Exception, match="invalid current request"):
+        await api.check_proof_state([proof])
+
+    assert len(requests) == 1
+    assert requests[0][2]["json"] == {"Ys": [proof.Y]}
 
 
 @pytest.mark.asyncio
@@ -500,6 +599,7 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
                     "quote": "m-1",
                     "amount": 1,
                     "unit": "sat",
+                    "method": "bolt11",
                     "request": "lnbc1",
                     "fee_reserve": 1,
                     "state": "UNPAID",
@@ -513,6 +613,7 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
                     "quote": "m-1",
                     "amount": 1,
                     "unit": "sat",
+                    "method": "bolt11",
                     "request": "lnbc1",
                     "fee_reserve": 1,
                     "state": "UNPAID",
@@ -526,6 +627,7 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
                     "quote": "m-1",
                     "amount": 1,
                     "unit": "sat",
+                    "method": "bolt11",
                     "request": "lnbc1",
                     "fee_reserve": 1,
                     "state": "PAID",
@@ -561,3 +663,167 @@ async def test_melt_quote_get_melt_quote_and_melt(monkeypatch, api: LedgerAPI):
         "C",
         "witness",
     }
+
+
+@pytest.mark.asyncio
+async def test_melt_rejects_deprecated_response(monkeypatch, api: LedgerAPI):
+    proof = Proof(
+        id="kid", amount=1, C=PrivateKey().public_key.format().hex(), secret="s2"
+    )
+    cast(Any, api).keysets = {"kid": object()}
+
+    async def fake_request(self, method, path, **kwargs):
+        assert path == "melt/bolt11"
+        return _response(
+            200,
+            {
+                "paid": True,
+                "preimage": "11" * 32,
+                "change": [],
+            },
+        )
+
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    with pytest.raises(ValidationError):
+        await api.melt("m-1", [proof], None)
+
+
+@pytest.mark.asyncio
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+    async def fake_request(self, method, path, **kwargs):
+        if path == "keysets":
+            return _response(
+                200,
+                {
+                    "keysets": [
+                        {"id": "01abcd", "unit": "sat", "active": True},
+                        {"id": "02efgh", "unit": "sat", "active": True},  # Unsupported
+                        {"id": "00ijkl", "unit": "sat", "active": True},
+                    ]
+                },
+            )
+        if path == "keys":
+            pubkey_hex = PrivateKey().public_key.format().hex()
+            return _response(
+                200,
+                {
+                    "keysets": [
+                        {
+                            "id": "01abcd",
+                            "unit": "sat",
+                            "active": True,
+                            "keys": {"1": pubkey_hex},
+                        },
+                        {
+                            "id": "02efgh",  # Unsupported
+                            "unit": "sat",
+                            "active": True,
+                            "keys": {"1": "invalid-hex-unsupported"},
+                        },
+                    ]
+                },
+            )
+        raise AssertionError(f"Unexpected path {path}")
+
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+
+    # Test _get_keysets filters out 02efgh
+    keysets = await api._get_keysets()
+    assert len(keysets) == 2
+    assert [k.id for k in keysets] == ["01abcd", "00ijkl"]
+
+    # Test _get_keys filters out 02efgh
+    wallet_keysets = await api._get_keys()
+    assert len(wallet_keysets) == 1
+    assert wallet_keysets[0].id == "01abcd"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["C_", "dleq", "signatures"])
+async def test_restore_rejects_oversized_mint_response(
+    monkeypatch, api: LedgerAPI, field
+):
+    point = PrivateKey().public_key.format().hex()
+    output = BlindedMessage(id="00deadbeefdeadbe", amount=1, B_=point)
+    signature = {"id": output.id, "amount": 1, "C_": point}
+    response = {"outputs": [output.model_dump()], "signatures": [signature]}
+    if field == "signatures":
+        response["signatures"] = [signature] * (settings.mint_max_request_length + 1)
+    elif field == "dleq":
+        signature["dleq"] = {"e": "11" * 33, "s": "22" * 32}
+    else:
+        signature["C_"] = "02" + "00" * 33
+
+    async def fake_request(self, method, path, **kwargs):
+        assert method == "POST"
+        assert path == "restore"
+        return _response(200, response)
+
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    monkeypatch.setattr(api, "keysets", {output.id: object()}, raising=False)
+    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object())
+
+    with pytest.raises(ValidationError) as exc:
+        await api.restore_promises([output])
+
+    assert exc.value.errors(include_input=False)[0]["loc"][0] == "signatures"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["swap", "melt"])
+async def test_wallet_sends_proof_above_local_mint_secret_limit(
+    monkeypatch, api: LedgerAPI, operation
+):
+    point = PrivateKey().public_key.format().hex()
+    proof = Proof(
+        id="00deadbeefdeadbe",
+        amount=1,
+        C=point,
+        secret="x" * (settings.mint_max_secret_length + 1),
+        witness='{"signatures":[]}',
+    )
+    output = BlindedMessage(id=proof.id, amount=1, B_=point)
+    requests = []
+    remote_secret_limit = settings.mint_max_secret_length + 1024
+
+    async def fake_request(self, method, path, **kwargs):
+        requests.append(path)
+        assert method == "POST"
+        sent_proof = kwargs["json"]["inputs"][0]
+        assert sent_proof == proof.to_dict()
+        assert len(sent_proof["secret"]) <= remote_secret_limit
+        if path == "swap":
+            return _response(
+                200, {"signatures": [{"id": proof.id, "amount": 1, "C_": point}]}
+            )
+        assert path == "melt/bolt11"
+        return _response(
+            200,
+            {
+                "quote": "quote",
+                "amount": 1,
+                "unit": "sat",
+                "request": "lnbc1",
+                "fee_reserve": 0,
+                "state": "PAID",
+                "expiry": None,
+            },
+        )
+
+    hashed = Mock(side_effect=AssertionError("wallet proof must not be rehashed"))
+    monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    monkeypatch.setattr(api, "keysets", {proof.id: object()}, raising=False)
+    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object())
+
+    if operation == "swap":
+        await api.split([proof], [output])
+        assert requests == ["swap"]
+    else:
+        await api.melt(quote="quote", proofs=[proof], outputs=None)
+        assert requests == ["melt/bolt11"]
+    hashed.assert_not_called()

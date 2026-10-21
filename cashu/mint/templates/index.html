@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{{ name }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+          --bg: #000;
+          --surface: #0e0e0e;
+          --surface-2: #191919;
+          --border: rgba(255,255,255,0.08);
+          --border-section: rgba(255,255,255,0.06);
+          --text-primary: #fff;
+          --text-secondary: rgba(255,255,255,0.72);
+          --text-muted: rgba(255,255,255,0.45);
+          --text-faint: rgba(255,255,255,0.28);
+          --green: #00d632;
+          --green-soft: rgba(0, 214, 50, 0.1);
+          --green-glow: rgba(0, 214, 50, 0.06);
+          --red: #ff5555;
+          --red-soft: rgba(255, 68, 68, 0.1);
+          --yellow: #ffb800;
+          --yellow-soft: rgba(255, 184, 0, 0.1);
+          --radius: 16px;
+          --radius-sm: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+          background: var(--bg);
+          color: var(--text-primary);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          min-height: 100vh;
+          -webkit-font-smoothing: antialiased;
+        }
+
+        .page {
+          max-width: 520px;
+          margin: 0 auto;
+          padding: 0 20px 100px;
+        }
+
+        /* ── Topbar ── */
+        .topbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 0;
+          position: sticky;
+          top: 0;
+          background: rgba(0,0,0,0.88);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          z-index: 10;
+        }
+
+        .cashu-wordmark {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-muted);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .status-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--green);
+          background: var(--green-soft);
+          padding: 5px 11px;
+          border-radius: 20px;
+        }
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          background: var(--green);
+          border-radius: 50%;
+          animation: pulse 2.4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+
+        /* ── Hero ── */
+        .hero {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 40px 0 16px;
+          position: relative;
+        }
+
+        .hero::before {
+          content: '';
+          position: absolute;
+          top: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 180px;
+          height: 180px;
+          background: radial-gradient(circle, var(--green-glow) 0%, transparent 70%);
+          pointer-events: none;
+        }
+
+        .avatar-ring {
+          width: 88px;
+          height: 88px;
+          border-radius: 50%;
+          padding: 2.5px;
+          background: linear-gradient(135deg, var(--green) 0%, rgba(0,214,50,0.15) 100%);
+          margin-bottom: 20px;
+          position: relative;
+          z-index: 1;
+        }
+
+        .avatar {
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          background: var(--surface-2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 34px;
+          font-weight: 700;
+          color: var(--green);
+          overflow: hidden;
+        }
+
+        .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+        .mint-name {
+          font-size: 30px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          text-align: center;
+          line-height: 1.15;
+          margin-bottom: 8px;
+        }
+
+        .mint-desc {
+          font-size: 15px;
+          font-weight: 400;
+          color: var(--text-secondary);
+          text-align: center;
+          line-height: 1.5;
+          max-width: 380px;
+        }
+
+        .mint-desc-long {
+          font-size: 14px;
+          font-weight: 400;
+          color: var(--text-muted);
+          text-align: center;
+          line-height: 1.5;
+          max-width: 380px;
+          margin-top: 4px;
+          font-style: italic;
+        }
+
+        .version-chip {
+          font-size: 11px;
+          font-family: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
+          font-weight: 500;
+          color: var(--text-muted);
+          background: var(--surface);
+          padding: 5px 12px;
+          border-radius: 20px;
+          border: 1px solid var(--border);
+          margin-top: 14px;
+        }
+
+        /* ── MOTD ── */
+        .motd {
+          background: var(--yellow-soft);
+          border: 1px solid rgba(255,184,0,0.12);
+          border-radius: var(--radius-sm);
+          padding: 14px 16px;
+          margin: 24px 0 0;
+        }
+
+        .motd-label {
+          font-size: 10px;
+          font-weight: 700;
+          color: var(--yellow);
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          margin-bottom: 4px;
+        }
+
+        .motd-text {
+          font-size: 14px;
+          color: rgba(255,255,255,0.85);
+          line-height: 1.5;
+        }
+
+        /* ── Disabled banners ── */
+        .disabled-banner {
+          background: var(--red-soft);
+          border: 1px solid rgba(255,68,68,0.12);
+          border-radius: var(--radius-sm);
+          padding: 12px 16px;
+          margin-top: 16px;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--red);
+          text-align: center;
+        }
+
+        /* ── URL section ── */
+        .url-section { margin-top: 28px; }
+
+        .url-bar {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-sm);
+          padding: 14px 16px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .url-text {
+          font-family: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
+          font-size: 13px;
+          color: var(--text-secondary);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .extra-urls { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+
+        .extra-url {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 10px 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .extra-url .url-text { font-size: 11px; }
+
+        .url-label {
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--text-faint);
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          flex-shrink: 0;
+        }
+
+        /* ── Detail card ── */
+        .detail-card {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          margin-top: 28px;
+          overflow: hidden;
+        }
+
+        .card-section-header {
+          padding: 18px 20px 0;
+          font-size: 15px;
+          font-weight: 700;
+          color: var(--text-primary);
+          letter-spacing: -0.01em;
+        }
+
+        .card-section-header.has-rule {
+          border-top: 1px solid var(--border-section);
+          margin-top: 16px;
+          padding-top: 18px;
+        }
+
+        .detail-row {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          padding: 7px 20px;
+          gap: 16px;
+        }
+
+        .detail-row:first-child,
+        .card-section-header + .detail-row {
+          padding-top: 12px;
+        }
+
+        .detail-row:last-child,
+        .detail-row + .card-divider {
+          padding-bottom: 4px;
+        }
+
+        .detail-row.row-last {
+          padding-bottom: 16px;
+        }
+
+        .detail-label {
+          font-size: 14px;
+          font-weight: 400;
+          color: var(--text-secondary);
+          flex-shrink: 0;
+        }
+
+        .detail-value {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+          text-align: right;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .detail-value-mono {
+          font-family: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text-secondary);
+        }
+
+        /* Tags */
+        .tag {
+          font-size: 12px;
+          font-weight: 600;
+          font-family: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
+          padding: 4px 11px;
+          border-radius: 20px;
+          background: var(--surface-2);
+          color: var(--text-primary);
+          border: 1px solid var(--border);
+          display: inline-block;
+          text-transform: uppercase;
+        }
+
+        .tag-red {
+          background: var(--red-soft);
+          color: var(--red);
+          border-color: rgba(255,68,68,0.12);
+        }
+
+        /* ── Features grid ── */
+        .features-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0;
+          margin: 0;
+        }
+
+        .feature {
+          padding: 12px 20px;
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          border-bottom: 1px solid var(--border-section);
+          border-right: 1px solid var(--border-section);
+        }
+
+        .feature:nth-child(2n) { border-right: none; }
+        .feature:nth-last-child(-n+2) { border-bottom: none; }
+        .feature:last-child:nth-child(odd) { border-right: none; }
+
+        .feature-dot {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: var(--green-soft);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          margin-top: 2px;
+        }
+
+        .feature-dot svg { width: 10px; height: 10px; }
+
+        .feature-name {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+          line-height: 1.3;
+        }
+
+        /* ── Contact ── */
+        .contact-chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 20px 18px; }
+
+        .contact-chip {
+          font-size: 12px;
+          font-weight: 600;
+          font-family: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
+          color: var(--text-primary);
+          background: var(--surface-2);
+          border: 1px solid var(--border);
+          padding: 4px 11px;
+          border-radius: 20px;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .contact-chip svg { width: 12px; height: 12px; opacity: 0.5; }
+
+        /* ── Pubkey row ── */
+        .pubkey-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 20px 18px;
+        }
+
+        .pubkey-mono {
+          font-family: ui-monospace, 'SFMono-Regular', 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', monospace;
+          font-size: 11px;
+          color: var(--text-muted);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex: 1;
+          min-width: 0;
+        }
+
+        /* ── Info tip ── */
+        .info-tip {
+          margin-top: 28px;
+          padding: 18px 20px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-sm);
+          display: flex;
+          gap: 12px;
+          align-items: flex-start;
+        }
+
+        .info-tip-icon {
+          width: 18px; height: 18px;
+          flex-shrink: 0;
+          color: var(--text-muted);
+          margin-top: 2px;
+        }
+
+        .info-tip-text {
+          font-size: 13.5px;
+          color: var(--text-secondary);
+          line-height: 1.6;
+        }
+
+        .info-tip-text a {
+          color: var(--text-primary);
+          font-weight: 600;
+          text-decoration: none;
+          border-bottom: 1px solid var(--text-faint);
+        }
+
+        /* ── Footer ── */
+        .footer {
+          text-align: center;
+          padding: 36px 0 20px;
+          font-size: 12px;
+          color: var(--text-faint);
+        }
+
+        .footer a {
+          color: var(--text-muted);
+          text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <!-- Topbar -->
+        <div class="topbar">
+            <span class="cashu-wordmark">Cashu Mint</span>
+            <span class="status-badge">
+                <span class="status-dot"></span>
+                Online
+            </span>
+        </div>
+
+        <!-- Hero -->
+        <div class="hero">
+            <div class="avatar-ring">
+                <div class="avatar">
+                    {% if icon_url %}
+                        <img src="{{ icon_url }}" alt="{{ name }}">
+                    {% else %}
+                        {{ avatar_letter }}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="mint-name">{{ name }}</div>
+            {% if description %}
+                <div class="mint-desc">{{ description }}</div>
+            {% endif %}
+            {% if description_long %}
+                <div class="mint-desc-long">{{ description_long }}</div>
+            {% endif %}
+            {% if version %}
+                <div class="version-chip">{{ version }}</div>
+            {% endif %}
+        </div>
+
+        <!-- MOTD -->
+        {% if motd %}
+            <div class="motd">
+                <div class="motd-label">Mint notice</div>
+                <div class="motd-text">{{ motd }}</div>
+            </div>
+        {% endif %}
+
+        <!-- Disabled banners -->
+        {% if mint_disabled %}
+            <div class="disabled-banner">Minting is currently disabled</div>
+        {% endif %}
+        {% if melt_disabled %}
+            <div class="disabled-banner">Melting is currently disabled</div>
+        {% endif %}
+
+        <!-- URL section -->
+        {% if urls %}
+            <div class="url-section">
+                <div class="url-bar">
+                    <span class="url-text">{{ urls[0] }}</span>
+                </div>
+                {% if urls|length > 1 %}
+                    <div class="extra-urls">
+                        {% for url in urls[1:] %}
+                            <div class="extra-url">
+                                <span class="url-label">{% if ".onion" in url.lower() %}TOR{% else %}ALT{% endif %}</span>
+                                <span class="url-text">{{ url }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <!-- Unified detail card -->
+        <div class="detail-card">
+            <!-- Mint details section -->
+            <div class="card-section-header">Mint details</div>
+
+            {% if units %}
+                <div class="detail-row" style="padding-top:14px">
+                    <span class="detail-label">Units</span>
+                    <div class="detail-value">
+                        {% for u in units %}
+                            <span class="tag">{{ u }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="detail-row">
+                <span class="detail-label">Minting</span>
+                <div class="detail-value">
+                    {% if mint_disabled %}
+                        <span class="tag tag-red">disabled</span>
+                    {% else %}
+                        {% for m in mint_methods %}
+                            <span class="tag">{{ m }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="detail-row">
+                <span class="detail-label">Melting</span>
+                <div class="detail-value">
+                    {% if melt_disabled %}
+                        <span class="tag tag-red">disabled</span>
+                    {% else %}
+                        {% for m in melt_methods %}
+                            <span class="tag">{{ m }}</span>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if mint_limits %}
+                <div class="detail-row">
+                    <span class="detail-label">Mint limits</span>
+                    <span class="detail-value detail-value-mono">
+                        {% for lim in mint_limits %}
+                            {{ lim }}{% if not loop.last %} · {% endif %}
+                        {% endfor %}
+                    </span>
+                </div>
+            {% endif %}
+
+            {% if melt_limits %}
+                <div class="detail-row row-last">
+                    <span class="detail-label">Melt limits</span>
+                    <span class="detail-value detail-value-mono">
+                        {% for lim in melt_limits %}
+                            {{ lim }}{% if not loop.last %} · {% endif %}
+                        {% endfor %}
+                    </span>
+                </div>
+            {% endif %}
+
+            <!-- Supported features section -->
+            {% if supported_features %}
+                <div class="card-section-header has-rule">Supported features</div>
+                <div style="padding-top:12px">
+                    <div class="features-grid">
+                        {% for nut_num, feature_name in supported_features %}
+                            <div class="feature">
+                                <div class="feature-dot">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
+                                <span class="feature-name">{{ feature_name }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Contact section -->
+            {% if contact %}
+                <div class="card-section-header has-rule">Contact</div>
+                <div style="padding-top:12px">
+                    <div class="contact-chips">
+                        {% for c in contact %}
+                            {% if c.method_lower == "email" %}
+                                <a class="contact-chip" href="{{ c.url }}" target="_blank">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22,4 12,13 2,4"/></svg>
+                                    {{ c.info }}
+                                </a>
+                            {% elif c.method_lower == "twitter" %}
+                                <a class="contact-chip" href="{{ c.url }}" target="_blank">
+                                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                                    {{ c.info }}
+                                </a>
+                            {% elif c.method_lower == "nostr" %}
+                                <a class="contact-chip" href="{{ c.url }}" target="_blank">
+                                    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+                                    {{ c.info }}
+                                </a>
+                            {% else %}
+                                <span class="contact-chip">{{ c.method }}: {{ c.info }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Public key section -->
+            {% if pubkey %}
+                <div class="card-section-header has-rule">Public key</div>
+                <div class="pubkey-row">
+                    <span class="pubkey-mono">{{ pubkey }}</span>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Info tip -->
+        <div class="info-tip">
+            <div class="info-tip-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </div>
+            <div class="info-tip-text">
+                To use this mint, copy the mint URL above and add it to a Cashu-compatible wallet such as 
+                <a href="https://wallet.cashu.me" target="_blank">Cashu.me</a>, 
+                <a href="https://macadamia.cash" target="_blank">Macadamia</a>, or 
+                <a href="https://www.minibits.cash" target="_blank">Minibits</a>.
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div>
+                Powered by 
+                <a href="https://github.com/cashubtc/nutshell" target="_blank">Nutshell</a>
+            </div>
+            <div style="margin-top: 8px">
+                <a href="https://iscashucustodial.com/" target="_blank">isCashuCustodial.com</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

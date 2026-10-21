@@ -334,3 +334,39 @@ async def m016_remove_nostr_table(db: Database):
             DROP TABLE IF EXISTS nostr;
             """
         )
+
+
+async def m017_add_mint_quote_accounting_fields(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            "ALTER TABLE bolt11_mint_quotes "
+            "ADD COLUMN amount_paid INTEGER DEFAULT NULL;"
+        )
+        await conn.execute(
+            "ALTER TABLE bolt11_mint_quotes "
+            "ADD COLUMN amount_issued INTEGER DEFAULT NULL;"
+        )
+        await conn.execute(
+            "ALTER TABLE bolt11_mint_quotes ADD COLUMN updated_at INTEGER DEFAULT NULL;"
+        )
+
+
+async def m018_add_deleted_at_column_to_keysets(db: Database):
+    """
+    Add a deleted_at column to keysets. A deleted keyset is one that disappeared
+    from the mint and must no longer be loaded or used.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            "ALTER TABLE keysets ADD COLUMN deleted_at TIMESTAMP DEFAULT NULL"
+        )
+
+
+async def m019_add_p2pk_e_to_proofs(db: Database):
+    """
+    Column to store the NUT-28 P2BK ephemeral pubkey (p2pk_e / E) on proofs.
+    Without this, P2BK tokens become unspendable after a wallet restart.
+    """
+    async with db.connect() as conn:
+        await conn.execute("ALTER TABLE proofs ADD COLUMN p2pk_e TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN p2pk_e TEXT")

@@ -1,4 +1,5 @@
 from typing import Any, cast
+from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
@@ -8,8 +9,11 @@ from cashu.core.errors import (
     BlindAuthAmountExceededError,
     BlindAuthFailedError,
     BlindAuthRateLimitExceededError,
+    BlindAuthRequiredError,
     ClearAuthFailedError,
+    ClearAuthRequiredError,
 )
+from cashu.core.secret import Secret, Tags
 from cashu.core.settings import settings
 from cashu.mint.auth.base import User
 from cashu.mint.auth.server import AuthLedger
@@ -24,6 +28,36 @@ def _ledger() -> AuthLedger:
 def _auth_token(secret: str = "secret", proof_id: str = "kid") -> str:
     proof = Proof(id=proof_id, amount=1, C="00", secret=secret)
     return AuthProof.from_proof(proof).to_base64()
+
+
+@pytest.mark.parametrize(
+    "error_class, code",
+    [
+        (ClearAuthRequiredError, 30001),
+        (ClearAuthFailedError, 30002),
+        (BlindAuthRequiredError, 31001),
+        (BlindAuthFailedError, 31002),
+        (BlindAuthAmountExceededError, 31003),
+        (BlindAuthRateLimitExceededError, 31004),
+    ],
+)
+def test_auth_error_codes_match_nut21_and_nut22(error_class, code):
+    """Auth error codes are specified in NUT-21 and NUT-22, see
+    https://github.com/cashubtc/nuts/blob/main/error_codes.md
+    """
+    assert error_class.code == code
+    assert error_class().code == code
+
+
+@pytest.mark.asyncio
+async def test_verify_blind_auth_rejects_length_before_decoding():
+    ledger = _ledger()
+    token = AuthProof.prefix + "a" * AuthProof.max_token_length()
+    with patch("cashu.core.base.base64.urlsafe_b64decode") as decode:
+        with pytest.raises(BlindAuthFailedError):
+            async with ledger.verify_blind_auth(token):
+                pytest.fail("overlong token was accepted")
+        decode.assert_not_called()
 
 
 def test_verify_oicd_issuer_accepts_matching_issuer():
@@ -96,8 +130,9 @@ async def test_verify_clear_auth_maps_verification_errors(monkeypatch):
 
     monkeypatch.setattr(ledger, "_get_user", get_user)
 
-    with pytest.raises(ClearAuthFailedError):
+    with pytest.raises(ClearAuthFailedError) as exc_info:
         await ledger.verify_clear_auth("token")
+    assert exc_info.value.code == 30002
 
 
 @pytest.mark.asyncio
@@ -111,13 +146,14 @@ async def test_verify_clear_auth_maps_rate_limit_errors(monkeypatch):
 
     monkeypatch.setattr(ledger, "_get_user", get_user)
 
-    def fail_limit(identifier):
+    def fail_limit(identifier, *args, **kwargs):
         raise Exception("too many requests")
 
     monkeypatch.setattr("cashu.mint.auth.server.assert_limit", fail_limit)
 
-    with pytest.raises(BlindAuthRateLimitExceededError):
+    with pytest.raises(BlindAuthRateLimitExceededError) as exc_info:
         await ledger.verify_clear_auth("token")
+    assert exc_info.value.code == 31004
 
 
 @pytest.mark.asyncio
@@ -131,7 +167,9 @@ async def test_verify_clear_auth_returns_user_on_success(monkeypatch):
         return expected_user
 
     monkeypatch.setattr(ledger, "_get_user", get_user)
-    monkeypatch.setattr("cashu.mint.auth.server.assert_limit", lambda identifier: None)
+    monkeypatch.setattr(
+        "cashu.mint.auth.server.assert_limit", lambda identifier, *args, **kwargs: None
+    )
 
     user = await ledger.verify_clear_auth("token")
     assert user is expected_user
@@ -143,8 +181,11 @@ async def test_mint_blind_auth_enforces_maximum_outputs(monkeypatch):
     monkeypatch.setattr(settings, "mint_auth_max_blind_tokens", 2)
     outputs = [BlindedMessage(id="kid", amount=1, B_=f"b{i}") for i in range(3)]
 
-    with pytest.raises(BlindAuthAmountExceededError, match="Too many outputs"):
+    with pytest.raises(
+        BlindAuthAmountExceededError, match="Too many outputs"
+    ) as exc_info:
         await ledger.mint_blind_auth(outputs=outputs, user=User(id="alice"))
+    assert exc_info.value.code == 31003
 
 
 @pytest.mark.asyncio
@@ -193,15 +234,15 @@ async def test_verify_blind_auth_invalidates_on_success_and_unsets_pending():
         async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
             calls["pending"] = proofs[0].secret
 
-        async def _unset_proofs_pending(self, proofs, keysets):
+        async def _unset_proofs_pending(self, proofs, keysets, **kwargs):
             calls["unset"] = proofs[0].secret
 
-    async def invalidate_proofs(*, proofs):
-        calls["invalidated"] = proofs[0].secret
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
+            calls["invalidated"] = proofs[0].secret
+            calls["unset"] = proofs[0].secret
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
     cast(Any, ledger).db_write = DbWrite()
-    cast(Any, ledger)._invalidate_proofs = invalidate_proofs
     cast(Any, ledger).keysets = {"kid": object()}
 
     async with ledger.verify_blind_auth(token):
@@ -213,6 +254,58 @@ async def test_verify_blind_auth_invalidates_on_success_and_unsets_pending():
         "invalidated": "secret",
         "unset": "secret",
     }
+
+
+@pytest.mark.asyncio
+async def test_verify_blind_auth_warns_on_nut10_secret():
+    ledger = _ledger()
+    token = _auth_token(
+        secret=Secret(
+            kind="P2PK",
+            data="0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            tags=Tags(tags=[]),
+            nonce="0" * 32,
+        ).serialize()
+    )
+
+    async def verify_inputs_and_outputs(*, proofs):
+        assert proofs[0].secret.startswith("[")
+
+    class DbWrite:
+        async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
+            return None
+
+        async def _unset_proofs_pending(self, proofs, keysets, **kwargs):
+            return None
+
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
+            return None
+
+    cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
+    cast(Any, ledger).db_write = DbWrite()
+    cast(Any, ledger).keysets = {"kid": object()}
+
+    with patch("cashu.mint.auth.server.logger.warning", MagicMock()) as warning:
+        async with ledger.verify_blind_auth(token):
+            pass
+
+    warning.assert_called_once()
+    assert "does not enforce spending conditions" in warning.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_verify_blind_auth_rejects_malformed_nut10_secret():
+    ledger = _ledger()
+    token = _auth_token(
+        secret=Secret(
+            kind="P2PK", data="not-a-pubkey", tags=Tags(tags=[]), nonce="0" * 32
+        ).serialize()
+    )
+
+    with pytest.raises(BlindAuthFailedError) as exc_info:
+        async with ledger.verify_blind_auth(token):
+            pass
+    assert exc_info.value.code == 31002
 
 
 @pytest.mark.asyncio
@@ -228,15 +321,14 @@ async def test_verify_blind_auth_wraps_inner_failure_and_still_unsets_pending():
         async def _verify_spent_proofs_and_set_pending(self, proofs, keysets):
             return None
 
-        async def _unset_proofs_pending(self, proofs, keysets):
+        async def _unset_proofs_pending(self, proofs, keysets, **kwargs):
             calls["unset"] = True
 
-    async def invalidate_proofs(*, proofs):
-        calls["invalidated"] = True
+        async def finalize_pending_proofs(self, *, proofs, keysets, **kwargs):
+            calls["invalidated"] = True
 
     cast(Any, ledger).verify_inputs_and_outputs = verify_inputs_and_outputs
     cast(Any, ledger).db_write = DbWrite()
-    cast(Any, ledger)._invalidate_proofs = invalidate_proofs
     cast(Any, ledger).keysets = {"kid": object()}
 
     with pytest.raises(BlindAuthFailedError):
@@ -245,3 +337,154 @@ async def test_verify_blind_auth_wraps_inner_failure_and_still_unsets_pending():
 
     assert calls["invalidated"] is False
     assert calls["unset"] is True
+
+
+def test_verify_decode_jwt_success(monkeypatch):
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from cashu.core.settings import settings
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    ledger = _ledger()
+    ledger.issuer = "https://issuer.test"
+
+    class MockJWKSClient:
+        def get_signing_key_from_jwt(self, token):
+            class MockSigningKey:
+                def __init__(self, key):
+                    self.key = key
+
+            return MockSigningKey(public_key)
+
+    ledger.jwks_client = cast(Any, MockJWKSClient())
+
+    # Token with matching audience and matching azp
+    token = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": settings.mint_auth_oicd_client_id,
+            "azp": settings.mint_auth_oicd_client_id,
+            "sub": "alice",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    decoded = ledger._verify_decode_jwt(token)
+    assert decoded["sub"] == "alice"
+
+    # Token with matching audience and no azp
+    token_no_azp = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": settings.mint_auth_oicd_client_id,
+            "sub": "bob",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+    decoded_no_azp = ledger._verify_decode_jwt(token_no_azp)
+    assert decoded_no_azp["sub"] == "bob"
+
+
+def test_verify_decode_jwt_accepts_non_client_audience(monkeypatch):
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from cashu.core.settings import settings
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    ledger = _ledger()
+    ledger.issuer = "https://issuer.test"
+
+    class MockJWKSClient:
+        def get_signing_key_from_jwt(self, token):
+            class MockSigningKey:
+                def __init__(self, key):
+                    self.key = key
+
+            return MockSigningKey(public_key)
+
+    ledger.jwks_client = cast(Any, MockJWKSClient())
+
+    # NUT-21 does not require access token audience to match the OIDC client id.
+    token = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": "account",
+            "azp": settings.mint_auth_oicd_client_id,
+            "sub": "alice",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    decoded = ledger._verify_decode_jwt(token)
+    assert decoded["sub"] == "alice"
+
+
+def test_verify_decode_jwt_rejects_mismatched_azp(monkeypatch):
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from cashu.core.settings import settings
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    ledger = _ledger()
+    ledger.issuer = "https://issuer.test"
+
+    class MockJWKSClient:
+        def get_signing_key_from_jwt(self, token):
+            class MockSigningKey:
+                def __init__(self, key):
+                    self.key = key
+
+            return MockSigningKey(public_key)
+
+    ledger.jwks_client = cast(Any, MockJWKSClient())
+
+    # Token with matching audience but mismatched azp
+    token = jwt.encode(
+        {
+            "iss": "https://issuer.test",
+            "aud": settings.mint_auth_oicd_client_id,
+            "azp": "wrong-client",
+            "sub": "alice",
+        },
+        private_key,
+        algorithm="RS256",
+    )
+
+    with pytest.raises(jwt.InvalidTokenError, match="does not match mint client"):
+        ledger._verify_decode_jwt(token)
+
+
+@pytest.mark.asyncio
+async def test_verify_clear_auth_uses_correct_rate_limit(monkeypatch):
+    ledger = _ledger()
+    monkeypatch.setattr(ledger, "_verify_oicd_issuer", lambda token: None)
+    monkeypatch.setattr(ledger, "_verify_decode_jwt", lambda token: {"sub": "alice"})
+
+    async def get_user(decoded):
+        return User(id="alice")
+
+    monkeypatch.setattr(ledger, "_get_user", get_user)
+
+    captured_limit = []
+
+    def mock_assert_limit(identifier, limit=None):
+        captured_limit.append(limit)
+
+    monkeypatch.setattr("cashu.mint.auth.server.assert_limit", mock_assert_limit)
+    monkeypatch.setattr(settings, "mint_auth_rate_limit_per_minute", 42)
+
+    await ledger.verify_clear_auth("token")
+    assert len(captured_limit) == 1
+    assert captured_limit[0] == 42

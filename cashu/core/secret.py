@@ -8,6 +8,12 @@ from pydantic import BaseModel, RootModel
 from .crypto.secp import PrivateKey
 
 
+def parse_int_tag(value: Optional[str]) -> Optional[int]:
+    if value is None or not value.isascii() or not value.isdecimal():
+        return None
+    return int(value)
+
+
 class SecretKind(Enum):
     P2PK = "P2PK"
     HTLC = "HTLC"
@@ -40,12 +46,10 @@ class Tags(RootModel):
 
     def get_tag_int(self, tag_name: str) -> Union[int, None]:
         tag = self.get_tag(tag_name)
-        if tag is not None:
-            try:
-                return int(tag)
-            except ValueError:
-                logger.warning(f"Tag {tag_name} is not an integer")
-        return None
+        parsed = parse_int_tag(tag)
+        if tag is not None and parsed is None:
+            logger.warning(f"Tag {tag_name} is not an integer")
+        return parsed
 
     def get_tag_all(self, tag_name: str) -> List[str]:
         all_tags = []
@@ -77,7 +81,7 @@ class Secret(BaseModel):
         )
 
     @classmethod
-    def deserialize(cls, from_proof: str):
+    def deserialize(cls, from_proof: str) -> "Secret":
         kind, kwargs = json.loads(from_proof)
         data = kwargs.pop("data")
         nonce = kwargs.pop("nonce")

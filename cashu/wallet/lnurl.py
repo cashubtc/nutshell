@@ -1,7 +1,9 @@
+import hashlib
 import json
 from typing import Optional
 
 import bech32
+import bolt11
 import httpx
 
 
@@ -108,4 +110,21 @@ async def handle_lnurl(lnurl: str, amount: Optional[int]) -> Optional[str]:
         print("Error: No payment request in response.")
         return None
         
+    try:
+        invoice_obj = bolt11.decode(pr)
+    except Exception as e:
+        print(f"Error decoding invoice: {e}")
+        return None
+
+    if invoice_obj.amount_msat != amount_msat:
+        print(f"Error: Invoice amount {invoice_obj.amount_msat} msat does not match requested amount {amount_msat} msat.")
+        return None
+
+    if invoice_obj.description_hash:
+        if metadata and isinstance(metadata, str):
+            metadata_hash = hashlib.sha256(metadata.encode("utf-8")).hexdigest()
+            if invoice_obj.description_hash != metadata_hash:
+                print(f"Error: Invoice description hash {invoice_obj.description_hash} does not match metadata hash {metadata_hash}.")
+                return None
+
     return pr

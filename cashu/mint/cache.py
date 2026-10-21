@@ -1,10 +1,12 @@
 import functools
 import json
+from typing import Any, Union
 
 from fastapi import Request
 from loguru import logger
 from pydantic import BaseModel
-from redis.asyncio import from_url
+from redis.asyncio import Redis, from_url
+from redis.asyncio.cluster import RedisCluster
 from redis.exceptions import ConnectionError
 
 from ..core.errors import CashuError
@@ -13,12 +15,16 @@ from ..core.settings import settings
 
 class RedisCache:
     initialized = False
+    redis: Union[Redis, Any]
 
     def __init__(self):
         if settings.mint_redis_cache_enabled:
             if settings.mint_redis_cache_url is None:
                 raise CashuError("Redis cache url not provided")
-            self.redis = from_url(settings.mint_redis_cache_url)
+            if settings.mint_redis_cache_cluster:
+                self.redis = RedisCluster.from_url(settings.mint_redis_cache_url)
+            else:
+                self.redis = from_url(settings.mint_redis_cache_url)
 
     async def test_connection(self):
         # PING

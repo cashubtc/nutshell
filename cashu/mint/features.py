@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Union
 
 from ..core.base import Method
+from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.mint_info import MintInfo
 from ..core.models import (
     MeltMethodSetting,
@@ -10,6 +11,7 @@ from ..core.models import (
     MintMethodSetting,
 )
 from ..core.nuts.nuts import (
+    BATCH_MINT_NUT,
     BLIND_AUTH_NUT,
     CACHE_NUT,
     CLEAR_AUTH_NUT,
@@ -33,12 +35,7 @@ _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
 _METHOD = "method"
 _UNIT = "unit"
-_BOLT11 = "bolt11"
-_MPP = "mpp"
 _COMMANDS = "commands"
-_BOLT11_MINT_QUOTE = "bolt11_mint_quote"
-_BOLT11_MELT_QUOTE = "bolt11_melt_quote"
-_PROOF_STATE = "proof_state"
 _PROTECTED_ENDPOINTS = "protected_endpoints"
 _BAT_MAX_MINT = "bat_max_mint"
 _OPENID_DISCOVERY = "openid_discovery"
@@ -66,6 +63,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
             tos_url=settings.mint_info_tos_url,
             motd=settings.mint_info_motd,
             time=None,
+            max_array_length=settings.mint_max_request_length,
         )
 
     @property
@@ -75,6 +73,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features = self.add_mpp_features(mint_features)
         mint_features = self.add_websocket_features(mint_features)
         mint_features = self.add_cache_features(mint_features)
+        mint_features = self.add_batch_features(mint_features)
 
         return mint_features
 
@@ -82,7 +81,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                mint_setting = MintMethodSetting(method=method.name, unit=unit.name)
+                mint_setting = MintMethodSetting(
+                    method=method.name, unit=unit.name, method_name=method.name
+                )
                 if settings.mint_max_mint_bolt11_sat:
                     mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
                     mint_setting.min_amount = 0
@@ -93,7 +94,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         melt_method_settings: List[MeltMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                melt_setting = MeltMethodSetting(method=method.name, unit=unit.name)
+                melt_setting = MeltMethodSetting(
+                    method=method.name, unit=unit.name, method_name=method.name
+                )
                 if settings.mint_max_melt_bolt11_sat:
                     melt_setting.max_amount = settings.mint_max_melt_bolt11_sat
                     melt_setting.min_amount = 0
@@ -125,6 +128,16 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
         return mint_features
 
+    def add_batch_features(
+        self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
+    ):
+        mint_features[BATCH_MINT_NUT] = {
+            "supported": True,
+            "max_batch_size": settings.mint_max_request_length,
+            "methods": list(set([m.name for m in self.backends.keys()])),
+        }
+        return mint_features
+
     def add_mpp_features(
         self, mint_features: Dict[int, Union[List[Any], Dict[str, Any]]]
     ):
@@ -150,13 +163,16 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         }
         # we check the backend to see if "bolt11_mint_quote" is supported as well
         for method, unit_dict in self.backends.items():
-            if method == Method[_BOLT11]:
+            if method == Method.bolt11:
                 for unit in unit_dict.keys():
                     websocket_features[_SUPPORTED].append(
                         {
                             _METHOD: method.name,
                             _UNIT: unit.name,
-                            _COMMANDS: [_BOLT11_MELT_QUOTE, _PROOF_STATE],
+                            _COMMANDS: [
+                                JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE.value,
+                                JSONRPCSubscriptionKinds.PROOF_STATE.value,
+                            ],
                         }
                     )
                     if unit_dict[unit].supports_incoming_payment_stream:
@@ -164,7 +180,8 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                             websocket_features[_SUPPORTED][-1][_COMMANDS]
                         )
                         websocket_features[_SUPPORTED][-1][_COMMANDS] = (
-                            supported_features + [_BOLT11_MINT_QUOTE]
+                            supported_features
+                            + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
                         )
 
         if websocket_features:

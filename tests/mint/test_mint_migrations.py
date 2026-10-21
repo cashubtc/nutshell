@@ -1,13 +1,266 @@
+import uuid
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
 import pytest
 
+from cashu.core.base import (
+    BlindedMessage,
+    MeltQuote,
+    MeltQuoteState,
+    MintQuote,
+    MintQuoteState,
+)
+from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.mint import migrations as mint_migrations
+from cashu.mint.auth import migrations as auth_migrations
+from cashu.mint.auth.base import User
+from cashu.mint.auth.crud import AuthLedgerCrudSqlite
+from cashu.mint.auth.server import AuthLedger
+from cashu.mint.crud import LedgerCrudSqlite
+from cashu.mint.db.write import DbWriteHelper
 
 
 @pytest.mark.asyncio
-async def test_m029_witness_cleanup():
-    db = Database("mint", "./test_data/mig_witness_cleanup")
+async def test_current_quote_schema_loads_current_fields(tmp_path):
+    db = Database("mint", str(tmp_path / "current_quote_schema"))
+    await migrate_databases(db, mint_migrations)
+    crud = LedgerCrudSqlite()
+
+    async with db.connect() as conn:
+        mint_columns = {
+            row["name"]
+            for row in await conn.fetchall(
+                f"PRAGMA table_info({db.table_with_schema('mint_quotes')})"
+            )
+        }
+        melt_columns = {
+            row["name"]
+            for row in await conn.fetchall(
+                f"PRAGMA table_info({db.table_with_schema('melt_quotes')})"
+            )
+        }
+
+    assert {"amount_paid", "amount_issued", "updated_at"} <= mint_columns
+    assert "proof" in melt_columns
+    assert "payment_preimage" not in melt_columns
+    assert "outputs" not in melt_columns
+
+    mint_quote = MintQuote(
+        quote="mint-quote",
+        method="bolt11",
+        request="mint-request",
+        checking_id="mint-checking-id",
+        unit="sat",
+        amount=100,
+        state=MintQuoteState.paid,
+        created_time=1000,
+        paid_time=1200,
+        amount_paid=40,
+        amount_issued=20,
+        updated_at=1500,
+    )
+    await crud.store_mint_quote(quote=mint_quote, db=db)
+    loaded_mint_quote = await crud.get_mint_quote(quote_id=mint_quote.quote, db=db)
+    assert loaded_mint_quote is not None
+    assert loaded_mint_quote.amount_paid == 40
+    assert loaded_mint_quote.amount_issued == 20
+    assert loaded_mint_quote.updated_at == 1500
+
+    melt_quote = MeltQuote(
+        quote="melt-quote",
+        method="bolt11",
+        request="melt-request",
+        checking_id="melt-checking-id",
+        unit="sat",
+        amount=100,
+        fee_reserve=2,
+        state=MeltQuoteState.paid,
+        created_time=1000,
+        paid_time=1200,
+        fee_paid=1,
+        payment_preimage="11" * 32,
+        expiry=2000,
+    )
+    await crud.store_melt_quote(quote=melt_quote, db=db)
+    loaded_melt_quote = await crud.get_melt_quote(quote_id=melt_quote.quote, db=db)
+    assert loaded_melt_quote is not None
+    assert loaded_melt_quote.payment_preimage == "11" * 32
+
+    await db.engine.dispose()
+
+
+def test_current_mint_quote_postgres_row_loads_accounting_fields():
+    row = {
+        "quote": "mint-quote",
+        "method": "bolt11",
+        "request": "mint-request",
+        "checking_id": "mint-checking-id",
+        "unit": "sat",
+        "amount": 100,
+        "state": MintQuoteState.paid.value,
+        "created_time": datetime.fromtimestamp(1000, timezone.utc),
+        "paid_time": datetime.fromtimestamp(1200, timezone.utc),
+        "issued_time": None,
+        "last_checked": None,
+        "pubkey": None,
+        "amount_paid": 40,
+        "amount_issued": 20,
+        "updated_at": datetime.fromtimestamp(1500, timezone.utc),
+    }
+
+    quote = MintQuote.from_row(row)  # type: ignore[arg-type]
+
+    assert quote.amount_paid == 40
+    assert quote.amount_issued == 20
+    assert quote.updated_at == 1500
+
+
+@pytest.mark.asyncio
+async def test_m038_remove_dleq_from_promises(tmp_path):
+    db = Database("mint", str(tmp_path / "mint"))
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        columns = await conn.fetchall(
+            f"PRAGMA table_info({db.table_with_schema('promises')})"
+        )
+
+    column_names = {column["name"] for column in columns}
+    assert "dleq_e" not in column_names
+    assert "dleq_s" not in column_names
+
+
+@pytest.mark.asyncio
+async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
+    db = Database("mint", str(tmp_path / "attempt_migration"))
+    crud = LedgerCrudSqlite()
+    try:
+        async with db.connect() as conn:
+            await conn.execute(
+                f"""
+                CREATE TABLE {db.table_with_schema("melt_quotes")} (
+                    quote TEXT PRIMARY KEY,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount INT NOT NULL,
+                    fee_reserve INT NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
+                    fee_paid INT,
+                    proof TEXT,
+                    state TEXT NOT NULL,
+                    expiry TIMESTAMP
+                )
+                """
+            )
+            await conn.execute(
+                f"""
+                CREATE TABLE {db.table_with_schema("promises")} (
+                    amount INT,
+                    b_ TEXT,
+                    c_ TEXT,
+                    id TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
+                    order_index INT
+                )
+                """
+            )
+
+        quote = MeltQuote(
+            quote="pre-m039-quote",
+            method="bolt11",
+            request="pre-m039-request",
+            checking_id="pre-m039-checking-id",
+            unit="sat",
+            amount=100,
+            fee_reserve=1,
+            state=MeltQuoteState.unpaid,
+        )
+        await crud.store_melt_quote(quote=quote, db=db)
+
+        await mint_migrations.m039_add_attempt_to_melt_quotes(db)
+
+        loaded = await crud.get_melt_quote(quote_id=quote.quote, db=db)
+        assert loaded is not None
+        assert loaded.attempt == ""
+
+        class Events:
+            async def submit(self, event):
+                pass
+
+        db_write = DbWriteHelper(
+            db=db,
+            crud=crud,
+            events=Events(),  # type: ignore[arg-type]
+            db_read=SimpleNamespace(),  # type: ignore[arg-type]
+        )
+        first_attempt = await db_write._set_melt_quote_pending(loaded)
+        parsed_attempt = uuid.UUID(first_attempt.attempt)
+        assert parsed_attempt.version == 7
+        assert parsed_attempt.variant == uuid.RFC_4122
+
+        unpaid = await db_write._unset_melt_quote_pending(
+            first_attempt, MeltQuoteState.unpaid
+        )
+        second_attempt = await db_write._set_melt_quote_pending(unpaid)
+        assert second_attempt.attempt != first_attempt.attempt
+        assert uuid.UUID(second_attempt.attempt).version == 7
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_m040_seed_cleanup(tmp_path):
+    db = Database("mint", str(tmp_path / "mig_seed_cleanup"))
+
+    # Ensure schema is at latest so tables exist
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # Insert a keyset with both a plaintext and an encrypted seed
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("keysets")} (id, seed, encrypted_seed)
+            VALUES ('ks_encrypted', :seed, :encrypted_seed)
+            """,
+            {"seed": "plaintext", "encrypted_seed": "ciphertext"},
+        )
+        # Insert a keyset with only a plaintext seed
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("keysets")} (id, seed, encrypted_seed)
+            VALUES ('ks_plaintext', :seed, NULL)
+            """,
+            {"seed": "plaintext"},
+        )
+
+    # Run the migration under test directly
+    await mint_migrations.m040_remove_plaintext_seeds_with_encrypted_seed(db)
+
+    # Validate cleanup
+    async with db.connect() as conn:
+        row = await conn.fetchone(
+            f"SELECT seed, encrypted_seed FROM {db.table_with_schema('keysets')} WHERE id = 'ks_encrypted'"
+        )
+        assert row["seed"] == ""
+        assert row["encrypted_seed"] == "ciphertext"
+
+        row = await conn.fetchone(
+            f"SELECT seed, encrypted_seed FROM {db.table_with_schema('keysets')} WHERE id = 'ks_plaintext'"
+        )
+        assert row["seed"] == "plaintext"
+        assert row["encrypted_seed"] is None
+
+
+@pytest.mark.asyncio
+async def test_m029_witness_cleanup(tmp_path):
+    db = Database("mint", str(tmp_path / "mig_witness_cleanup"))
 
     # Ensure schema is at latest so tables exist
     await migrate_databases(db, mint_migrations)
@@ -19,14 +272,14 @@ async def test_m029_witness_cleanup():
         # Insert into proofs_used
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_used')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_used")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_used_long', 's_used_long', 'y_used_long', :w, {db.timestamp_now}, NULL)
             """,
             {"w": long_witness},
         )
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_used')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_used")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_used_short', 's_used_short', 'y_used_short', :w, {db.timestamp_now}, NULL)
             """,
             {"w": short_witness},
@@ -35,14 +288,14 @@ async def test_m029_witness_cleanup():
         # Insert into proofs_pending
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_pending')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_pending")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_pend_long', 's_pend_long', 'y_pend_long', :w, {db.timestamp_now}, NULL)
             """,
             {"w": long_witness},
         )
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('proofs_pending')} (amount, id, c, secret, y, witness, created, melt_quote)
+            INSERT INTO {db.table_with_schema("proofs_pending")} (amount, id, c, secret, y, witness, created, melt_quote)
             VALUES (1, 'kid', 'c_pend_short', 's_pend_short', 'y_pend_short', :w, {db.timestamp_now}, NULL)
             """,
             {"w": short_witness},
@@ -72,3 +325,168 @@ async def test_m029_witness_cleanup():
             f"SELECT witness FROM {db.table_with_schema('proofs_pending')} WHERE secret = 's_pend_short'"
         )
         assert row["witness"] == short_witness
+
+
+@pytest.mark.asyncio
+async def test_auth_m003_migration():
+    import os
+    import shutil
+
+    from cashu.core.base import MintKeyset
+    from cashu.mint.auth import migrations as auth_migrations
+
+    db_path = "./test_data/mig_auth"
+    if os.path.exists(db_path):
+        shutil.rmtree(db_path)
+    db = Database("auth", db_path)
+
+    # Migrate auth database to latest
+    await migrate_databases(db, auth_migrations)
+
+    # Verify that keysets table now has the final_expiry column
+    async with db.connect() as conn:
+        columns = await conn.fetchall(
+            f"PRAGMA table_info({db.table_with_schema('keysets')})"
+        )
+        assert any(col["name"] == "final_expiry" for col in columns)
+
+    # Verify that we can successfully store a keyset (which uses the final_expiry column)
+    crud = LedgerCrudSqlite()
+    keyset = MintKeyset(
+        seed="test_seed",
+        derivation_path="m/0'/0'/0'",
+        version="0.15.0",
+        final_expiry=123456789,
+    )
+    await crud.store_keyset(db=db, keyset=keyset)
+
+    # Verify that the keyset was stored and final_expiry value is set correctly
+    retrieved = await crud.get_keyset(db=db, id=keyset.id)
+    assert len(retrieved) == 1
+    assert retrieved[0].final_expiry == 123456789
+
+    # Clean up
+    if os.path.exists(db_path):
+        shutil.rmtree(db_path)
+
+
+@pytest.mark.asyncio
+async def test_auth_promises_schema_supports_blinded_message_crud(tmp_path):
+    """The auth ledger reuses LedgerCrudSqlite, so the auth promises table must carry
+    the same columns the mint CRUD writes.
+    """
+    db = Database("auth", str(tmp_path / "auth_promises_schema"))
+    await migrate_databases(db, auth_migrations)
+    crud = LedgerCrudSqlite()
+
+    async with db.connect() as conn:
+        columns = {
+            row["name"]: row
+            for row in await conn.fetchall(
+                f"PRAGMA table_info({db.table_with_schema('promises')})"
+            )
+        }
+
+    assert {
+        "mint_quote",
+        "melt_quote",
+        "swap_id",
+        "signed_at",
+        "order_index",
+    } <= columns.keys()
+    # blinded messages are stored before they are signed
+    assert not columns["c_"]["notnull"]
+
+    b_ = "02" + "aa" * 32
+    c_ = "03" + "bb" * 32
+
+    # this is the call AuthLedger.mint_blind_auth makes via Ledger._store_blinded_messages
+    await crud.store_blinded_message(db=db, amount=1, b_=b_, id="keyset_id")
+    assert await crud.get_blind_signature(db=db, b_=b_) is None
+
+    await crud.update_blinded_message_signature(db=db, amount=1, b_=b_, c_=c_)
+    signature = await crud.get_blind_signature(db=db, b_=b_)
+    assert signature is not None
+    assert signature.C_ == c_
+    assert signature.amount == 1
+    assert signature.id == "keyset_id"
+
+
+@pytest.mark.asyncio
+async def test_fresh_auth_ledger_uses_shared_crud(tmp_path):
+    db = Database("auth", str(tmp_path / "auth_ledger"))
+    await migrate_databases(db, auth_migrations)
+    ledger = AuthLedger(
+        db=db,
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    assert isinstance(ledger.crud, LedgerCrudSqlite)
+    await ledger.init_keysets()
+    ledger.auth_crud = AuthLedgerCrudSqlite()
+    user = User(id="alice")
+    await ledger.auth_crud.create_user(db=db, user=user)
+
+    B_, _ = step1_alice("auth token")
+    signatures = await ledger.mint_blind_auth(
+        outputs=[BlindedMessage(id=ledger.keyset.id, amount=1, B_=B_.format().hex())],
+        user=user,
+    )
+
+    assert len(signatures) == 1
+    assert signatures[0].id == ledger.keyset.id
+    assert signatures[0].amount == 1
+
+    reloaded = AuthLedger(
+        db=db,
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    await reloaded.init_keysets()
+    assert reloaded.keyset.amounts == [1]
+
+
+@pytest.mark.asyncio
+async def test_auth_m005_migration_preserves_existing_promises(tmp_path):
+    """m005 rebuilds the SQLite promises table, so already-issued auth promises must
+    survive the upgrade.
+    """
+    db = Database("auth", str(tmp_path / "auth_promises_upgrade"))
+
+    # bring the database up to the pre-m005 state
+    async with db.connect() as conn:
+        await auth_migrations.m000_create_migrations_table(conn)
+    for migration in (
+        auth_migrations.m001_initial,
+        auth_migrations.m002_add_balance_to_keysets_and_log_table,
+        auth_migrations.m003_add_final_expiry_to_keysets,
+        auth_migrations.m004_remove_dleq_from_promises,
+    ):
+        await migration(db)
+
+    b_ = "02" + "cc" * 32
+    c_ = "03" + "dd" * 32
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('promises')} (id, amount, b_, c_, created)
+            VALUES (:id, :amount, :b_, :c_, :created)
+            """,
+            {
+                "id": "keyset_id",
+                "amount": 1,
+                "b_": b_,
+                "c_": c_,
+                "created": db.to_timestamp(db.timestamp_now_str()),
+            },
+        )
+
+    await auth_migrations.m005_align_promises_with_mint_schema(db)
+
+    signature = await LedgerCrudSqlite().get_blind_signature(db=db, b_=b_)
+    assert signature is not None
+    assert signature.C_ == c_
+    assert signature.amount == 1
+    assert signature.id == "keyset_id"

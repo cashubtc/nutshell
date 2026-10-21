@@ -1,4 +1,5 @@
 name: prepare
+description: Install Python, Poetry, and project dependencies.
 
 inputs:
   python-version:

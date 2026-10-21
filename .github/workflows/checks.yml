@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       python-version:
-        default: "3.10"
+        default: "3.12"
         type: string
       poetry-version:
         default: "2.3.2"
@@ -24,6 +24,8 @@ jobs:
           poetry-version: ${{ inputs.poetry-version }}
       - name: Ruff check
         run: make ruff-check
+      - name: Mutation tooling regression tests
+        run: poetry run pytest scripts/tests -o addopts=
   mypy:
     runs-on: ubuntu-latest
     steps:

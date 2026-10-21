@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi import WebSocketDisconnect
+from pydantic import ValidationError
 
 from cashu.core.base import (
     MeltQuote,
@@ -93,6 +94,18 @@ async def test_websocket_start_returns_jsonrpc_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_websocket_start_exits_on_disconnect_message(monkeypatch):
+    websocket = FakeWebSocket([{"type": "websocket.disconnect", "code": 1012}])
+    manager = _client_manager(websocket)
+    monkeypatch.setattr("cashu.mint.events.client.limit_websocket", lambda ws: None)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        await manager.start()
+
+    assert exc_info.value.code == 1012
+
+
+@pytest.mark.asyncio
 async def test_handle_request_subscribe_and_unsubscribe_roundtrip(monkeypatch):
     manager = _client_manager(FakeWebSocket())
     monkeypatch.setattr(
@@ -135,6 +148,22 @@ def test_add_subscription_rejects_when_max_reached():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["subscribe", "unsubscribe"])
+async def test_handle_request_rejects_long_subscription_id(method):
+    manager = _client_manager(FakeWebSocket())
+    request = JSONRPCRequest(
+        id=1,
+        method=method,
+        params={"kind": "proof_state", "filters": ["Y1"], "subId": "s" * 257},
+    )
+
+    with pytest.raises(ValidationError):
+        await manager._handle_request(request)
+
+    assert not any(manager.subscriptions.values())
+
+
+@pytest.mark.asyncio
 async def test_init_subscription_sends_initial_snapshots():
     websocket = FakeWebSocket()
     manager = _client_manager(websocket)
@@ -157,13 +186,20 @@ async def test_init_subscription_sends_initial_snapshots():
         amount=1,
         fee_reserve=1,
         state=MeltQuoteState.unpaid,
+        attempt="internal-attempt-nonce",
     )
     proof_state = ProofState(Y="Y1", state=ProofSpentState.unspent)
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def mock_connect():
+        yield object()
 
     manager.db_read = cast(
         Any,
         SimpleNamespace(
-            db=object(),
+            db=SimpleNamespace(connect=mock_connect),
             crud=SimpleNamespace(
                 get_mint_quote=None,
                 get_melt_quote=None,
@@ -172,13 +208,13 @@ async def test_init_subscription_sends_initial_snapshots():
         ),
     )
 
-    async def get_mint_quote(quote_id, db):
+    async def get_mint_quote(quote_id, db, conn=None):
         return mint_quote if quote_id == "quote-1" else None
 
-    async def get_melt_quote(quote_id, db):
+    async def get_melt_quote(quote_id, db, conn=None):
         return melt_quote if quote_id == "melt-1" else None
 
-    async def get_proofs_states(Ys):
+    async def get_proofs_states(Ys, conn=None):
         return [proof_state]
 
     cast(Any, manager.db_read).crud.get_mint_quote = get_mint_quote
@@ -192,19 +228,20 @@ async def test_init_subscription_sends_initial_snapshots():
 
     cast(Any, manager)._send_obj = send_obj
 
-    await manager._init_subscription(
-        "sub-mint", "quote-1", JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+    await manager._init_subscriptions(
+        "sub-mint", ["quote-1"], JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
     )
-    await manager._init_subscription(
-        "sub-melt", "melt-1", JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+    await manager._init_subscriptions(
+        "sub-melt", ["melt-1"], JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
     )
-    await manager._init_subscription(
-        "sub-proof", "Y1", JSONRPCSubscriptionKinds.PROOF_STATE
+    await manager._init_subscriptions(
+        "sub-proof", ["Y1"], JSONRPCSubscriptionKinds.PROOF_STATE
     )
 
     payloads = [json.loads(msg) for msg in websocket.sent]
     assert payloads[0]["payload"]["quote"] == "quote-1"
     assert payloads[1]["payload"]["quote"] == "melt-1"
+    assert "attempt" not in payloads[1]["payload"]
     assert payloads[2]["payload"]["Y"] == "Y1"
 
 
@@ -264,3 +301,33 @@ async def test_event_manager_rejects_unsupported_events():
     manager = LedgerEventManager()
     with pytest.raises(ValueError, match="Unsupported event object type"):
         await manager.submit(cast(Any, object()))
+
+
+def test_remove_subscription_removes_all_filter_entries_for_subid(monkeypatch):
+    """Regression test for `remove_subscription` early-return bug.
+
+    NUT-17 lets a wallet subscribe to multiple filters in one subscribe
+    request, with a single `subId`. The unsubscribe command carries
+    only that `subId`, so `remove_subscription` must remove the
+    `subId` from every filter list it was registered against. The
+    current implementation returns after the first match, leaving
+    stranded `subId` entries for every other filter -- the client
+    keeps receiving notifications it already unsubscribed from, and
+    the server accumulates one stranded subscription per filter per
+    subscribe/unsubscribe cycle.
+    """
+    manager = _client_manager(FakeWebSocket())
+    monkeypatch.setattr(
+        "cashu.mint.events.client.asyncio.create_task",
+        lambda coro: (coro.close(), None)[1],
+    )
+    manager.add_subscription(
+        JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
+        ["quote-1", "quote-2", "quote-3"],
+        "sub-X",
+    )
+    manager.remove_subscription("sub-X")
+    kind_map = manager.subscriptions[JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE]
+    assert kind_map["quote-1"] == []
+    assert kind_map["quote-2"] == []
+    assert kind_map["quote-3"] == []

@@ -1,0 +1,138 @@
+name: mutation profile
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        required: true
+        type: string
+      shards:
+        description: JSON array of zero-based shard indices
+        type: string
+        default: "[0]"
+      prefix:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    name: Mutate ${{ inputs.profile }} (${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.shards) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v6
+
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: "3.12"
+          poetry-version: "2.3.2"
+
+      - name: Restore mutation cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: mutants
+          key: mutation-v2-${{ runner.os }}-${{ inputs.profile }}-${{ matrix.shard }}-${{ hashFiles('poetry.lock') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            mutation-v2-${{ runner.os }}-${{ inputs.profile }}-${{ matrix.shard }}-${{ hashFiles('poetry.lock') }}-${{ github.sha }}-
+
+      - name: Run mutation profile
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
+            MUTATION_TESTING=true TOR=false \
+            timeout --signal=INT --kill-after=2m 340m \
+            poetry run python scripts/run_mutation.py --profile '${{ inputs.profile }}' \
+              --shard '${{ matrix.shard }}' --shards $(jq length <<< '${{ inputs.shards }}') \
+              --report 'mutation-${{ inputs.profile }}-${{ matrix.shard }}-baseline.json' 2>&1 \
+            | tee 'mutation-${{ inputs.profile }}-${{ matrix.shard }}.log'
+
+      - name: Save mutation progress
+        if: ${{ !cancelled() && hashFiles('mutants/**/*.py.meta') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: mutants
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Create mutation report
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          poetry run mutmut results --all true \
+            | grep -F '    ${{ inputs.prefix }}' \
+            > 'mutation-${{ inputs.profile }}-${{ matrix.shard }}-results.txt'
+
+          results_file='mutation-${{ inputs.profile }}-${{ matrix.shard }}-results.txt'
+          {
+            echo '## Mutation results: ${{ inputs.profile }}'
+            echo
+            echo '| Status | Count |'
+            echo '|---|---:|'
+            for status in killed survived "no tests" timeout suspicious skipped "not checked"; do
+              count=$(awk -F ': ' -v status="$status" \
+                '$NF == status { count++ } END { print count + 0 }' "$results_file")
+              echo "| $status | $count |"
+            done
+            baseline_file='mutation-${{ inputs.profile }}-${{ matrix.shard }}-baseline.json'
+            if [[ -f "$baseline_file" ]]; then
+              echo
+              echo "Baseline status: $(jq -r '.status' "$baseline_file")"
+              excluded=$(jq '.excluded_tests | length' "$baseline_file")
+              if (( excluded > 0 )); then
+                echo
+                echo '> [!WARNING]'
+                echo "> Partial mutation coverage: ${excluded} failing baseline test(s) excluded for this run."
+                echo
+                jq -r '.excluded_tests[] | "- `\(.nodeid)`"' "$baseline_file"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ inputs.profile }}-${{ matrix.shard }}-${{ github.run_id }}
+          overwrite: true
+          path: |
+            mutation-${{ inputs.profile }}-${{ matrix.shard }}.log
+            mutation-${{ inputs.profile }}-${{ matrix.shard }}-results.txt
+            mutation-${{ inputs.profile }}-${{ matrix.shard }}-baseline.json
+          retention-days: 14
+          if-no-files-found: warn
+
+  report:
+    name: Combine ${{ inputs.profile }} reports
+    needs: mutation
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mutation-${{ inputs.profile }}-*-${{ github.run_id }}
+          path: shard-reports
+          merge-multiple: true
+      - name: Combine shard reports
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/merge_mutation_reports.py '${{ inputs.profile }}' \
+            --shards $(jq length <<< '${{ inputs.shards }}') --directory shard-reports
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: mutation-${{ inputs.profile }}-${{ github.run_id }}
+          overwrite: true
+          path: |
+            mutation-${{ inputs.profile }}-results.txt
+            mutation-${{ inputs.profile }}-baseline.json
+          retention-days: 14

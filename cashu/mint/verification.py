@@ -1,8 +1,10 @@
 from typing import List, Literal, Optional, Tuple, Union
 
+import bolt11
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     Method,
@@ -15,6 +17,8 @@ from ..core.crypto.secp import PublicKey
 from ..core.db import Connection
 from ..core.errors import (
     InvalidProofsError,
+    KeysetInactiveError,
+    LightningError,
     NoSecretInProofsError,
     NotAllowedError,
     OutputsAlreadySignedError,
@@ -24,8 +28,8 @@ from ..core.errors import (
     TransactionDuplicateOutputsError,
     TransactionError,
     TransactionMultipleUnitsError,
-    TransactionUnitError,
     TransactionUnitMismatchError,
+    UnitNotSupportedError,
     WitnessTooLongError,
 )
 from ..core.nuts import nut20
@@ -39,6 +43,19 @@ class LedgerVerification(
 ):
     """Verification functions for the ledger."""
 
+    def _verify_mint_quote_invoice_amount(
+        self, invoice: bolt11.Bolt11, amount: Amount
+    ) -> None:
+        """Require BTC mint quotes to collect their exact issuance amount."""
+        if amount.unit not in (Unit.sat, Unit.msat):
+            return
+        if (
+            amount.amount <= 0
+            or invoice.amount_msat is None
+            or invoice.amount_msat != amount.to(Unit.msat).amount
+        ):
+            raise LightningError("backend invoice amount does not match mint quote")
+
     async def verify_inputs_and_outputs(
         self,
         *,
@@ -47,8 +64,6 @@ class LedgerVerification(
         conn: Optional[Connection] = None,
     ):
         """Checks all proofs and outputs for validity.
-
-        Warning: Does NOT check if the proofs were already spent. Use `db_write._verify_proofs_spendable` for that.
 
         Args:
             proofs (List[Proof]): List of proofs to check.
@@ -62,7 +77,66 @@ class LedgerVerification(
             Exception: Duplicate proofs provided.
             Exception: BDHKE verification failed.
         """
-        # Verify inputs
+        # 1. Verify inputs
+        await self._verify_inputs(proofs)
+
+        # If no outputs are provided, no further checks are needed
+        if outputs is None:
+            return
+
+        # 2. Verify outputs
+        await self._verify_outputs(outputs, conn=conn)
+
+        # 3. Verify inputs and outputs together
+        self._verify_inputs_and_outputs_together(proofs, outputs)
+
+    async def _verify_transaction(
+        self,
+        *,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]] = None,
+        quote: Optional[str] = None,
+        conn: Optional[Connection] = None,
+        skip_output_amount_check: bool = False,
+        expected_output_unit: Optional[Unit] = None,
+        verify_input_output_balance: bool = True,
+    ) -> None:
+        # 1. Verify the inputs generically: amounts, secret and witness
+        # criteria, duplicate-input prevention, ECASH signature validity, and
+        # whether the proofs are still spendable.
+        await self._verify_inputs(proofs)
+
+        # 2. Verify NUT-10 spending conditions (P2PK, HTLC, and grouped
+        # SIG_ALL rules) at the transaction level.
+        self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
+
+        # Melts can omit NUT-08 change outputs or provide an empty array.
+        if outputs is None or (not outputs and not verify_input_output_balance):
+            return
+
+        # 3. Verify the outputs generically: keyset consistency, amount rules,
+        # duplicate-output prevention, and that the blinded messages have not
+        # already been stored or signed by the mint.
+        await self._verify_outputs(
+            outputs,
+            skip_amount_check=skip_output_amount_check,
+            expected_unit=expected_output_unit,
+            conn=conn,
+        )
+
+        # 4. For transaction types that require normal input/output balance and
+        # unit checks (such as swaps), verify those combined invariants now.
+        if verify_input_output_balance:
+            # This checks the amount equation and unit compatibility between the
+            # spent inputs and the created outputs.
+            self._verify_inputs_and_outputs_together(proofs, outputs)
+
+    async def _verify_inputs(
+        self,
+        proofs: List[Proof],
+    ):
+        """Verify that the proofs are valid and can be spent."""
+        logger.trace(f"Verifying {len(proofs)} proofs.")
         if not proofs:
             raise TransactionError("no proofs provided.")
         # Verify amounts of inputs
@@ -80,41 +154,34 @@ class LedgerVerification(
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise InvalidProofsError()
-        # Verify SIG_INPUTS spending conditions
-        if not all([self._verify_input_spending_conditions(p) for p in proofs]):
-            raise TransactionError("validation of input spending conditions failed.")
+        # NUT-10 spending conditions are intentionally not checked here.
+        # For swap and melt, those are verified at the transaction level by
+        # `_verify_input_output_spending_conditions(...)`, which `_verify_transaction(...)`
+        # calls right after `_verify_inputs(...)`. Blind-auth uses this generic
+        # proof-validation path and does not rely on NUT-10 spending-condition
+        # enforcement here.
+        # Verify proofs are not already spent (raises ProofsAlreadySpentError)
+        await self.db_read._verify_proofs_spendable(proofs)
 
-        if outputs is None:
-            # If no outputs are provided, we are melting
-            return
+        logger.trace(f"Verified {len(proofs)} proofs.")
 
-        # Verify input and output amounts
-        self._verify_equation_balanced(proofs, outputs)
-
-        # Verify outputs
-        await self._verify_outputs(outputs, conn=conn)
-
-        # Verify inputs and outputs together
-        if not self._verify_input_output_amounts(proofs, outputs):
-            raise TransactionError("input amounts less than output.")
-        # Verify that input keyset units are the same as output keyset unit
-        # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
-        assert outputs[0].id, "output id not set"
-        if not all(
-            [
-                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-                for p in proofs
-            ]
-        ):
-            raise TransactionError("input and output keysets have different units.")
-
-        # Verify SIG_ALL spending conditions
-        self._verify_input_output_spending_conditions(proofs, outputs)
+    def _verify_proofs_unit(self, proofs: List[Proof], expected_unit: Unit) -> None:
+        """Verifies that all proofs have the expected unit and valid keysets."""
+        if not proofs:
+            raise TransactionError("no proofs provided.")
+        for p in proofs:
+            if p.id not in self.keysets:
+                raise TransactionError(f"keyset {p.id} unknown")
+            if self.keysets[p.id].unit != expected_unit:
+                raise TransactionError(
+                    f"proof unit {self.keysets[p.id].unit.name} does not match quote unit {expected_unit.name}"
+                )
 
     async def _verify_outputs(
         self,
         outputs: List[BlindedMessage],
         skip_amount_check=False,
+        expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
     ):
         """Verify that the outputs are valid."""
@@ -128,7 +195,14 @@ class LedgerVerification(
         if outputs[0].id not in self.keysets:
             raise TransactionError("keyset id unknown.")
         if not self.keysets[outputs[0].id].active:
-            raise TransactionError("keyset id inactive.")
+            raise KeysetInactiveError()
+        if expected_unit and self.keysets[outputs[0].id].unit != expected_unit:
+            raise TransactionError(
+                f"output unit {self.keysets[outputs[0].id].unit.name} does not match quote unit {expected_unit.name}"
+            )
+        # Verify that all blinded messages are valid curve points
+        if not all([self._verify_blinded_message(o) for o in outputs]):
+            raise TransactionError("invalid blinded message.")
         # Verify amounts of outputs
         # we skip the amount check for NUT-8 change outputs (which can have amount 0)
         if not skip_amount_check:
@@ -149,6 +223,21 @@ class LedgerVerification(
                 raise OutputsArePendingError()
 
         logger.trace(f"Verified {len(outputs)} outputs.")
+
+    def _verify_inputs_and_outputs_together(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+    ):
+        """Verify criteria that depend on both inputs and outputs."""
+        # Verify that inputs > outputs (excluding fees)
+        self._verify_input_output_amounts(proofs, outputs)
+
+        # Verify input and output amounts are balanced (inputs = outputs + fees)
+        self._verify_equation_balanced(proofs, outputs)
+
+        # Verify that input keyset units are the same as output keyset unit
+        self._verify_units_match(proofs, outputs)
 
     async def _check_outputs_pending_or_issued_before(
         self,
@@ -195,8 +284,7 @@ class LedgerVerification(
         """Verifies that the proof of promise was issued by this ledger."""
         assert proof.id in self.keysets, f"keyset {proof.id} unknown"
         logger.trace(
-            f"Validating proof {proof.secret} with keyset"
-            f" {self.keysets[proof.id].id}."
+            f"Validating proof {proof.secret} with keyset {self.keysets[proof.id].id}."
         )
         # use the appropriate active keyset for this proof.id
         private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
@@ -211,11 +299,14 @@ class LedgerVerification(
 
     def _verify_input_output_amounts(
         self, inputs: List[Proof], outputs: List[BlindedMessage]
-    ) -> bool:
+    ) -> None:
         """Verifies that inputs have at least the same amount as outputs"""
         input_amount = sum([p.amount for p in inputs])
         output_amount = sum([o.amount for o in outputs])
-        return input_amount >= output_amount
+        if not input_amount >= output_amount:
+            raise TransactionError(
+                f"input amounts ({input_amount}) less than output amounts ({output_amount})."
+            )
 
     def _verify_no_duplicate_proofs(self, proofs: List[Proof]) -> bool:
         secrets = [p.secret for p in proofs]
@@ -227,6 +318,28 @@ class LedgerVerification(
         B_s = [od.B_ for od in outputs]
         if len(B_s) != len(list(set(B_s))):
             return False
+        return True
+
+    def _verify_blinded_message(self, output: BlindedMessage) -> bool:
+        """Verifies that a blinded message is a valid curve point."""
+        try:
+            PublicKey(bytes.fromhex(output.B_))
+        except ValueError:
+            return False
+        return True
+
+    def _verify_inputs_outputs_units_match(
+        self, proofs: List[Proof], outputs: List[BlindedMessage]
+    ) -> bool:
+        """Verifies that the units of the inputs and outputs match."""
+        units_proofs = [self.keysets[p.id].unit for p in proofs]
+        units_outputs = [self.keysets[o.id].unit for o in outputs]
+        if not len(set(units_proofs)) == 1:
+            raise TransactionMultipleUnitsError("inputs have different units.")
+        if not len(set(units_outputs)) == 1:
+            raise TransactionMultipleUnitsError("outputs have different units.")
+        if not units_proofs[0] == units_outputs[0]:
+            raise TransactionUnitMismatchError()
         return True
 
     def _verify_amount(self, amount: int) -> int:
@@ -254,7 +367,7 @@ class LedgerVerification(
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         if not len({self.keysets[p.id].unit for p in proofs}) == 1:
-            raise TransactionUnitError("inputs have different units.")
+            raise TransactionMultipleUnitsError("inputs have different units.")
         fee = (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000
         return fee
 
@@ -288,7 +401,9 @@ class LedgerVerification(
         unit = Unit[unit_str]
 
         if not any([unit == k.unit for k in self.keysets.values()]):
-            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+            raise UnitNotSupportedError(
+                f"unit '{unit.name}' not supported in any keyset."
+            )
 
         if not self.backends.get(method) or unit not in self.backends[method]:
             raise NotAllowedError(

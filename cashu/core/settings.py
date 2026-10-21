@@ -3,13 +3,11 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from environs import Env  # type: ignore
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-env = Env()
-
-VERSION = "0.20.0"
+VERSION = "0.21.0"
 
 
 def find_env_file():
@@ -18,7 +16,7 @@ def find_env_file():
     if not os.path.isfile(env_file):
         env_file = os.path.join(str(Path.home()), ".cashu", ".env")
     if os.path.isfile(env_file):
-        env.read_env(env_file, recurse=False, override=True)
+        load_dotenv(env_file, override=True)
     else:
         env_file = ""
     return env_file
@@ -43,7 +41,6 @@ class EnvSettings(CashuSettings):
     log_level: str = Field(default="INFO")
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
-    debug_mint_only_deprecated: bool = Field(default=False)
     db_backup_path: Optional[str] = Field(default=None)
     db_connection_pool: bool = Field(default=True)
 
@@ -57,12 +54,27 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
 
     mint_database: str = Field(default="data/mint")
+    mint_database_lock_timeout: int = Field(
+        default=30000
+    )  # Postgres lock timeout in milliseconds
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
     mint_max_witness_length: int = Field(default=1024)
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Mint quote TTL",
+        description="Time-to-live in seconds for newly created mint quotes.",
+    )
+    melt_quote_ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        title="Melt quote TTL",
+        description="Time-to-live in seconds for newly created melt quotes.",
+    )
 
     mint_regular_tasks_interval_seconds: int = Field(
         default=3600,
@@ -91,6 +103,7 @@ class MintWatchdogSettings(MintSettings):
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
 
+
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
@@ -98,15 +111,39 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
-    mint_lnbits_endpoint: Optional[str] = Field(default=None)
-    mint_lnbits_key: Optional[str] = Field(default=None)
     mint_strike_key: Optional[str] = Field(default=None)
-    mint_blink_key: Optional[str] = Field(default=None)
+
+    mint_spark_network: str = Field(default="TESTNET")
+    mint_spark_api_key: Optional[str] = Field(default=None)
+    mint_spark_mnemonic: Optional[str] = Field(default=None)
 
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
-        default=False, title="Rate limit", description="IP-based rate limiter."
+        default=True,
+        title="Rate limit",
+        description="IP-based rate limiter.",
+    )
+    mint_rate_limit_proxy_trust: bool = Field(
+        default=True,
+        title="Trust proxy headers for rate limiting",
+        description=(
+            "Extract client IP from proxy headers (X-Forwarded-For,"
+            " CF-Connecting-IP) for rate limiting. Enable this if the mint"
+            " is behind a reverse proxy (Caddy, nginx) or CDN (Cloudflare)."
+            " Disable if the mint is directly exposed to the internet to"
+            " prevent clients from spoofing their IP via headers."
+        ),
+    )
+    mint_forwarded_allow_ips: str = Field(
+        default="127.0.0.1",
+        title="Forwarded-allow IPs",
+        description=(
+            "Comma-separated list of proxy IPs to trust for X-Forwarded-For"
+            " headers at the uvicorn level, or '*' to trust all."
+            " Only relevant when mint_rate_limit_proxy_trust is enabled."
+            " Set to '*' if your proxy's IP is dynamic or unknown."
+        ),
     )
     mint_global_rate_limit_per_minute: int = Field(
         default=60,
@@ -119,6 +156,11 @@ class MintLimits(MintSettings):
         gt=0,
         title="Transaction rate limit per minute",
         description="Number of requests an IP can make per minute to transaction endpoints.",
+    )
+    mint_quote_backend_check_rate_limit: int = Field(
+        default=10,
+        title="Quote backend check rate limit",
+        description="Minimum seconds between checks with the backend for unpaid mint quotes.",
     )
     mint_max_request_length: int = Field(
         default=1000,
@@ -241,7 +283,6 @@ class WalletSettings(CashuSettings):
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
-    wallet_use_deprecated_h2c: bool = Field(default=False)
     wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
@@ -269,12 +310,14 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=True)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rpc_cert: Optional[str] = Field(default=None)
     mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_allow_self_payment: bool = Field(default=False)
 
 
 class CLNRestFundingSource(MintSettings):
@@ -284,14 +327,9 @@ class CLNRestFundingSource(MintSettings):
     mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
-class CoreLightningRestFundingSource(MintSettings):
-    mint_corelightning_rest_url: Optional[str] = Field(default=None)
-    mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
-    mint_corelightning_rest_cert: Optional[str] = Field(default=None)
-
-
 class AuthSettings(MintSettings):
     mint_auth_database: str = Field(default="data/mint")
+    mint_auth_private_key: Optional[str] = Field(default=None)
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
@@ -308,6 +346,7 @@ class AuthSettings(MintSettings):
         ["POST", "/v1/swap"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
+        ["POST", "/v1/mint/bolt11/batch"],
         ["POST", "/v1/melt/bolt11"],
     ]
 
@@ -316,13 +355,13 @@ class MintRedisCache(MintSettings):
     mint_redis_cache_enabled: bool = Field(default=False)
     mint_redis_cache_url: Optional[str] = Field(default=None)
     mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week
+    mint_redis_cache_cluster: bool = Field(default=False)
 
 
 class Settings(
     EnvSettings,
     LndRPCFundingSource,
     LndRestFundingSource,
-    CoreLightningRestFundingSource,
     CLNRestFundingSource,
     FakeWalletSettings,
     MintLimits,

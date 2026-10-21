@@ -1,11 +1,19 @@
 import copy
 from types import SimpleNamespace
 from typing import List, Union
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintKeyset,
+    MintQuoteState,
+    Proof,
+    WalletKeyset,
+)
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -14,18 +22,27 @@ from cashu.wallet.crud import (
     get_bolt11_mint_quote,
     get_keysets,
     get_proofs,
+    store_keyset,
 )
 from cashu.wallet.wallet import Wallet
-from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
+from tests.compatibility import mint_older_than
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
-    is_deprecated_api_only,
+    get_real_invoice_routed,
     is_fake,
     is_github_actions,
     is_regtest,
+    is_spark_backend,
     pay_if_regtest,
+)
+
+# The test mint's sat keyset. Mints before 0.20.0 derive version 00 keyset IDs.
+KEYSET_ID = (
+    "009a1f293253e41e"
+    if mint_older_than("0.20.0")
+    else "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
 )
 
 
@@ -47,18 +64,6 @@ async def assert_err(f, msg: Union[str, CashuError]):
     raise Exception(f"Expected error: {msg}, got no error")
 
 
-async def assert_err_multiple(f, msgs: List[str]):
-    """Compute f() and expect an error message 'msg'."""
-    try:
-        await f
-    except Exception as exc:
-        for msg in msgs:
-            if msg in str(exc.args[0]):
-                return
-        raise Exception(f"Expected error: {msgs}, got: {exc.args[0]}")
-    raise Exception(f"Expected error: {msgs}, got no error")
-
-
 def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
     assert sum([p.amount for p in proofs]) == expected
@@ -72,25 +77,27 @@ async def reset_wallet_db(wallet: Wallet):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
-    wallet1 = await Wallet1.with_db(
+async def wallet1(mint, tmp_path):
+    wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet1",
+        db=str(tmp_path / "wallet1"),
         name="wallet1",
     )
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2():
+async def wallet2(tmp_path):
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet2",
+        db=str(tmp_path / "wallet2"),
         name="wallet2",
     )
     await wallet2.load_mint()
     yield wallet2
+    await wallet2.db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -101,10 +108,7 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    assert (
-        keyset.id
-        == "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    assert keyset.id == KEYSET_ID
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -177,11 +181,11 @@ async def test_request_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
+    mint_request = mint_quote.request
     await pay_if_regtest(mint_quote.request)
-    if not settings.debug_mint_only_deprecated:
-        mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
-        assert mint_quote.request == mint_quote.request
-        assert mint_quote.state == MintQuoteState.paid
+    mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
+    assert mint_quote.request == mint_request
+    assert mint_quote.state == MintQuoteState.paid
 
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, quote_id=mint_quote.quote)
@@ -308,19 +312,18 @@ async def test_melt(wallet1: Wallet):
     quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
 
-    if is_regtest:
-        # we expect a fee reserve of 2 sat for regtest
+    if is_regtest and not is_spark_backend:
+        # LND and CLN reserve 2 sats for routing.
         assert total_amount == 66
         assert quote.fee_reserve == 2
-    if is_fake:
-        # we expect a fee reserve of 0 sat for fake
+    if is_fake or is_spark_backend:
+        # Internal payments and the local Spark SSP have zero fees.
         assert total_amount == 64
         assert quote.fee_reserve == 0
 
-    if not settings.debug_mint_only_deprecated:
-        quote_resp = await wallet1.get_melt_quote(quote.quote)
-        assert quote_resp
-        assert quote_resp.amount == quote.amount
+    quote_resp = await wallet1.get_melt_quote(quote.quote)
+    assert quote_resp
+    assert quote_resp.amount == quote.amount
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
@@ -331,7 +334,7 @@ async def test_melt(wallet1: Wallet):
         quote_id=quote.quote,
     )
 
-    if is_regtest:
+    if is_regtest and quote.fee_reserve:
         assert melt_response.change, "No change returned"
         assert len(melt_response.change) == 1, "More than one change returned"
         # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
@@ -346,15 +349,14 @@ async def test_melt(wallet1: Wallet):
     assert melt_quote_db, "No melt quote in db"
 
     # compare melt quote from API against db
-    if not settings.debug_mint_only_deprecated:
-        melt_quote_api_resp = await wallet1.get_melt_quote(melt_quote_db.quote)
-        assert melt_quote_api_resp, "No melt quote from API"
-        assert melt_quote_api_resp.quote == melt_quote_db.quote, "Wrong quote ID"
-        assert melt_quote_api_resp.amount == melt_quote_db.amount, "Wrong amount"
-        assert melt_quote_api_resp.fee_reserve == melt_quote_db.fee_reserve, "Wrong fee"
-        assert melt_quote_api_resp.request == melt_quote_db.request, "Wrong request"
-        assert melt_quote_api_resp.state == melt_quote_db.state, "Wrong state"
-        assert melt_quote_api_resp.unit == melt_quote_db.unit, "Wrong unit"
+    melt_quote_api_resp = await wallet1.get_melt_quote(melt_quote_db.quote)
+    assert melt_quote_api_resp, "No melt quote from API"
+    assert melt_quote_api_resp.quote == melt_quote_db.quote, "Wrong quote ID"
+    assert melt_quote_api_resp.amount == melt_quote_db.amount, "Wrong amount"
+    assert melt_quote_api_resp.fee_reserve == melt_quote_db.fee_reserve, "Wrong fee"
+    assert melt_quote_api_resp.request == melt_quote_db.request, "Wrong request"
+    assert melt_quote_api_resp.state == melt_quote_db.state, "Wrong state"
+    assert melt_quote_api_resp.unit == melt_quote_db.unit, "Wrong unit"
 
     proofs_used = await get_proofs(
         db=wallet1.db, melt_id=melt_quote_db.quote, table="proofs_used"
@@ -369,7 +371,40 @@ async def test_melt(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_deprecated_api_only, reason="Deprecated API only")
+@pytest.mark.skipif(is_fake, reason="only works on regtest")
+@pytest.mark.skipif(
+    is_spark_backend,
+    reason="cashu-regtest open-ssp does not support nonzero swap fees",
+)
+async def test_melt_routed_invoice(wallet1: Wallet):
+    topup_mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    await wallet1.mint(128, quote_id=topup_mint_quote.quote)
+    assert wallet1.balance == 128
+
+    # external invoice that the mint can only pay through a routing node
+    invoice_payment_request = get_real_invoice_routed(64)
+
+    quote = await wallet1.melt_quote(invoice_payment_request)
+    total_amount = quote.amount + quote.fee_reserve
+    assert quote.fee_reserve > 0
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
+
+    melt_response = await wallet1.melt(
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
+    )
+    assert melt_response.state == MeltQuoteState.paid.value, "Melt not paid"
+    assert melt_response.payment_preimage is not None, "No payment preimage"
+
+    # the payment had a routing fee, so we get back less than the full fee reserve
+    assert wallet1.balance < 128 - quote.amount, "No routing fee paid"
+
+
+@pytest.mark.asyncio
 async def test_get_melt_quote_state(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote.request)
@@ -396,8 +431,6 @@ async def test_get_melt_quote_state(wallet1: Wallet):
     melt_quote_wallet = MeltQuote.from_resp_wallet(
         melt_response,
         mint="test",
-        unit=quote.unit or "sat",
-        request=quote.request or invoice_payment_request,
     )
 
     # compare melt quote from API against db
@@ -460,12 +493,17 @@ async def test_split_race_condition(wallet1: Wallet):
     # run two splits in parallel
     import asyncio
 
-    await assert_err_multiple(
-        asyncio.gather(
-            wallet1.split(wallet1.proofs, 20),
-            wallet1.split(wallet1.proofs, 20),
-        ),
-        ["proofs are pending", "already spent"],
+    # Await both attempts: the losing split can fail before the winning split
+    # releases its SQLite transaction, which otherwise leaks into the next test.
+    results = await asyncio.gather(
+        wallet1.split(wallet1.proofs, 20),
+        wallet1.split(wallet1.proofs, 20),
+        return_exceptions=True,
+    )
+    errors = [result for result in results if isinstance(result, Exception)]
+    assert len(errors) == 1, results
+    assert any(
+        message in str(errors[0]) for message in ("proofs are pending", "already spent")
     )
 
 
@@ -549,13 +587,9 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def testactivate_keyset_specific_keyset(wallet1: Wallet):
     await wallet1.activate_keyset()
-    assert list(wallet1.keysets.keys()) == [
-        "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    ]
+    assert list(wallet1.keysets.keys()) == [KEYSET_ID]
     await wallet1.activate_keyset(keyset_id=wallet1.keyset_id)
-    await wallet1.activate_keyset(
-        keyset_id="01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    )
+    await wallet1.activate_keyset(keyset_id=KEYSET_ID)
     # expect deprecated keyset id to be present
     await assert_err(
         wallet1.activate_keyset(keyset_id="nonexistent"),
@@ -599,3 +633,148 @@ async def test_raise_on_unsupported_version_non_404(wallet1: Wallet):
 
     # should not raise
     wallet1.raise_on_unsupported_version(resp, "GET /v1/keys")
+
+
+@pytest.mark.asyncio
+async def test_keyset_disappears_from_mint(wallet1: Wallet):
+    """
+    Ensure that when a mint no longer returns a previously known keyset,
+    it gets removed from the wallet's keyset list and marked as deleted in the DB.
+    """
+
+    # Save the real keyset ID that the wallet loaded from the mint
+    real_keyset_id = list(wallet1.keysets.keys())[0]
+
+    # Seed a second fake keyset in the DB so we have 2 keysets
+    fake_keyset_id = "01" + "f" * 62
+    fake_keyset = WalletKeyset(
+        id=fake_keyset_id,
+        unit=wallet1.unit.name,
+        mint_url=wallet1.url,
+        active=True,
+        public_keys=wallet1.keysets[real_keyset_id].public_keys,
+    )
+    await store_keyset(keyset=fake_keyset, db=wallet1.db)
+    await wallet1.load_keysets_from_db()
+
+    assert len(wallet1.keysets) == 2, "Expected 2 keysets before test"
+
+    # Mock the mint API to only return the real keyset (fake one "disappeared")
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+
+    # Load keysets from mocked mint API
+    await wallet1.load_mint_keysets()
+
+    # Assert only the real keyset remains in memory
+    assert len(wallet1.keysets) == 1
+    assert real_keyset_id in wallet1.keysets
+
+    # Assert the disappeared keyset is marked as deleted in the DB
+    disappeared_keysets_db = await get_keysets(db=wallet1.db, id=fake_keyset_id)
+    assert len(disappeared_keysets_db) == 0
+    disappeared_keyset_row = await wallet1.db.fetchone(
+        "SELECT deleted_at FROM keysets WHERE id = :id",
+        {"id": fake_keyset_id},
+    )
+    assert disappeared_keyset_row is not None
+    assert disappeared_keyset_row["deleted_at"] is not None
+
+    # Assert the retained keyset is NOT marked as deleted
+    retained_keysets_db = await get_keysets(db=wallet1.db, id=real_keyset_id)
+    assert retained_keysets_db[0].deleted_at is None
+
+
+@pytest.mark.asyncio
+async def test_keyset_reappears_after_mint_deletes_it(wallet1: Wallet):
+    """
+    Ensure that when a mint re-adds a previously deleted keyset, the wallet
+    restores the existing DB row instead of inserting a duplicate keyset.
+    """
+
+    real_keyset_id = list(wallet1.keysets.keys())[0]
+    fake_keyset_id = "01" + "e" * 62
+    fake_keyset = WalletKeyset(
+        id=fake_keyset_id,
+        unit=wallet1.unit.name,
+        mint_url=wallet1.url,
+        active=True,
+        public_keys=wallet1.keysets[real_keyset_id].public_keys,
+        input_fee_ppk=0,
+    )
+    await store_keyset(keyset=fake_keyset, db=wallet1.db)
+    await wallet1.load_keysets_from_db()
+    assert fake_keyset_id in wallet1.keysets
+
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+    await wallet1.load_mint_keysets()
+    assert fake_keyset_id not in wallet1.keysets
+
+    deleted_keysets = await get_keysets(
+        db=wallet1.db, id=fake_keyset_id, exclude_deleted=False
+    )
+    assert len(deleted_keysets) == 1
+    assert deleted_keysets[0].deleted_at is not None
+
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=real_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            ),
+            MintKeyset(
+                id=fake_keyset_id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/1'",
+                seed="dummy2",
+                input_fee_ppk=7,
+            ),
+        ]
+    )
+    await wallet1.load_mint_keysets()
+
+    assert fake_keyset_id in wallet1.keysets
+    restored_keysets = await get_keysets(
+        db=wallet1.db, id=fake_keyset_id, exclude_deleted=False
+    )
+    assert len(restored_keysets) == 1
+    assert restored_keysets[0].deleted_at is None
+    assert restored_keysets[0].input_fee_ppk == 7
+
+
+@pytest.mark.asyncio
+async def test_request_mint_raises_no_active_keysets(wallet1: Wallet):
+    wallet1.keysets = {}
+
+    async def mock_load_mint(*args, **kwargs):
+        pass
+
+    wallet1.load_mint = mock_load_mint  # type: ignore
+
+    # Verify KeysetNotFoundError is raised when no active keysets are available
+    with pytest.raises(KeysetNotFoundError) as excinfo:
+        await wallet1.request_mint(64)
+    assert "no active keysets found" in str(excinfo.value)

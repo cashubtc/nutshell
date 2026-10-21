@@ -3,8 +3,14 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 from ..core.base import Method, Unit
+from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.models import MintInfoContact, Nut15MppSupport
-from ..core.nuts.nuts import MINT_QUOTE_SIGNATURE_NUT, MPP_NUT, WEBSOCKETS_NUT
+from ..core.nuts.nuts import (
+    BOOLEAN_SUPPORTED_NUTS,
+    MINT_QUOTE_SIGNATURE_NUT,
+    MPP_NUT,
+    WEBSOCKETS_NUT,
+)
 
 
 class MintInfo(BaseModel):
@@ -24,9 +30,11 @@ class MintInfo(BaseModel):
         return f"{self.name} ({self.description})"
 
     def supports_nut(self, nut: int) -> bool:
-        if self.nuts is None:
+        if not self.nuts or nut not in self.nuts:
             return False
-        return nut in self.nuts
+        if nut in BOOLEAN_SUPPORTED_NUTS:
+            return self.nuts[nut].get("supported") is True
+        return True
 
     def supports_mpp(self, method: str, unit: Unit) -> bool:
         if not self.nuts:
@@ -51,7 +59,10 @@ class MintInfo(BaseModel):
         websocket_supported = websocket_settings["supported"]
         for entry in websocket_supported:
             if entry["method"] == method.name and entry["unit"] == unit.name:
-                if "bolt11_mint_quote" in entry["commands"]:
+                if (
+                    JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value
+                    in entry["commands"]
+                ):
                     return True
         return False
 

@@ -178,3 +178,34 @@ async def test_blind_auth_middleware_wraps_protected_paths(monkeypatch):
     )
     assert entered["value"] is True
     assert response.status_code == 200
+
+
+def test_mint_require_blind_auth_paths_includes_batch_mint():
+    from cashu.core.mint_info import MintInfo
+    from cashu.core.nuts.nuts import BLIND_AUTH_NUT
+
+    # Create dummy nuts configuration referencing the settings list
+    nuts = {
+        BLIND_AUTH_NUT: {
+            "protected_endpoints": [
+                {"method": e[0], "path": e[1]}
+                for e in settings.mint_require_blind_auth_paths
+            ]
+        }
+    }
+    mint_info = MintInfo(
+        name="test",
+        pubkey="pubkey",
+        version="version",
+        description="description",
+        description_long="description_long",
+        contact=[],
+        nuts=nuts,
+        icon_url=None,
+        urls=None,
+        tos_url=None,
+        motd=None,
+        time=None,
+    )
+
+    assert mint_info.requires_blind_auth_path("POST", "/v1/mint/bolt11/batch")

@@ -1,15 +1,22 @@
 import asyncio
-from typing import List, Tuple
+import sys
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Tuple
 
 import bolt11
 import pytest
 import pytest_asyncio
+from loguru import logger
 
-from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof, Unit
+from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult, PaymentStatus
+from cashu.lightning.base import (
+    PaymentStatus,
+    PaymentStatusResult,
+    StatusResponse,
+)
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -23,6 +30,8 @@ from tests.helpers import (
     is_regtest,
     pay_if_regtest,
     settle_invoice,
+    wait_for_hold_invoice,
+    wait_for_result,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -50,8 +59,8 @@ def assert_amt(proofs: List[Proof], expected: int):
 async def wallet(ledger: Ledger):
     wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet_mint_api_deprecated",
-        name="wallet_mint_api_deprecated",
+        db="test_data/wallet_mint_init",
+        name="wallet_mint_init",
     )
     await wallet1.load_mint()
     yield wallet1
@@ -132,6 +141,35 @@ async def test_decrypt_seed():
     )
 
 
+@pytest.mark.asyncio
+async def test_encrypted_seed_not_stored_in_plaintext(ledger: Ledger, monkeypatch):
+    monkeypatch.setattr(settings, "mint_seed_decryption_key", DECRYPTON_KEY)
+    ledger_encrypted = Ledger(
+        db=ledger.db,
+        seed=ENCRYPTED_SEED,
+        seed_decryption_key=DECRYPTON_KEY,
+        derivation_path=DERIVATION_PATH,
+        backends={},
+        crud=LedgerCrudSqlite(),
+    )
+    await ledger_encrypted.init_keysets()
+    old_keyset = ledger_encrypted.keyset
+
+    # rotation stores the new keyset and updates the old one
+    new_keyset = await ledger_encrypted.rotate_next_keyset(unit=Unit.sat)
+
+    aes = AESCipher(DECRYPTON_KEY)
+    for keyset in (old_keyset, new_keyset):
+        row = await ledger.db.fetchone(
+            f"SELECT * FROM {ledger.db.table_with_schema('keysets')} WHERE id = :id",
+            {"id": keyset.id},
+        )
+        assert row
+        assert row["seed"] == ""
+        assert row["seed_encryption_method"] == "aes"
+        assert aes.decrypt(row["encrypted_seed"]) == SEED
+
+
 async def create_pending_melts(
     ledger: Ledger, check_id: str = "checking_id"
 ) -> Tuple[Proof, MeltQuote]:
@@ -175,7 +213,7 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -201,7 +239,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.FAILED.name
+    settings.fakewallet_payment_state = PaymentStatusResult.FAILED.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -222,7 +260,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    settings.fakewallet_payment_state = PaymentStatusResult.PENDING.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -239,12 +277,12 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only for fake wallet")
-async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
+async def test_startup_fakewallet_pending_quote_error(ledger: Ledger):
     # unknown state simulates a failure th check the lightning backend
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
-    settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
+    settings.fakewallet_payment_state = PaymentStatusResult.ERROR.name
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -258,6 +296,21 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
     # expect that proofs are still pending
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
+
+
+async def start_unrecorded_melt(ledger, quote, proofs):
+    """Send through the real backend without recording its result in the mint.
+
+    This simulates a mint stopping after submitting a payment: startup must
+    recover using the quote's persisted checking ID and the backend's history.
+    """
+    pending_quote = await ledger._prepare_melt(proofs=proofs, quote=quote.quote)
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    return asyncio.create_task(
+        backend.pay_invoice(
+            pending_quote, Amount(Unit.sat, quote.fee_reserve).to(Unit.msat).amount
+        )
+    )
 
 
 @pytest.mark.asyncio
@@ -277,14 +330,8 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routine
@@ -302,6 +349,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
+    await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -321,23 +369,26 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
     # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.pending for s in states])
 
     settle_invoice(preimage=preimage)
+    await asyncio.wait_for(task, 90)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routine
+    await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            bolt11.decode(invoice_payment_request).payment_hash
+        ),
+        lambda status: status.settled,
+    )
+    # The payment has finished, but its result has not been recorded by the mint.
+    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert pending and pending.pending
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
@@ -371,14 +422,8 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are pending
@@ -386,9 +431,18 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     assert all([s.pending for s in states])
 
     cancel_invoice(preimage_hash=preimage_hash)
+    await asyncio.wait_for(task, 90)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routine
+    await wait_for_result(
+        lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+            bolt11.decode(invoice_payment_request).payment_hash
+        ),
+        lambda status: status.failed,
+    )
+    # The payment has finished, but its result has not been recorded by the mint.
+    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert pending and pending.pending
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
@@ -425,14 +479,8 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.melt(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    task = await start_unrecorded_melt(ledger, quote, send_proofs)
+    await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are pending
@@ -469,6 +517,7 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)
+    await asyncio.wait_for(task, 90)
 
 
 @pytest.mark.asyncio
@@ -505,10 +554,9 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
         Unit.sat
     ].get_payment_status(quote.checking_id)
 
-    assert status.unknown
+    assert status.not_found
 
-    # this should NOT remove the pending melt quote
-    await ledger.get_melt_quote(quote.quote, rollback_unknown=False)
+    await ledger.get_melt_quote(quote.quote)
 
     # assert melt quote unpaid
     melt_quotes = await ledger.crud.get_melt_quote(
@@ -517,12 +565,127 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
     assert melt_quotes
     assert melt_quotes.state == MeltQuoteState.pending
 
-    # this should remove the pending melt quote
-    await ledger.get_melt_quote(quote.quote, rollback_unknown=True)
 
-    # assert melt quote unpaid
-    melt_quotes = await ledger.crud.get_melt_quote(
-        db=ledger.db, checking_id=quote.checking_id
+class RaisingBackend:
+    """A backend whose status check raises instead of reporting an error message."""
+
+    def __init__(self, exc: BaseException) -> None:
+        self.exc = exc
+
+    async def status(self) -> StatusResponse:
+        raise self.exc
+
+
+class ReportingBackend:
+    """A backend that reports failure the documented way."""
+
+    async def status(self) -> StatusResponse:
+        return StatusResponse(
+            error_message="rune is invalid", balance=Amount(Unit.sat, 0)
+        )
+
+
+class HealthyBackend:
+    async def status(self) -> StatusResponse:
+        return StatusResponse(error_message=None, balance=Amount(Unit.sat, 21))
+
+
+def ledger_with_backend(backend: Any) -> Ledger:
+    return Ledger(
+        db=Database("mint", settings.mint_database),
+        seed=SEED,
+        derivation_path=DERIVATION_PATH,
+        backends={Method.bolt11: {Unit.sat: backend}},
+        crud=LedgerCrudSqlite(),
     )
-    assert melt_quotes
-    assert melt_quotes.state == MeltQuoteState.unpaid
+
+
+@contextmanager
+def captured_logs(level: str = "INFO") -> Iterator[List[str]]:
+    """Collects everything the ledger logs at `level` or above."""
+    messages: List[str] = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), level=level)
+    try:
+        yield messages
+    finally:
+        logger.remove(sink_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        ConnectionRefusedError("connection refused"),
+        OSError("certificate file missing"),
+        TimeoutError("timed out"),
+        ValueError("malformed response"),
+        RuntimeError("a backend added later blew up"),
+    ],
+)
+async def test_check_backends_reports_raising_backend(exc: Exception):
+    """A backend that raises is reported like one that returns an error message."""
+    ledger = ledger_with_backend(RaisingBackend(exc))
+
+    with captured_logs("INFO") as messages:
+        with pytest.raises(SystemExit) as exit_info:
+            await ledger._check_backends()
+
+    assert exit_info.value.code == 1
+    logged = "".join(messages)
+    assert "isn't working properly" in logged
+    # the cause stays identifiable without dumping a stack on the operator
+    assert type(exc).__name__ in logged
+    assert "Backend status check failed" not in logged
+
+
+@pytest.mark.asyncio
+async def test_check_backends_logs_traceback_at_debug():
+    ledger = ledger_with_backend(RaisingBackend(ConnectionRefusedError("refused")))
+    tracebacklimit = getattr(sys, "tracebacklimit", None)
+    if tracebacklimit is not None:
+        del sys.tracebacklimit
+
+    try:
+        with captured_logs("DEBUG") as messages:
+            with pytest.raises(SystemExit):
+                await ledger._check_backends()
+    finally:
+        if tracebacklimit is not None:
+            sys.tracebacklimit = tracebacklimit
+
+    logged = "".join(messages)
+    assert "Backend status check failed" in logged
+    assert "Traceback (most recent call last)" in logged
+    assert "_check_backends" in logged
+
+
+@pytest.mark.asyncio
+async def test_check_backends_reports_backend_error_message():
+    """Backends that return an error message behave as they did before."""
+    ledger = ledger_with_backend(ReportingBackend())
+
+    with captured_logs("INFO") as messages:
+        with pytest.raises(SystemExit) as exit_info:
+            await ledger._check_backends()
+
+    assert exit_info.value.code == 1
+    assert "rune is invalid" in "".join(messages)
+
+
+@pytest.mark.asyncio
+async def test_check_backends_accepts_healthy_backend():
+    ledger = ledger_with_backend(HealthyBackend())
+
+    with captured_logs("INFO") as messages:
+        await ledger._check_backends()
+
+    assert "Backend balance: 21 sat" in "".join(messages)
+
+
+@pytest.mark.asyncio
+async def test_check_backends_propagates_cancellation():
+    """Cancellation is not a backend failure and must not be swallowed."""
+    ledger = ledger_with_backend(RaisingBackend(asyncio.CancelledError()))
+
+    with pytest.raises(asyncio.CancelledError):
+        await ledger._check_backends()

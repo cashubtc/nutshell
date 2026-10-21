@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       python-version:
-        default: "3.10"
+        default: "3.12"
         type: string
       poetry-version:
         default: "2.3.2"
@@ -64,9 +64,10 @@ jobs:
           MINT_AUTH_OICD_DISCOVERY_URL: http://localhost:8080/realms/nutshell/.well-known/openid-configuration
           MINT_AUTH_OICD_CLIENT_ID: cashu-client
         run: |
-          poetry run pytest tests/wallet/test_wallet_auth.py -v --cov=mint --cov-report=xml
+          poetry run pytest tests/wallet/test_wallet_auth.py -v -rs --cov=cashu.mint --cov-report=xml
 
       - name: Stop and clean up Docker Compose
+        if: always()
         run: |
           docker compose -f tests/keycloak_data/docker-compose-restore.yml down
 

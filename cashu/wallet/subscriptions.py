@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from loguru import logger
 from websocket._app import WebSocketApp
 
-from ..core.crypto.keys import random_hash
+from ..core.crypto.keys import generate_uuid_v7
 from ..core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
@@ -87,7 +87,7 @@ class SubscriptionManager:
         self, kind: JSONRPCSubscriptionKinds, filters: List[str], callback: Callable
     ):
         self.wait_until_connected()
-        subId = random_hash()
+        subId = generate_uuid_v7()
         req = JSONRPCRequest(
             method=JSONRPCMethods.SUBSCRIBE.value,
             params=JSONRPCSubscribeParams(

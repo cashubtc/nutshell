@@ -1,8 +1,14 @@
 import asyncio
+import html
+import os
 import time
+from typing import Annotated
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from loguru import logger
+from pydantic import BeforeValidator
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
@@ -16,6 +22,9 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMintBatchRequest,
+    PostMintBatchResponse,
+    PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -25,13 +34,205 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts.nuts import (
+    BATCH_MINT_NUT,
+    BLIND_AUTH_NUT,
+    CACHE_NUT,
+    CLEAR_AUTH_NUT,
+    DLEQ_NUT,
+    FEE_RETURN_NUT,
+    HTLC_NUT,
+    MINT_QUOTE_SIGNATURE_NUT,
+    MPP_NUT,
+    P2PK_NUT,
+    RESTORE_NUT,
+    SCRIPT_NUT,
+    STATE_NUT,
+    WEBSOCKETS_NUT,
+)
 from ..core.settings import settings
 from ..mint.startup import ledger
 from .cache import RedisCache
 from .limit import limit_websocket, limiter
+from .validation import validate_input_secret_lengths
 
 router = APIRouter()
 redis = RedisCache()
+
+
+# Resolve templates directory relative to this file
+current_dir = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(current_dir, "templates"))
+
+
+def format_limit(amount: int, unit: str) -> str:
+    if amount >= 1_000_000:
+        val = amount / 1_000_000
+        return f"{int(val) if val.is_integer() else round(val, 2)}M {unit}"
+    elif amount >= 1_000:
+        val = amount / 1_000
+        return f"{int(val) if val.is_integer() else round(val, 2)}K {unit}"
+    else:
+        return f"{amount} {unit}"
+
+
+@router.get(
+    "/",
+    name="Mint Landing Page",
+    summary="Landing page showing mint information and supported features.",
+    response_class=HTMLResponse,
+)
+async def index(request: Request) -> HTMLResponse:
+    mint_info = ledger.mint_info
+
+    name = mint_info.name or "Nutshell Mint"
+    description = mint_info.description or ""
+    description_long = mint_info.description_long or ""
+    motd = mint_info.motd or ""
+    pubkey = mint_info.pubkey or ""
+    version = mint_info.version or ""
+    contact = mint_info.contact or []
+    icon_url = mint_info.icon_url or ""
+
+    # Base URL / Onion / Alt URLs
+    urls = settings.mint_info_urls or [str(request.base_url).rstrip("/")]
+
+    # Active Units
+    units = sorted(
+        list(
+            set(
+                keyset.unit.name.upper()
+                for keyset in ledger.keysets.values()
+                if keyset.active
+            )
+        )
+    )
+
+    # Methods (Minting / Melting)
+    mint_methods = []
+    melt_methods = []
+    backends_methods = sorted(
+        list(set(m.name.upper() for m in ledger.backends.keys()))
+    )
+    if not settings.mint_bolt11_disable_mint:
+        mint_methods = backends_methods
+    if not settings.mint_bolt11_disable_melt:
+        melt_methods = backends_methods
+
+    # Limits
+    mint_limits = []
+    if settings.mint_max_mint_bolt11_sat:
+        mint_limits.append(format_limit(settings.mint_max_mint_bolt11_sat, "sat"))
+
+    melt_limits = []
+    if settings.mint_max_melt_bolt11_sat:
+        melt_limits.append(format_limit(settings.mint_max_melt_bolt11_sat, "sat"))
+
+    # Features (NUTs)
+    supported_features = []
+    nuts = mint_info.nuts or {}
+
+    def is_nut_supported(nut_num: int) -> bool:
+        if nut_num not in nuts:
+            return False
+        nut_val = nuts[nut_num]
+        if isinstance(nut_val, dict):
+            if nut_val.get("disabled", False) is True:
+                return False
+            return nut_val.get("supported", True) is True
+        return True
+
+    if is_nut_supported(STATE_NUT):
+        supported_features.append((STATE_NUT, "Token state check"))
+    if is_nut_supported(FEE_RETURN_NUT):
+        supported_features.append((FEE_RETURN_NUT, "Lightning fee returns"))
+    if is_nut_supported(RESTORE_NUT):
+        supported_features.append((RESTORE_NUT, "Signature restore"))
+    if is_nut_supported(SCRIPT_NUT):
+        supported_features.append((SCRIPT_NUT, "Spending conditions"))
+    if is_nut_supported(P2PK_NUT):
+        supported_features.append((P2PK_NUT, "Pay-to-Pubkey"))
+    if is_nut_supported(DLEQ_NUT):
+        supported_features.append((DLEQ_NUT, "DLEQ proofs"))
+    if is_nut_supported(HTLC_NUT):
+        supported_features.append((HTLC_NUT, "HTLCs"))
+    if is_nut_supported(MPP_NUT):
+        supported_features.append((MPP_NUT, "Multi-path payments"))
+    if is_nut_supported(WEBSOCKETS_NUT):
+        supported_features.append((WEBSOCKETS_NUT, "WebSocket subscriptions"))
+    if is_nut_supported(CACHE_NUT):
+        supported_features.append((CACHE_NUT, "Cached responses"))
+    if is_nut_supported(MINT_QUOTE_SIGNATURE_NUT):
+        supported_features.append((MINT_QUOTE_SIGNATURE_NUT, "Signed mint quotes"))
+    if is_nut_supported(CLEAR_AUTH_NUT):
+        supported_features.append((CLEAR_AUTH_NUT, "Clear auth"))
+    if is_nut_supported(BLIND_AUTH_NUT):
+        supported_features.append((BLIND_AUTH_NUT, "Blind auth"))
+    if is_nut_supported(BATCH_MINT_NUT):
+        supported_features.append((BATCH_MINT_NUT, "Batched minting"))
+
+    # Escape and prepare elements
+    name_escaped = html.escape(name)
+    avatar_letter = (name_escaped[0] if name_escaped else "M").upper()
+
+    clean_contacts = []
+    for c in contact:
+        c_method = c.method
+        c_info = c.info
+        if c_method and c_info:
+            c_method_lower = c_method.lower()
+            c_info_str = c_info.strip()
+            url = c_info_str
+            if c_method_lower == "email":
+                url = (
+                    c_info_str
+                    if c_info_str.lower().startswith("mailto:")
+                    else f"mailto:{c_info_str}"
+                )
+            elif c_method_lower == "twitter":
+                url = (
+                    c_info_str
+                    if c_info_str.lower().startswith(("http://", "https://"))
+                    else f"https://x.com/{c_info_str.lstrip('@')}"
+                )
+            elif c_method_lower == "nostr":
+                nostr_val = c_info_str
+                if nostr_val.lower().startswith("nostr:"):
+                    nostr_val = nostr_val[6:]
+                url = f"https://njump.me/{nostr_val}"
+
+            clean_contacts.append(
+                {
+                    "method": c_method,
+                    "info": c_info_str,
+                    "method_lower": c_method_lower,
+                    "url": url,
+                }
+            )
+
+    context = {
+        "request": request,
+        "name": name,
+        "description": description,
+        "description_long": description_long,
+        "motd": motd,
+        "pubkey": pubkey,
+        "version": version,
+        "contact": clean_contacts,
+        "icon_url": icon_url,
+        "urls": urls,
+        "units": units,
+        "mint_methods": mint_methods,
+        "melt_methods": melt_methods,
+        "mint_limits": mint_limits,
+        "melt_limits": melt_limits,
+        "mint_disabled": settings.mint_bolt11_disable_mint,
+        "melt_disabled": settings.mint_bolt11_disable_melt,
+        "supported_features": supported_features,
+        "avatar_letter": avatar_letter,
+    }
+
+    return templates.TemplateResponse("index.html", context)
 
 
 @router.get(
@@ -57,6 +258,7 @@ async def info() -> GetInfoResponse:
         urls=settings.mint_info_urls,
         motd=mint_info.motd,
         time=int(time.time()),
+        max_array_length=mint_info.max_array_length,
     )
 
 
@@ -156,6 +358,7 @@ async def keysets() -> KeysetsResponse:
     name="Request mint quote",
     summary="Request a quote for minting of new tokens",
     response_model=PostMintQuoteResponse,
+    response_model_exclude_none=True,
     response_description="A payment request to mint tokens of a denomination",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -175,9 +378,13 @@ async def mint_quote(
         request=quote.request,
         amount=quote.amount,
         unit=quote.unit,
-        state=quote.state.value,
+        method=quote.method,
+        state=str(quote.state.value),
         expiry=quote.expiry,
         pubkey=quote.pubkey,
+        amount_paid=quote.amount_paid,
+        amount_issued=quote.amount_issued,
+        updated_at=quote.updated_at,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -187,6 +394,7 @@ async def mint_quote(
     "/v1/mint/quote/bolt11/{quote}",
     summary="Get mint quote",
     response_model=PostMintQuoteResponse,
+    response_model_exclude_none=True,
     response_description="Get an existing mint quote to check its status.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
@@ -201,18 +409,74 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         request=mint_quote.request,
         amount=mint_quote.amount,
         unit=mint_quote.unit,
-        state=mint_quote.state.value,
+        method=mint_quote.method,
+        state=str(mint_quote.state.value),
         expiry=mint_quote.expiry,
         pubkey=mint_quote.pubkey,
+        amount_paid=mint_quote.amount_paid,
+        amount_issued=mint_quote.amount_issued,
+        updated_at=mint_quote.updated_at,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/quote/bolt11/check",
+    name="Batch check mint quotes",
+    summary="Batch check mint quotes",
+    response_model=list[PostMintQuoteResponse],
+    response_model_exclude_none=True,
+    response_description="A list of mint quotes",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_quote_check(
+    request: Request, payload: PostMintQuoteCheckRequest
+) -> list[PostMintQuoteResponse]:
+    logger.trace(f"> POST /v1/mint/quote/bolt11/check: payload={payload}")
+    quotes = await ledger.mint_quote_check(payload)
+    resp = [
+        PostMintQuoteResponse(
+            quote=quote.quote,
+            request=quote.request,
+            amount=quote.amount,
+            unit=quote.unit,
+            method=quote.method,
+            state=str(quote.state.value),
+            expiry=quote.expiry,
+            pubkey=quote.pubkey,
+            amount_paid=quote.amount_paid,
+            amount_issued=quote.amount_issued,
+            updated_at=quote.updated_at,
+        )
+        for quote in quotes
+    ]
+    logger.trace(f"< POST /v1/mint/quote/bolt11/check: {resp}")
+    return resp
+
+
+@router.post(
+    "/v1/mint/bolt11/batch",
+    name="Batch mint tokens",
+    summary="Batch mint tokens",
+    response_model=PostMintBatchResponse,
+    response_description="A list of blinded signatures that can be used to create proofs.",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_batch(
+    request: Request, payload: PostMintBatchRequest
+) -> PostMintBatchResponse:
+    logger.trace(f"> POST /v1/mint/bolt11/batch: payload={payload}")
+    signatures = await ledger.mint_batch(payload)
+    resp = PostMintBatchResponse(signatures=signatures)
+    logger.trace(f"< POST /v1/mint/bolt11/batch: {resp}")
     return resp
 
 
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
-    disconnected = False
+    client = None
     try:
         client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
     except Exception as e:
@@ -225,13 +489,12 @@ async def websocket_endpoint(websocket: WebSocket):
         await client.start()
     except WebSocketDisconnect as e:
         logger.debug(f"Websocket disconnected: {e}")
-        disconnected = True
-        return
     except Exception as e:
         logger.debug(f"Exception: {e}")
-        ledger.events.remove_client(client)
     finally:
-        if not disconnected:
+        if client and client in ledger.events.clients:
+            ledger.events.remove_client(client)
+        if websocket.client_state.name != "DISCONNECTED":
             await asyncio.wait_for(websocket.close(), timeout=1)
 
 
@@ -301,9 +564,9 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         quote=melt_quote.quote,
         amount=melt_quote.amount,
         unit=melt_quote.unit,
+        method=melt_quote.method,
         request=melt_quote.request,
         fee_reserve=melt_quote.fee_reserve,
-        paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
         payment_preimage=melt_quote.payment_preimage,
@@ -328,14 +591,22 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @redis.cache()
-async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
+async def melt(
+    request: Request,
+    payload: Annotated[PostMeltRequest, BeforeValidator(validate_input_secret_lengths)],
+) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
-    resp = await ledger.melt(
-        proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
-    )
+    if payload.prefer_async:
+        resp = await ledger.async_melt(
+            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+        )
+    else:
+        resp = await ledger.melt(
+            proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
+        )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
 
@@ -353,7 +624,7 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
 @redis.cache()
 async def swap(
     request: Request,
-    payload: PostSwapRequest,
+    payload: Annotated[PostSwapRequest, BeforeValidator(validate_input_secret_lengths)],
 ) -> PostSwapResponse:
     """
     Requests a set of Proofs to be swapped for another set of BlindSignatures.

@@ -4,8 +4,15 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 from .base import Method, Unit
+from .json_rpc.base import JSONRPCSubscriptionKinds
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
-from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+from .nuts.nuts import (
+    BLIND_AUTH_NUT,
+    BOOLEAN_SUPPORTED_NUTS,
+    CLEAR_AUTH_NUT,
+    MPP_NUT,
+    WEBSOCKETS_NUT,
+)
 
 
 def _match_protected_endpoint(endpoint_path: str, request_path: str) -> bool:
@@ -39,6 +46,7 @@ class MintInfo(BaseModel):
     urls: Optional[List[str]]
     tos_url: Optional[str]
     time: Optional[int]
+    max_array_length: Optional[int] = None
     nuts: Dict[int, Any]
 
     def __str__(self):
@@ -49,9 +57,11 @@ class MintInfo(BaseModel):
         return cls.model_validate(json.loads(json_str))
 
     def supports_nut(self, nut: int) -> bool:
-        if self.nuts is None:
+        if not self.nuts or nut not in self.nuts:
             return False
-        return nut in self.nuts
+        if nut in BOOLEAN_SUPPORTED_NUTS:
+            return self.nuts[nut].get("supported") is True
+        return True
 
     def supports_mpp(self, method: str, unit: Unit) -> bool:
         if not self.nuts:
@@ -76,7 +86,10 @@ class MintInfo(BaseModel):
         websocket_supported = websocket_settings["supported"]
         for entry in websocket_supported:
             if entry["method"] == method.name and entry["unit"] == unit.name:
-                if "bolt11_mint_quote" in entry["commands"]:
+                if (
+                    JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value
+                    in entry["commands"]
+                ):
                     return True
         return False
 
