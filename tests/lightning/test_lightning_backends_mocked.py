@@ -171,6 +171,50 @@ def test_strike_fee_int_rejects_unexpected_currency():
         wallet.fee_int(cast(Any, quote), Unit.sat)
 
 
+@pytest.mark.parametrize(
+    ("fee", "currency", "unit", "expected"),
+    [
+        ("0", "BTC", Unit.sat, 0),
+        ("0.00000007", "BTC", Unit.sat, 7),
+        ("0.00000029", "BTC", Unit.sat, 29),
+        ("0.00000029", "BTC", Unit.msat, 29000),
+        ("0.00000000007", "BTC", Unit.msat, 7),
+        ("0.00000000029", "BTC", Unit.msat, 29),
+        ("0", "USD", Unit.usd, 0),
+        ("0.29", "USD", Unit.usd, 29),
+        ("1.10", "USD", Unit.usd, 110),
+        ("0.29", "EUR", Unit.eur, 29),
+        ("0.29", "USDT", Unit.usd, 29),
+    ],
+)
+def test_strike_fee_int_preserves_whole_units(fee, currency, unit, expected):
+    wallet = object.__new__(StrikeWallet)
+    quote = SimpleNamespace(totalFee=SimpleNamespace(amount=fee, currency=currency))
+    assert wallet.fee_int(cast(Any, quote), unit) == expected
+
+
+@pytest.mark.parametrize(
+    ("fee", "currency", "unit", "expected"),
+    [
+        ("0.000000072", "BTC", Unit.sat, 8),
+        ("0.000000065", "BTC", Unit.sat, 7),
+        ("0.00000000001", "BTC", Unit.sat, 1),
+        ("0.000000000072", "BTC", Unit.msat, 8),
+        ("0.000000000065", "BTC", Unit.msat, 7),
+        ("0.000000000001", "BTC", Unit.msat, 1),
+        ("0.291", "USD", Unit.usd, 30),
+        ("0.005", "USD", Unit.usd, 1),
+        ("0.291", "EUR", Unit.eur, 30),
+        ("0.0001", "EUR", Unit.eur, 1),
+        ("0.291", "USDT", Unit.usd, 30),
+    ],
+)
+def test_strike_fee_int_rounds_up_fractional_units(fee, currency, unit, expected):
+    wallet = object.__new__(StrikeWallet)
+    quote = SimpleNamespace(totalFee=SimpleNamespace(amount=fee, currency=currency))
+    assert wallet.fee_int(cast(Any, quote), unit) == expected
+
+
 @pytest.mark.asyncio
 async def test_clnrest_create_invoice_description_hash_unsupported():
     wallet = object.__new__(CLNRestWallet)
