@@ -51,16 +51,17 @@ async def get_history(db: Database) -> List[Dict[str, Any]]:
         SELECT * FROM (
             SELECT 'mint' AS type, COALESCE(amount_issued, amount) AS amount,
                    unit, mint, COALESCE(paid_time, created_time) AS created_time,
-                   quote AS reference
+                   quote AS reference, method, request, NULL AS payment_preimage
             FROM bolt11_mint_quotes
             WHERE amount_issued > 0 OR (amount_issued IS NULL AND state = 'ISSUED')
             UNION ALL
             SELECT 'melt', -amount, unit, mint,
-                   COALESCE(paid_time, created_time), quote
+                   COALESCE(paid_time, created_time), quote, method, request,
+                   payment_preimage
             FROM bolt11_melt_quotes WHERE state = 'PAID'
             UNION ALL
             SELECT type, CASE WHEN type = 'send' THEN -amount ELSE amount END,
-                   unit, mint, created_time, CAST(id AS TEXT)
+                   unit, mint, created_time, CAST(id AS TEXT), NULL, NULL, NULL
             FROM ecash_transactions
         ) AS history
         ORDER BY created_time DESC NULLS LAST, type, reference

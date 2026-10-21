@@ -1410,6 +1410,13 @@ async def history(ctx: Context):
             else "unknown"
         )
         print(f"{entry['type']:<8} {formatted_amount:>18}  {date:<19}  {entry['mint']}")
+        if entry["type"] == "mint":
+            print(f"  Payment method: {entry['method']}")
+            print(f"  Quote ID: {entry['reference']}")
+        elif entry["type"] == "melt":
+            print(f"  Payment request: {entry['request']}")
+            if entry["payment_preimage"]:
+                print(f"  Preimage: {entry['payment_preimage']}")
 
 
 @cli.command("invoices", help="List of all invoices.")

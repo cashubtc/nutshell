@@ -348,6 +348,7 @@ class MeltQuote(LedgerEvent):
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
             mint=mint,
+            payment_preimage=melt_quote_resp.payment_preimage,
             change=melt_quote_resp.change,
         )
 
