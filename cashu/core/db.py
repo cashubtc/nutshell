@@ -19,6 +19,13 @@ POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
 SQLITE = "SQLITE"
 
+
+def mask_db_location(db_location: str) -> str:
+    """Hide everything after the scheme of a database URL so it can be logged."""
+    scheme, separator, _ = db_location.partition("://")
+    return f"{scheme}{separator}********" if separator else db_location
+
+
 @dataclass(frozen=True)
 class LockOptions:
     """Describes one table or row lock in an ordered transaction lock set."""
