@@ -119,6 +119,7 @@ class Ledger(
         self.invoice_listener_tasks: List[asyncio.Task] = []
         self.watchdog_tasks: List[asyncio.Task] = []
         self.regular_tasks: List[asyncio.Task] = []
+        self.melt_tasks: set[asyncio.Task] = set()
 
         if not seed:
             raise Exception("seed not set")
@@ -157,6 +158,9 @@ class Ledger(
 
     async def startup_ledger(self) -> None:
         await self._startup_keysets()
+        for unitbackends in self.backends.values():
+            for backend in unitbackends.values():
+                await backend.startup()
         await self._check_backends()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
@@ -212,28 +216,40 @@ class Ledger(
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
-        logger.debug("Shutting down invoice listeners")
-        for task in self.invoice_listener_tasks:
+        logger.debug("Shutting down ledger background tasks")
+        tasks = self.invoice_listener_tasks + self.watchdog_tasks + self.regular_tasks
+        # Do not retain tasks from a previous application lifespan/event loop.
+        self.invoice_listener_tasks.clear()
+        self.watchdog_tasks.clear()
+        self.regular_tasks.clear()
+        for task in tasks:
             task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-        for task in self.watchdog_tasks:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-        logger.debug("Shutting down regular tasks")
-        for task in self.regular_tasks:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-        logger.debug("Disconnecting from database")
-        await self.db.engine.dispose()
+
+        try:
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Payment jobs must finish before their backend or database closes.
+            # In particular, internal melts cannot be reconciled via Lightning.
+            if self.melt_tasks:
+                logger.debug("Waiting for in-flight melt payments")
+                await asyncio.gather(*self.melt_tasks, return_exceptions=True)
+                self.melt_tasks.clear()
+
+            await self.events.cleanup()
+
+            logger.debug("Shutting down backends")
+            for unitbackends in self.backends.values():
+                for backend in unitbackends.values():
+                    try:
+                        await backend.cleanup()
+                    except Exception as exc:
+                        logger.warning(
+                            f"Error cleaning up {type(backend).__name__}: {exc}"
+                        )
+        finally:
+            logger.debug("Disconnecting from database")
+            await self.db.engine.dispose()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
@@ -1365,7 +1381,9 @@ class Ledger(
             except Exception as e:
                 logger.error(f"Error in background melt task: {e}")
 
-        asyncio.create_task(melt_task())
+        task = asyncio.create_task(melt_task())
+        self.melt_tasks.add(task)
+        task.add_done_callback(self.melt_tasks.discard)
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
     async def melt(

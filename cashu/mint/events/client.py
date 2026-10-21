@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Union
+from typing import Coroutine, List, Union
 
 from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -42,6 +42,20 @@ class LedgerEventClientManager:
         self.websocket = websocket
         self.subscriptions = {}
         self.db_read = DbReadHelper(db, crud)
+        self.tasks: set[asyncio.Task] = set()
+
+    def create_task(self, coroutine: Coroutine) -> None:
+        task = asyncio.create_task(coroutine)
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+
+    async def cleanup(self) -> None:
+        tasks = list(self.tasks)
+        self.tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def start(self):
         await self.websocket.accept()
@@ -189,18 +203,16 @@ class LedgerEventClientManager:
         for f in filters:
             logger.debug(f"Adding subscription {subId} for filter {f}")
             self.subscriptions[kind].setdefault(f, []).append(subId)
-            
+
         # Initialize the subscriptions in batch
-        asyncio.create_task(self._init_subscriptions(subId, filters, kind))
+        self.create_task(self._init_subscriptions(subId, filters, kind))
 
     def remove_subscription(self, subId: str) -> None:
         removed = False
         for kind, sub_filters in self.subscriptions.items():
             for filter, subs in sub_filters.items():
                 while subId in subs:
-                    logger.debug(
-                        f"Removing subscription {subId} for filter {filter}"
-                    )
+                    logger.debug(f"Removing subscription {subId} for filter {filter}")
                     subs.remove(subId)
                     removed = True
         if not removed:
@@ -229,9 +241,9 @@ class LedgerEventClientManager:
                     )
                     if mint_quote:
                         results.append(
-                            PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump(
-                                exclude_none=True
-                            )
+                            PostMintQuoteResponse.from_mint_quote(
+                                mint_quote
+                            ).model_dump(exclude_none=True)
                         )
             elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
                 for filter in filters:
@@ -239,11 +251,15 @@ class LedgerEventClientManager:
                         quote_id=filter, db=self.db_read.db, conn=conn
                     )
                     if melt_quote:
-                        results.append(PostMeltQuoteResponse.from_melt_quote(melt_quote).model_dump())
+                        results.append(
+                            PostMeltQuoteResponse.from_melt_quote(
+                                melt_quote
+                            ).model_dump()
+                        )
             elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
                 proofs = await self.db_read.get_proofs_states(Ys=filters, conn=conn)
                 for proof in proofs:
                     results.append(proof.model_dump())
-        
+
         for result in results:
             await self._send_obj(result, subId)

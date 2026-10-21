@@ -142,6 +142,14 @@ class LightningBackend(ABC):
         if unit not in self.supported_units:
             raise Unsupported(f"Unit {unit} is not supported")
 
+    async def startup(self) -> None:
+        """Prepare resources when starting or restarting the backend."""
+        pass
+
+    async def cleanup(self) -> None:
+        """Release backend resources after ledger background tasks have stopped."""
+        pass
+
     @abstractmethod
     def __init__(self, unit: Unit, **kwargs):
         pass

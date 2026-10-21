@@ -89,15 +89,22 @@ class CLNRestWallet(LightningBackend):
         }
 
         self.cert = settings.mint_clnrest_cert or False
-        self.client = httpx.AsyncClient(
+        self.client = self._create_client()
+        self.last_pay_index = 0
+
+    def _create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
             base_url=self.url,
             verify=self.cert,
             headers=self.auth,
             timeout=None,
         )
-        self.last_pay_index = 0
 
-    async def cleanup(self):
+    async def startup(self) -> None:
+        if self.client.is_closed:
+            self.client = self._create_client()
+
+    async def cleanup(self) -> None:
         try:
             await self.client.aclose()
         except RuntimeError as e:
