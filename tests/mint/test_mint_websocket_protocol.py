@@ -4,6 +4,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi import WebSocketDisconnect
+from pydantic import ValidationError
 
 from cashu.core.base import (
     MeltQuote,
@@ -144,6 +145,22 @@ def test_add_subscription_rejects_when_max_reached():
     manager.max_subscriptions = 0
     with pytest.raises(ValueError, match="Max subscriptions reached"):
         manager.add_subscription(JSONRPCSubscriptionKinds.PROOF_STATE, ["Y1"], "sub-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["subscribe", "unsubscribe"])
+async def test_handle_request_rejects_long_subscription_id(method):
+    manager = _client_manager(FakeWebSocket())
+    request = JSONRPCRequest(
+        id=1,
+        method=method,
+        params={"kind": "proof_state", "filters": ["Y1"], "subId": "s" * 257},
+    )
+
+    with pytest.raises(ValidationError):
+        await manager._handle_request(request)
+
+    assert not any(manager.subscriptions.values())
 
 
 @pytest.mark.asyncio

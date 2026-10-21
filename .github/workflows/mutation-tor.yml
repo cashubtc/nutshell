@@ -10,5 +10,5 @@ jobs:
     uses: ./.github/workflows/_mutation-profile.yml
     with:
       profile: tor
-      target: "cashu.tor*"
+      shards: "[0]"
       prefix: "cashu.tor"

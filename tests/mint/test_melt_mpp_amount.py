@@ -127,7 +127,7 @@ async def test_migration_marks_legacy_mpp_without_changing_full_quotes(
         await crud.store_melt_quote(quote=quote, db=db)
         await db.execute("ALTER TABLE melt_quotes DROP COLUMN amount_msat")
         await db.execute("ALTER TABLE melt_quotes DROP COLUMN amount_option_type")
-        await migrations.m040_add_amount_msat_to_melt_quotes(db)
+        await migrations.m041_add_amount_msat_to_melt_quotes(db)
         stored = await crud.get_melt_quote(quote_id=quote.quote, db=db)
         assert stored is not None
         assert stored.amount == amount

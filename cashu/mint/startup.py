@@ -2,6 +2,7 @@
 # to be taken by external apps importing the cashu mint.
 
 import asyncio
+import hashlib
 import importlib
 from copy import copy
 from typing import Dict
@@ -31,6 +32,7 @@ for key, value in settings.model_dump().items():
     if key in [
         "mint_private_key",
         "mint_seed_decryption_key",
+        "mint_auth_private_key",
         "mint_strike_key",
         "mint_spark_api_key",
         "mint_spark_mnemonic",
@@ -85,9 +87,15 @@ ledger = Ledger(
 )
 
 # start auth ledger
+# fall back to a seed derived from the mint private key if no dedicated
+# auth private key is configured
+auth_seed = (
+    settings.mint_auth_private_key
+    or hashlib.sha256(f"auth:{settings.mint_private_key}".encode()).hexdigest()
+)
 auth_ledger = AuthLedger(
     db=Database("auth", settings.mint_auth_database),
-    seed="auth seed here",
+    seed=auth_seed,
     amounts=[1],
     derivation_path="m/0'/999'/0'",
     crud=LedgerCrudSqlite(),

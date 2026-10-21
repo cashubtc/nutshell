@@ -655,7 +655,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 )
                 if quote.last_checked
                 else None,
-                "pubkey": quote.pubkey or "",
+                "pubkey": quote.pubkey or None,
                 "amount_paid": quote.amount_paid,
                 "amount_issued": quote.amount_issued,
                 "updated_at": db.to_timestamp(
@@ -914,7 +914,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {
                 "id": keyset.id,
-                "seed": keyset.seed,
+                "seed": "" if keyset.encrypted_seed else keyset.seed,
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
@@ -1069,7 +1069,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {
                 "id": keyset.id,
-                "seed": keyset.seed,
+                "seed": "" if keyset.encrypted_seed else keyset.seed,
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,

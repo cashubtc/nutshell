@@ -45,12 +45,22 @@ Run the mutation-testing pilot with:
 
 ```bash
 PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
-  MUTATION_TESTING=true TOR=false poetry run python scripts/run_mutation.py
+  MUTATION_TESTING=true TOR=false \
+  poetry run python scripts/run_mutation.py --profile tor
 ```
 
 The profiles cover each complete production subsystem: core, mint, wallet,
-lightning, and Tor. A profile target limits mutant execution to its subtree,
-while Mutmut uses the non-fuzz pytest suite to discover relevant tests.
+lightning, and Tor. Use `--profile mint` (or another subsystem) to generate
+mutants only for that subtree and resume previously completed results. Mutmut
+uses the non-fuzz pytest suite to discover relevant tests, then limits clean
+baseline checks to those tests. Profile caches are
+invalidated when source, tests, runner, dependencies, or configuration change,
+including resolved shell/`.env` settings and pytest or regtest flags.
+
+Each invocation uses one worker because the integration tests share database
+paths and HTTP/RPC ports. Mutmut's fork server starts each baseline and mutant
+with fresh imports, without inheriting databases or gRPC threads from a prior
+test session. Parallel CI shards run on separate machines.
 
 The runner retries baseline failures up to three times, excluding failed tests
 for that invocation and rebuilding mutation coverage and results. Exclusions
@@ -61,8 +71,8 @@ Collection errors, fixture errors, unusable baselines, and failures after the
 baseline still stop the run. Test failures caused by an actual mutant mark that
 mutant as killed and do not stop mutation testing.
 
-For a function-specific rerun within the configured scope, pass a Mutmut
-wildcard:
+For a function-specific forced rerun, pass a Mutmut wildcard. Explicit mutant
+targets rerun cached verdicts; use `--profile` for incremental execution:
 
 ```bash
 PYTHONUNBUFFERED=1 DEBUG=true MINT_BACKEND_BOLT11_SAT=FakeWallet \
@@ -80,14 +90,27 @@ Only apply mutants in a clean worktree.
 
 Scheduled CI runs each profile independently at 01:00 UTC: core on Monday, mint
 on Tuesday, wallet on Wednesday, lightning on Thursday, and Tor on Friday.
+Mint and wallet each use four shards, core and lightning use two, and Tor uses
+one. Source paths are deterministically assigned to exactly one shard, including
+new files. To reproduce one shard locally, use
+`scripts/run_mutation.py --profile mint --shard 0 --shards 4` with the environment
+and Python command shown above.
+
 Every workflow also supports manual dispatch. Surviving mutants are advisory
 during the initial rollout: improve the relevant tests or document why a mutant
 is equivalent. CI uploads each profile's report and log as artifacts and retains
-its incremental mutation state in a separate cache. On Saturday, CI collects
-the five profile reports and opens a labeled weekly GitHub issue when actionable
+its incremental mutation state in a separate cache, including after a timeout.
+Caches resume only within the same revision and shard; reruns save a new cache
+snapshot. Shard artifacts retain their individual logs, while a combined
+artifact preserves the profile report format and flags missing or unfinished
+shards. On Saturday, CI collects the five profile reports and opens a labeled
+weekly GitHub issue when actionable
 mutants remain, baseline tests were excluded, or a profile report is unavailable.
 Jobs use GitHub's six-hour hosted-runner limit. Mutation execution receives 340
 minutes, leaving time to upload partial results if a profile does not finish.
+Failed profiles with available artifacts still contribute their partial counts
+to the weekly report. Test the runner and report tooling separately with
+`poetry run pytest scripts/tests`; these tests are outside mutmut's own suite.
 Do not add `# pragma: no mutate` or broaden `do_not_mutate` without review.
 Changes involving cryptography, key handling, migrations, protocol behavior, or
 public APIs require maintainer review.
@@ -110,6 +133,24 @@ FAKEWALLET_DELAY_PAYMENT=TRUE
 FAKEWALLET_DELAY_OUTGOING_PAYMENT=3
 FAKEWALLET_DELAY_INCOMING_PAYMENT=3
 ```
+
+A test can also choose the outcome of a single melt. If the description of the invoice being paid is JSON of this shape, it overrides the mint-wide `FAKEWALLET_*` payment settings for that invoice only:
+
+```json
+{"pay_invoice_state": "PENDING", "check_payment_state": "PAID", "pay_err": false, "check_err": false}
+```
+
+All four fields are required. States are `PAID` (or `SETTLED`), `PENDING`, `FAILED` (or `UNPAID`) and `UNKNOWN`. `pay_err` makes the payment raise and `check_err` makes the status check raise. The format matches the CDK fake wallet, and `get_fake_invoice` in `tests/helpers.py` builds such an invoice.
+
+### Released mint compatibility
+
+CI also runs the wallet tests against the latest patch of the three most recent releases, using the `cashubtc/nutshell` Docker images. To run them against one release:
+
+```bash
+CASHU_TEST_MINT_IMAGE=cashubtc/nutshell:0.20.3 make test-wallet-compatibility
+```
+
+The mint must use `FakeWallet` (a local `.env` overrides this) and logs to `test_data/released-mint.log`. `make compatibility-targets` lists the current targets. Against mints older than `MINIMUM_MINT_VERSION` in [tests/compatibility.py](tests/compatibility.py), failures caused by the known incompatibility are reported as expected.
 
 ### Lightning regtest
 

@@ -4,11 +4,21 @@ from types import SimpleNamespace
 
 import pytest
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState
+from cashu.core.base import (
+    BlindedMessage,
+    MeltQuote,
+    MeltQuoteState,
+    MintQuote,
+    MintQuoteState,
+)
+from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.mint import migrations as mint_migrations
 from cashu.mint.auth import migrations as auth_migrations
+from cashu.mint.auth.base import User
+from cashu.mint.auth.crud import AuthLedgerCrudSqlite
+from cashu.mint.auth.server import AuthLedger
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.db.write import DbWriteHelper
 
@@ -214,6 +224,101 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_m041_upgrades_database_already_at_main_version_40(tmp_path):
+    db = Database("mint", str(tmp_path / "amount_migration"))
+    crud = LedgerCrudSqlite()
+    previous_migrations = SimpleNamespace(
+        __name__=mint_migrations.__name__,
+        **{
+            name: migration
+            for name, migration in vars(mint_migrations).items()
+            if name.startswith("m") and name[1:4].isdigit() and int(name[1:4]) <= 40
+        },
+    )
+    try:
+        await migrate_databases(db, previous_migrations)
+        version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
+        assert version["version"] == 40
+
+        # Use the historical INSERT shape, before the amount columns exist.
+        await db.execute(
+            """
+            INSERT INTO melt_quotes
+            (quote, method, request, checking_id, unit, amount, fee_reserve, fee_paid, state)
+            VALUES ('legacy', 'bolt11', 'legacy-request', 'legacy-hash', 'sat', 17, 2, 0, 'UNPAID')
+            """
+        )
+        await migrate_databases(db, mint_migrations)
+        # A restart must leave the migrated database unchanged.
+        await migrate_databases(db, mint_migrations)
+        version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
+        assert version["version"] == 41
+        legacy = await crud.get_melt_quote(quote_id="legacy", db=db)
+        assert legacy is not None
+        assert legacy.amount == 17
+        assert legacy.amount_msat is None
+        assert legacy.amount_option_type is None
+
+        quote = legacy.model_copy(
+            update={
+                "quote": "amountless",
+                "amount_msat": 16_001,
+                "amount_option_type": "nut-23",
+            }
+        )
+        await crud.store_melt_quote(quote=quote, db=db)
+        restored = await crud.get_melt_quote(quote_id=quote.quote, db=db)
+        assert restored is not None
+        assert restored.amount_msat == 16_001
+        assert restored.amount_option_type == "nut-23"
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_m040_seed_cleanup(tmp_path):
+    db = Database("mint", str(tmp_path / "mig_seed_cleanup"))
+
+    # Ensure schema is at latest so tables exist
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # Insert a keyset with both a plaintext and an encrypted seed
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("keysets")} (id, seed, encrypted_seed)
+            VALUES ('ks_encrypted', :seed, :encrypted_seed)
+            """,
+            {"seed": "plaintext", "encrypted_seed": "ciphertext"},
+        )
+        # Insert a keyset with only a plaintext seed
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema("keysets")} (id, seed, encrypted_seed)
+            VALUES ('ks_plaintext', :seed, NULL)
+            """,
+            {"seed": "plaintext"},
+        )
+
+    # Run the migration under test directly
+    await mint_migrations.m040_remove_plaintext_seeds_with_encrypted_seed(db)
+
+    # Validate cleanup
+    async with db.connect() as conn:
+        row = await conn.fetchone(
+            f"SELECT seed, encrypted_seed FROM {db.table_with_schema('keysets')} WHERE id = 'ks_encrypted'"
+        )
+        assert row["seed"] == ""
+        assert row["encrypted_seed"] == "ciphertext"
+
+        row = await conn.fetchone(
+            f"SELECT seed, encrypted_seed FROM {db.table_with_schema('keysets')} WHERE id = 'ks_plaintext'"
+        )
+        assert row["seed"] == "plaintext"
+        assert row["encrypted_seed"] is None
+
+
+@pytest.mark.asyncio
 async def test_m029_witness_cleanup(tmp_path):
     db = Database("mint", str(tmp_path / "mig_witness_cleanup"))
 
@@ -289,7 +394,6 @@ async def test_auth_m003_migration():
 
     from cashu.core.base import MintKeyset
     from cashu.mint.auth import migrations as auth_migrations
-    from cashu.mint.crud import LedgerCrudSqlite
 
     db_path = "./test_data/mig_auth"
     if os.path.exists(db_path):
@@ -366,6 +470,42 @@ async def test_auth_promises_schema_supports_blinded_message_crud(tmp_path):
     assert signature.C_ == c_
     assert signature.amount == 1
     assert signature.id == "keyset_id"
+
+
+@pytest.mark.asyncio
+async def test_fresh_auth_ledger_uses_shared_crud(tmp_path):
+    db = Database("auth", str(tmp_path / "auth_ledger"))
+    await migrate_databases(db, auth_migrations)
+    ledger = AuthLedger(
+        db=db,
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    assert isinstance(ledger.crud, LedgerCrudSqlite)
+    await ledger.init_keysets()
+    ledger.auth_crud = AuthLedgerCrudSqlite()
+    user = User(id="alice")
+    await ledger.auth_crud.create_user(db=db, user=user)
+
+    B_, _ = step1_alice("auth token")
+    signatures = await ledger.mint_blind_auth(
+        outputs=[BlindedMessage(id=ledger.keyset.id, amount=1, B_=B_.format().hex())],
+        user=user,
+    )
+
+    assert len(signatures) == 1
+    assert signatures[0].id == ledger.keyset.id
+    assert signatures[0].amount == 1
+
+    reloaded = AuthLedger(
+        db=db,
+        seed="auth seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    await reloaded.init_keysets()
+    assert reloaded.keyset.amounts == [1]
 
 
 @pytest.mark.asyncio

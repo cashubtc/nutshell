@@ -120,7 +120,7 @@ class LedgerEventClientManager:
 
             # Handle the request
             try:
-                logger.debug(f"Request: {req.model_dump_json()}")
+                logger.debug(f"Websocket request: {req.method} (id {req.id})")
                 resp = await self._handle_request(req)
                 # Send the response
                 await self._send_msg(resp)
@@ -139,7 +139,7 @@ class LedgerEventClientManager:
                 continue
 
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
-        logger.debug(f"Received websocket message: {data}")
+        logger.debug(f"Handling websocket request: {data.method} (id {data.id})")
         if data.method == JSONRPCMethods.SUBSCRIBE.value:
             subscribe_params = JSONRPCSubscribeParams.model_validate(data.params)
             self.add_subscription(
@@ -208,7 +208,9 @@ class LedgerEventClientManager:
 
     def serialize_event(self, event: LedgerEvent) -> dict:
         if isinstance(event, MintQuote):
-            return_dict = PostMintQuoteResponse.from_mint_quote(event).model_dump()
+            return_dict = PostMintQuoteResponse.from_mint_quote(event).model_dump(
+                exclude_none=True
+            )
         elif isinstance(event, MeltQuote):
             return_dict = PostMeltQuoteResponse.from_melt_quote(event).model_dump()
         elif isinstance(event, ProofState):
@@ -226,7 +228,11 @@ class LedgerEventClientManager:
                         quote_id=filter, db=self.db_read.db, conn=conn
                     )
                     if mint_quote:
-                        results.append(PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump())
+                        results.append(
+                            PostMintQuoteResponse.from_mint_quote(mint_quote).model_dump(
+                                exclude_none=True
+                            )
+                        )
             elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
                 for filter in filters:
                     melt_quote = await self.db_read.crud.get_melt_quote(

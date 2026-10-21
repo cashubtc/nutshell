@@ -10,5 +10,5 @@ jobs:
     uses: ./.github/workflows/_mutation-profile.yml
     with:
       profile: wallet
-      target: "cashu.wallet*"
+      shards: "[0,1,2,3]"
       prefix: "cashu.wallet"

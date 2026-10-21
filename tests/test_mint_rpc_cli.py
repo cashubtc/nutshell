@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from click.testing import CliRunner
 
+from cashu.core.base import MintQuoteState
 from cashu.core.settings import settings
 from cashu.mint.management_rpc.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -133,7 +134,14 @@ def test_update_auth_limits(cli_prefix):
 async def test_update_mint_quote(cli_prefix):
     wallet = await init_wallet()
     mint_quote = await wallet.request_mint(100)
-    await asyncio.sleep(1)
+    # FakeWallet payment and its listener run asynchronously. Observe the paid
+    # state instead of racing them with a fixed one-second sleep.
+    for _ in range(100):
+        if (await wallet.get_mint_quote(mint_quote.quote)).state == MintQuoteState.paid:
+            break
+        await asyncio.sleep(0.1)
+    else:
+        pytest.fail("Mint quote was not paid before the RPC update")
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
     result = runner.invoke(

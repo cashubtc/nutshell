@@ -72,18 +72,18 @@ class JSONRPCSubscribeParams(BaseModel):
     filters: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]] = Field(
         ..., max_length=settings.mint_max_request_length
     )
-    subId: str
+    subId: str = Field(..., max_length=MAX_QUOTE_ID_LEN)
 
 
 class JSONRPCUnsubscribeParams(BaseModel):
-    subId: str
+    subId: str = Field(..., max_length=MAX_QUOTE_ID_LEN)
 
 
 class JSONRPCNotficationParams(BaseModel):
-    subId: str
+    subId: str = Field(..., max_length=MAX_QUOTE_ID_LEN)
     payload: dict
 
 
 class JSONRRPCSubscribeResponse(BaseModel):
     status: JSONRPCStatus
-    subId: str
+    subId: str = Field(..., max_length=MAX_QUOTE_ID_LEN)

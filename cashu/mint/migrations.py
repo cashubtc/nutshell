@@ -1350,7 +1350,16 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
         )
 
 
-async def m040_add_amount_msat_to_melt_quotes(db: Database):
+async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
+    """Remove plaintext seeds from keysets that also store an encrypted seed."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
+            "WHERE encrypted_seed IS NOT NULL AND seed != ''"
+        )
+
+
+async def m041_add_amount_msat_to_melt_quotes(db: Database):
     """Persist explicit NUT-15/NUT-23 amounts and identify legacy partial quotes."""
     async with db.connect() as conn:
         await conn.execute(

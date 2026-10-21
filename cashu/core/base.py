@@ -11,9 +11,16 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, RootModel, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    model_validator,
+)
 from sqlalchemy import RowMapping
 
+from cashu.core.constants import MAX_KEYSET_ID_LEN, MAX_PUBKEY_LEN, MAX_SCALAR_LEN
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
 from ..mint.events.event_model import LedgerEvent
@@ -37,8 +44,8 @@ class DLEQ(BaseModel):
     Discrete Log Equality (DLEQ) Proof
     """
 
-    e: str
-    s: str
+    e: str = Field(..., max_length=MAX_SCALAR_LEN)
+    s: str = Field(..., max_length=MAX_SCALAR_LEN)
 
 
 class DLEQWallet(BaseModel):
@@ -232,9 +239,11 @@ class BlindedMessage(BaseModel):
     """
 
     amount: int
-    id: str  # Keyset id
-    B_: str  # Hex-encoded blinded message
-    C_: Optional[str] = None  # Hex-encoded signature, None if not signed yet
+    id: str = Field(..., max_length=MAX_KEYSET_ID_LEN)  # Keyset id
+    B_: str = Field(..., max_length=MAX_PUBKEY_LEN)  # Hex-encoded blinded message
+    C_: Optional[str] = Field(
+        default=None, max_length=MAX_PUBKEY_LEN
+    )  # Hex-encoded signature, None if not signed yet
 
     @classmethod
     def from_row(cls, row: RowMapping):
@@ -246,9 +255,9 @@ class BlindedSignature(BaseModel):
     Blinded signature or "promise" which is the signature on a `BlindedMessage`
     """
 
-    id: str
+    id: str = Field(..., max_length=MAX_KEYSET_ID_LEN)
     amount: int
-    C_: str  # Hex-encoded signature
+    C_: str = Field(..., max_length=MAX_PUBKEY_LEN)  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
     @classmethod
@@ -467,7 +476,7 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
             issued_time=issued_time,
             last_checked=last_checked,
-            pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
+            pubkey=(row["pubkey"] or None) if "pubkey" in row.keys() else None,
             privkey=row["privkey"] if "privkey" in row.keys() else None,
             amount_paid=row["amount_paid"] if row["amount_paid"] is not None else None,
             amount_issued=(
@@ -984,6 +993,15 @@ class MintKeyset:
             self.seed = seed
 
         assert self.seed, "seed not set"
+
+        # keep the seed encrypted at rest if a decryption key is set
+        if settings.mint_seed_decryption_key and not encrypted_seed:
+            encrypted_seed = AESCipher(settings.mint_seed_decryption_key).encrypt(
+                self.seed.encode()
+            )
+            seed_encryption_method = "aes"
+        self.encrypted_seed = encrypted_seed
+        self.seed_encryption_method = seed_encryption_method
 
         if amounts:
             self.amounts = amounts
@@ -1553,12 +1571,24 @@ class AuthProof(BaseModel):
     Blind authentication token
     """
 
-    id: str
-    secret: str  # secret
-    C: str  # signature
+    model_config = ConfigDict(hide_input_in_errors=True)
+    max_secret_length: ClassVar[int] = settings.mint_max_secret_length
+
+    id: str = Field(..., max_length=MAX_KEYSET_ID_LEN)
+    secret: str = Field(..., max_length=max_secret_length)
+    C: str = Field(..., max_length=MAX_PUBKEY_LEN)  # signature
     amount: int = 1  # default amount
 
     prefix: ClassVar[str] = "authA"
+
+    @classmethod
+    def max_token_length(cls) -> int:
+        # JSON can use two six-character Unicode escapes per input character.
+        # Include field names/separators and padded base64 encoding overhead.
+        max_json_length = (
+            12 * (MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN) + 64
+        )
+        return len(cls.prefix) + 4 * ((max_json_length + 2) // 3)
 
     @classmethod
     def from_proof(cls, proof: Proof):
@@ -1573,6 +1603,8 @@ class AuthProof(BaseModel):
 
     @classmethod
     def from_base64(cls, base64_str: str):
+        if len(base64_str) > cls.max_token_length():
+            raise ValueError("Blind auth token too long.")
         assert base64_str.startswith(cls.prefix), Exception(
             f"Token prefix not valid. Expected {cls.prefix}."
         )

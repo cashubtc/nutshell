@@ -130,7 +130,7 @@ async def test_amountless_migration_preserves_existing_quotes(tmp_path):
         # Reconstruct the preceding schema with an existing quote.
         await db.execute("ALTER TABLE melt_quotes DROP COLUMN amount_msat")
         await db.execute("ALTER TABLE melt_quotes DROP COLUMN amount_option_type")
-        await migrations.m040_add_amount_msat_to_melt_quotes(db)
+        await migrations.m041_add_amount_msat_to_melt_quotes(db)
         legacy = await crud.get_melt_quote(quote_id="legacy", db=db)
         assert legacy is not None
         assert legacy.amount_msat is None

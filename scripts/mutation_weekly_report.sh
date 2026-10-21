@@ -62,11 +62,6 @@ collect_profile() {
     run_url=$(jq -r '.url' <<< "$run_data")
     run_conclusion=$(jq -r '.conclusion' <<< "$run_data")
 
-    if [[ "$run_conclusion" != "success" ]]; then
-        append_unavailable_profile "$profile" "$run_url"
-        return
-    fi
-
     if (( $(date -u -d "$run_date" +%s) < $(date -u -d '8 days ago' +%s) )); then
         echo "| [${profile}](${run_url}) | stale | - | - | - | - | - | - | - |" >> "$BODY_FILE"
         incomplete_profiles=$((incomplete_profiles + 1))
@@ -103,7 +98,7 @@ collect_profile() {
     if [[ -f "$baseline_file" ]]; then
         excluded=$(jq '.excluded_tests | length' "$baseline_file")
     fi
-    if (( excluded > 0 )); then
+    if [[ "$run_conclusion" != "success" ]] || (( excluded > 0 || not_checked > 0 )); then
         incomplete_profiles=$((incomplete_profiles + 1))
     fi
     total_actionable=$((total_actionable + survived + no_tests + timeout + suspicious + not_checked))
@@ -171,7 +166,7 @@ append_action_items() {
         {
             echo
             echo "> [!WARNING]"
-            echo "> ${incomplete_profiles} profile report(s) were missing, stale, or had excluded baseline tests and need investigation."
+            echo "> ${incomplete_profiles} profile report(s) were missing, stale, failed, unfinished, or had excluded baseline tests and need investigation."
         } >> "$BODY_FILE"
     fi
 

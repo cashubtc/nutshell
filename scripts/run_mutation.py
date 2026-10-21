@@ -1,12 +1,91 @@
 """Run mutmut with bounded retries excluding tests that fail without mutations."""
 
 import argparse
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+
+def profile_paths(profile, shard, shards):
+    """Assign every source file to one stable shard, including future files."""
+    return [
+        str(path)
+        for path in sorted(Path("cashu", profile).rglob("*.py"))
+        if int(hashlib.sha256(str(path).encode()).hexdigest(), 16) % shards == shard
+    ]
+
+
+def configuration_fingerprint():
+    """Resolve .env settings in a fresh process, keeping credentials out of output."""
+    from cashu.core.settings import settings
+
+    environment = {
+        name: value
+        for name, value in os.environ.items()
+        if (
+            name.startswith(("CASHU_", "PYTEST_")) and name != "PYTEST_CURRENT_TEST"
+        )
+        or name
+        in ("GITHUB_ACTIONS", "MUTATION_TESTING", "PYTHONPATH", "PYTHONHASHSEED")
+    }
+    return hashlib.sha256(
+        json.dumps(
+            {"settings": settings.model_dump(mode="json"), "environment": environment},
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
+def prepare_profile_cache(paths, env=None):
+    # Uninstrumented dependencies can change behavior too. Reuse verdicts only
+    # for identical source, tests, runner, effective configuration, and selection.
+    digest = hashlib.sha256(json.dumps(paths).encode())
+    # Loading settings applies .env overrides and interpolation. Isolate those
+    # side effects from the runner and fingerprint the environment tests receive.
+    configuration = subprocess.check_output(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "from run_mutation import configuration_fingerprint; "
+            "print(configuration_fingerprint())",
+            str(Path(__file__).resolve().parent),
+        ],
+        env=env,
+        text=True,
+    )
+    digest.update(configuration.encode())
+    inputs = [Path("pyproject.toml"), Path("poetry.lock")]
+    for directory in ("cashu", "tests", "scripts"):
+        inputs.extend(sorted(Path(directory).rglob("*.py")))
+    for path in inputs:
+        digest.update(str(path).encode())
+        digest.update(path.read_bytes())
+    cache = Path("mutants")
+    identity = cache / ".nutshell-profile"
+    fingerprint = digest.hexdigest()
+    if cache.exists() and (
+        not identity.exists() or identity.read_text() != fingerprint
+    ):
+        shutil.rmtree(cache)
+    cache.mkdir(exist_ok=True)
+    identity.write_text(fingerprint)
+
+
+def mutmut_main():
+    """Configure file selection without forcing cached mutant verdicts to rerun."""
+    from mutmut.__main__ import cli
+    from mutmut.configuration import config
+
+    paths = os.environ.get("NUTSHELL_MUTATION_PATHS")
+    if paths is not None:
+        config().only_mutate = json.loads(paths)
+    cli()
 
 
 def reset_changed_selection(excluded):
@@ -38,6 +117,17 @@ def run(args):
         baseline_path = Path(temp_dir) / "baseline.json"
         exclusions_path = Path(temp_dir) / "excluded.json"
         env = os.environ.copy()
+        paths = None
+        if args.profile:
+            paths = profile_paths(args.profile, args.shard, args.shards)
+            if not paths:
+                raise ValueError("Mutation shard contains no source files")
+            env["NUTSHELL_MUTATION_PATHS"] = json.dumps(paths)
+        else:
+            env.pop("NUTSHELL_MUTATION_PATHS", None)
+        # Switching back to a full or explicit-target run must also rebuild
+        # coverage: a prior profile did not instrument the other subsystems.
+        prepare_profile_cache(paths, env)
         env["NUTSHELL_MUTATION_BASELINE_REPORT"] = str(baseline_path)
         env["NUTSHELL_MUTATION_EXCLUSIONS"] = str(exclusions_path)
         env["PYTHONPATH"] = os.pathsep.join(
@@ -61,7 +151,7 @@ def run(args):
         command = [
             sys.executable,
             "-c",
-            "from mutmut.__main__ import cli; cli()",
+            "from run_mutation import mutmut_main; mutmut_main()",
             "run",
             *args.targets,
         ]
@@ -140,12 +230,25 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("targets", nargs="*")
+    parser.add_argument(
+        "--profile", choices=["core", "mint", "wallet", "lightning", "tor"]
+    )
+    parser.add_argument("--shard", type=int, default=0)
+    parser.add_argument("--shards", type=int, default=1)
     parser.add_argument("--report", type=Path, default=Path("mutation-baseline.json"))
     parser.add_argument("--baseline-retries", type=int, default=3)
-    parser.add_argument("--max-children", type=int)
+    # Tests share HTTP/RPC ports and data paths. Parallelism belongs in isolated
+    # CI shards, not concurrent workers in the same test environment.
+    parser.add_argument("--max-children", type=int, default=1)
     args = parser.parse_args()
     if args.baseline_retries < 0:
         parser.error("--baseline-retries must be nonnegative")
+    if args.shards < 1 or not 0 <= args.shard < args.shards:
+        parser.error("--shard must be between zero and --shards minus one")
+    if args.profile and args.targets:
+        parser.error("Use --profile for incremental runs or targets for forced reruns")
+    if not args.profile and (args.shard != 0 or args.shards != 1):
+        parser.error("Sharding requires --profile")
     return run(args)
 
 

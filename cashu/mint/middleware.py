@@ -59,7 +59,7 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
         if (
             settings.mint_require_auth
             and auth_ledger.mint_info.requires_clear_auth_path(
-                method=request.method, path=request.url.path
+                method=request.method, path=request.scope["path"]
             )
         ):
             clear_auth_token = request.headers.get("clear-auth")
@@ -82,7 +82,7 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
         if (
             settings.mint_require_auth
             and auth_ledger.mint_info.requires_blind_auth_path(
-                method=request.method, path=request.url.path
+                method=request.method, path=request.scope["path"]
             )
         ):
             blind_auth_token = request.headers.get("blind-auth")
@@ -101,15 +101,23 @@ async def request_validation_exception_handler(
     This is a wrapper to the default RequestValidationException handler of FastAPI.
     This function will be called when client input is not valid.
     """
+    # Rejected inputs may be arbitrarily large or contain secrets. Keep the
+    # validation details without copying those values into logs and responses.
+    errors = [
+        {key: value for key, value in error.items() if key != "input"}
+        for error in exc.errors()
+    ]
     query_params = request.query_params._dict
     detail = {
-        "errors": exc.errors(),
+        "errors": errors,
         "query_params": query_params,
     }
     # log the error
     logger.error(detail)
     # pass on
-    return await _request_validation_exception_handler(request, exc)
+    return await _request_validation_exception_handler(
+        request, RequestValidationError(errors)
+    )
 
 
 class CompressionMiddleware(BaseHTTPMiddleware):

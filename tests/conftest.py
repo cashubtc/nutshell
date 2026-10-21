@@ -22,6 +22,14 @@ from cashu.core.settings import settings
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
+from tests.compatibility import (
+    BELOW_MINIMUM_ERROR,
+    MINIMUM_MINT_VERSION,
+    MINT_IMAGE,
+    MINT_VERSION,
+    mint_older_than,
+    run_mint_container,
+)
 
 pytest_plugins = (
     ["tests.spark_regtest"]
@@ -72,6 +80,40 @@ settings.mint_rpc_server_mutual_tls = False
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Against a released mint image, run only the wallet suite."""
+    if not MINT_IMAGE:
+        return
+    skip = pytest.mark.skip(
+        reason="Only wallet tests run against a released mint image"
+    )
+    for item in items:
+        if not item.nodeid.startswith("tests/wallet/"):
+            item.add_marker(skip)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Against a mint older than the wallet supports, report failures caused by
+    that known incompatibility as expected failures. Other failures still fail."""
+    report = yield
+    if (
+        report.failed
+        and call.excinfo is not None
+        and mint_older_than(MINIMUM_MINT_VERSION)
+    ):
+        output = "\n".join(
+            (str(call.excinfo.value), report.capstdout, report.capstderr, report.caplog)
+        )
+        if BELOW_MINIMUM_ERROR in output:
+            report.outcome = "skipped"
+            report.wasxfail = (
+                f"Nutshell {MINT_VERSION} is older than the minimum supported "
+                f"mint version {MINIMUM_MINT_VERSION}"
+            )
+    return report
 
 
 @pytest.fixture(autouse=True)
@@ -213,6 +255,11 @@ def start_mint_server():
 # This fixture is used for tests that require API access to the mint.
 @pytest.fixture(autouse=True, scope="session")
 def mint(request):
+    if MINT_IMAGE:
+        log_file = Path(settings.cashu_dir) / "released-mint.log"
+        with run_mint_container(MINT_IMAGE, SERVER_PORT, log_file) as url:
+            yield url
+        return
     if "tests.spark_regtest" in pytest_plugins:
         request.getfixturevalue("spark_regtest_config")
     with start_mint_server() as server:

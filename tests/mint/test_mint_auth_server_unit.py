@@ -49,6 +49,17 @@ def test_auth_error_codes_match_nut21_and_nut22(error_class, code):
     assert error_class().code == code
 
 
+@pytest.mark.asyncio
+async def test_verify_blind_auth_rejects_length_before_decoding():
+    ledger = _ledger()
+    token = AuthProof.prefix + "a" * AuthProof.max_token_length()
+    with patch("cashu.core.base.base64.urlsafe_b64decode") as decode:
+        with pytest.raises(BlindAuthFailedError):
+            async with ledger.verify_blind_auth(token):
+                pytest.fail("overlong token was accepted")
+        decode.assert_not_called()
+
+
 def test_verify_oicd_issuer_accepts_matching_issuer():
     ledger = _ledger()
     ledger.issuer = "https://issuer.test"

@@ -24,6 +24,8 @@ jobs:
           poetry-version: ${{ inputs.poetry-version }}
       - name: Ruff check
         run: make ruff-check
+      - name: Mutation tooling regression tests
+        run: poetry run pytest scripts/tests -o addopts=
   mypy:
     runs-on: ubuntu-latest
     steps:

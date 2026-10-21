@@ -329,6 +329,7 @@ class CLNRestFundingSource(MintSettings):
 
 class AuthSettings(MintSettings):
     mint_auth_database: str = Field(default="data/mint")
+    mint_auth_private_key: Optional[str] = Field(default=None)
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")

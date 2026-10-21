@@ -95,7 +95,7 @@ async def catch_exceptions(request: Request, call_next):
             err_message = e.args[0] if e.args else "Unknown error"
 
         if isinstance(e, CashuError) or isinstance(e.args[0], CashuError):
-            logger.error(f"CashuError: {err_message}")
+            logger.info(f"CashuError: {err_message}")
             code = e.code if isinstance(e, CashuError) else e.args[0].code
             # return with cors headers
             return JSONResponse(
