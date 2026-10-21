@@ -10,7 +10,7 @@ services:
       - MINT_BACKEND_BOLT11_SAT=FakeWallet
       - MINT_LISTEN_HOST=0.0.0.0
       - MINT_LISTEN_PORT=3338
-      - MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+      - MINT_MNEMONIC=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
       - MINT_REDIS_CACHE_ENABLED=TRUE
       - MINT_REDIS_CACHE_URL=redis://redis:6379
     depends_on:

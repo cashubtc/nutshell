@@ -10,6 +10,7 @@ from cashu.core.settings import settings
 from cashu.mint import migrations as mint_migrations
 from cashu.mint.encrypt import cli
 from tests.mint.test_mint_init import DECRYPTON_KEY, ENCRYPTED_SEED, SEED
+from tests.mint.test_mint_mnemonic import MNEMONIC
 
 
 async def insert_plaintext_keyset(db: Database):
@@ -35,13 +36,18 @@ async def get_keyset(db: Database):
 
 
 @pytest.mark.parametrize(
-    "mint_private_key", [SEED, ENCRYPTED_SEED], ids=["plaintext", "encrypted"]
+    "mint_private_key,mint_mnemonic",
+    [(SEED, None), (ENCRYPTED_SEED, None), (None, MNEMONIC)],
+    ids=["plaintext", "encrypted", "mnemonic"],
 )
-def test_migrate_encrypts_plaintext_seeds(tmp_path, monkeypatch, mint_private_key):
+def test_migrate_encrypts_plaintext_seeds(
+    tmp_path, monkeypatch, mint_private_key, mint_mnemonic
+):
     db_path = str(tmp_path / "mint")
     monkeypatch.setattr(settings, "mint_database", db_path)
     monkeypatch.setattr(settings, "mint_seed_decryption_key", DECRYPTON_KEY)
     monkeypatch.setattr(settings, "mint_private_key", mint_private_key)
+    monkeypatch.setattr(settings, "mint_mnemonic", mint_mnemonic)
     asyncio.run(insert_plaintext_keyset(Database("mint", db_path)))
 
     runner = CliRunner()
