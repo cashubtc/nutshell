@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.py[cod]
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.hypothesis
+mutants
+dist
+build
+test_data
+docker-build
