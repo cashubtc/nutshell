@@ -71,6 +71,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 )
                 if keyset_derivation_counter > selected_keyset_counter:
                     selected_keyset = keyset
+                    selected_keyset_counter = keyset_derivation_counter
 
         # If no selected keyset, then there is no keyset for this unit
         if not selected_keyset:
