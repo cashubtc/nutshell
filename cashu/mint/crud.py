@@ -9,6 +9,7 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MeltQuote,
+    MeltQuoteState,
     MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
@@ -195,6 +196,15 @@ class LedgerCrud(ABC):
         c_: str,
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    @abstractmethod
+    async def has_pending_melt_outputs(
+        self,
+        *,
+        db: Database,
+        keyset_id: str,
+        conn: Optional[Connection] = None,
+    ) -> bool: ...
 
     @abstractmethod
     async def get_blinded_messages_melt_id(
@@ -384,6 +394,26 @@ class LedgerCrudSqlite(LedgerCrud):
                 "order_index": order_index,
             },
         )
+
+    async def has_pending_melt_outputs(
+        self,
+        *,
+        db: Database,
+        keyset_id: str,
+        conn: Optional[Connection] = None,
+    ) -> bool:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT 1 from {db.table_with_schema("promises")}
+            WHERE id = :keyset_id AND c_ IS NULL AND melt_quote IN (
+                SELECT quote FROM {db.table_with_schema("melt_quotes")}
+                WHERE state = :state
+            )
+            LIMIT 1
+            """,
+            {"keyset_id": keyset_id, "state": MeltQuoteState.pending.value},
+        )
+        return row is not None
 
     async def get_blinded_messages_melt_id(
         self,

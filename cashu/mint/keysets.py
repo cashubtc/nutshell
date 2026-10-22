@@ -46,8 +46,8 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             1. finds the highest counter keyset for `unit`
             2. creates a new derivation path from the old one, increasing the counter by one
             3. creates a new active keyset for the new derivation path
-            4. de-activates the old keyset
-            5. stores the new keyset to DB
+            4. stores the new keyset to DB
+            5. marks the old keyset rotating; it is de-activated once its pending melts settle
 
         Args:
             unit (Unit): Unit of the keyset.
@@ -107,13 +107,21 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         await self.crud.store_keyset(keyset=new_keyset, db=self.db)
         self.keysets[new_keyset.id] = new_keyset
 
-        logger.debug(f"De-activating keyset {selected_keyset.id}...")
-        selected_keyset.active = False
-        await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
-        self.keysets[selected_keyset.id] = selected_keyset
-
-        logger.debug(f"Keyset {keyset.id} was de-activated")
+        self.rotating_keysets.add(selected_keyset.id)
+        await self.inactivate_drained_keysets()
         return new_keyset
+
+    async def inactivate_drained_keysets(self) -> None:
+        """Inactivates rotating keysets once no pending melt has change outputs on them (NUT-02)."""
+        for keyset_id in list(self.rotating_keysets):
+            if await self.crud.has_pending_melt_outputs(db=self.db, keyset_id=keyset_id):
+                logger.info(f"Keyset {keyset_id} is rotating, waiting on pending melts")
+                continue
+            keyset = self.keysets[keyset_id]
+            keyset.active = False
+            await self.crud.update_keyset(keyset=keyset, db=self.db)
+            self.rotating_keysets.discard(keyset_id)
+            logger.info(f"Keyset {keyset_id} was de-activated")
 
     async def activate_keyset(
         self,
