@@ -118,6 +118,25 @@ async def test_keyset_rotation(ledger: Ledger):
     assert not old_keyset.active, "old keyset is still active"
 
 
+@pytest.mark.asyncio
+async def test_keyset_rotation_from_highest_counter(ledger: Ledger):
+    keyset_sat = next(
+        filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values())
+    )
+    prefix = keyset_sat.derivation_path.rsplit("/", 1)[0]
+    # The highest counter is not the last active keyset in iteration order
+    for counter in (50, 20):
+        keyset = MintKeyset(
+            seed=ledger.seed, derivation_path=f"{prefix}/{counter}'", active=True
+        )
+        await ledger.crud.store_keyset(keyset=keyset, db=ledger.db)
+        ledger.keysets[keyset.id] = keyset
+
+    new_keyset_sat = await ledger.rotate_next_keyset(unit=Unit["sat"])
+
+    assert new_keyset_sat.derivation_path == f"{prefix}/51'"
+
+
 # ==================== KEYSETS V2 TESTS ====================
 
 
