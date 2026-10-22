@@ -91,6 +91,32 @@ docker compose up mint
 
 [uv](https://docs.astral.sh/uv/) manages Python, dependencies, and the project's virtual environment.
 
+#### Coming from Poetry
+
+Nutshell previously used [Poetry](https://python-poetry.org/) for dependency management and has migrated to uv. The `poetry.lock` file has been replaced by `uv.lock`, which pins the same dependency versions, and the project's Python environment now lives in `.venv` inside the repository instead of Poetry's cache directory.
+
+If you are running a mint or wallet from source and have updated to a revision containing `uv.lock`, follow this mapping:
+
+| Before (Poetry)                    | Now (uv)                              |
+| ---------------------------------- | ------------------------------------- |
+| `poetry install`                   | `uv sync --locked`                    |
+| `poetry run <command>`             | `uv run --locked <command>`           |
+| `poetry shell`                     | `source .venv/bin/activate`           |
+| `poetry add <package>`             | `uv add <package>`                    |
+| `poetry lock` / `poetry update`    | `uv lock` / `uv lock --upgrade`       |
+| `poetry version -s`                | `uv version --short`                  |
+
+A few things to know when switching:
+
+- Poetry commands no longer work in this repository and fail in confusing ways. In particular, `poetry run mint` exits with `Command not found: mint` — this is expected after the migration, not a broken mint, and it does not affect your `data/` directory or `.env` configuration in any way.
+- Your existing `.env`, `data/` directory, database, and keysets are untouched by this change. Try not to run `poetry install` in a repository already containing `uv.lock`: Poetry 2.x will accept the new `[project]` table and resolve dependency versions from scratch on whatever Python it finds (instead of the pinned 3.10), which can fail mid-install and leave a partial environment in Poetry's cache.
+- Old Poetry environments are no longer used. You can free the disk space with `poetry env remove --all` (or delete `~/.cache/pypoetry/virtualenvs`), and uninstall Poetry itself with `rm -rf ~/.local/share/pypoetry ~/.local/bin/poetry` once nothing else on your machine uses it.
+- uv installs Python 3.10 for you, so `pyenv` is no longer needed. uv downloads it automatically on first `uv sync` (or run `uv python install 3.10` explicitly).
+- OpenRC units, systemd services, tmux/screen sessions, or scripts that call `poetry run mint` must be updated to call `uv run --locked mint` (run from the repository directory), or to `source .venv/bin/activate` and call `mint` directly.
+- Docker images released before this migration bundle their own Python environment and are unaffected; instructions like the pinned `docker run` example in [Running a mint](#running-a-mint) work for both old and new images.
+
+Then continue with the [uv: Prerequisites](#uv-prerequisites) below.
+
 #### uv: Prerequisites
 
 ```bash
