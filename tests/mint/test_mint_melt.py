@@ -15,6 +15,8 @@ from cashu.core.base import (
 )
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
+    KeysetInactiveError,
+    KeysetRotatingError,
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
     OutputsArePendingError,
@@ -1430,3 +1432,111 @@ async def test_melt_status_resolution_across_attempts(
     assert result.state == MeltQuoteState.unpaid
     states = await ledger.db_read.get_proofs_states([proof_b.Y])
     assert states[0].unspent
+
+
+INVOICE_64_SAT = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+INVOICE_62_SAT = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+
+async def blank_outputs(wallet: Wallet, n: int = 4):
+    secrets, rs, _ = await wallet.generate_n_secrets(n)
+    outputs, _ = wallet._construct_outputs(n * [0], secrets, rs)
+    return outputs
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only fakewallet")
+async def test_rotation_settles_pending_melt_before_inactivating(
+    wallet, ledger: Ledger
+):
+    settings.fakewallet_payment_state = PaymentStatusResult.PENDING.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+    melt_quote1 = await wallet.melt_quote(INVOICE_64_SAT)
+    melt_quote2 = await wallet.melt_quote(INVOICE_62_SAT)
+
+    outputs1 = await blank_outputs(wallet)
+    response = await ledger.melt(
+        proofs=proofs1, quote=melt_quote1.quote, outputs=outputs1
+    )
+    assert response.state == "PENDING"
+
+    old_id = outputs1[0].id
+    new_keyset = await ledger.rotate_next_keyset(unit=Unit.sat)
+    assert new_keyset.id != old_id
+    assert ledger.keysets[old_id].active
+    assert old_id in ledger.rotating_keysets
+    await ledger.inactivate_drained_keysets()
+    assert ledger.keysets[old_id].active
+
+    # new melts with change on the rotating keyset are refused and left unpaid
+    await assert_err(
+        ledger.melt(
+            proofs=proofs2,
+            quote=melt_quote2.quote,
+            outputs=await blank_outputs(wallet),
+        ),
+        KeysetRotatingError.detail,
+    )
+    assert (await ledger.get_melt_quote(melt_quote2.quote)).unpaid
+    states = await ledger.db_read.get_proofs_states([p.Y for p in proofs2])
+    assert all(s.unspent for s in states)
+
+    # the pending melt settles on the still-active keyset, then the drain inactivates it
+    settings.fakewallet_payment_state = PaymentStatusResult.SETTLED.name
+    assert (await ledger.get_melt_quote(melt_quote1.quote)).paid
+    await ledger.inactivate_drained_keysets()
+    assert not ledger.keysets[old_id].active
+    assert old_id not in ledger.rotating_keysets
+    old_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=old_id))[0]
+    assert not old_keyset.active
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only fakewallet")
+async def test_melt_refuses_change_on_keyset_expiring_before_quote(
+    wallet, ledger: Ledger
+):
+    mint_quote = await wallet.request_mint(100)
+    proofs = await wallet.mint(amount=100, quote_id=mint_quote.quote)
+    melt_quote = await ledger.get_melt_quote(
+        (await wallet.melt_quote(INVOICE_64_SAT)).quote
+    )
+    assert melt_quote.expiry
+    outputs = await blank_outputs(wallet)
+    ledger.keysets[outputs[0].id].final_expiry = melt_quote.expiry - 1
+
+    await assert_err(
+        ledger.melt(proofs=proofs, quote=melt_quote.quote, outputs=outputs),
+        KeysetRotatingError.detail,
+    )
+    assert (await ledger.get_melt_quote(melt_quote.quote)).unpaid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only fakewallet")
+async def test_melt_refused_when_drain_retires_keyset_before_it_sees_the_outputs(
+    wallet, ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+):
+    mint_quote = await wallet.request_mint(100)
+    proofs = await wallet.mint(amount=100, quote_id=mint_quote.quote)
+    melt_quote = await wallet.melt_quote(INVOICE_64_SAT)
+    outputs = await blank_outputs(wallet)
+    keyset = ledger.keysets[outputs[0].id]
+    store = ledger._store_blinded_messages
+
+    # a drain whose pending query ran before these outputs were stored
+    async def store_then_retire(*args, **kwargs):
+        await store(*args, **kwargs)
+        keyset.active = False
+
+    monkeypatch.setattr(ledger, "_store_blinded_messages", store_then_retire)
+    await assert_err(
+        ledger.melt(proofs=proofs, quote=melt_quote.quote, outputs=outputs),
+        KeysetInactiveError.detail,
+    )
+    keyset.active = True
+    assert (await ledger.get_melt_quote(melt_quote.quote)).unpaid

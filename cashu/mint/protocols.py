@@ -1,4 +1,4 @@
-from typing import Dict, List, Mapping, Protocol
+from typing import Dict, List, Mapping, Protocol, Set
 
 from ..core.base import Method, MintKeyset, Unit
 from ..core.crypto.secp import PublicKey
@@ -17,6 +17,7 @@ class SupportsKeysets(Protocol):
     amounts: List[int]
     keyset: MintKeyset
     keysets: Dict[str, MintKeyset]
+    rotating_keysets: Set[str]
     derivation_path: str
 
 

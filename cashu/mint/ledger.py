@@ -1,7 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 import bolt11
 from loguru import logger
@@ -37,6 +37,7 @@ from ..core.errors import (
     CashuError,
     InvoiceAlreadyPaidError,
     KeysetInactiveError,
+    KeysetRotatingError,
     LightningError,
     LightningPaymentFailedError,
     MintingDisabledError,
@@ -112,6 +113,7 @@ class Ledger(
         crud=LedgerCrudSqlite(),
     ) -> None:
         self.keysets: Dict[str, MintKeyset] = {}
+        self.rotating_keysets: Set[str] = set()
         self.backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
         self.events = LedgerEventManager()
         self.db_read: DbReadHelper
@@ -178,6 +180,7 @@ class Ledger(
         while True:
             try:
                 await self._check_pending_proofs_and_melt_quotes()
+                await self.inactivate_drained_keysets()
                 await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
             except Exception as e:
                 logger.error(f"Ledger regular task failed: {e}")
@@ -1427,6 +1430,10 @@ class Ledger(
             expected_output_unit=unit,
             verify_input_output_balance=False,
         )
+        if outputs:
+            final_expiry = self.keysets[outputs[0].id].final_expiry
+            if final_expiry and melt_quote.expiry and final_expiry < melt_quote.expiry:
+                raise KeysetRotatingError()
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
@@ -1452,6 +1459,12 @@ class Ledger(
             # store the change outputs
             if outputs:
                 await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
+                # Checked after storing: the drain either saw these outputs or has already
+                # marked the keyset rotating or inactive.
+                if not self.keysets[outputs[0].id].active:
+                    raise KeysetInactiveError()
+                if outputs[0].id in self.rotating_keysets:
+                    raise KeysetRotatingError()
         except Exception as e:
             logger.debug(f"Melt failed before backend payment: {e}")
             await self._finalize_melt_failed(

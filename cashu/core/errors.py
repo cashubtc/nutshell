@@ -201,6 +201,14 @@ class KeysetInactiveError(KeysetError):
         super().__init__(self.detail, code=self.code)
 
 
+class KeysetRotatingError(KeysetError):
+    detail = "keyset is rotating soon, no new melts accepted"
+    code = 12004
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
 class LightningError(CashuError):
     detail = "Lightning error"
     code = 20000
