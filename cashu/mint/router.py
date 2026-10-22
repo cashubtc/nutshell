@@ -111,9 +111,7 @@ async def index(request: Request) -> HTMLResponse:
     # Methods (Minting / Melting)
     mint_methods = []
     melt_methods = []
-    backends_methods = sorted(
-        list(set(m.name.upper() for m in ledger.backends.keys()))
-    )
+    backends_methods = sorted(list(set(m.name.upper() for m in ledger.backends.keys())))
     if not settings.mint_bolt11_disable_mint:
         mint_methods = backends_methods
     if not settings.mint_bolt11_disable_melt:
@@ -240,7 +238,6 @@ async def index(request: Request) -> HTMLResponse:
     name="Mint information",
     summary="Mint information, operator contact information, and other info.",
     response_model=GetInfoResponse,
-    response_model_exclude_none=True,
 )
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
@@ -616,6 +613,7 @@ async def melt(
     name="Swap tokens",
     summary="Swap inputs for outputs of the same value",
     response_model=PostSwapResponse,
+    response_model_exclude_none=True,
     response_description=(
         "An array of blinded signatures that can be used to create proofs."
     ),
@@ -635,8 +633,12 @@ async def swap(
     logger.trace(f"> POST /v1/swap: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
+    if payload.rerandomize:
+        signatures, randomness = await ledger.swap(
+            proofs=payload.inputs, outputs=payload.outputs, rerandomize=True
+        )
+        return PostSwapResponse(signatures=signatures, rerandomization_r=randomness)
     signatures = await ledger.swap(proofs=payload.inputs, outputs=payload.outputs)
-
     return PostSwapResponse(signatures=signatures)
 
 

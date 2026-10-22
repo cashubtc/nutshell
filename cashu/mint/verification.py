@@ -100,6 +100,7 @@ class LedgerVerification(
         skip_output_amount_check: bool = False,
         expected_output_unit: Optional[Unit] = None,
         verify_input_output_balance: bool = True,
+        rerandomize: bool = False,
     ) -> None:
         # 1. Verify the inputs generically: amounts, secret and witness
         # criteria, duplicate-input prevention, ECASH signature validity, and
@@ -108,7 +109,12 @@ class LedgerVerification(
 
         # 2. Verify NUT-10 spending conditions (P2PK, HTLC, and grouped
         # SIG_ALL rules) at the transaction level.
-        self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
+        if rerandomize:
+            self._verify_input_output_spending_conditions(
+                proofs, outputs or [], quote, rerandomize=True
+            )
+        else:
+            self._verify_input_output_spending_conditions(proofs, outputs or [], quote)
 
         # Melts can omit NUT-08 change outputs or provide an empty array.
         if outputs is None or (not outputs and not verify_input_output_balance):
@@ -117,12 +123,21 @@ class LedgerVerification(
         # 3. Verify the outputs generically: keyset consistency, amount rules,
         # duplicate-output prevention, and that the blinded messages have not
         # already been stored or signed by the mint.
-        await self._verify_outputs(
-            outputs,
-            skip_amount_check=skip_output_amount_check,
-            expected_unit=expected_output_unit,
-            conn=conn,
-        )
+        if rerandomize:
+            await self._verify_outputs(
+                outputs,
+                skip_amount_check=skip_output_amount_check,
+                expected_unit=expected_output_unit,
+                conn=conn,
+                check_stored=False,
+            )
+        else:
+            await self._verify_outputs(
+                outputs,
+                skip_amount_check=skip_output_amount_check,
+                expected_unit=expected_output_unit,
+                conn=conn,
+            )
 
         # 4. For transaction types that require normal input/output balance and
         # unit checks (such as swaps), verify those combined invariants now.
@@ -183,6 +198,7 @@ class LedgerVerification(
         skip_amount_check=False,
         expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
+        check_stored: bool = True,
     ):
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
@@ -212,15 +228,16 @@ class LedgerVerification(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionDuplicateOutputsError()
         # verify that outputs have not been stored or signed before
-        stored_before = await self._check_outputs_pending_or_issued_before(
-            outputs, conn
-        )
-        if stored_before:
-            signed_outputs = [o for o in stored_before if o.C_ is not None]
-            if any(o.C_ for o in signed_outputs):
-                raise OutputsAlreadySignedError()
-            else:
-                raise OutputsArePendingError()
+        if check_stored:
+            stored_before = await self._check_outputs_pending_or_issued_before(
+                outputs, conn
+            )
+            if stored_before:
+                signed_outputs = [o for o in stored_before if o.C_ is not None]
+                if any(o.C_ for o in signed_outputs):
+                    raise OutputsAlreadySignedError()
+                else:
+                    raise OutputsArePendingError()
 
         logger.trace(f"Verified {len(outputs)} outputs.")
 

@@ -74,11 +74,18 @@ class ProofState(LedgerEvent):
     Y: str
     state: ProofSpentState
     witness: Optional[str] = None
+    rerandomization_r: Optional[str] = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
     @model_validator(mode="after")
     def check_witness(self):
         if self.witness is not None and self.state != ProofSpentState.spent:
             raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        if self.rerandomization_r is not None and self.state != ProofSpentState.spent:
+            raise ValueError(
+                'Recovery randomness can only be set if the state is "SPENT"'
+            )
         return self
 
     @property
@@ -137,6 +144,7 @@ class Proof(BaseModel):
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
     witness: Union[None, str] = None  # witness for spending condition
     p2pk_e: Union[None, str] = None  # NUT-28 P2BK ephemeral pubkey E (33-byte SEC1 hex)
+    rerandomization_r: Optional[str] = Field(default=None, exclude=True)
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
@@ -1580,9 +1588,9 @@ class AuthProof(BaseModel):
     def max_token_length(cls) -> int:
         # JSON can use two six-character Unicode escapes per input character.
         # Include field names/separators and padded base64 encoding overhead.
-        max_json_length = 12 * (
-            MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN
-        ) + 64
+        max_json_length = (
+            12 * (MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN) + 64
+        )
         return len(cls.prefix) + 4 * ((max_json_length + 2) // 3)
 
     @classmethod
