@@ -9,6 +9,7 @@ from loguru import logger
 
 from ...core.base import PaymentRequest, Unit
 from ...core.helpers import sum_proofs
+from ...core.nuts.nut18 import method_fee
 from ...core.settings import settings
 from ...wallet.crud import (
     get_keysets,
@@ -152,7 +153,7 @@ async def get_payment_request_wallet(ctx: Context, request: PaymentRequest) -> W
             url, wallet.db.db_location, name=wallet.name, unit=wallet.unit.name
         )
         await candidate.load_mint()
-        fee = candidate.mint_info.payment_request_method_fee(request.sm, candidate.unit)
+        fee = method_fee(request.sm, candidate.mint_info, candidate.unit)
         if fee is None:
             continue
         amount = (request.a or 0) + (0 if listed else fee)
