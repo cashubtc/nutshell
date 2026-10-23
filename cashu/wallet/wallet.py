@@ -1303,7 +1303,8 @@ class Wallet(
             raise BalanceTooLowError()
 
         # coin selection for swapping, needs to include fees
-        swap_proofs = self.coinselect(proofs, amount, include_fees=True)
+        send_amount = self.get_send_amount(amount) if include_fees else amount
+        swap_proofs = self.coinselect(proofs, send_amount, include_fees=True)
 
         # Extra rule: add proofs from inactive keysets to swap_proofs to get rid of them
         swap_proofs += [

@@ -62,12 +62,23 @@ def bech32m_decode(bech: str) -> Tuple[Optional[str], Optional[List[int]]]:
 def _tlv_entry(tag: int, value: bytes) -> bytes:
     return struct.pack(">BH", tag, len(value)) + value
 
-def _tlv_parse(data: bytes) -> List[Tuple[int, bytes]]:
+def _tlv_parse(
+    data: bytes, singletons: Tuple[int, ...] = ()
+) -> List[Tuple[int, bytes]]:
     entries: List[Tuple[int, bytes]] = []
+    seen = set()
     pos = 0
     while pos < len(data):
+        if len(data) - pos < 3:
+            raise ValueError("Incomplete TLV header")
         tag = data[pos]
         length = struct.unpack(">H", data[pos + 1 : pos + 3])[0]
+        if pos + 3 + length > len(data):
+            raise ValueError("Incomplete TLV value")
+        if tag in singletons:
+            if tag in seen:
+                raise ValueError("Duplicate TLV field")
+            seen.add(tag)
         value = data[pos + 3 : pos + 3 + length]
         entries.append((tag, value))
         pos += 3 + length
@@ -177,7 +188,7 @@ def _encode_transport(tr: Transport) -> bytes:
     return inner
 
 def _decode_transport(data: bytes) -> Transport:
-    entries = _tlv_parse(data)
+    entries = _tlv_parse(data, singletons=(0x01, 0x02))
     kind: Optional[int] = None
     target_raw = b""
     tag_tuples: List[List[str]] = []
@@ -226,7 +237,7 @@ def _encode_nut10(opt: NUT10Option) -> bytes:
     return inner
 
 def _decode_nut10(data: bytes) -> NUT10Option:
-    entries = _tlv_parse(data)
+    entries = _tlv_parse(data, singletons=(0x01, 0x02))
     kind: Optional[int] = None
     d = ""
     tags: List[List[str]] = []
@@ -257,7 +268,7 @@ def _encode_supported_method(sm: SupportedMethod) -> bytes:
     return inner
 
 def _decode_supported_method(data: bytes) -> SupportedMethod:
-    entries = _tlv_parse(data)
+    entries = _tlv_parse(data, singletons=(0x01, 0x02))
     mn: Optional[str] = None
     mf: Optional[int] = None
 
@@ -307,7 +318,7 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
     return out
 
 def _tlv_to_pr(data: bytes) -> PaymentRequest:
-    entries = _tlv_parse(data)
+    entries = _tlv_parse(data, singletons=(0x01, 0x02, 0x03, 0x04, 0x06, 0x08, 0x09))
     kwargs: dict = {}
     mints: List[str] = []
     transports: List[Transport] = []
@@ -328,8 +339,10 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
             else:
                 kwargs["u"] = val.decode()
         elif tag == 0x04:
-            if len(val) == 0:
+            if len(val) != 1:
                 raise ValueError("Invalid single use length")
+            if val[0] not in (0, 1):
+                raise ValueError("Invalid single use value")
             kwargs["s"] = val[0] == 1
         elif tag == 0x05:
             mints.append(val.decode())
@@ -340,6 +353,10 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
         elif tag == 0x08:
             kwargs["nut10"] = _decode_nut10(val)
         elif tag == 0x09:
+            if len(val) != 1:
+                raise ValueError("Invalid mint preferred length")
+            if val[0] not in (0, 1):
+                raise ValueError("Invalid mint preferred value")
             kwargs["mp"] = val[0] == 1
         elif tag == 0x0A:
             supported_methods.append(_decode_supported_method(val))
