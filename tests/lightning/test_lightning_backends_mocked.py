@@ -29,7 +29,11 @@ from cashu.lightning.lnd_grpc.lnd_grpc import (
     FEE_PROBE_TIMEOUT_SECONDS,
     LndRPCWallet,
 )
-from cashu.lightning.lndrest import LndRestWallet
+from cashu.lightning.lndrest import (
+    HTTP_CONNECT_TIMEOUT_SECONDS,
+    HTTP_READ_TIMEOUT_SECONDS,
+    LndRestWallet,
+)
 from cashu.lightning.strike import StrikeWallet
 from cashu.wallet.lightning import LightningWallet
 
@@ -1575,3 +1579,21 @@ async def test_strike_payment_status_non_404_is_error():
     status = await wallet.get_payment_status("payment-id")
 
     assert status.result == PaymentStatusResult.ERROR
+
+
+@pytest.mark.asyncio
+async def test_lndrest_client_has_http_timeouts(monkeypatch):
+    """A connection that dies mid-request must raise instead of hanging
+    forever, which would wedge the melt quote waiting for the response."""
+    monkeypatch.setattr(settings, "mint_lnd_rest_endpoint", "https://lnd.example")
+    monkeypatch.setattr(settings, "mint_lnd_rest_cert", None)
+    monkeypatch.setattr(settings, "mint_lnd_rest_cert_verify", False)
+    monkeypatch.setattr(settings, "mint_lnd_rest_macaroon", "00" * 32)
+
+    backend = LndRestWallet(unit=Unit.sat)
+    try:
+        assert backend.client.timeout is not None
+        assert backend.client.timeout.connect == HTTP_CONNECT_TIMEOUT_SECONDS
+        assert backend.client.timeout.read == HTTP_READ_TIMEOUT_SECONDS
+    finally:
+        await backend.client.aclose()

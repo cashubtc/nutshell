@@ -60,6 +60,16 @@ TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
 FEE_PROBE_TIMEOUT_SECONDS = 5
 
+# HTTP timeouts for the LND REST client. Without them, a connection that
+# dies mid-request (e.g. a reverse proxy or tunnel dropping silently)
+# leaves pay and status calls hanging forever, wedging the melt quote that
+# waits for them. Pay calls stream until LND's own PAYMENT_TIMEOUT_SECONDS
+# resolves the payment attempt, so they get that plus a grace margin;
+# everything else answers within seconds.
+HTTP_CONNECT_TIMEOUT_SECONDS = 15
+HTTP_READ_TIMEOUT_SECONDS = 60
+HTTP_PAY_TIMEOUT_SECONDS = PAYMENT_TIMEOUT_SECONDS + HTTP_READ_TIMEOUT_SECONDS
+
 
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
@@ -119,7 +129,11 @@ class LndRestWallet(LightningBackend):
             base_url=self.endpoint,
             headers=self.auth,
             verify=self.cert,
-            timeout=None,
+            # bounded by default so dead connections raise instead of
+            # hanging forever; long-lived streams override per request
+            timeout=httpx.Timeout(
+                HTTP_READ_TIMEOUT_SECONDS, connect=HTTP_CONNECT_TIMEOUT_SECONDS
+            ),
         )
         if self.supports_mpp:
             logger.info("LNDRestWallet enabling MPP feature")
@@ -228,7 +242,7 @@ class LndRestWallet(LightningBackend):
         }
 
         async with self.client.stream(
-            "POST", "/v2/router/send", json=data, timeout=None
+            "POST", "/v2/router/send", json=data, timeout=HTTP_PAY_TIMEOUT_SECONDS
         ) as r:
             async for json_line in r.aiter_lines():
                 try:
@@ -325,7 +339,7 @@ class LndRestWallet(LightningBackend):
                     "fee_limit": lnrpcFeeLimit,
                     "use_mission_control": True,
                 },
-                timeout=None,
+                timeout=HTTP_READ_TIMEOUT_SECONDS,
             )
 
             assert route
@@ -362,7 +376,7 @@ class LndRestWallet(LightningBackend):
                     ).decode(),
                     "route": route_data["routes"][0],
                 },
-                timeout=None,
+                timeout=HTTP_PAY_TIMEOUT_SECONDS,
             )
 
             assert response
@@ -451,7 +465,9 @@ class LndRestWallet(LightningBackend):
             "ascii"
         )
         url = f"/v2/router/track/{checking_id}"
-        async with self.client.stream("GET", url, timeout=None) as r:
+        async with self.client.stream(
+            "GET", url, timeout=HTTP_READ_TIMEOUT_SECONDS
+        ) as r:
             async for json_line in r.aiter_lines():
                 try:
                     line = json.loads(json_line)
@@ -502,7 +518,13 @@ class LndRestWallet(LightningBackend):
         while True:
             try:
                 url = "/v1/invoices/subscribe"
-                async with self.client.stream("GET", url, timeout=None) as r:
+                # long-lived stream: bound only the connection setup, the
+                # read stays open (the surrounding loop reconnects on error)
+                async with self.client.stream(
+                    "GET",
+                    url,
+                    timeout=httpx.Timeout(None, connect=HTTP_CONNECT_TIMEOUT_SECONDS),
+                ) as r:
                     # Reset retry delay on successful connection
                     retry_delay = 0
                     async for line in r.aiter_lines():
