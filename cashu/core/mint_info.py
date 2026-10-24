@@ -5,11 +5,17 @@ from pydantic import BaseModel
 
 from .base import Method, Unit
 from .json_rpc.base import JSONRPCSubscriptionKinds
-from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
+from .models import (
+    MeltMethodSetting,
+    MintInfoContact,
+    MintInfoProtectedEndpoint,
+    Nut15MppSupport,
+)
 from .nuts.nuts import (
     BLIND_AUTH_NUT,
     BOOLEAN_SUPPORTED_NUTS,
     CLEAR_AUTH_NUT,
+    MELT_NUT,
     MPP_NUT,
     WEBSOCKETS_NUT,
 )
@@ -72,6 +78,20 @@ class MintInfo(BaseModel):
 
         for entry in nut_15["methods"]:
             entry_obj = Nut15MppSupport.model_validate(entry)
+            if entry_obj.method == method and entry_obj.unit == unit.name:
+                return True
+
+        return False
+
+    def supports_melt_method(self, method: str, unit: Unit) -> bool:
+        if not self.nuts:
+            return False
+        nut_05 = self.nuts.get(MELT_NUT)
+        if not nut_05 or not nut_05.get("methods") or nut_05.get("disabled"):
+            return False
+
+        for entry in nut_05["methods"]:
+            entry_obj = MeltMethodSetting.model_validate(entry)
             if entry_obj.method == method and entry_obj.unit == unit.name:
                 return True
 

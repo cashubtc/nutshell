@@ -8,8 +8,9 @@ import bolt11
 import pytest
 from click.testing import CliRunner
 
-from cashu.core.base import NUT10Option, PaymentRequest, TokenV4
-from cashu.core.nuts.nut18 import serialize
+from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, TokenV4
+from cashu.core.nuts.nut18 import deserialize, serialize
+from cashu.core.nuts.nut26 import deserialize as nut26_deserialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
 from cashu.core.p2pk import P2PKSecret
 from cashu.core.settings import settings
@@ -1267,3 +1268,340 @@ def test_pay_nut26_unsupported_lock(mint, nut26_cli_prefix):
 
     assert "Unsupported lock kind 'HTLC'" in result.output
     assert "cashuB" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_in_list_zero_fee_method(mint, nut18_cli_prefix):
+    """Mint is in the (strict) list; a zero-fee method adds nothing."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10, u="sat", m=[settings.mint_url], sm=[SupportedMethod(mn="bolt11")]
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_in_list_priced_method_no_fee_applied(mint, nut18_cli_prefix):
+    """Mint is in the list; a priced method's fee does NOT apply (mint ∈ m ⇒ no fee)."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=[settings.mint_url],
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_outside_preferred_list_zero_fee_method(mint, nut18_cli_prefix):
+    """Mint outside a preferred list with a zero-fee method: accepted, nothing added."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=["https://other.mint/"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11")],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_outside_preferred_list_with_method_fee(mint, nut18_cli_prefix):
+    """Mint outside a preferred list with a priced method: fee is added."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=["https://other.mint/"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    # The mint outside the preferred list is not rejected ...
+    assert "not accepted" not in result.output
+    # ... and the method fee is added on top of the requested amount.
+    assert "Adding method fee of 5 sat" in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_unsupported_method(mint, nut18_cli_prefix):
+    """A request whose supported methods exclude bolt11 is hard-rejected,
+    regardless of the mint list."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(a=10, u="sat", sm=[SupportedMethod(mn="bolt12")])
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "does not support a requested method" in result.output
+    assert "cashuB" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_mint_list_ignores_trailing_slash(mint, nut18_cli_prefix):
+    """A trailing-slash difference must not classify our own mint as outside the list."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(
+        a=10,
+        u="sat",
+        m=[settings.mint_url.rstrip("/") + "/"],
+        mp=True,
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "not accepted" not in result.output
+    # our mint is in the list, so no method fee is owed
+    assert "Adding method fee" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_fee_reason_without_mint_list(mint, nut18_cli_prefix):
+    """With no mint list the fee still applies, but the reason must say so."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(a=10, u="sat", sm=[SupportedMethod(mn="bolt11", mf=5)])
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "Adding method fee of 5 sat" in result.output
+    assert "the request has no mint list" in result.output
+    assert "outside the preferred list" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+@pytest.mark.parametrize("encode", [serialize, nut26_serialize], ids=["nut18", "nut26"])
+@pytest.mark.parametrize("methods", [None, [], [SupportedMethod(mn="bolt11")]])
+def test_pay_rejects_request_without_unit(mint, nut18_cli_prefix, encode, methods):
+    """Reject encoded requests whose amount or methods lack a unit."""
+    runner = CliRunner()
+
+    pr = PaymentRequest.model_construct(a=10, sm=methods)
+    creq = encode(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert result.exit_code == 1
+    assert "require a unit" in result.output
+    assert "cashuB" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_pay_nut18_rejects_unit_mismatch(mint, nut18_cli_prefix):
+    """A request unit that differs from the wallet's unit is rejected."""
+    runner = CliRunner()
+
+    pr = PaymentRequest(a=10, u="usd", sm=[SupportedMethod(mn="bolt11")])
+    creq = serialize(pr)
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "pay", creq, "-y"])
+
+    assert "does not match" in result.output
+    assert "cashuB" not in result.output
+
+
+def _extract_creq(output: str) -> str:
+    """Pull the creqA payment request out of CLI output that may include logs."""
+    for line in output.splitlines():
+        if line.strip().startswith("creqA"):
+            return line.strip()
+    raise AssertionError(f"No creqA found in output:\n{output}")
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_request_creates_payment_request(mint, nut18_cli_prefix):
+    """The request command builds a NUT-18 request carrying the new fields."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        [
+            *nut18_cli_prefix, "request", "100",
+            "-d", "Coffee",
+            "-m", "https://mint.example.com",
+            "--preferred",
+            "--method", "bolt11",
+            "-s",
+        ],
+    )
+    assert result.exception is None, f"Exception: {result.exception}"
+
+    pr = deserialize(_extract_creq(result.output))
+    assert pr.a == 100
+    assert pr.u == "sat"
+    assert pr.d == "Coffee"
+    assert pr.m == ["https://mint.example.com"]
+    assert pr.mp is True
+    assert pr.sm == [SupportedMethod(mn="bolt11")]
+    assert pr.s is True
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_request_method_with_fee_syntax(mint, nut18_cli_prefix):
+    """--method name:fee builds a SupportedMethod with a per-method fee."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        [
+            *nut18_cli_prefix, "request", "100",
+            "--method", "bolt11",
+            "--method", "onchain:50",
+        ],
+    )
+    assert result.exception is None, f"Exception: {result.exception}"
+
+    pr = deserialize(_extract_creq(result.output))
+    assert pr.sm == [
+        SupportedMethod(mn="bolt11"),
+        SupportedMethod(mn="onchain", mf=50),
+    ]
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+@pytest.mark.parametrize("amount", ["0", "-1", str(2**64)])
+def test_request_rejects_non_positive_amount(mint, nut18_cli_prefix, amount):
+    """A request amount must be positive: the pay path can't process 0 or less."""
+    runner = CliRunner()
+
+    result = runner.invoke(cli, [*nut18_cli_prefix, "request", "--", amount])
+
+    assert "Invalid value" in result.output
+    assert "creqA" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+@pytest.mark.parametrize(
+    "method", ["onchain:-5", "onchain:abc", ":5", "", f"onchain:{2**64}"]
+)
+def test_request_rejects_invalid_method_fee(mint, nut18_cli_prefix, method):
+    """Invalid method specifications are normal CLI parameter errors."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli, [*nut18_cli_prefix, "request", "100", "--method", method]
+    )
+    assert result.exit_code == 2
+    assert "Invalid --method" in result.output
+    assert "creqA" not in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
+def test_request_bech32_creates_nut26_request(mint, nut26_cli_prefix):
+    """The request command emits a NUT-26 creqB1 string with --bech32."""
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        [*nut26_cli_prefix, "request", "100", "-m", "https://mint.example.com", "--bech32"],
+    )
+    assert result.exception is None, f"Exception: {result.exception}"
+
+    creqb = next(
+        line.strip()
+        for line in result.output.splitlines()
+        if line.strip().upper().startswith("CREQB1")
+    )
+    pr = nut26_deserialize(creqb)
+    assert pr.a == 100
+    assert pr.u == "sat"
+    assert pr.m == ["https://mint.example.com"]
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize("encode", [serialize, nut26_serialize], ids=["nut18", "nut26"])
+@pytest.mark.parametrize("mint_policy", ["listed", "preferred", "any", "empty"])
+def test_pay_payment_request_sends_method_fee(funded_cli_prefix, encode, mint_policy):
+    """Verify the emitted token value, including fees only for unlisted mints."""
+    mints = {
+        "listed": [settings.mint_url],
+        "preferred": ["https://other.mint"],
+        "any": None,
+        "empty": [],
+    }[mint_policy]
+    request = PaymentRequest(
+        a=10,
+        u="sat",
+        m=mints,
+        mp=True if mint_policy == "preferred" else None,
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    result = CliRunner().invoke(
+        cli, [*funded_cli_prefix, "pay", encode(request), "-y"]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert token.mint.rstrip("/") == settings.mint_url.rstrip("/")
+    assert token.unit == "sat"
+    assert sum(proof.amount for proof in token.proofs) == (
+        10 if mint_policy == "listed" else 15
+    )
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize("bech32", [False, True], ids=["nut18", "nut26"])
+def test_request_accepts_u64_boundaries(nut18_cli_prefix, bech32):
+    maximum = str(2**64 - 1)
+    result = CliRunner().invoke(
+        cli,
+        [
+            *nut18_cli_prefix,
+            "request",
+            maximum,
+            "--method",
+            f"bolt11:{maximum}",
+            *(["--bech32"] if bech32 else []),
+        ],
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    encoded = next(
+        line
+        for line in result.stdout.splitlines()
+        if line.startswith(("creqA", "CREQB1"))
+    )
+    request = deserialize(encoded)
+    assert request.a == 2**64 - 1
+    assert request.sm == [SupportedMethod(mn="bolt11", mf=2**64 - 1)]
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize("encode", [serialize, nut26_serialize], ids=["nut18", "nut26"])
+def test_pay_rejects_request_total_overflow(nut18_cli_prefix, encode):
+    request = PaymentRequest(
+        a=2**64 - 1, u="sat", sm=[SupportedMethod(mn="bolt11", mf=1)]
+    )
+    result = CliRunner().invoke(cli, [*nut18_cli_prefix, "pay", encode(request), "-y"])
+    assert result.exit_code == 1
+    assert "total exceeds the maximum amount" in result.output
+    assert "cashuB" not in result.stdout
