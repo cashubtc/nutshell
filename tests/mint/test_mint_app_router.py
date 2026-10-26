@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
@@ -162,8 +162,36 @@ def _dummy_ledger():
 
 def test_create_app_sets_metadata():
     app = app_module.create_app()
-    assert app.title == "Nutshell Mint"
-    assert app.version == settings.version
+    assert app.openapi()["info"] == {
+        "title": "Nutshell Mint",
+        "description": "Ecash mint based on the Cashu protocol.",
+        "version": settings.version,
+        "license": {
+            "name": "MIT License",
+            "url": "https://raw.githubusercontent.com/cashubtc/cashu/main/LICENSE",
+        },
+    }
+
+
+def test_create_app_runs_mint_lifecycle(monkeypatch):
+    monkeypatch.setattr(settings, "mint_redis_cache_enabled", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(settings, "mint_rpc_server_enable", False)
+    start = AsyncMock()
+    stop = AsyncMock()
+    disconnect = AsyncMock()
+    monkeypatch.setattr(app_module, "start_mint", start)
+    monkeypatch.setattr(app_module, "shutdown_mint", stop)
+    monkeypatch.setattr(app_module, "shutdown_management_rpc", AsyncMock())
+    monkeypatch.setattr(app_module.redis, "disconnect", disconnect)
+
+    with TestClient(app_module.create_app()):
+        start.assert_awaited_once_with()
+        stop.assert_not_awaited()
+        disconnect.assert_not_awaited()
+
+    stop.assert_awaited_once_with()
+    disconnect.assert_awaited_once_with()
 
 
 def test_app_does_not_mount_v0_mint_routes():
