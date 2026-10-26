@@ -24,7 +24,7 @@ jobs:
           uv-version: ${{ inputs.uv-version }}
       - name: Ruff check
         run: make ruff-check
-      - name: Mutation tooling regression tests
+      - name: Tooling regression tests
         run: uv run --locked pytest scripts/tests -o addopts=
   mypy:
     runs-on: ubuntu-latest

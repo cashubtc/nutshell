@@ -14,6 +14,19 @@ We use [Ruff](https://docs.astral.sh/ruff/formatter/) for formatting. To make su
 
 We use [uv](https://docs.astral.sh/uv/) to manage Python, dependencies, and packaging. Install uv as described in the README, then run `uv sync --locked` to install the project and its development dependencies into `.venv`. The `.python-version` file selects Python `3.10`; uv downloads it if needed. Run `uv run --locked cashu --help` to use the wallet or `uv run --locked mint` to run the mint. You can also activate the environment with `source .venv/bin/activate`.
 
+### Building distributions
+
+Run `make package` to build the wheel and source distribution. The build backend
+copies only the paths in `package-files.txt` and the required build metadata into
+a temporary directory before calling `uv_build`. Local files are excluded even
+when Git is unavailable, and symlinks under `cashu/` or in build inputs cause the
+build to fail. This also applies to direct `uv build` and pip builds.
+
+When adding or removing packaged files, stage the changes and update the manifest
+with `git ls-files cashu > package-files.txt`. Review the manifest diff: every
+listed file will be published, including non-Python resources. Run the packaging
+regression tests with `uv run --locked pytest scripts/tests/test_package.py -o addopts=`.
+
 ### Precommit hook
 
 To run the formatter and mypy (linter) before you push code, you can install the very useful pre-commit hook which will check your code every time you push with git.
