@@ -59,7 +59,12 @@ INVOICE_STATUS_RESULT_MAP = {
 MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
+PAYMENT_TIMEOUT_GRACE_SECONDS = 30
+SEND_PAYMENT_READ_TIMEOUT_SECONDS = (
+    PAYMENT_TIMEOUT_SECONDS + PAYMENT_TIMEOUT_GRACE_SECONDS
+)
 FEE_PROBE_TIMEOUT_SECONDS = 5
+INVOICE_PAGE_SIZE = 1000
 
 
 class LndRestWallet(LightningBackend):
@@ -232,7 +237,7 @@ class LndRestWallet(LightningBackend):
             "POST",
             "/v2/router/send",
             json=data,
-            timeout=http_timeout(PAYMENT_TIMEOUT_SECONDS + 30),
+            timeout=http_timeout(SEND_PAYMENT_READ_TIMEOUT_SECONDS),
         ) as r:
             async for json_line in r.aiter_lines():
                 try:
@@ -505,14 +510,17 @@ class LndRestWallet(LightningBackend):
                     while True:
                         response = await self.client.get(
                             "/v1/invoices",
-                            params={"index_offset": offset, "num_max_invoices": 1000},
+                            params={
+                                "index_offset": offset,
+                                "num_max_invoices": INVOICE_PAGE_SIZE,
+                            },
                         )
                         response.raise_for_status()
                         page = response.json()
                         invoices = page.get("invoices", [])
                         settled.extend(inv for inv in invoices if inv.get("settled"))
                         next_offset = int(page.get("last_index_offset", 0))
-                        if len(invoices) < 1000 or next_offset <= offset:
+                        if len(invoices) < INVOICE_PAGE_SIZE or next_offset <= offset:
                             break
                         offset = next_offset
                     for inv in sorted(

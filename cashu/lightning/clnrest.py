@@ -31,6 +31,7 @@ from .http import PAYMENT_READ_TIMEOUT, STREAM_READ_TIMEOUT, http_timeout
 CLN_PAYMENT_STATUS_COMPLETE = "complete"
 CLN_PAYMENT_STATUS_PENDING = "pending"
 CLN_PAYMENT_STATUS_FAILED = "failed"
+STATUS_TIMEOUT_SECONDS = 5
 
 # https://docs.corelightning.org/reference/listpays
 PAYMENT_RESULT_MAP = {
@@ -105,7 +106,7 @@ class CLNRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.post("/v1/listfunds", timeout=5)
+        r = await self.client.post("/v1/listfunds", timeout=STATUS_TIMEOUT_SECONDS)
         r.raise_for_status()
         if r.is_error or "message" in r.json():
             try:

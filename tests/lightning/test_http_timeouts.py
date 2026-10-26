@@ -12,9 +12,13 @@ from cashu.core.base import Unit
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
 from cashu.lightning.clnrest import CLNRestWallet
-from cashu.lightning.lndrest import LndRestWallet
+from cashu.lightning.http import DEFAULT_READ_TIMEOUT
+from cashu.lightning.lndrest import INVOICE_PAGE_SIZE, LndRestWallet
 from cashu.lightning.strike import StrikeWallet
 from tests.lightning.test_lightning_backends_mocked import _quote
+
+TEST_READ_TIMEOUT_SECONDS = 0.05
+TEST_STREAM_WAIT_TIMEOUT_SECONDS = 2.0
 
 
 @pytest.mark.asyncio
@@ -120,13 +124,19 @@ async def test_invoice_stream_recovers_from_silent_connection(monkeypatch, backe
     wallet.unit = Unit.sat
     monkeypatch.setattr(
         f"{backend.__module__}.http_timeout",
-        lambda read=60.0: httpx.Timeout(0.05),
+        lambda read=DEFAULT_READ_TIMEOUT: httpx.Timeout(TEST_READ_TIMEOUT_SECONDS),
         raising=False,
     )
     stream = wallet.paid_invoices_stream()
     try:
-        assert await asyncio.wait_for(stream.__anext__(), 2) == first_hash
-        assert await asyncio.wait_for(stream.__anext__(), 2) == second_hash
+        assert (
+            await asyncio.wait_for(stream.__anext__(), TEST_STREAM_WAIT_TIMEOUT_SECONDS)
+            == first_hash
+        )
+        assert (
+            await asyncio.wait_for(stream.__anext__(), TEST_STREAM_WAIT_TIMEOUT_SECONDS)
+            == second_hash
+        )
         assert cursors == ([7, 8] if backend is CLNRestWallet else [0, 8])
     finally:
         await stream.aclose()
@@ -183,9 +193,9 @@ async def test_lnd_recovers_first_settlement_missed_during_stall(paginated):
                 return httpx.Response(
                     200,
                     json={
-                        "invoices": [{"settled": False}] * 999
+                        "invoices": [{"settled": False}] * (INVOICE_PAGE_SIZE - 1)
                         + [invoice(middle_hash, 2)],
-                        "last_index_offset": "1000",
+                        "last_index_offset": str(INVOICE_PAGE_SIZE),
                     },
                 )
             return httpx.Response(
@@ -213,11 +223,26 @@ async def test_lnd_recovers_first_settlement_missed_during_stall(paginated):
         wallet.client = client
         stream = wallet.paid_invoices_stream()
         try:
-            assert await asyncio.wait_for(stream.__anext__(), 2) == recovered_hash
+            assert (
+                await asyncio.wait_for(
+                    stream.__anext__(), TEST_STREAM_WAIT_TIMEOUT_SECONDS
+                )
+                == recovered_hash
+            )
             if paginated:
-                assert await asyncio.wait_for(stream.__anext__(), 2) == middle_hash
-            assert await asyncio.wait_for(stream.__anext__(), 2) == next_hash
+                assert (
+                    await asyncio.wait_for(
+                        stream.__anext__(), TEST_STREAM_WAIT_TIMEOUT_SECONDS
+                    )
+                    == middle_hash
+                )
+            assert (
+                await asyncio.wait_for(
+                    stream.__anext__(), TEST_STREAM_WAIT_TIMEOUT_SECONDS
+                )
+                == next_hash
+            )
             assert subscriptions == ["0", "2" if paginated else "1"]
-            assert offsets == ([0, 1000] if paginated else [0])
+            assert offsets == ([0, INVOICE_PAGE_SIZE] if paginated else [0])
         finally:
             await stream.aclose()

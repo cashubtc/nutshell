@@ -20,6 +20,7 @@ from .base import (
 from .http import PAYMENT_READ_TIMEOUT, http_timeout
 
 USDT = "USDT"
+STATUS_TIMEOUT_SECONDS = 15
 
 
 class StrikeAmount(BaseModel):
@@ -143,7 +144,9 @@ class StrikeWallet(LightningBackend):
 
     async def status(self) -> StatusResponse:
         try:
-            r = await self.client.get(url=f"{self.endpoint}/v1/balances", timeout=15)
+            r = await self.client.get(
+                url=f"{self.endpoint}/v1/balances", timeout=STATUS_TIMEOUT_SECONDS
+            )
             r.raise_for_status()
         except Exception as exc:
             return StatusResponse(
