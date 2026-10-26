@@ -490,6 +490,7 @@ async def test_split_race_condition(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
+    input_count = len(wallet1.proofs)
     # run two splits in parallel
     import asyncio
 
@@ -501,10 +502,20 @@ async def test_split_race_condition(wallet1: Wallet):
         return_exceptions=True,
     )
     errors = [result for result in results if isinstance(result, Exception)]
-    assert len(errors) == 1, results
-    assert any(
-        message in str(errors[0]) for message in ("proofs are pending", "already spent")
-    )
+    assert len(errors) <= 1, results
+    if errors:
+        assert any(
+            message in str(errors[0])
+            for message in ("proofs are pending", "already spent")
+        )
+    else:
+        # Identical concurrent calls can recover the same completed request.
+        assert [[p.secret for p in group] for group in results[0]] == [
+            [p.secret for p in group] for group in results[1]
+        ]
+    assert wallet1.balance == wallet1.available_balance == 64
+    assert len({p.secret for p in wallet1.proofs}) == len(wallet1.proofs)
+    assert len(await get_proofs(db=wallet1.db, table="proofs_used")) == input_count
 
 
 @pytest.mark.asyncio
