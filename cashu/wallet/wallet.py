@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import threading
 import time
@@ -25,7 +26,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import is_supported_keyset_version
 from ..core.crypto.secp import PrivateKey, PublicKey
-from ..core.db import Database
+from ..core.db import Database, LockOptions
 from ..core.errors import KeysetNotFoundError
 from ..core.helpers import (
     amount_summary,
@@ -67,10 +68,17 @@ from .crud import (
     update_mint,
     update_proof,
 )
-from .errors import BalanceTooLowError
+from .errors import BalanceTooLowError, MintError
 from .htlc import WalletHTLC
 from .p2pk import WalletP2PK
 from .proofs import WalletProofs
+from .requests import (
+    PendingRequest,
+    delete_pending_request,
+    get_pending_request,
+    store_pending_request,
+    update_pending_request,
+)
 from .secrets import WalletSecrets
 from .subscriptions import SubscriptionManager
 from .transactions import WalletTransactions
@@ -757,71 +765,86 @@ class Wallet(
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
 
-        input_fees = self.get_fees_for_proofs(proofs)
-        logger.trace(f"Input fees: {input_fees}")
-        # create a suitable amounts to keep and send.
-        keep_outputs, send_outputs = self.determine_output_amounts(
-            proofs,
-            amount,
-            include_fees=include_fees,
-            keyset_id_outputs=self.keyset_id,
+        operation = (
+            "swap:"
+            + hashlib.sha256(
+                json.dumps(sorted(p.Y for p in proofs)).encode()
+            ).hexdigest()
         )
-
-        amounts = keep_outputs + send_outputs
-
-        # generate secrets for new outputs
-        if secret_lock is None:
-            secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
-        else:
-            secrets, rs, derivation_paths = await self.generate_locked_secrets(
-                send_outputs, keep_outputs, secret_lock
+        parameters = {
+            "amount": amount,
+            "include_fees": include_fees,
+            "secret_lock": secret_lock.model_dump(mode="json") if secret_lock else None,
+            "p2pk_e": p2pk_e,
+        }
+        pending = await get_pending_request(self.db, self.url, operation)
+        if pending is None:
+            keep_outputs, send_outputs = self.determine_output_amounts(
+                proofs,
+                amount,
+                include_fees=include_fees,
+                keyset_id_outputs=self.keyset_id,
             )
-
-        assert len(secrets) == len(amounts), (
-            "number of secrets does not match number of outputs"
-        )
-        # verify that we didn't accidentally reuse a secret
-        await self._check_used_secrets(secrets)
-
-        # construct outputs
-        outputs, rs = self._construct_outputs(amounts, secrets, rs, self.keyset_id)
-
-        # potentially add witnesses to outputs based on what requirement the proofs indicate
-        proofs = self.sign_proofs_inplace_swap(proofs, outputs)
-
-        # sort outputs by amount, remember original order
-        sorted_outputs_with_indices = sorted(
-            enumerate(outputs), key=lambda p: p[1].amount
-        )
-        original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
-
-        # Call swap API
-        sorted_promises = await super().split(proofs, list(sorted_outputs))
-
-        # sort promises back to original order
-        promises = [
-            promise
-            for _, promise in sorted(
-                zip(original_indices, sorted_promises), key=lambda x: x[0]
+            amounts = keep_outputs + send_outputs
+            if secret_lock is None:
+                secrets, rs, paths = await self.generate_n_secrets(len(amounts))
+            else:
+                secrets, rs, paths = await self.generate_locked_secrets(
+                    send_outputs, keep_outputs, secret_lock
+                )
+            await self._check_used_secrets(secrets)
+            outputs, rs = self._construct_outputs(amounts, secrets, rs, self.keyset_id)
+            proofs = self.sign_proofs_inplace_swap(proofs, outputs)
+            pending = await self._save_pending_request(
+                PendingRequest(
+                    kind="swap",
+                    operation=operation,
+                    inputs=proofs,
+                    outputs=outputs,
+                    secrets=secrets,
+                    rs=[r.to_hex() for r in rs],
+                    derivation_paths=paths,
+                    keep_count=len(keep_outputs),
+                    parameters=parameters,
+                )
             )
-        ]
+        if pending.parameters != parameters:
+            raise ValueError("Retry the unfinished swap with its original parameters.")
 
-        # Construct proofs from returned promises (i.e., unblind the signatures)
-        new_proofs = await self._construct_proofs(
-            promises, secrets, rs, derivation_paths
-        )
+        if pending.signatures is None:
+            indices, sorted_outputs = zip(
+                *sorted(enumerate(pending.outputs), key=lambda p: p[1].amount)
+            )
+            pending.attempts += 1
+            await update_pending_request(self.db, self.url, pending)
+            try:
+                sorted_promises = await super().split(
+                    pending.inputs, list(sorted_outputs)
+                )
+                promises = [p for _, p in sorted(zip(indices, sorted_promises))]
+            except Exception as error:
+                # The response cache may have expired. NUT-09 still lets us
+                # recover signatures for the exact outputs saved before sending.
+                restored, signatures = [], []
+                try:
+                    restored, signatures = await super().restore_promises(
+                        pending.outputs
+                    )
+                except Exception as restore_error:
+                    logger.debug(f"Could not recover swap outputs: {restore_error}")
+                by_output = {o.B_: p for o, p in zip(restored, signatures)}
+                if len(by_output) != len(pending.outputs):
+                    if isinstance(error, MintError) and pending.attempts == 1:
+                        await self._discard_request_if_unspent(pending)
+                    raise error
+                promises = [by_output[o.B_] for o in pending.outputs]
+            if len(promises) != len(pending.outputs):
+                raise ValueError("Mint returned an incomplete swap response.")
+            pending.signatures = promises
+            await update_pending_request(self.db, self.url, pending)
 
-        await self.invalidate(proofs)
-
-        keep_proofs = new_proofs[: len(keep_outputs)]
-        send_proofs = new_proofs[len(keep_outputs) :]
-
-        # P2BK: attach ephemeral pubkey to send proofs
-        if p2pk_e:
-            for p in send_proofs:
-                p.p2pk_e = p2pk_e
-
-        return keep_proofs, send_proofs
+        new_proofs = await self._complete_pending_request(pending)
+        return new_proofs[: pending.keep_count], new_proofs[pending.keep_count :]
 
     async def melt_quote(
         self, invoice: str, amount_msat: Optional[int] = None
@@ -853,6 +876,16 @@ class Wallet(
         melt_quote_resp = await super().get_melt_quote(quote)
         melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote)
         melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
+        melt_quote.payment_preimage = melt_quote_resp.payment_preimage
+        pending = await get_pending_request(self.db, self.url, f"melt:{quote}")
+        if pending and melt_quote.pending:
+            pending.seen_pending = True
+            await update_pending_request(self.db, self.url, pending)
+        if pending and melt_quote.paid:
+            pending.signatures = melt_quote.change or []
+            await update_pending_request(self.db, self.url, pending)
+            await self._complete_pending_request(pending, melt_quote)
+            return melt_quote
 
         # update database
         if not melt_quote_local:
@@ -876,15 +909,138 @@ class Wallet(
                 if sum_proofs(proofs) == melt_quote.amount + melt_quote.fee_reserve:
                     await self.invalidate(proofs)
 
-                if melt_quote.change:
-                    logger.warning(
-                        "Melt quote contains change but change is not supported yet."
-                    )
-
             if melt_quote.state == MeltQuoteState.unpaid:
+                # UNPAID can precede processing of an earlier timed-out POST.
+                # Release only an attempt we observed enter PENDING and fail.
+                if pending and not pending.seen_pending:
+                    return melt_quote
                 logger.debug("Updating unpaid status of melt quote.")
                 await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
+                if pending:
+                    await delete_pending_request(self.db, self.url, pending.operation)
         return melt_quote
+
+    async def _save_pending_request(self, request: PendingRequest) -> PendingRequest:
+        """Reserve inputs and persist unblinding data before any network request."""
+        request = request.model_copy(deep=True)
+        request.reserved_inputs = [p.secret for p in request.inputs if p.reserved]
+        for proof in request.inputs:
+            proof.reserved = True
+            if request.kind == "melt":
+                proof.melt_id = request.parameters["quote"]
+        async with self.db.get_connection(
+            locks=[LockOptions(table="pending_requests")]
+        ) as conn:
+            await store_pending_request(self.db, self.url, request, conn)
+            pending = await get_pending_request(
+                self.db, self.url, request.operation, conn
+            )
+            assert pending is not None
+            for proof in pending.inputs:
+                proof.reserved = True
+                if pending.kind == "melt":
+                    proof.melt_id = pending.parameters["quote"]
+                await update_proof(
+                    proof, reserved=True, melt_id=proof.melt_id, conn=conn
+                )
+        # Mirror the reservation in memory so coin selection excludes these inputs.
+        for proof in self.proofs:
+            match = next((p for p in pending.inputs if p.secret == proof.secret), None)
+            if match:
+                proof.reserved = True
+                proof.melt_id = match.melt_id
+        return pending
+
+    async def _discard_request_if_unspent(self, pending: PendingRequest) -> None:
+        # Even an HTTP error can follow a committed transaction or an active
+        # backend payment. Confirm every input is unspent before releasing it.
+        try:
+            states = (await super().check_proof_state(pending.inputs)).states
+        except Exception:
+            return
+        if {state.Y for state in states} != {
+            proof.Y for proof in pending.inputs
+        } or not all(state.unspent for state in states):
+            return
+        await self._discard_pending_request(pending)
+
+    async def _discard_pending_request(self, pending: PendingRequest) -> None:
+        """Release a first attempt that received an explicit rejection."""
+        async with self.db.get_connection(
+            locks=[LockOptions(table="pending_requests")]
+        ) as conn:
+            for proof in pending.inputs:
+                await update_proof(
+                    proof,
+                    reserved=proof.secret in pending.reserved_inputs,
+                    melt_id=None if pending.kind == "melt" else proof.melt_id,
+                    conn=conn,
+                )
+            await delete_pending_request(self.db, self.url, pending.operation, conn)
+        for proof in self.proofs:
+            if any(p.secret == proof.secret for p in pending.inputs):
+                proof.reserved = proof.secret in pending.reserved_inputs
+                if pending.kind == "melt":
+                    proof.melt_id = None
+
+    async def _complete_pending_request(
+        self, pending: PendingRequest, melt_quote: MeltQuote | None = None
+    ) -> List[Proof]:
+        """Commit recovered outputs and spent inputs together, then forget the request."""
+        assert pending.signatures is not None
+        if len(pending.signatures) > len(pending.outputs):
+            raise ValueError("Mint returned too many signatures.")
+        proofs = await self._construct_proofs(
+            pending.signatures,
+            pending.secrets,
+            [PrivateKey(bytes.fromhex(r)) for r in pending.rs],
+            pending.derivation_paths,
+            store=False,
+        )
+        if pending.kind == "swap" and pending.parameters.get("p2pk_e"):
+            for proof in proofs[pending.keep_count :]:
+                proof.p2pk_e = pending.parameters["p2pk_e"]
+        async with self.db.get_connection(
+            locks=[LockOptions(table="pending_requests")]
+        ) as conn:
+            for proof in proofs:
+                known = await conn.fetchone(
+                    "SELECT secret FROM proofs WHERE secret = :secret "
+                    "UNION SELECT secret FROM proofs_used WHERE secret = :secret",
+                    {"secret": proof.secret},
+                )
+                if not known:
+                    await store_proof(proof, db=self.db, conn=conn)
+            for proof in pending.inputs:
+                spent = await conn.fetchone(
+                    "SELECT secret FROM proofs_used WHERE secret = :secret",
+                    {"secret": proof.secret},
+                )
+                if not spent:
+                    await invalidate_proof(proof, db=self.db, conn=conn)
+            if melt_quote:
+                await update_bolt11_melt_quote(
+                    db=self.db,
+                    quote=melt_quote.quote,
+                    state=MeltQuoteState.paid,
+                    paid_time=melt_quote.paid_time or int(time.time()),
+                    payment_preimage=melt_quote.payment_preimage or "",
+                    fee_paid=max(
+                        0,
+                        sum_proofs(pending.inputs)
+                        - melt_quote.amount
+                        - self.get_fees_for_proofs(pending.inputs)
+                        - sum_promises(pending.signatures),
+                    ),
+                    change=pending.signatures,
+                    conn=conn,
+                )
+            await delete_pending_request(self.db, self.url, pending.operation, conn)
+        await self.load_proofs(reload=True)
+        # Callers reserve returned send proofs in place. Preserve their identity
+        # with the objects used for the wallet's available balance.
+        loaded = {proof.secret: proof for proof in self.proofs}
+        return [loaded.get(proof.secret, proof) for proof in proofs]
 
     async def melt(
         self,
@@ -906,70 +1062,79 @@ class Wallet(
         # Make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
 
-        # Generate a number of blank outputs for any overpaid fees. As described in
-        # NUT-08, the mint will imprint these outputs with a value depending on the
-        # amount of fees we overpaid.
-        n_change_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-        (
-            change_secrets,
-            change_rs,
-            change_derivation_paths,
-        ) = await self.generate_n_secrets(n_change_outputs)
-        change_outputs, change_rs = self._construct_outputs(
-            n_change_outputs * [0], change_secrets, change_rs
-        )
-
-        await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
-        proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
+        operation = f"melt:{quote_id}"
+        pending = await get_pending_request(self.db, self.url, operation)
+        if pending is None:
+            # Reserve fresh counters once; retries reuse the saved blank outputs.
+            n_change_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
+            secrets, rs, paths = await self.generate_n_secrets(n_change_outputs)
+            outputs, rs = self._construct_outputs(n_change_outputs * [0], secrets, rs)
+            proofs = self.sign_proofs_inplace_melt(proofs, outputs, quote_id)
+            pending = await self._save_pending_request(
+                PendingRequest(
+                    kind="melt",
+                    operation=operation,
+                    inputs=proofs,
+                    outputs=outputs,
+                    secrets=secrets,
+                    rs=[r.to_hex() for r in rs],
+                    derivation_paths=paths,
+                    parameters={
+                        "quote": quote_id,
+                        "invoice": invoice,
+                        "fee_reserve": fee_reserve_sat,
+                    },
+                )
+            )
+        if {p.Y for p in pending.inputs} != {
+            p.Y for p in proofs
+        } or pending.parameters != {
+            "quote": quote_id,
+            "invoice": invoice,
+            "fee_reserve": fee_reserve_sat,
+        }:
+            raise ValueError("Retry the unfinished melt with its original parameters.")
+        pending.attempts += 1
+        await update_pending_request(self.db, self.url, pending)
         try:
             melt_quote_resp = await super().melt(
-                quote_id, proofs, change_outputs, prefer_async=prefer_async
+                quote_id, pending.inputs, pending.outputs, prefer_async=prefer_async
             )
         except Exception as e:
             logger.debug(f"Mint error: {e}")
-            # remove the melt_id in proofs and set reserved to False
-            await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
+            # A lost response leaves the payment outcome uncertain. Keep its
+            # outputs and input reservation until a quote check resolves it.
+            # get_melt_quote also recovers change if the cache has expired.
+            try:
+                recovered = await self.get_melt_quote(quote_id)
+                if recovered and recovered.paid:
+                    return PostMeltQuoteResponse.from_melt_quote(recovered)
+            except Exception:
+                pass
+            if isinstance(e, MintError) and pending.attempts == 1:
+                await self._discard_request_if_unspent(pending)
             raise Exception(f"could not pay invoice: {e}")
 
         melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
+        melt_quote.payment_preimage = melt_quote_resp.payment_preimage
         # if payment fails
         if melt_quote.state == MeltQuoteState.unpaid:
             # remove the melt_id in proofs and set reserved to False
-            await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
+            await self.set_reserved_for_melt(
+                pending.inputs, reserved=False, quote_id=None
+            )
+            await delete_pending_request(self.db, self.url, operation)
             raise Exception("could not pay invoice.")
         elif melt_quote.state == MeltQuoteState.pending:
             # payment is still pending
             logger.debug("Payment is still pending.")
+            pending.seen_pending = True
+            await update_pending_request(self.db, self.url, pending)
             return melt_quote_resp
 
-        # invoice was paid successfully
-        await self.invalidate(proofs)
-
-        # update paid status in db
-        logger.trace(f"Settings invoice {quote_id} to paid.")
-        logger.trace(f"Quote: {melt_quote_resp}")
-        fee_paid = melt_quote.amount + melt_quote.fee_paid
-        if melt_quote.change:
-            fee_paid -= sum_promises(melt_quote.change)
-
-        await update_bolt11_melt_quote(
-            db=self.db,
-            quote=quote_id,
-            state=MeltQuoteState.paid,
-            paid_time=int(time.time()),
-            payment_preimage=melt_quote.payment_preimage or "",
-            fee_paid=fee_paid,
-        )
-
-        # handle change and produce proofs
-        if melt_quote.change:
-            change_proofs = await self._construct_proofs(
-                melt_quote.change,
-                change_secrets[: len(melt_quote.change)],
-                change_rs[: len(melt_quote.change)],
-                change_derivation_paths[: len(melt_quote.change)],
-            )
-            logger.debug(f"Received change: {self.unit.str(sum_proofs(change_proofs))}")
+        pending.signatures = melt_quote.change or []
+        await update_pending_request(self.db, self.url, pending)
+        await self._complete_pending_request(pending, melt_quote)
         return melt_quote_resp
 
     async def check_proof_state(self, proofs) -> PostCheckStateResponse:
@@ -1001,9 +1166,9 @@ class Wallet(
                 return
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
-            assert proof.id in self.keysets, (
-                f"Keyset {proof.id} not known, can not verify DLEQ."
-            )
+            assert (
+                proof.id in self.keysets
+            ), f"Keyset {proof.id} not known, can not verify DLEQ."
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C)),
@@ -1023,6 +1188,7 @@ class Wallet(
         secrets: List[str],
         rs: List[PrivateKey],
         derivation_paths: List[str],
+        store: bool = True,
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
@@ -1079,9 +1245,10 @@ class Wallet(
         logger.trace(f"Constructed {len(proofs)} proofs.")
 
         # add new proofs to wallet
-        self.proofs += copy.copy(proofs)
-        # store new proofs in database
-        await self._store_proofs(proofs)
+        if store:
+            # store before updating memory so failed writes leave no phantom balance
+            await self._store_proofs(proofs)
+            self.proofs += copy.copy(proofs)
 
         return proofs
 
@@ -1107,9 +1274,9 @@ class Wallet(
         Raises:
             AssertionError: if len(amounts) != len(secrets)
         """
-        assert len(amounts) == len(secrets), (
-            f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        )
+        assert len(amounts) == len(
+            secrets
+        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
         keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
         rs_ = [None] * len(amounts) if not rs else rs

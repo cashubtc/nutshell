@@ -3,6 +3,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.base import (
+    BlindedSignature,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -477,7 +478,13 @@ async def get_bolt11_melt_quote(
         values,
     )
 
-    return MeltQuote.from_row(row) if row else None  # type: ignore
+    if not row:
+        return None
+    change = json.loads(row["change"]) if row["change"] else None
+    return MeltQuote.from_row(
+        row,
+        change=[BlindedSignature.model_validate(c) for c in change] if change else None,
+    )  # type: ignore
 
 
 async def get_bolt11_melt_quotes(
@@ -516,11 +523,13 @@ async def update_bolt11_melt_quote(
     fee_paid: int,
     payment_preimage: str,
     conn: Optional[Connection] = None,
+    change: Optional[List[BlindedSignature]] = None,
 ) -> None:
     await (conn or db).execute(
         """
         UPDATE bolt11_melt_quotes
-        SET state = :state, paid_time = :paid_time, fee_paid = :fee_paid, payment_preimage = :payment_preimage
+        SET state = :state, paid_time = :paid_time, fee_paid = :fee_paid, payment_preimage = :payment_preimage,
+            change = COALESCE(:change, change)
         WHERE quote = :quote
         """,
         {
@@ -528,6 +537,9 @@ async def update_bolt11_melt_quote(
             "paid_time": paid_time,
             "fee_paid": fee_paid,
             "payment_preimage": payment_preimage,
+            "change": json.dumps([c.model_dump() for c in change])
+            if change is not None
+            else None,
             "quote": quote,
         },
     )

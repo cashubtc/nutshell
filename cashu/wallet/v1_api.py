@@ -46,6 +46,7 @@ from .crud import (
     get_proofs,
     invalidate_proof,
 )
+from .errors import MintError
 from .protocols import SupportsAuth
 
 GET = "GET"
@@ -137,7 +138,7 @@ class LedgerAPI(SupportsAuth):
             error_message = f"Mint Error: {resp_dict['detail']}"
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
-            raise Exception(error_message)
+            raise MintError(error_message)
         resp.raise_for_status()
 
     def raise_on_unsupported_version(self, resp: Response, endpoint: str):

@@ -370,3 +370,18 @@ async def m019_add_p2pk_e_to_proofs(db: Database):
     async with db.connect() as conn:
         await conn.execute("ALTER TABLE proofs ADD COLUMN p2pk_e TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN p2pk_e TEXT")
+
+
+async def m020_pending_requests(db: Database):
+    """Keep the original outputs and unblinding data until a request completes."""
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pending_requests (
+                mint TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                data TEXT NOT NULL,
+                PRIMARY KEY (mint, operation)
+            )
+            """
+        )

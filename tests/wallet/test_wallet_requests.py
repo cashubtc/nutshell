@@ -39,11 +39,23 @@ async def test_swap_outputs_are_sorted(wallet1: Wallet):
         amount=8,
         C_=key.format().hex(),
     )
-    mock_response_data = {"signatures": [mock_blind_signature.model_dump()]}
-    with respx.mock() as mock:
-        route = mock.post(test_url).mock(
-            return_value=Response(200, json=mock_response_data)
+
+    def response_for_outputs(request):
+        payload = json.loads(request.content)
+        return Response(
+            200,
+            json={
+                "signatures": [
+                    mock_blind_signature.model_copy(
+                        update={"amount": output["amount"]}
+                    ).model_dump()
+                    for output in payload["outputs"]
+                ]
+            },
         )
+
+    with respx.mock() as mock:
+        route = mock.post(test_url).mock(side_effect=response_for_outputs)
         await wallet1.select_to_send(wallet1.proofs, 5)
 
         assert route.called

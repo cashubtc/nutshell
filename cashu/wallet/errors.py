@@ -14,3 +14,7 @@ class BalanceTooLowError(WalletError):
 
     def __init__(self, msg: Optional[str] = None):
         super().__init__(msg or self.msg)
+
+
+class MintError(WalletError):
+    """An explicit error response from the mint, rather than a transport failure."""

@@ -233,6 +233,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     },
                     {
                         "method": "POST",
+                        "path": "/v1/mint/bolt11/batch",
+                    },
+                    {
+                        "method": "POST",
                         "path": "/v1/melt/bolt11",
                     },
                     {
