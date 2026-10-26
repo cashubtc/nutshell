@@ -161,7 +161,7 @@ async def get_payment_request_wallet(ctx: Context, request: PaymentRequest) -> W
         proofs = candidate.active_proofs(candidate.proofs)
         selected = candidate.coinselect(proofs, amount, include_fees=True)
         input_fee = candidate.get_fees_for_proofs(selected)
-        if request.nut10 or sum_proofs(selected) > amount + input_fee:
+        if request.nut10 or sum_proofs(selected) != amount + input_fee:
             # An unavailable mint may fail to activate a keyset needed for swapping.
             if not getattr(candidate, "keyset_id", None):
                 continue

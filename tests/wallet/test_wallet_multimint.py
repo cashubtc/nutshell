@@ -343,6 +343,47 @@ def test_payment_request_redeemed_value(
     asyncio.run(redeem())
 
 
+@pytest.mark.parametrize("mint", [2000], indirect=True)
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("explicit", [False, True])
+def test_payment_request_swaps_proofs_with_insufficient_net_value(
+    mint, tmp_path, monkeypatch, encode, explicit
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[1])
+    asyncio.run(
+        _fund_request_wallet(mint[0], tmp_path, "payer", 32, split=[16, 16])
+    )
+    request = PaymentRequest(a=15, u="sat", m=[mint[0]])
+    prefix = ["--wallet", "payer", "--tests", "--yes"]
+    if explicit:
+        prefix += ["--host", mint[0]]
+    result = CliRunner().invoke(cli, [*prefix, "pay", encode(request)])
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert token.mint == mint[0]
+
+    async def redeem():
+        recipient = await Wallet.with_db(
+            mint[0], str(tmp_path / "receiver"), name="receiver"
+        )
+        try:
+            await recipient.load_mint()
+            proofs = token.proofs
+            await recipient._expand_short_keyset_ids(proofs)
+            assert token.amount - recipient.get_fees_for_proofs(proofs) >= request.a
+            await recipient.redeem(proofs)
+            assert recipient.available_balance >= request.a
+        finally:
+            await recipient.db.engine.dispose()
+
+    asyncio.run(redeem())
+
+
 @pytest.mark.parametrize("mint", [1000], indirect=True)
 @pytest.mark.parametrize(
     "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]

@@ -1250,7 +1250,11 @@ class Wallet(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
         )
         # offline coin selection unsuccessful, we need to swap proofs before we can send
-        if not send_proofs or sum_proofs(send_proofs) > amount + fees:
+        if (
+            not send_proofs
+            or sum_proofs(send_proofs) > amount + fees
+            or (include_fees and sum_proofs(send_proofs) < amount + fees)
+        ):
             if not offline:
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
