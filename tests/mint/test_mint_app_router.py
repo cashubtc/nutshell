@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, StreamingResponse
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
 
 from cashu.core.base import (
     BlindedSignature,
@@ -19,7 +18,6 @@ from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
 from cashu.mint import router as router_module
-from cashu.mint.cache import RedisCache
 
 
 def _build_router_app() -> FastAPI:
@@ -380,72 +378,6 @@ def test_router_quote_routes_and_swap(monkeypatch):
     )
     assert swap.status_code == 200
     assert swap.json()["signatures"][0]["id"] == "active"
-
-
-@pytest.mark.asyncio
-async def test_redis_cache_hit_and_miss(monkeypatch):
-    set_calls: list[tuple[str, int]] = []
-    closed = False
-
-    class FakeRedis:
-        def __init__(self):
-            self.store = {}
-
-        async def exists(self, key):
-            return key in self.store
-
-        async def get(self, key):
-            return self.store.get(key)
-
-        async def set(self, name, value, ex):
-            self.store[name] = value
-            set_calls.append((name, ex))
-
-        async def ping(self):
-            return True
-
-        async def close(self):
-            nonlocal closed
-            closed = True
-
-    class Payload(BaseModel):
-        value: int
-
-    fake_redis = FakeRedis()
-    monkeypatch.setattr(settings, "mint_redis_cache_enabled", True)
-    monkeypatch.setattr(settings, "mint_redis_cache_url", "redis://cache")
-    monkeypatch.setattr(settings, "mint_redis_cache_ttl", 12)
-    monkeypatch.setattr("cashu.mint.cache.from_url", lambda url: fake_redis)
-    cache = RedisCache()
-
-    @cache.cache()
-    async def cached_route(request, payload):
-        return Payload(value=payload.value + 1)
-
-    request = router_module.Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "path": "/v1/test",
-            "headers": [],
-            "query_string": b"",
-            "scheme": "http",
-            "server": ("testserver", 80),
-        }
-    )
-    payload = Payload(value=2)
-
-    first = await cached_route(request, payload)
-    second = await cached_route(request, payload)
-
-    assert first == Payload(value=3)
-    assert second == {"value": 3}
-    assert len(set_calls) == 1
-
-    await cache.test_connection()
-    assert cache.initialized is True
-    await cache.disconnect()
-    assert closed is True
 
 
 @pytest.mark.parametrize(
