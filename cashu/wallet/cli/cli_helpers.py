@@ -162,9 +162,19 @@ async def get_payment_request_wallet(ctx: Context, request: PaymentRequest) -> W
         selected = candidate.coinselect(proofs, amount, include_fees=True)
         input_fee = candidate.get_fees_for_proofs(selected)
         if request.nut10 or sum_proofs(selected) > amount + input_fee:
+            # An unavailable mint may fail to activate a keyset needed for swapping.
+            if not getattr(candidate, "keyset_id", None):
+                continue
             amount = candidate.get_send_amount(amount)
-            input_fee = candidate.coinselect_fee(proofs, amount)
-        if candidate.available_balance >= amount + input_fee:
+            selected = candidate.coinselect(proofs, amount, include_fees=True)
+            # Match swap_to_send's inclusion of proofs from inactive keysets.
+            selected += [
+                proof
+                for proof in proofs
+                if not candidate.keysets[proof.id].active and proof not in selected
+            ]
+            input_fee = candidate.get_fees_for_proofs(selected)
+        if sum_proofs(selected) >= amount + input_fee:
             return candidate
 
     raise click.ClickException("No funded mint satisfies this payment request.")
