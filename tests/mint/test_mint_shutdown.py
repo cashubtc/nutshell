@@ -281,6 +281,8 @@ async def test_shutdown_owns_background_melts(monkeypatch, finish_payment):
 
     if finish_payment:
         await asyncio.gather(*tasks)
+        # gather() may return immediately for done tasks; let their callbacks run.
+        await asyncio.sleep(0)
         assert not ledger.melt_tasks
     shutdown = asyncio.create_task(ledger.shutdown_ledger())
     await asyncio.sleep(0)
