@@ -213,7 +213,7 @@ async def test_clnrest_pay_invoice_uses_xpay(monkeypatch):
         async def post(self, url, data=None, timeout=None):
             nonlocal request_data
             assert url == "/v1/xpay"
-            assert timeout is None
+            assert timeout.read is not None and timeout.read > 0
             request_data = data
             return _response(
                 200,

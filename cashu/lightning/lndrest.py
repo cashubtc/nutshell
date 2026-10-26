@@ -26,6 +26,7 @@ from .base import (
     PaymentStatusResult,
     StatusResponse,
 )
+from .http import PAYMENT_READ_TIMEOUT, STREAM_READ_TIMEOUT, http_timeout
 from .macaroon import load_macaroon
 
 PAYMENT_RESULT_MAP = {
@@ -119,7 +120,7 @@ class LndRestWallet(LightningBackend):
             base_url=self.endpoint,
             headers=self.auth,
             verify=self.cert,
-            timeout=None,
+            timeout=http_timeout(),
         )
         if self.supports_mpp:
             logger.info("LNDRestWallet enabling MPP feature")
@@ -228,7 +229,10 @@ class LndRestWallet(LightningBackend):
         }
 
         async with self.client.stream(
-            "POST", "/v2/router/send", json=data, timeout=None
+            "POST",
+            "/v2/router/send",
+            json=data,
+            timeout=http_timeout(PAYMENT_TIMEOUT_SECONDS + 30),
         ) as r:
             async for json_line in r.aiter_lines():
                 try:
@@ -325,7 +329,7 @@ class LndRestWallet(LightningBackend):
                     "fee_limit": lnrpcFeeLimit,
                     "use_mission_control": True,
                 },
-                timeout=None,
+                timeout=http_timeout(),
             )
 
             assert route
@@ -362,7 +366,7 @@ class LndRestWallet(LightningBackend):
                     ).decode(),
                     "route": route_data["routes"][0],
                 },
-                timeout=None,
+                timeout=http_timeout(PAYMENT_READ_TIMEOUT),
             )
 
             assert response
@@ -441,7 +445,7 @@ class LndRestWallet(LightningBackend):
             "ascii"
         )
         url = f"/v2/router/track/{checking_id}"
-        async with self.client.stream("GET", url, timeout=None) as r:
+        async with self.client.stream("GET", url, timeout=http_timeout()) as r:
             async for json_line in r.aiter_lines():
                 try:
                     line = json.loads(json_line)
@@ -488,11 +492,43 @@ class LndRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
+        settle_index = 0
+        reconnecting = False
 
         while True:
             try:
+                if reconnecting and settle_index == 0:
+                    # LND treats zero as "new events only". If the very first
+                    # settlement was lost, recover it before subscribing again.
+                    offset = 0
+                    settled: list[dict] = []
+                    while True:
+                        response = await self.client.get(
+                            "/v1/invoices",
+                            params={"index_offset": offset, "num_max_invoices": 1000},
+                        )
+                        response.raise_for_status()
+                        page = response.json()
+                        invoices = page.get("invoices", [])
+                        settled.extend(inv for inv in invoices if inv.get("settled"))
+                        next_offset = int(page.get("last_index_offset", 0))
+                        if len(invoices) < 1000 or next_offset <= offset:
+                            break
+                        offset = next_offset
+                    for inv in sorted(
+                        settled, key=lambda inv: int(inv["settle_index"])
+                    ):
+                        payment_hash = base64.b64decode(inv["r_hash"]).hex()
+                        settle_index = int(inv["settle_index"])
+                        yield payment_hash
+                reconnecting = True
                 url = "/v1/invoices/subscribe"
-                async with self.client.stream("GET", url, timeout=None) as r:
+                async with self.client.stream(
+                    "GET",
+                    url,
+                    params={"settle_index": settle_index},
+                    timeout=http_timeout(STREAM_READ_TIMEOUT),
+                ) as r:
                     # Reset retry delay on successful connection
                     retry_delay = 0
                     async for line in r.aiter_lines():
@@ -500,6 +536,9 @@ class LndRestWallet(LightningBackend):
                             inv = json.loads(line)["result"]
                             if not inv["settled"]:
                                 continue
+                            settle_index = max(
+                                settle_index, int(inv.get("settle_index", 0))
+                            )
                         except Exception:
                             continue
 

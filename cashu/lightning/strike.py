@@ -17,6 +17,7 @@ from .base import (
     PaymentStatusResult,
     StatusResponse,
 )
+from .http import PAYMENT_READ_TIMEOUT, http_timeout
 
 USDT = "USDT"
 
@@ -137,7 +138,7 @@ class StrikeWallet(LightningBackend):
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
             headers=bearer_auth,
-            timeout=None,
+            timeout=http_timeout(),
         )
 
     async def status(self) -> StatusResponse:
@@ -199,6 +200,8 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.post(url=f"{self.endpoint}/v1/invoices", json=payload)
             r.raise_for_status()
+        except httpx.RequestError as exc:
+            return InvoiceResponse(ok=False, error_message=str(exc))
         except Exception:
             return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
@@ -210,6 +213,8 @@ class StrikeWallet(LightningBackend):
                 f"{self.endpoint}/v1/invoices/{invoice.invoiceId}/quote", json=payload
             )
             r2.raise_for_status()
+        except httpx.RequestError as exc:
+            return InvoiceResponse(ok=False, error_message=str(exc))
         except Exception:
             return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
@@ -226,9 +231,11 @@ class StrikeWallet(LightningBackend):
             r = await self.client.post(
                 url=f"{self.endpoint}/v1/payment-quotes/lightning",
                 json={"sourceCurrency": self.currency, "lnInvoice": bolt11},
-                timeout=None,
+                timeout=http_timeout(),
             )
             r.raise_for_status()
+        except httpx.RequestError:
+            raise
         except Exception:
             error_message = r.json()["data"]["message"]
             raise Exception(error_message)
@@ -254,9 +261,15 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.patch(
                 url=f"{self.endpoint}/v1/payment-quotes/{quote.checking_id}/execute",
-                timeout=None,
+                timeout=http_timeout(PAYMENT_READ_TIMEOUT),
             )
             r.raise_for_status()
+        except httpx.RequestError as exc:
+            return PaymentResponse(
+                result=PaymentResult.ERROR,
+                checking_id=quote.checking_id,
+                error_message=str(exc),
+            )
         except Exception:
             error_message = r.json()["data"]["message"]
             return PaymentResponse(
