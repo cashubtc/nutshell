@@ -77,11 +77,12 @@ dev = [
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
-build-backend = "uv_build"
+build-backend = "build_backend"
+backend-path = ["scripts"]
 
 [tool.uv.build-backend]
 module-root = ""
-source-include = ["requirements.txt"]
+source-include = ["requirements.txt", "package-files.txt", "scripts/build_backend.py"]
 # Keep local build inputs and generated certificates out of distributions.
 source-exclude = ["**/googleapis", "**/*.pem", "**/.DS_Store", "**/tor.pid"]
 
