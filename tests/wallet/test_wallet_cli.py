@@ -219,6 +219,33 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exit_code == 0
 
 
+@pytest.mark.skipif(is_regtest, reason="uses FakeWallet")
+def test_invoice_uses_normalized_quote_amount(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    original = Wallet.request_mint
+    wallets = []
+
+    async def normalized_quote(self, amount, memo=None):
+        wallets.append(self)
+        return await original(self, amount + 1, memo)
+
+    monkeypatch.setattr(Wallet, "request_mint", normalized_quote)
+    prefix = ["--wallet", "normalized", "--host", settings.mint_url, "--tests"]
+    runner = CliRunner()
+    result = runner.invoke(cli, [*prefix, "invoice", "-n", "12"])
+    assert result.exception is None, result.output
+    assert "Pay invoice to mint 13 sat" in result.output
+    assert "cashu invoice 13 --id" in result.output
+    _, quote_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
+
+    # Rechecking with the original requested amount must still issue the quote.
+    result = runner.invoke(cli, [*prefix, "invoice", "12", "--id", quote_id])
+    assert result.exception is None, result.output
+    wallet = wallets[0]
+    asyncio.run(wallet.load_proofs(reload=True))
+    assert wallet.balance == 13
+
+
 @xfail_below_minimum
 def test_invoice_with_memo(mint, cli_prefix):
     runner = CliRunner()

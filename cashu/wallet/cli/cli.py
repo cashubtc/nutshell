@@ -558,7 +558,7 @@ async def invoice(
             try:
                 asyncio.run(
                     wallet.mint(
-                        int(amount),
+                        ws_quote_resp.amount or mint_quote.amount,
                         split=optional_split,
                         quote_id=mint_quote.quote,
                     )
@@ -584,6 +584,10 @@ async def invoice(
             invoice_nonlocal, subscription_nonlocal = mint_quote, subscription
         else:
             mint_quote = await wallet.request_mint(amount, memo=memo)
+        amount = mint_quote.amount
+        if split:
+            assert amount % split == 0, "split must be divisor of quoted amount"
+            optional_split = [split] * (amount // split)
         if mint_quote.request:
             print("")
             print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
@@ -615,7 +619,7 @@ async def invoice(
                 mint_quote = await wallet.get_mint_quote(mint_quote.quote)
                 if mint_quote.state == MintQuoteState.paid:
                     await wallet.mint(
-                        amount,
+                        mint_quote.amount,
                         split=optional_split,
                         quote_id=mint_quote.quote,
                     )
@@ -641,8 +645,11 @@ async def invoice(
         quote = await get_bolt11_mint_quote(wallet.db, quote=id)
         if not quote:
             raise Exception("Quote not found")
+        if split:
+            assert quote.amount % split == 0, "split must be divisor of quoted amount"
+            optional_split = [split] * (quote.amount // split)
         await wallet.mint(
-            amount,
+            quote.amount,
             split=optional_split,
             quote_id=quote.quote,
         )
@@ -702,7 +709,7 @@ async def swap(ctx: Context):
     )
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, quote_id=mint_quote.quote)
+    await incoming_wallet.mint(mint_quote.amount, quote_id=mint_quote.quote)
 
     await incoming_wallet.load_proofs(reload=True)
     await print_mint_balances(incoming_wallet, show_mints=True)
