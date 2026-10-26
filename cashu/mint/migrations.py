@@ -1356,3 +1356,88 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
             f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
             "WHERE encrypted_seed IS NOT NULL AND seed != ''"
         )
+
+
+async def m041_add_payment_method_data_to_quotes(db: Database):
+    """Add opaque, server-internal storage for method-specific quote state."""
+    async with db.connect() as conn:
+        for table in ("mint_quotes", "melt_quotes"):
+            if conn.type == "SQLITE":
+                columns = await conn.fetchall(
+                    f"SELECT name FROM pragma_table_info('{table}')"
+                )
+                exists = any(column["name"] == "method_data" for column in columns)
+            else:
+                column = await conn.fetchone(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = :table AND column_name = 'method_data'",
+                    {"table": table},
+                )
+                exists = column is not None
+
+            if not exists:
+                await conn.execute(
+                    f"ALTER TABLE {db.table_with_schema(table)} "
+                    "ADD COLUMN method_data TEXT"
+                )
+
+
+async def m042_separate_internal_credits_and_amountless_payments(db: Database):
+    """Keep internal credits and exact outgoing msat amounts across restarts."""
+    async with db.connect() as conn:
+        mint_quotes = db.table_with_schema("mint_quotes")
+        melt_quotes = db.table_with_schema("melt_quotes")
+        await conn.execute(
+            f"ALTER TABLE {mint_quotes} ADD COLUMN amount_paid_internal {db.big_int} NOT NULL DEFAULT 0"
+        )
+        # Internal settlements copy the mint checking id and charge no fee.
+        # Preserve credits on quotes that were settled before this migration.
+        await conn.execute(
+            f"""UPDATE {mint_quotes} SET amount_paid_internal = COALESCE((
+                SELECT SUM(melt.amount) FROM {melt_quotes} AS melt
+                WHERE melt.request = {mint_quotes}.request
+                  AND melt.checking_id = {mint_quotes}.checking_id
+                  AND melt.unit = {mint_quotes}.unit
+                  AND melt.method = {mint_quotes}.method
+                  AND melt.state = 'PAID' AND melt.fee_paid = 0
+            ), 0)"""
+        )
+        await conn.execute(
+            f"ALTER TABLE {melt_quotes} ADD COLUMN amountless_msat {db.big_int}"
+        )
+
+
+async def m043_backfill_mint_quote_accounting(db: Database):
+    """Initialize legacy NULL fields without overwriting cumulative accounting."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                UPDATE {db.table_with_schema('mint_quotes')}
+                SET amount_paid = COALESCE(amount_paid, CASE
+                        WHEN state IN ('PAID', 'PENDING', 'ISSUED') THEN amount
+                        ELSE 0
+                    END),
+                    amount_issued = COALESCE(amount_issued, CASE
+                        WHEN state = 'ISSUED' THEN amount
+                        ELSE 0
+                    END),
+                    updated_at = COALESCE(updated_at, issued_time, paid_time, created_time)
+                WHERE amount_paid IS NULL OR amount_issued IS NULL OR updated_at IS NULL
+            """
+        )
+
+
+async def m044_validate_mint_quote_payment_identities(db: Database):
+    """Refuse ambiguous legacy funding records without deleting any quotes."""
+    async with db.connect() as conn:
+        for field in ("request", "checking_id"):
+            duplicate = await conn.fetchone(
+                f"""SELECT method FROM {db.table_with_schema('mint_quotes')}
+                    GROUP BY method, {field} HAVING COUNT(*) > 1 LIMIT 1"""
+            )
+            if duplicate:
+                raise RuntimeError(
+                    f"Cannot upgrade mint database: duplicate {field} for payment "
+                    f"method '{duplicate['method']}'. Resolve conflicting mint "
+                    "quotes before retrying."
+                )
