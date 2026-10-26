@@ -274,18 +274,18 @@ async def test_mint_quote_without_pubkey(ledger: Ledger, pubkey_payload):
     )
     assert response.status_code == 200
     result = response.json()
-    assert result["pubkey"] is None
+    assert "pubkey" not in result
 
     response = httpx.get(f"{BASE_URL}/v1/mint/quote/bolt11/{result['quote']}")
     assert response.status_code == 200
-    assert response.json()["pubkey"] is None
+    assert "pubkey" not in response.json()
 
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11/check",
         json={"quotes": [result["quote"]]},
     )
     assert response.status_code == 200
-    assert response.json()[0]["pubkey"] is None
+    assert "pubkey" not in response.json()[0]
 
 
 @pytest.mark.asyncio
@@ -337,7 +337,7 @@ async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
-    assert result["pubkey"] is None
+    assert "pubkey" not in result
     await pay_if_regtest(result["request"])
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)

@@ -1347,3 +1347,12 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
+    """Remove plaintext seeds from keysets that also store an encrypted seed."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
+            "WHERE encrypted_seed IS NOT NULL AND seed != ''"
+        )

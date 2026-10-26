@@ -989,6 +989,15 @@ class MintKeyset:
 
         assert self.seed, "seed not set"
 
+        # keep the seed encrypted at rest if a decryption key is set
+        if settings.mint_seed_decryption_key and not encrypted_seed:
+            encrypted_seed = AESCipher(settings.mint_seed_decryption_key).encrypt(
+                self.seed.encode()
+            )
+            seed_encryption_method = "aes"
+        self.encrypted_seed = encrypted_seed
+        self.seed_encryption_method = seed_encryption_method
+
         if amounts:
             self.amounts = amounts
         else:

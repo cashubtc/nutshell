@@ -141,7 +141,7 @@ async def test_mint_quote_legacy_empty_pubkey(ledger: Ledger):
         websocket.send_text.call_args.args[0]
     )
     assert notification.params["payload"]["quote"] == quote.quote
-    assert notification.params["payload"]["pubkey"] is None
+    assert "pubkey" not in notification.params["payload"]
 
 
 @pytest.mark.asyncio

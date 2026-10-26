@@ -32,7 +32,7 @@ bolt11==2.1.1 ; python_full_version >= '3.13'
     # via cashu
 bolt11==2.2.0 ; python_full_version < '3.13'
     # via cashu
-breez-sdk-spark==0.17.2
+breez-sdk-spark==0.21.1
     # via cashu
 brotli==1.2.0
     # via cashu
