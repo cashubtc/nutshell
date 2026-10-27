@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -298,11 +299,186 @@ async def test_unpaid_quote_does_not_release_an_uncertain_melt(
         "get_melt_quote",
         AsyncMock(return_value=PostMeltQuoteResponse.from_melt_quote(quote)),
     )
+    monkeypatch.setattr(
+        LedgerAPI,
+        "check_proof_state",
+        AsyncMock(
+            return_value=PostCheckStateResponse(
+                states=[
+                    ProofState(Y=p.Y, state=ProofSpentState.unspent)
+                    for p in wallet.proofs
+                ]
+            )
+        ),
+    )
     with pytest.raises(Exception, match="queued request"):
         await wallet.melt(list(wallet.proofs), "invoice", 4, quote.quote)
+    await wallet.check_proof_state(wallet.proofs)
     await wallet.get_melt_quote(quote.quote)
+    assert wallet.available_balance == 0
     assert all(p.reserved for p in await get_proofs(db=wallet.db))
-    assert await get_pending_request(wallet.db, wallet.url, f"melt:{quote.quote}")
+    pending = await get_pending_request(wallet.db, wallet.url, f"melt:{quote.quote}")
+    assert pending and not pending.seen_pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reserved", [False, True])
+async def test_unpaid_melt_response_releases_live_and_persisted_inputs(
+    retry_wallet, monkeypatch, reserved
+):
+    wallet = retry_wallet
+    inputs = list(wallet.proofs)
+    if reserved:
+        await wallet.set_reserved_for_melt(inputs, True, None)
+    quote = MeltQuote(
+        quote="failed-payment",
+        method="bolt11",
+        request="invoice",
+        checking_id="payment",
+        unit="sat",
+        amount=60,
+        fee_reserve=4,
+        state=MeltQuoteState.unpaid,
+        mint=wallet.url,
+    )
+    await store_bolt11_melt_quote(db=wallet.db, quote=quote)
+    monkeypatch.setattr(
+        LedgerAPI,
+        "melt",
+        AsyncMock(return_value=PostMeltQuoteResponse.from_melt_quote(quote)),
+    )
+    with pytest.raises(Exception, match="could not pay invoice"):
+        await wallet.melt(inputs, "invoice", 4, quote.quote)
+
+    assert wallet.available_balance == 64
+    assert all(not p.reserved and p.melt_id is None for p in inputs)
+    stored = await get_proofs(db=wallet.db)
+    assert len(stored) == len(inputs)
+    assert all(not p.reserved and p.melt_id is None for p in stored)
+    assert not await get_pending_request(wallet.db, wallet.url, f"melt:{quote.quote}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("observe_quote", [False, True])
+async def test_failed_melt_recovers_after_interruption_and_restart(
+    retry_wallet, monkeypatch, observe_quote
+):
+    wallet = retry_wallet
+    inputs = list(wallet.proofs)
+    # Coin selection may already have reserved the inputs for this payment.
+    await wallet.set_reserved_for_melt(inputs, True, None)
+    quote = MeltQuote(
+        quote="interrupted-payment",
+        method="bolt11",
+        request="invoice",
+        checking_id="payment",
+        unit="sat",
+        amount=60,
+        fee_reserve=4,
+        state=MeltQuoteState.unpaid,
+        mint=wallet.url,
+    )
+    await store_bolt11_melt_quote(db=wallet.db, quote=quote)
+    monkeypatch.setattr(
+        LedgerAPI, "melt", AsyncMock(side_effect=asyncio.CancelledError)
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await wallet.melt(inputs, "invoice", 4, quote.quote)
+    pending = await get_pending_request(wallet.db, wallet.url, f"melt:{quote.quote}")
+    assert pending and not pending.seen_pending
+
+    restarted = await restart(wallet)
+    if observe_quote:
+        monkeypatch.setattr(
+            LedgerAPI,
+            "get_melt_quote",
+            AsyncMock(
+                return_value=PostMeltQuoteResponse.from_melt_quote(
+                    quote.model_copy(update={"state": MeltQuoteState.pending})
+                )
+            ),
+        )
+        await restarted.get_melt_quote(quote.quote)
+    else:
+        monkeypatch.setattr(
+            LedgerAPI,
+            "check_proof_state",
+            AsyncMock(
+                return_value=PostCheckStateResponse(
+                    states=[
+                        ProofState(Y=p.Y, state=ProofSpentState.pending)
+                        for p in inputs
+                    ]
+                )
+            ),
+        )
+        # A proof-state check after the interruption also confirms acceptance.
+        await restarted.check_proof_state(
+            [p.model_copy(update={"melt_id": None}) for p in inputs]
+        )
+    pending = await get_pending_request(
+        restarted.db, restarted.url, f"melt:{quote.quote}"
+    )
+    assert pending and pending.seen_pending
+    await restarted.db.engine.dispose()
+
+    restarted = await restart(wallet)
+    monkeypatch.setattr(
+        LedgerAPI,
+        "get_melt_quote",
+        AsyncMock(return_value=PostMeltQuoteResponse.from_melt_quote(quote)),
+    )
+    # An UNPAID quote cannot release missing, pending, or spent inputs, nor can
+    # it release inputs whose state could not be checked.
+    for states in (
+        [],
+        [ProofState(Y=p.Y, state=ProofSpentState.pending) for p in inputs],
+        [ProofState(Y=p.Y, state=ProofSpentState.spent) for p in inputs],
+    ):
+        monkeypatch.setattr(
+            LedgerAPI,
+            "check_proof_state",
+            AsyncMock(return_value=PostCheckStateResponse(states=states)),
+        )
+        await restarted.get_melt_quote(quote.quote)
+        assert restarted.available_balance == 0
+        assert await get_pending_request(
+            restarted.db, restarted.url, f"melt:{quote.quote}"
+        )
+    monkeypatch.setattr(
+        LedgerAPI,
+        "check_proof_state",
+        AsyncMock(side_effect=httpx.ConnectError("offline")),
+    )
+    await restarted.get_melt_quote(quote.quote)
+    assert restarted.available_balance == 0
+    assert await get_pending_request(
+        restarted.db, restarted.url, f"melt:{quote.quote}"
+    )
+    monkeypatch.setattr(
+        LedgerAPI,
+        "check_proof_state",
+        AsyncMock(
+            return_value=PostCheckStateResponse(
+                states=[
+                    ProofState(Y=p.Y, state=ProofSpentState.unspent) for p in inputs
+                ]
+            )
+        ),
+    )
+    await restarted.get_melt_quote(quote.quote)
+    assert restarted.available_balance == 64
+    assert all(not p.reserved and p.melt_id is None for p in restarted.proofs)
+    stored = await get_proofs(db=restarted.db)
+    assert len(stored) == len(inputs)
+    assert all(not p.reserved and p.melt_id is None for p in stored)
+    assert not await get_pending_request(
+        restarted.db, restarted.url, f"melt:{quote.quote}"
+    )
+    # Repeated polling must leave the recovered balance intact.
+    await restarted.get_melt_quote(quote.quote)
+    assert restarted.available_balance == 64
+    await restarted.db.engine.dispose()
 
 
 @pytest.mark.asyncio

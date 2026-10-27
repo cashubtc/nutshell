@@ -911,13 +911,13 @@ class Wallet(
 
             if melt_quote.state == MeltQuoteState.unpaid:
                 # UNPAID can precede processing of an earlier timed-out POST.
-                # Release only an attempt we observed enter PENDING and fail.
-                if pending and not pending.seen_pending:
+                # Quote or proof-state checks can confirm that it was accepted.
+                if pending:
+                    if pending.seen_pending:
+                        await self._discard_request_if_unspent(pending)
                     return melt_quote
                 logger.debug("Updating unpaid status of melt quote.")
                 await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
-                if pending:
-                    await delete_pending_request(self.db, self.url, pending.operation)
         return melt_quote
 
     async def _save_pending_request(self, request: PendingRequest) -> PendingRequest:
@@ -955,7 +955,7 @@ class Wallet(
         # Even an HTTP error can follow a committed transaction or an active
         # backend payment. Confirm every input is unspent before releasing it.
         try:
-            states = (await super().check_proof_state(pending.inputs)).states
+            states = (await self.check_proof_state(pending.inputs)).states
         except Exception:
             return
         if {state.Y for state in states} != {
@@ -965,21 +965,24 @@ class Wallet(
         await self._discard_pending_request(pending)
 
     async def _discard_pending_request(self, pending: PendingRequest) -> None:
-        """Release a first attempt that received an explicit rejection."""
+        """Release a failed request, preserving only prior swap reservations."""
         async with self.db.get_connection(
             locks=[LockOptions(table="pending_requests")]
         ) as conn:
             for proof in pending.inputs:
                 await update_proof(
                     proof,
-                    reserved=proof.secret in pending.reserved_inputs,
+                    reserved=pending.kind == "swap"
+                    and proof.secret in pending.reserved_inputs,
                     melt_id=None if pending.kind == "melt" else proof.melt_id,
                     conn=conn,
                 )
             await delete_pending_request(self.db, self.url, pending.operation, conn)
         for proof in self.proofs:
             if any(p.secret == proof.secret for p in pending.inputs):
-                proof.reserved = proof.secret in pending.reserved_inputs
+                proof.reserved = (
+                    pending.kind == "swap" and proof.secret in pending.reserved_inputs
+                )
                 if pending.kind == "melt":
                     proof.melt_id = None
 
@@ -1119,11 +1122,7 @@ class Wallet(
         melt_quote.payment_preimage = melt_quote_resp.payment_preimage
         # if payment fails
         if melt_quote.state == MeltQuoteState.unpaid:
-            # remove the melt_id in proofs and set reserved to False
-            await self.set_reserved_for_melt(
-                pending.inputs, reserved=False, quote_id=None
-            )
-            await delete_pending_request(self.db, self.url, operation)
+            await self._discard_pending_request(pending)
             raise Exception("could not pay invoice.")
         elif melt_quote.state == MeltQuoteState.pending:
             # payment is still pending
@@ -1137,8 +1136,30 @@ class Wallet(
         await self._complete_pending_request(pending, melt_quote)
         return melt_quote_resp
 
-    async def check_proof_state(self, proofs) -> PostCheckStateResponse:
-        return await super().check_proof_state(proofs)
+    async def check_proof_state(self, proofs: List[Proof]) -> PostCheckStateResponse:
+        response = await super().check_proof_state(proofs)
+        pending_ys = {state.Y for state in response.states if state.pending}
+        if pending_ys:
+            # A synchronous melt can be interrupted before returning PENDING.
+            # Remember acceptance observed through its inputs, including after
+            # restart, so a later UNPAID quote can release the failed payment.
+            quote_ids = {
+                proof.melt_id
+                for proof in self.proofs + proofs
+                if proof.Y in pending_ys and proof.melt_id
+            }
+            for quote_id in quote_ids:
+                pending = await get_pending_request(
+                    self.db, self.url, f"melt:{quote_id}"
+                )
+                if (
+                    pending
+                    and not pending.seen_pending
+                    and any(proof.Y in pending_ys for proof in pending.inputs)
+                ):
+                    pending.seen_pending = True
+                    await update_pending_request(self.db, self.url, pending)
+        return response
 
     async def check_proof_state_with_callback(
         self, proofs: List[Proof], callback: Callable

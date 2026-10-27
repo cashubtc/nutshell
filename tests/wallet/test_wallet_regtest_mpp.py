@@ -24,14 +24,15 @@ from tests.helpers import (
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet():
+async def wallet(tmp_path):
     wallet = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet",
+        db=str(tmp_path / "wallet"),
         name="wallet",
     )
     await wallet.load_mint()
     yield wallet
+    await wallet.db.engine.dispose()
 
 
 @pytest.mark.asyncio

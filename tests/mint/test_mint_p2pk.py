@@ -21,14 +21,15 @@ async def assert_err(f, msg):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(ledger: Ledger):
+async def wallet1(ledger: Ledger, tmp_path):
     wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet1",
+        db=str(tmp_path / "wallet1"),
         name="wallet1",
     )
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest.mark.asyncio
