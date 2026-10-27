@@ -66,6 +66,13 @@ class SparkL2Wallet(LightningBackend):
         self.payment_queue: asyncio.Queue[str] = asyncio.Queue()
         self.listener: Optional[_SdkEventListener] = None
 
+    async def cleanup(self) -> None:
+        if self.sdk is not None:
+            await self.sdk.disconnect()
+            self.sdk = None
+        self.listener = None
+        self.payment_queue = asyncio.Queue()
+
     async def _ensure_sdk(self):
         if self.sdk is not None:
             return

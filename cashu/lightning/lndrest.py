@@ -115,14 +115,27 @@ class LndRestWallet(LightningBackend):
             self.cert = False
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
-        self.client = httpx.AsyncClient(
+        self.client = self._create_client()
+        if self.supports_mpp:
+            logger.info("LNDRestWallet enabling MPP feature")
+
+    def _create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
             base_url=self.endpoint,
             headers=self.auth,
             verify=self.cert,
             timeout=None,
         )
-        if self.supports_mpp:
-            logger.info("LNDRestWallet enabling MPP feature")
+
+    async def startup(self) -> None:
+        if self.client.is_closed:
+            self.client = self._create_client()
+
+    async def cleanup(self) -> None:
+        try:
+            await self.client.aclose()
+        except RuntimeError as e:
+            logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
         try:
