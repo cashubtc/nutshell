@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -10,8 +10,13 @@ class PostMeltRequestOptionMpp(BaseModel):
     amount: int = Field(gt=0)  # input amount
 
 
+class PostMeltRequestOptionAmountless(BaseModel):
+    amount_msat: int = Field(gt=0, strict=True)
+
+
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
+    amountless: Optional[PostMeltRequestOptionAmountless] = None
 
 
 class PostMeltQuoteRequest(BaseModel):
@@ -21,6 +26,24 @@ class PostMeltQuoteRequest(BaseModel):
     )  # output payment request
     options: Optional[PostMeltRequestOptions] = None
     prefer_async: bool = False
+
+    @property
+    def amount_msat(self) -> Optional[int]:
+        return self.amountless_amount or (self.mpp_amount if self.is_mpp else None)
+
+    @property
+    def amount_option_type(self) -> Optional[Literal["nut-15", "nut-23"]]:
+        if self.amountless_amount is not None:
+            return "nut-23"
+        if self.is_mpp:
+            return "nut-15"
+        return None
+
+    @property
+    def amountless_amount(self) -> Optional[int]:
+        if self.options and self.options.amountless:
+            return self.options.amountless.amount_msat
+        return None
 
     @property
     def is_mpp(self) -> bool:

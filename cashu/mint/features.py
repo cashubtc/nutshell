@@ -4,6 +4,7 @@ from ..core.base import Method
 from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.mint_info import MintInfo
 from ..core.models import (
+    MeltMethodBolt11OptionSetting,
     MeltMethodSetting,
     MintInfoContact,
     MintInfoProtectedEndpoint,
@@ -95,7 +96,12 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
                 melt_setting = MeltMethodSetting(
-                    method=method.name, unit=unit.name, method_name=method.name
+                    method=method.name,
+                    unit=unit.name,
+                    method_name=method.name,
+                    options=MeltMethodBolt11OptionSetting(
+                        amountless=unit_dict[unit].supports_amountless
+                    ),
                 )
                 if settings.mint_max_melt_bolt11_sat:
                     melt_setting.max_amount = settings.mint_max_melt_bolt11_sat

@@ -182,7 +182,15 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
             fee_reserve=1,
             state=MeltQuoteState.unpaid,
         )
-        await crud.store_melt_quote(quote=quote, db=db)
+        # Seed the historical schema without using today's INSERT columns.
+        await db.execute(
+            """
+            INSERT INTO melt_quotes
+            (quote, method, request, checking_id, unit, amount, fee_reserve, fee_paid, state)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :fee_paid, :state)
+            """,
+            {**quote.model_dump(), "state": quote.state.value},
+        )
 
         await mint_migrations.m039_add_attempt_to_melt_quotes(db)
 
@@ -211,6 +219,58 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
         second_attempt = await db_write._set_melt_quote_pending(unpaid)
         assert second_attempt.attempt != first_attempt.attempt
         assert uuid.UUID(second_attempt.attempt).version == 7
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_m041_upgrades_database_already_at_main_version_40(tmp_path):
+    db = Database("mint", str(tmp_path / "amount_migration"))
+    crud = LedgerCrudSqlite()
+    previous_migrations = SimpleNamespace(
+        __name__=mint_migrations.__name__,
+        **{
+            name: migration
+            for name, migration in vars(mint_migrations).items()
+            if name.startswith("m") and name[1:4].isdigit() and int(name[1:4]) <= 40
+        },
+    )
+    try:
+        await migrate_databases(db, previous_migrations)
+        version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
+        assert version["version"] == 40
+
+        # Use the historical INSERT shape, before the amount columns exist.
+        await db.execute(
+            """
+            INSERT INTO melt_quotes
+            (quote, method, request, checking_id, unit, amount, fee_reserve, fee_paid, state)
+            VALUES ('legacy', 'bolt11', 'legacy-request', 'legacy-hash', 'sat', 17, 2, 0, 'UNPAID')
+            """
+        )
+        await migrate_databases(db, mint_migrations)
+        # A restart must leave the migrated database unchanged.
+        await migrate_databases(db, mint_migrations)
+        version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
+        assert version["version"] == 41
+        legacy = await crud.get_melt_quote(quote_id="legacy", db=db)
+        assert legacy is not None
+        assert legacy.amount == 17
+        assert legacy.amount_msat is None
+        assert legacy.amount_option_type is None
+
+        quote = legacy.model_copy(
+            update={
+                "quote": "amountless",
+                "amount_msat": 16_001,
+                "amount_option_type": "nut-23",
+            }
+        )
+        await crud.store_melt_quote(quote=quote, db=db)
+        restored = await crud.get_melt_quote(quote_id=quote.quote, db=db)
+        assert restored is not None
+        assert restored.amount_msat == 16_001
+        assert restored.amount_option_type == "nut-23"
     finally:
         await db.engine.dispose()
 
@@ -471,7 +531,7 @@ async def test_auth_m005_migration_preserves_existing_promises(tmp_path):
     async with db.connect() as conn:
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')} (id, amount, b_, c_, created)
+            INSERT INTO {db.table_with_schema("promises")} (id, amount, b_, c_, created)
             VALUES (:id, :amount, :b_, :c_, :created)
             """,
             {

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
 
 import cbor2
 from loguru import logger
@@ -288,6 +288,9 @@ class MeltQuote(LedgerEvent):
     checking_id: str
     unit: str
     amount: int
+    # Exact Lightning amount supplied through NUT-15 or NUT-23 payment options.
+    amount_msat: Optional[int] = None
+    amount_option_type: Optional[Literal["nut-15", "nut-23"]] = None
     fee_reserve: int
     state: MeltQuoteState
     attempt: str = ""
@@ -325,6 +328,8 @@ class MeltQuote(LedgerEvent):
             fee_reserve=row["fee_reserve"],
             state=MeltQuoteState(row["state"]),
             attempt=str(attempt) if attempt is not None else "",
+            amount_msat=row.get("amount_msat"),  # type: ignore
+            amount_option_type=row.get("amount_option_type"),  # type: ignore
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
@@ -1580,9 +1585,9 @@ class AuthProof(BaseModel):
     def max_token_length(cls) -> int:
         # JSON can use two six-character Unicode escapes per input character.
         # Include field names/separators and padded base64 encoding overhead.
-        max_json_length = 12 * (
-            MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN
-        ) + 64
+        max_json_length = (
+            12 * (MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN) + 64
+        )
         return len(cls.prefix) + 4 * ((max_json_length + 2) // 3)
 
     @classmethod

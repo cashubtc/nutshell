@@ -18,12 +18,17 @@ class MintMethodSetting(BaseModel):
     options: Optional[MintMethodBolt11OptionSetting] = None
 
 
+class MeltMethodBolt11OptionSetting(BaseModel):
+    amountless: bool = False
+
+
 class MeltMethodSetting(BaseModel):
     method: str
     unit: str
     method_name: Optional[str] = None
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
+    options: Optional[MeltMethodBolt11OptionSetting] = None
 
 
 class MintInfoContact(BaseModel):

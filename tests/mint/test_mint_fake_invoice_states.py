@@ -117,6 +117,35 @@ async def test_description_overrides_mint_wide_exceptions(monkeypatch):
     assert (await backend.get_payment_status(payment.checking_id)).settled
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pay_state", ["PAID", "FAILED"])
+async def test_amountless_payment_preserves_description_override(
+    monkeypatch, pay_state
+):
+    from unittest.mock import Mock
+
+    quote = backend_quote(description(pay_state, pay_state))
+    quote.request = get_fake_invoice(0, description(pay_state, pay_state))
+    quote.amount = 17
+    quote.amount_msat = 16_001
+    quote.amount_option_type = "nut-23"
+    backend = FakeWallet()
+    update_balance = Mock()
+    monkeypatch.setattr(backend, "update_balance", update_balance)
+
+    payment = await backend.pay_invoice(quote, 2000)
+    assert payment.settled == (pay_state == "PAID")
+    assert payment.failed == (pay_state == "FAILED")
+    assert payment.checking_id
+    status = await backend.get_payment_status(payment.checking_id)
+    assert status.settled == payment.settled
+    if payment.settled:
+        update_balance.assert_called_once()
+        assert update_balance.call_args.args[0].amount_msat == 16_001
+    else:
+        update_balance.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "plain",
     [

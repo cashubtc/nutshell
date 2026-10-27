@@ -112,15 +112,18 @@ async def test_lndrpc_subsat_invoice_is_paid_in_full(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_lndrpc_quote_below_invoice_is_still_partial(monkeypatch):
-    """A quote that covers only part of the invoice keeps using MPP."""
+@pytest.mark.parametrize("is_mpp", [False, True])
+async def test_lndrpc_partial_payment_requires_explicit_type(monkeypatch, is_mpp):
     wallet = _grpc_wallet()
     calls = _mock_grpc(monkeypatch, wallet, 2000)
 
-    await wallet.pay_invoice(_quote(1), fee_limit_msat=1000)
+    quote = _quote(1)
+    quote.amount_msat = 1000
+    quote.amount_option_type = "nut-15" if is_mpp else None
+    await wallet.pay_invoice(quote, fee_limit_msat=1000)
 
-    assert calls["partial"] is True
-    assert calls["send_payment"] is False
+    assert calls["partial"] is is_mpp
+    assert calls["send_payment"] is (not is_mpp)
 
 
 def _mock_rest(monkeypatch, wallet, invoice_amount_msat: int) -> dict[str, Any]:
@@ -173,7 +176,7 @@ def _rest_wallet() -> LndRestWallet:
     wallet.supports_mpp = True
     wallet.endpoint = "http://localhost:8080"
     wallet.macaroon = "macaroon"
-    wallet.cert = None
+    wallet.cert = False
     return wallet
 
 
@@ -191,11 +194,15 @@ async def test_lndrest_subsat_invoice_is_paid_in_full(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_lndrest_quote_below_invoice_is_still_partial(monkeypatch):
+@pytest.mark.parametrize("is_mpp", [False, True])
+async def test_lndrest_partial_payment_requires_explicit_type(monkeypatch, is_mpp):
     wallet = _rest_wallet()
     calls = _mock_rest(monkeypatch, wallet, 2000)
 
-    await wallet.pay_invoice(_quote(1), fee_limit_msat=1000)
+    quote = _quote(1)
+    quote.amount_msat = 1000
+    quote.amount_option_type = "nut-15" if is_mpp else None
+    await wallet.pay_invoice(quote, fee_limit_msat=1000)
 
-    assert calls["partial"] is True
-    assert calls["send_payment"] is False
+    assert calls["partial"] is is_mpp
+    assert calls["send_payment"] is (not is_mpp)
