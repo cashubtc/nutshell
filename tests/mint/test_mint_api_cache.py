@@ -5,7 +5,7 @@ import pytest_asyncio
 from cashu.core.nuts import nut20
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import pay_if_regtest
+from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 invoice_32sat = "lnbc320n1pnsuamsdqqxqrrsssp5w3tlpw2zss396qh28l3a07u35zdx8nmknzryk89ackn23eywdu2spp5ckt298t835ejzh2xepyxlg57f54q27ffc2zjsjh3t5pmx4wghpcqne0vycw5dfalx5y45d2jtwqfwz437hduyccn9nxk2feay0ytxldjpf3fcjrcf5k2s56q3erj86ymlqdp703y89vt4lr4lun5z5duulcqwuwutn"
@@ -83,7 +83,10 @@ async def test_api_swap_cached_responses(wallet: Wallet):
 @pytest.mark.asyncio
 async def test_api_melt_cached_responses(wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
-    melt_quote = await wallet.melt_quote(invoice_32sat)
+    invoice = (
+        get_real_invoice(32)["payment_request"] if is_regtest else invoice_32sat
+    )
+    melt_quote = await wallet.melt_quote(invoice)
 
     await pay_if_regtest(mint_quote.request)
     minted = await wallet.mint(64, mint_quote.quote)
@@ -112,4 +115,5 @@ async def test_api_melt_cached_responses(wallet: Wallet):
     )
     assert response.status_code == 200, f"{response.status_code = }"
     assert response1.status_code == 200, f"{response1.status_code = }"
+    assert response.json()["state"] == "PAID", response.text
     assert response.text == response1.text
