@@ -312,6 +312,9 @@ class MeltQuote(LedgerEvent):
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
 
+        if change is None and row.get("change"):  # type: ignore
+            change = json.loads(row["change"])
+
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
         attempt = row.get("attempt")  # type: ignore
 

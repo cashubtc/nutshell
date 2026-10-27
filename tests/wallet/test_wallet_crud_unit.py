@@ -440,12 +440,15 @@ async def test_melt_quote_crud_lifecycle(wallet_db: Database):
     by_request = await get_bolt11_melt_quote(db=wallet_db, request="melt-mquote-2")
     assert by_quote is not None and by_quote.quote == "mquote-1"
     assert by_request is not None and by_request.quote == "mquote-2"
+    assert by_quote.change == quote_1.change
+    assert by_request.change == quote_2.change
 
     pending = await get_bolt11_melt_quotes(
         db=wallet_db, mint="https://mint.test", state=MeltQuoteState.pending
     )
     assert len(pending) == 1
     assert pending[0].quote == "mquote-2"
+    assert pending[0].change == quote_2.change
 
     await update_bolt11_melt_quote(
         db=wallet_db,
@@ -461,6 +464,7 @@ async def test_melt_quote_crud_lifecycle(wallet_db: Database):
     assert updated.paid_time == 456
     assert updated.fee_paid == 7
     assert updated.payment_preimage == "preimage"
+    assert updated.change == quote_1.change
 
     with pytest.raises(ValueError, match="quote or request must be provided"):
         await get_bolt11_melt_quote(db=wallet_db)

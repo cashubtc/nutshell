@@ -478,13 +478,7 @@ async def get_bolt11_melt_quote(
         values,
     )
 
-    if not row:
-        return None
-    change = json.loads(row["change"]) if row["change"] else None
-    return MeltQuote.from_row(
-        row,
-        change=[BlindedSignature.model_validate(c) for c in change] if change else None,
-    )  # type: ignore
+    return MeltQuote.from_row(row) if row else None  # type: ignore
 
 
 async def get_bolt11_melt_quotes(

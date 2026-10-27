@@ -2,7 +2,16 @@ from typing import Any, Dict
 
 import pytest
 
-from cashu.core.base import AuthProof, Method, TokenV3, TokenV4, Unit
+from cashu.core.base import (
+    AuthProof,
+    BlindedSignature,
+    MeltQuote,
+    MeltQuoteState,
+    Method,
+    TokenV3,
+    TokenV4,
+    Unit,
+)
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.mint_info import MintInfo as CoreMintInfo
 from cashu.core.models.info import GetInfoResponse
@@ -11,6 +20,25 @@ from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.split import amount_split
 from cashu.wallet.helpers import deserialize_token_from_string
 from cashu.wallet.mint_info import MintInfo as WalletMintInfo
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_melt_quote_from_row_preserves_explicit_change(empty):
+    quote = MeltQuote(
+        quote="quote",
+        method="bolt11",
+        request="invoice",
+        checking_id="payment",
+        unit="sat",
+        amount=1,
+        fee_reserve=1,
+        state=MeltQuoteState.paid,
+    )
+    row = quote.model_dump(mode="json")
+    # Explicit signatures supplied by the mint take precedence over row data.
+    row["change"] = "invalid JSON"
+    change = [] if empty else [BlindedSignature(id="keyset", amount=1, C_="02")]
+    assert MeltQuote.from_row(row, change=change).change == change
 
 
 def support_helpers(nuts: Dict[int, Any]):
