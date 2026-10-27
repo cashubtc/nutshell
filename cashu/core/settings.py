@@ -352,6 +352,8 @@ class AuthSettings(MintSettings):
 
 
 class MintRedisCache(MintSettings):
+    mint_memory_cache_max_entries: int = Field(default=10_000, gt=0)
+    mint_memory_cache_max_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
     mint_redis_cache_enabled: bool = Field(default=False)
     mint_redis_cache_url: Optional[str] = Field(default=None)
     mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week

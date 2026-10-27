@@ -3,7 +3,6 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.nuts import nut20
-from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.helpers import pay_if_regtest
@@ -24,10 +23,6 @@ async def wallet(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.mint_redis_cache_enabled,
-    reason="settings.mint_redis_cache_enabled is False",
-)
 async def test_api_mint_cached_responses(wallet: Wallet):
     # Testing mint
     mint_quote = await wallet.request_mint(64)
@@ -55,10 +50,6 @@ async def test_api_mint_cached_responses(wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.mint_redis_cache_enabled,
-    reason="settings.mint_redis_cache_enabled is False",
-)
 async def test_api_swap_cached_responses(wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -90,10 +81,6 @@ async def test_api_swap_cached_responses(wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.mint_redis_cache_enabled,
-    reason="settings.mint_redis_cache_enabled is False",
-)
 async def test_api_melt_cached_responses(wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     melt_quote = await wallet.melt_quote(invoice_32sat)
