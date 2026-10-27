@@ -30,39 +30,42 @@ async def assert_err(f, msg):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(ledger: Ledger):
+async def wallet1(ledger: Ledger, tmp_path):
     wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet1_p2pk_comprehensive",
+        db=str(tmp_path / "wallet1"),
         name="wallet1",
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2(ledger: Ledger):
+async def wallet2(ledger: Ledger, tmp_path):
     wallet2 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet2_p2pk_comprehensive",
+        db=str(tmp_path / "wallet2"),
         name="wallet2",
     )
     await migrate_databases(wallet2.db, migrations)
     await wallet2.load_mint()
     yield wallet2
+    await wallet2.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet3(ledger: Ledger):
+async def wallet3(ledger: Ledger, tmp_path):
     wallet3 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/wallet3_p2pk_comprehensive",
+        db=str(tmp_path / "wallet3"),
         name="wallet3",
     )
     await migrate_databases(wallet3.db, migrations)
     await wallet3.load_mint()
     yield wallet3
+    await wallet3.db.engine.dispose()
 
 
 @pytest.mark.asyncio

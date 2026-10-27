@@ -32,24 +32,26 @@ async def assert_err(f, msg):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1():
+async def wallet1(tmp_path):
     wallet1 = await Wallet.with_db(
-        SERVER_ENDPOINT, "test_data/wallet_p2pk_methods_1", "wallet1"
+        SERVER_ENDPOINT, str(tmp_path / "wallet1"), "wallet1"
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
     yield wallet1
+    await wallet1.db.engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2():
+async def wallet2(tmp_path):
     wallet2 = await Wallet.with_db(
-        SERVER_ENDPOINT, "test_data/wallet_p2pk_methods_2", "wallet2"
+        SERVER_ENDPOINT, str(tmp_path / "wallet2"), "wallet2"
     )
     await migrate_databases(wallet2.db, migrations)
     wallet2.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet2.load_mint()
     yield wallet2
+    await wallet2.db.engine.dispose()
 
 
 @pytest.mark.asyncio
