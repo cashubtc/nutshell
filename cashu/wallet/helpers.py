@@ -204,6 +204,7 @@ async def send(
             amount,
             set_reserved=False,  # we set reserved later
             secret_lock=secret_lock,
+            include_fees=include_fees,
             p2pk_e=p2pk_e,
         )
     else:

@@ -7,7 +7,9 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Unit
+from ...core.base import PaymentRequest, Unit
+from ...core.helpers import sum_proofs
+from ...core.nuts.nut18 import method_fee
 from ...core.settings import settings
 from ...wallet.crud import (
     get_keysets,
@@ -129,6 +131,53 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     await mint_wallet.load_proofs(reload=True)
 
     return mint_wallet
+
+
+async def get_payment_request_wallet(ctx: Context, request: PaymentRequest) -> Wallet:
+    """Select a funded mint, preferring the receiver's listed mints."""
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs(reload=True, all_keysets=True)
+    balances = await wallet.balance_per_minturl(unit=wallet.unit)
+    mints = [mint.rstrip("/") for mint in request.m or []]
+    urls = sorted(
+        balances,
+        key=lambda url: (url.rstrip("/") not in mints, -int(balances[url]["available"])),
+    )
+    for url in urls:
+        listed = url.rstrip("/") in mints
+        if mints and not request.mp and not listed:
+            continue
+        if int(balances[url]["available"]) < (request.a or 0):
+            continue
+        candidate = await Wallet.with_db(
+            url, wallet.db.db_location, name=wallet.name, unit=wallet.unit.name
+        )
+        await candidate.load_mint()
+        fee = method_fee(request.sm, candidate.mint_info, candidate.unit)
+        if fee is None:
+            continue
+        amount = (request.a or 0) + (0 if listed else fee)
+        await candidate.load_proofs()
+        proofs = candidate.active_proofs(candidate.proofs)
+        selected = candidate.coinselect(proofs, amount, include_fees=True)
+        input_fee = candidate.get_fees_for_proofs(selected)
+        if request.nut10 or sum_proofs(selected) != amount + input_fee:
+            # An unavailable mint may fail to activate a keyset needed for swapping.
+            if not getattr(candidate, "keyset_id", None):
+                continue
+            amount = candidate.get_send_amount(amount)
+            selected = candidate.coinselect(proofs, amount, include_fees=True)
+            # Match swap_to_send's inclusion of proofs from inactive keysets.
+            selected += [
+                proof
+                for proof in proofs
+                if not candidate.keysets[proof.id].active and proof not in selected
+            ]
+            input_fee = candidate.get_fees_for_proofs(selected)
+        if sum_proofs(selected) >= amount + input_fee:
+            return candidate
+
+    raise click.ClickException("No funded mint satisfies this payment request.")
 
 
 async def print_mint_balances(

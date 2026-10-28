@@ -25,6 +25,8 @@ from ...core.base import (
     Method,
     MintQuote,
     MintQuoteState,
+    PaymentRequest,
+    SupportedMethod,
     TokenV4,
     Unit,
 )
@@ -33,6 +35,9 @@ from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
 from ...core.nuts.nut18 import deserialize as deserialize_payment_request
+from ...core.nuts.nut18 import method_fee as payment_request_method_fee
+from ...core.nuts.nut18 import serialize as serialize_payment_request
+from ...core.nuts.nut26 import serialize as serialize_payment_request_bech32
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -46,6 +51,7 @@ from ...wallet.wallet import Wallet as Wallet
 from ..auth.auth import WalletAuth
 from ..cli.cli_helpers import (
     get_mint_wallet,
+    get_payment_request_wallet,
     get_unit_wallet,
     print_balance,
     print_mint_balances,
@@ -239,7 +245,7 @@ async def cli(
 
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
-    if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
+    if ctx.invoked_subcommand not in ["send", "invoice"] or host:
         return
     # ------ MULTIUNIT ------- : Select a unit
     ctx.obj["WALLET"] = await get_unit_wallet(ctx)
@@ -272,7 +278,6 @@ async def cli(
 )
 @click.pass_context
 @coro
-@init_auth_wallet
 async def pay(
     ctx: Context,
     invoice: str,
@@ -280,26 +285,73 @@ async def pay(
     yes: bool = False,
     prefer_async: bool = False,
 ):
+    pr = None
+    if invoice.startswith("creqA") or invoice.lower().startswith("creqb1"):
+        try:
+            pr = deserialize_payment_request(invoice)
+        except Exception as e:
+            raise click.ClickException(f"Error decoding payment request: {e}") from e
+
+    assert ctx.parent is not None
+    wallet: Wallet = ctx.obj["WALLET"]
+    if pr is not None and pr.u is not None:
+        if not ctx.parent.params["host"] and not ctx.parent.params["unit"]:
+            try:
+                wallet.unit = Unit[pr.u]
+            except KeyError:
+                raise click.ClickException(
+                    f"Unsupported payment request unit: {pr.u}"
+                ) from None
+        if pr.u != wallet.unit.name:
+            raise click.ClickException(
+                f"Payment request unit '{pr.u}' does not match "
+                f"wallet unit '{wallet.unit.name}'."
+            )
+    if not ctx.parent.params["host"]:
+        if pr is not None:
+            ctx.obj["WALLET"] = await get_payment_request_wallet(ctx, pr)
+        else:
+            ctx.obj["WALLET"] = await get_unit_wallet(ctx)
+            ctx.obj["WALLET"] = await get_mint_wallet(ctx)
+        await init_wallet(ctx.obj["WALLET"], load_proofs=False)
+
+    ctx.obj["HOST"] = ctx.obj["WALLET"].url
+    await _pay(ctx, invoice, amount, yes, prefer_async, pr)
+
+
+@init_auth_wallet
+async def _pay(
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int],
+    yes: bool,
+    prefer_async: bool,
+    pr: Optional[PaymentRequest],
+):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
 
     # NUT-18 / NUT-26 Payment Request support
-    if invoice.startswith("creqA") or invoice.lower().startswith("creqb1"):
-        try:
-            pr = deserialize_payment_request(invoice)
-        except Exception as e:
-            print(f"Error decoding payment request: {e}")
-            return
-
+    if pr is not None:
         print(f"Payment Request: {pr.d or 'No description'}")
         if pr.a:
             print(f"Amount: {wallet.unit.str(pr.a)} ({pr.a} {pr.u})")
 
-        if pr.m and wallet.url not in pr.m:
+        # The mint list is strict unless `mp` is explicitly true (preferred)
+        mint_outside_list = pr.m is not None and wallet.url.rstrip("/") not in [
+            mint.rstrip("/") for mint in pr.m
+        ]
+        if mint_outside_list and not pr.mp:
             print(
                 f"Error: Current mint {wallet.url} is not accepted by the receiver.")
             print(f"Accepted mints: {pr.m}")
+            return
+
+        # The sending mint must support (melt via) one of the requested methods
+        method_fee = payment_request_method_fee(pr.sm, wallet.mint_info, wallet.unit)
+        if method_fee is None:
+            print(f"Error: Current mint does not support a requested method: {pr.sm}")
             return
 
         amount_to_pay = pr.a
@@ -307,6 +359,21 @@ async def pay(
             # TODO: Handle amounts not specified in request (ask user)
             print("Error: Amount not specified in payment request.")
             return
+
+        # The method fee applies only when paying from a mint outside the mint
+        # list, or when no mint list is set at all
+        fee_applies = pr.m is None or mint_outside_list
+        if fee_applies and method_fee:
+            amount_to_pay += method_fee
+            reason = (
+                "the request has no mint list"
+                if pr.m is None
+                else "paying from a mint outside the preferred list"
+            )
+            print(f"Adding method fee of {wallet.unit.str(method_fee)} ({reason}).")
+
+        if amount_to_pay >= 2**64:
+            raise click.ClickException("Payment request total exceeds the maximum amount.")
 
         if not yes and not ctx.obj.get("YES"):
             message = f"Pay {wallet.unit.str(amount_to_pay)}?"
@@ -476,6 +543,86 @@ async def pay(
         print(" Error paying invoice.")
 
     await print_balance(ctx)
+
+
+def _parse_supported_method(spec: str) -> SupportedMethod:
+    """Parse a `--method` value of the form `name` or `name:fee`."""
+    mn, sep, fee_str = spec.partition(":")
+    try:
+        return SupportedMethod(mn=mn, mf=int(fee_str) if sep else None)
+    except ValueError:
+        raise click.BadParameter(
+            f"Invalid --method '{spec}', expected a method name and a fee "
+            f"between 0 and {2**64 - 1}.",
+            param_hint="--method",
+        ) from None
+
+
+@cli.command("request", help="Create a NUT-18 payment request.")
+@click.argument("amount", type=click.IntRange(min=1, max=2**64 - 1))
+@click.option("--description", "-d", default=None, help="Human-readable description.")
+@click.option(
+    "--mint",
+    "-m",
+    "mints",
+    multiple=True,
+    help="Accepted mint URL (repeatable, defaults to the current mint).",
+)
+@click.option(
+    "--preferred",
+    default=False,
+    is_flag=True,
+    help="Treat the mint list as preferred rather than strict.",
+)
+@click.option(
+    "--method",
+    "methods",
+    multiple=True,
+    help=(
+        "Required supported method as name or name:fee, e.g. bolt11 or"
+        " onchain:50 (repeatable). The fee applies only when the payer's"
+        " mint is outside a preferred mint list."
+    ),
+)
+@click.option(
+    "--single-use", "-s", default=False, is_flag=True, help="Mark the request single use."
+)
+@click.option(
+    "--bech32", default=False, is_flag=True, help="Encode as a NUT-26 bech32m request."
+)
+@click.pass_context
+@coro
+@init_auth_wallet
+async def request(
+    ctx: Context,
+    amount: int,
+    description: Optional[str],
+    mints: tuple,
+    preferred: bool,
+    methods: tuple,
+    single_use: bool,
+    bech32: bool,
+):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+
+    supported_methods = [_parse_supported_method(spec) for spec in methods]
+
+    pr = PaymentRequest(
+        a=amount,
+        u=wallet.unit.name,
+        m=list(mints) or [wallet.url],
+        mp=True if preferred else None,
+        sm=supported_methods or None,
+        s=True if single_use else None,
+        d=description,
+    )
+    encoded = (
+        serialize_payment_request_bech32(pr)
+        if bech32
+        else serialize_payment_request(pr)
+    )
+    print(encoded)
 
 
 @cli.command("invoice", help="Create Lighting invoice.")

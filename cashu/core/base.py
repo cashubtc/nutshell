@@ -1655,12 +1655,28 @@ class NUT10Option(BaseModel):
     t: Optional[List[List[str]]] = None  # tags
 
 
+class SupportedMethod(BaseModel):
+    mn: str = Field(min_length=1)  # method name
+    # per-method fee, absent = 0; u64 range per NUT-26
+    mf: Optional[int] = Field(default=None, ge=0, lt=2**64)
+
+
 class PaymentRequest(BaseModel):
     i: Optional[str] = None  # payment id
-    a: Optional[int] = None  # amount
+    a: Optional[int] = Field(default=None, ge=0, lt=2**64)  # amount
     u: Optional[str] = None  # unit
     s: Optional[bool] = None  # single use
     m: Optional[List[str]] = None  # mints
+    mp: Optional[bool] = None  # mint list preferred
+    sm: Optional[List[SupportedMethod]] = None  # supported methods
     d: Optional[str] = None  # description
     t: Optional[List[Transport]] = None  # transports
     nut10: Optional[NUT10Option] = None
+
+    @model_validator(mode="after")
+    def validate_request(self) -> "PaymentRequest":
+        self.m = self.m or None
+        self.sm = self.sm or None
+        if (self.a is not None or self.sm is not None) and not self.u:
+            raise ValueError("Payment request amount or supported methods require a unit")
+        return self

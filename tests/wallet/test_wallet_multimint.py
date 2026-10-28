@@ -1,3 +1,4 @@
+import asyncio
 import socket
 import sys
 import time
@@ -7,8 +8,22 @@ from subprocess import STDOUT, Popen
 import httpx
 import pytest
 import pytest_asyncio
+from click.testing import CliRunner
 
-from cashu.core.base import TokenV3, Unit
+from cashu.core.base import (
+    NUT10Option,
+    PaymentRequest,
+    SupportedMethod,
+    TokenV3,
+    TokenV4,
+    Unit,
+)
+from cashu.core.crypto.secp import PrivateKey
+from cashu.core.nuts.nut18 import serialize
+from cashu.core.nuts.nut26 import serialize as serialize_bech32m
+from cashu.core.settings import settings
+from cashu.core.split import amount_split
+from cashu.wallet.cli.cli import cli
 from cashu.wallet.errors import BalanceTooLowError
 from cashu.wallet.helpers import (
     deserialize_token_from_string,
@@ -28,7 +43,8 @@ settings.mint_seed_decryption_key = ""
 settings.mint_database = sys.argv[2]
 settings.mint_backend_bolt11_sat = "FakeWallet"
 settings.mint_backend_bolt11_usd = "FakeWallet"
-settings.mint_input_fee_ppk = 0
+settings.mint_derivation_path_list = ["m/0'/2'/0'"]
+settings.mint_input_fee_ppk = int(sys.argv[4])
 settings.mint_require_auth = False
 settings.mint_rpc_server_enable = False
 settings.fakewallet_brr = True
@@ -38,7 +54,7 @@ uvicorn.run("cashu.mint.app:app", host="127.0.0.1", port=int(sys.argv[3]))
 
 
 @pytest.fixture(scope="module")
-def mint(tmp_path_factory):
+def mint(tmp_path_factory, request):
     """Run two independent FakeWallet mints without changing the shared test mint."""
     directory = tmp_path_factory.mktemp("multimint")
     urls = []
@@ -59,6 +75,7 @@ def mint(tmp_path_factory):
                         f"MULTIMINT_TEST_PRIVATE_KEY_{index}",
                         str(directory / f"mint{index}"),
                         str(port),
+                        str(getattr(request, "param", 0)),
                     ],
                     stdout=log,
                     stderr=STDOUT,
@@ -184,3 +201,308 @@ async def test_redeem_token_with_multiple_mints(wallets):
         alice.keyset_id,
         bob.keyset_id,
     }
+
+
+async def _fund_request_wallet(url, directory, name, amount, unit="sat", split=None):
+    wallet = await Wallet.with_db(url, str(directory / name), name=name, unit=unit)
+    try:
+        await wallet.load_mint()
+        quote = await wallet.request_mint(amount)
+        await wallet.mint(amount, split=split, quote_id=quote.quote)
+    finally:
+        await wallet.db.engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("unit", ["sat", "usd"])
+@pytest.mark.parametrize(
+    "preferred_balance,explicit,strict,disabled,expected",
+    [
+        (16, False, False, False, 0),
+        (8, False, False, False, 1),
+        (16, True, False, False, 1),
+        (16, False, True, False, 0),
+        (8, False, True, False, None),
+        (16, False, False, True, 1),
+    ],
+)
+def test_cli_selects_payment_request_mint(
+    mint,
+    tmp_path,
+    monkeypatch,
+    encode,
+    unit,
+    preferred_balance,
+    explicit,
+    strict,
+    disabled,
+    expected,
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[1])
+    monkeypatch.setattr(settings, "wallet_unit", "sat")
+    for url, amount in zip(mint, [preferred_balance, 64]):
+        asyncio.run(_fund_request_wallet(url, tmp_path, "payer", amount, unit))
+
+    if disabled:
+        load_info = Wallet.load_mint_info
+
+        async def disabled_info(wallet, *args, **kwargs):
+            info = await load_info(wallet, *args, **kwargs)
+            if wallet.url == mint[0] and info:
+                info.nuts[5]["disabled"] = True
+            return info
+
+        monkeypatch.setattr(Wallet, "load_mint_info", disabled_info)
+
+    request = PaymentRequest(
+        a=10,
+        u=unit,
+        m=[mint[0] + "/"],
+        mp=not strict,
+        sm=[SupportedMethod(mn="bolt11", mf=5)],
+    )
+    prefix = ["--wallet", "payer", "--tests", "--yes"]
+    if explicit:
+        prefix += ["--host", mint[1], "--unit", unit]
+    result = CliRunner().invoke(cli, [*prefix, "pay", encode(request)])
+    if expected is None:
+        assert result.exit_code == 1
+        assert "No funded mint satisfies" in result.output
+        assert "cashuB" not in result.stdout
+        return
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert token.mint == mint[expected]
+    assert token.unit == unit
+    assert token.amount == (10 if expected == 0 else 15)
+
+
+@pytest.mark.parametrize("mint", [250, 1000], indirect=True)
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("locked", [False, True])
+@pytest.mark.parametrize("fee", [0, 5])
+@pytest.mark.parametrize("amount", [8, 10])
+def test_payment_request_redeemed_value(
+    mint, tmp_path, monkeypatch, encode, locked, fee, amount
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[0])
+    asyncio.run(_fund_request_wallet(mint[0], tmp_path, "payer", 64))
+
+    async def receiver():
+        wallet = await Wallet.with_db(
+            mint[0], str(tmp_path / "receiver"), name="receiver"
+        )
+        await wallet.load_mint()
+        return wallet
+
+    recipient = asyncio.run(receiver())
+    pubkey = asyncio.run(recipient.create_p2pk_pubkey())
+    request = PaymentRequest(
+        a=amount,
+        u="sat",
+        sm=[SupportedMethod(mn="bolt11", mf=fee)],
+        nut10=NUT10Option(k="P2PK", d=pubkey) if locked else None,
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--wallet",
+            "payer",
+            "--host",
+            mint[0],
+            "--tests",
+            "pay",
+            encode(request),
+            "-y",
+        ],
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+
+    async def redeem():
+        try:
+            proofs = token.proofs
+            await recipient._expand_short_keyset_ids(proofs)
+            assert recipient.keysets[proofs[0].id].input_fee_ppk > 0
+            assert token.amount - recipient.get_fees_for_proofs(proofs) >= amount + fee
+            await recipient.redeem(proofs)
+            assert recipient.available_balance >= amount + fee
+        finally:
+            await recipient.db.engine.dispose()
+
+    asyncio.run(redeem())
+
+
+@pytest.mark.parametrize("mint", [2000], indirect=True)
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("explicit", [False, True])
+def test_payment_request_swaps_proofs_with_insufficient_net_value(
+    mint, tmp_path, monkeypatch, encode, explicit
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[1])
+    asyncio.run(
+        _fund_request_wallet(mint[0], tmp_path, "payer", 32, split=[16, 16])
+    )
+    request = PaymentRequest(a=15, u="sat", m=[mint[0]])
+    prefix = ["--wallet", "payer", "--tests", "--yes"]
+    if explicit:
+        prefix += ["--host", mint[0]]
+    result = CliRunner().invoke(cli, [*prefix, "pay", encode(request)])
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert token.mint == mint[0]
+
+    async def redeem():
+        recipient = await Wallet.with_db(
+            mint[0], str(tmp_path / "receiver"), name="receiver"
+        )
+        try:
+            await recipient.load_mint()
+            proofs = token.proofs
+            await recipient._expand_short_keyset_ids(proofs)
+            assert token.amount - recipient.get_fees_for_proofs(proofs) >= request.a
+            await recipient.redeem(proofs)
+            assert recipient.available_balance >= request.a
+        finally:
+            await recipient.db.engine.dispose()
+
+    asyncio.run(redeem())
+
+
+@pytest.mark.parametrize("mint", [1000], indirect=True)
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("locked", [False, True])
+def test_request_selection_accounts_for_swap_fees(
+    mint, tmp_path, monkeypatch, encode, locked
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[1])
+    for url, amount in zip(mint, [16, 64]):
+        asyncio.run(
+            _fund_request_wallet(url, tmp_path, "payer", amount, split=[amount])
+        )
+    request = PaymentRequest(
+        a=15,
+        u="sat",
+        m=[mint[0]],
+        mp=True,
+        nut10=(
+            NUT10Option(k="P2PK", d=PrivateKey().public_key.format().hex())
+            if locked
+            else None
+        ),
+    )
+    result = CliRunner().invoke(
+        cli, ["--wallet", "payer", "--tests", "--yes", "pay", encode(request)]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert token.mint == mint[1 if locked else 0]
+
+
+@pytest.mark.parametrize("mint", [1234], indirect=True)
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("strict", [False, True])
+@pytest.mark.parametrize("locked", [False, True])
+def test_request_selection_requires_net_funded_proofs(
+    mint, tmp_path, monkeypatch, encode, strict, locked
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[1])
+    for url, amount in zip(mint, [7 if locked else 3, 64]):
+        asyncio.run(
+            _fund_request_wallet(url, tmp_path, "payer", amount, split=amount_split(amount))
+        )
+    request = PaymentRequest(
+        a=1,
+        u="sat",
+        m=[mint[0]],
+        mp=not strict,
+        nut10=(
+            NUT10Option(k="P2PK", d=PrivateKey().public_key.format().hex())
+            if locked
+            else None
+        ),
+    )
+    result = CliRunner().invoke(
+        cli, ["--wallet", "payer", "--tests", "--yes", "pay", encode(request)]
+    )
+    if strict:
+        assert result.exit_code == 1
+        assert "No funded mint satisfies" in result.output
+        assert "cashuB" not in result.stdout
+        return
+
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert token.mint == mint[1]
+    assert token.amount - (len(token.proofs) * 1234 + 999) // 1000 >= request.a
+
+
+@pytest.mark.parametrize(
+    "encode", [serialize, serialize_bech32m], ids=["nut18", "nut26"]
+)
+@pytest.mark.parametrize("locked", [False, True])
+@pytest.mark.parametrize("preferred_amount", [10, 64], ids=["exact", "needs-split"])
+def test_request_selection_handles_unavailable_mint(
+    mint, tmp_path, monkeypatch, encode, locked, preferred_amount
+):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "mint_url", mint[1])
+    for url, amount in zip(mint, [preferred_amount, 64]):
+        asyncio.run(
+            _fund_request_wallet(url, tmp_path, "payer", amount, split=amount_split(amount))
+        )
+
+    get_keysets = Wallet._get_keysets
+
+    async def unavailable_keysets(wallet, *args, **kwargs):
+        if wallet.url == mint[0]:
+            raise httpx.ConnectError("Preferred mint is offline")
+        return await get_keysets(wallet, *args, **kwargs)
+
+    monkeypatch.setattr(Wallet, "_get_keysets", unavailable_keysets)
+    request = PaymentRequest(
+        a=10,
+        u="sat",
+        m=[mint[0]],
+        mp=True,
+        nut10=(
+            NUT10Option(k="P2PK", d=PrivateKey().public_key.format().hex())
+            if locked
+            else None
+        ),
+    )
+    result = CliRunner().invoke(
+        cli, ["--wallet", "payer", "--tests", "--yes", "pay", encode(request)]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    requires_swap = locked or preferred_amount != request.a
+    assert token.mint == mint[1 if requires_swap else 0]
+    assert token.amount == request.a

@@ -1250,7 +1250,11 @@ class Wallet(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
         )
         # offline coin selection unsuccessful, we need to swap proofs before we can send
-        if not send_proofs or sum_proofs(send_proofs) > amount + fees:
+        if (
+            not send_proofs
+            or sum_proofs(send_proofs) > amount + fees
+            or (include_fees and sum_proofs(send_proofs) < amount + fees)
+        ):
             if not offline:
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
@@ -1303,7 +1307,8 @@ class Wallet(
             raise BalanceTooLowError()
 
         # coin selection for swapping, needs to include fees
-        swap_proofs = self.coinselect(proofs, amount, include_fees=True)
+        send_amount = self.get_send_amount(amount) if include_fees else amount
+        swap_proofs = self.coinselect(proofs, send_amount, include_fees=True)
 
         # Extra rule: add proofs from inactive keysets to swap_proofs to get rid of them
         swap_proofs += [
