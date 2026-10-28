@@ -187,11 +187,14 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         # upon a restar (it will activate a new keyset with the standard max order)
         if request.max_order:
             logger.warning(f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted.")
-        logger.debug(f"{request.final_expiry = }")
+        final_expiry = (
+            request.final_expiry if request.HasField("final_expiry") else None
+        )
+        logger.debug(f"{final_expiry = }")
         new_keyset = await self.ledger.rotate_next_keyset(
             Unit[request.unit],
             input_fee_ppk=request.input_fee_ppk,
-            final_expiry=request.final_expiry
+            final_expiry=final_expiry,
         )
         return management_pb2.RotateNextKeysetResponse(
             id=new_keyset.id,
