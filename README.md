@@ -76,7 +76,7 @@ You can skip the entire next section about Poetry and jump right to [Using Cashu
 
 The easiest way to get a mint running is through Docker.
 
-You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`.
+You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`, and replace the public test `MINT_MNEMONIC` with your own.
 
 ```bash
 docker compose up mint
@@ -226,7 +226,7 @@ docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet
 
 ## From this repository
 
-Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_PRIVATE_KEY` in your `.env` file.
+Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_MNEMONIC` to a BIP-39 mnemonic in your `.env` file. The mint derives all of its keys from the mnemonic, so back it up securely: without it, the mint can't start.
 
 ```bash
 poetry run mint

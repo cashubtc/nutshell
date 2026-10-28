@@ -1,4 +1,4 @@
-from typing import Dict, List, Mapping, Protocol
+from typing import Dict, List, Mapping, Optional, Protocol
 
 from ..core.base import Method, MintKeyset, Unit
 from ..core.crypto.secp import PublicKey
@@ -11,7 +11,7 @@ from .events.events import LedgerEventManager
 
 
 class SupportsSeed(Protocol):
-    seed: str
+    seed: Optional[str]
 
 class SupportsKeysets(Protocol):
     amounts: List[int]

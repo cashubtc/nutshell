@@ -5,6 +5,7 @@ from typing import Dict, List, Mapping, Optional, Tuple
 
 import bolt11
 from loguru import logger
+from mnemonic import Mnemonic
 
 from ..core.base import (
     DLEQ,
@@ -25,6 +26,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
+    derive_bip39_pubkey,
     derive_pubkey,
     generate_uuid_v7,
 )
@@ -104,7 +106,7 @@ class Ledger(
         self,
         *,
         db: Database,
-        seed: str,
+        seed: Optional[str],
         derivation_path="",
         amounts: Optional[List[int]] = None,
         backends: Optional[Mapping[Method, Mapping[Unit, LightningBackend]]] = None,
@@ -121,14 +123,18 @@ class Ledger(
         self.regular_tasks: List[asyncio.Task] = []
         self.melt_tasks: set[asyncio.Task] = set()
 
-        if not seed:
+        if not seed and not settings.mint_mnemonic:
             raise Exception("seed not set")
+        if settings.mint_mnemonic and not Mnemonic("english").check(
+            settings.mint_mnemonic
+        ):
+            raise Exception("MINT_MNEMONIC is not a valid BIP-39 mnemonic.")
 
         # decrypt seed if seed_decryption_key is set
         try:
             self.seed = (
                 AESCipher(seed_decryption_key).decrypt(seed)
-                if seed_decryption_key
+                if seed_decryption_key and seed
                 else seed
             )
         except Exception as e:
@@ -148,7 +154,11 @@ class Ledger(
         else:
             self.amounts = [2**n for n in range(settings.max_order)]
 
-        self.pubkey = derive_pubkey(self.seed)
+        # the pubkey stays derived from MINT_PRIVATE_KEY for as long as it is set
+        if self.seed:
+            self.pubkey = derive_pubkey(self.seed)
+        elif settings.mint_mnemonic:
+            self.pubkey = derive_bip39_pubkey(Mnemonic.to_seed(settings.mint_mnemonic))
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
@@ -168,6 +178,9 @@ class Ledger(
             self.watchdog_tasks = await self.dispatch_watchdogs()
 
     async def _startup_keysets(self) -> None:
+        if settings.mint_mnemonic:
+            await self.init_mnemonic_keysets()
+            return
         await self.init_keysets()
         for derivation_path in settings.mint_derivation_path_list:
             derivation_path = self.maybe_update_derivation_path(derivation_path)
