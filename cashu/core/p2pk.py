@@ -66,3 +66,9 @@ def verify_schnorr_signature(
         signature,
         hashlib.sha256(message).digest(),
     )
+
+
+def verify_schnorr_digest(digest: bytes, pubkey: PublicKey, signature: bytes) -> bool:
+    """Verify an already hashed tagged SIG_ALL message without hashing twice."""
+    xonly_pubkey = PublicKeyXOnly(pubkey.format()[1:])
+    return xonly_pubkey.verify(signature, digest)

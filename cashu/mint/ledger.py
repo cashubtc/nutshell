@@ -1,10 +1,12 @@
 import asyncio
+import secrets
 import time
 import traceback
 from typing import Dict, List, Mapping, Optional, Tuple
 
 import bolt11
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from ..core.base import (
     DLEQ,
@@ -41,6 +43,8 @@ from ..core.errors import (
     LightningPaymentFailedError,
     MintingDisabledError,
     NotAllowedError,
+    OutputsAlreadySignedError,
+    OutputsArePendingError,
     QuoteAlreadyIssuedError,
     QuoteExpiredError,
     QuoteNotPaidError,
@@ -57,6 +61,7 @@ from ..core.models import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
 )
+from ..core.nuts.nut03 import PointAtInfinity, tweak_outputs
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -1589,6 +1594,7 @@ class Ledger(
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
+        rerandomize: bool = False,
     ):
         """Consumes proofs and prepares new promises based on the amount swap. Used for swapping tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
@@ -1597,17 +1603,19 @@ class Ledger(
             proofs (List[Proof]): Proofs to be invalidated for the swap.
             outputs (List[BlindedMessage]): New outputs that should be signed in return.
             keyset (Optional[MintKeyset], optional): Keyset to use. Uses default keyset if not given. Defaults to None.
+            rerandomize (bool): Sign tweaked outputs and disclose recovery randomness after commit.
 
         Raises:
             Exception: Validation of proofs or outputs failed
 
         Returns:
-            List[BlindedSignature]: New promises (signatures) for the outputs.
+            Ordinary swaps return promises; rerandomized swaps return promises and R.
         """
         logger.trace("swap called")
         await self._verify_transaction(
             proofs=proofs,
             outputs=outputs,
+            rerandomize=rerandomize,
         )
         await self.db_write._verify_spent_proofs_and_set_pending(
             proofs, keysets=self.keysets
@@ -1617,33 +1625,95 @@ class Ledger(
             Ys = [p.Y for p in proofs]
             lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
             ys_list = ", ".join(f":y{i}" for i in range(len(Ys)))
-            async with self.db.get_connection(
-                locks=[
-                    LockOptions(
-                        table="proofs_pending",
-                        select_statement=f"y IN ({ys_list})",
-                        parameters=lock_parameters,
+            proofs_by_keyset: Dict[str, List[Proof]] = {}
+            for p in proofs:
+                proofs_by_keyset.setdefault(p.id, []).append(p)
+            keyset_fees = {
+                keyset_id: self.get_fees_for_proofs(keyset_proofs)
+                for keyset_id, keyset_proofs in proofs_by_keyset.items()
+            }
+            for _ in range(16 if rerandomize else 1):
+                randomness = secrets.token_bytes(32) if rerandomize else None
+                try:
+                    execution_outputs = (
+                        tweak_outputs(outputs, randomness)
+                        if randomness is not None
+                        else outputs
                     )
-                ],
-            ) as conn:
-                await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
+                except PointAtInfinity:
+                    # A valid original can occasionally produce the point at infinity.
+                    continue
 
-                # Calculate fees
-                proofs_by_keyset: Dict[str, List[Proof]] = {}
-                for p in proofs:
-                    proofs_by_keyset.setdefault(p.id, []).append(p)
-                keyset_fees = {}
-                for keyset_id, keyset_proofs in proofs_by_keyset.items():
-                    keyset_fees[keyset_id] = self.get_fees_for_proofs(keyset_proofs)
+                try:
+                    async with self.db.get_connection(
+                        locks=[
+                            LockOptions(
+                                table="proofs_pending",
+                                select_statement=f"y IN ({ys_list})",
+                                parameters=lock_parameters,
+                            )
+                        ],
+                    ) as conn:
+                        if rerandomize:
+                            await self._verify_outputs(execution_outputs, conn=conn)
+                        try:
+                            await self._store_blinded_messages(
+                                execution_outputs, keyset=keyset, conn=conn
+                            )
+                        except IntegrityError as exc:
+                            # Retry only a uniqueness conflict on the reserved point.
+                            # Other constraints and errors later in TX2 are terminal.
+                            original = exc.orig
+                            sqlstate = getattr(original, "sqlstate", None)
+                            cause = getattr(original, "__cause__", None)
+                            constraint = getattr(cause, "constraint_name", None)
+                            duplicate_point = (
+                                sqlstate == "23505"
+                                and constraint
+                                in {"promises_b__key", "promises_new_b__key"}
+                            ) or (
+                                getattr(original, "sqlite_errorname", None)
+                                == "SQLITE_CONSTRAINT_UNIQUE"
+                                and str(original)
+                                == "UNIQUE constraint failed: promises.b_"
+                            )
+                            if rerandomize and duplicate_point:
+                                raise OutputsAlreadySignedError() from exc
+                            raise
 
-                await self.db_write.finalize_pending_proofs(
-                    proofs=proofs,
-                    keysets=self.keysets,
-                    keyset_fees=keyset_fees,
-                    conn=conn,
-                )
-                promises = await self._sign_blinded_messages(outputs, conn)
-            finalized = True
+                        await self.db_write.finalize_pending_proofs(
+                            proofs=proofs,
+                            keysets=self.keysets,
+                            keyset_fees=keyset_fees,
+                            conn=conn,
+                            emit_events=not rerandomize,
+                            rerandomization_r=(
+                                randomness.hex() if randomness is not None else None
+                            ),
+                        )
+                        promises = await self._sign_blinded_messages(
+                            execution_outputs, conn
+                        )
+                except (OutputsAlreadySignedError, OutputsArePendingError) as exc:
+                    if not rerandomize:
+                        raise
+                    logger.debug(f"Retrying occupied rerandomized output: {exc}")
+                    continue
+                finalized = True
+                if randomness is not None:
+                    for proof in proofs:
+                        await self.events.submit(
+                            ProofState(
+                                Y=proof.Y,
+                                state=ProofSpentState.spent,
+                                witness=proof.witness,
+                                rerandomization_r=randomness.hex(),
+                            )
+                        )
+                    return promises, randomness.hex()
+                return promises
+
+            raise TransactionError("could not reserve rerandomized outputs")
         except Exception as e:
             logger.trace(f"swap failed: {e}")
             raise e
@@ -1652,9 +1722,6 @@ class Ledger(
                 await self.db_write._unset_proofs_pending(
                     proofs, keysets=self.keysets, spent=False
                 )
-
-        logger.trace("swap successful")
-        return promises
 
     async def restore(
         self, outputs: List[BlindedMessage]

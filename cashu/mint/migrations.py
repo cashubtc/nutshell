@@ -1356,3 +1356,13 @@ async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
             f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
             "WHERE encrypted_seed IS NOT NULL AND seed != ''"
         )
+
+
+async def m041_rerandomization_recovery(db: Database):
+    """Persist V2 swap recovery randomness on spent inputs, never pending ones."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('proofs_used')} "
+            "ADD COLUMN rerandomization_r TEXT "
+            "CHECK (rerandomization_r IS NULL OR length(rerandomization_r) = 64)"
+        )
