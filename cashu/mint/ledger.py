@@ -36,6 +36,7 @@ from ..core.errors import (
     BatchDuplicateQuotesError,
     CashuError,
     InvoiceAlreadyPaidError,
+    KeysetInactiveError,
     LightningError,
     LightningPaymentFailedError,
     MintingDisabledError,
@@ -1713,6 +1714,8 @@ class Ledger(
                     raise TransactionError(f"keyset {output.id} not found")
                 if output.id != keyset.id:
                     raise TransactionError("keyset id does not match output id")
+                if not keyset.active:
+                    raise KeysetInactiveError()
                 logger.trace(f"Storing blinded message with keyset {keyset.id}.")
                 await self.crud.store_blinded_message(
                     id=keyset.id,
