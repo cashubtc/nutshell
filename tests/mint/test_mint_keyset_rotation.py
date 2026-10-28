@@ -1,9 +1,11 @@
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 
 from cashu.core.base import (
     Amount,
+    AuthProof,
     BlindedMessage,
     BlindedSignature,
     MeltQuoteState,
@@ -14,7 +16,9 @@ from cashu.core.base import (
 )
 from cashu.core.crypto import b_dhke
 from cashu.core.crypto.secp import PrivateKey, PublicKey
+from cashu.core.db import Database
 from cashu.core.errors import KeysetInactiveError
+from cashu.core.migrations import migrate_databases
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.lightning.base import (
     PaymentResponse,
@@ -22,13 +26,14 @@ from cashu.lightning.base import (
     PaymentStatus,
     PaymentStatusResult,
 )
+from cashu.mint.auth import migrations as auth_migrations
+from cashu.mint.auth.base import User
+from cashu.mint.auth.crud import AuthLedgerCrudSqlite
+from cashu.mint.auth.server import AuthLedger
 from cashu.mint.ledger import Ledger
 from tests.helpers import get_fake_invoice, is_fake
 
-pytestmark = [
-    pytest.mark.asyncio,
-    pytest.mark.skipif(not is_fake, reason="only FakeWallet"),
-]
+pytestmark = pytest.mark.asyncio
 
 
 def _outputs(keyset_id: str, amounts: list[int], label: str):
@@ -103,6 +108,7 @@ async def _transact(ledger, operation, proofs, outputs, quote):
     return response.change
 
 
+@pytest.mark.skipif(not is_fake, reason="only FakeWallet")
 @pytest.mark.parametrize("operation", ["mint", "swap", "melt"])
 async def test_new_requests_reject_inactive_outputs(
     ledger: Ledger, monkeypatch, operation
@@ -135,6 +141,7 @@ async def test_new_requests_reject_inactive_outputs(
         assert (await ledger.get_melt_quote(quote.quote)).state == MeltQuoteState.unpaid
 
 
+@pytest.mark.skipif(not is_fake, reason="only FakeWallet")
 @pytest.mark.parametrize("operation", ["mint", "swap", "melt"])
 async def test_transactions_honor_outputs_rotated_after_verification(
     ledger: Ledger, monkeypatch, operation
@@ -181,6 +188,7 @@ async def test_transactions_honor_outputs_rotated_after_verification(
         assert all(state.spent for state in states)
 
 
+@pytest.mark.skipif(not is_fake, reason="only FakeWallet")
 @pytest.mark.parametrize("settlement", ["immediate", "quote_check", "startup"])
 async def test_melt_honors_change_rotated_during_payment(
     ledger: Ledger, monkeypatch, settlement
@@ -295,4 +303,103 @@ async def test_melt_honors_change_rotated_during_payment(
     assert sum(signature.amount for signature in signatures) == 63
     assert all(signature.id == new_keyset.id for signature in signatures)
     balance, _ = await ledger.crud.get_balance(db=ledger.db, keyset=old_keyset)
+    assert balance.amount == 0
+
+
+@pytest_asyncio.fixture
+async def auth_ledger(tmp_path):
+    ledger = AuthLedger(
+        db=Database("auth", str(tmp_path / "auth_rotation")),
+        seed="auth rotation test seed",
+        derivation_path="m/0'/999'/0'",
+        amounts=[1],
+    )
+    await migrate_databases(ledger.db, auth_migrations)
+    await ledger.init_keysets()
+    ledger.auth_crud = AuthLedgerCrudSqlite()
+    await ledger.auth_crud.create_user(db=ledger.db, user=User(id="rotation-test-user"))
+    try:
+        yield ledger
+    finally:
+        await ledger.shutdown_ledger()
+
+
+async def test_blind_auth_rejects_inactive_outputs(auth_ledger: AuthLedger):
+    user = await auth_ledger.auth_crud.get_user(
+        db=auth_ledger.db, user_id="rotation-test-user"
+    )
+    assert user
+    old_keyset = auth_ledger.keyset
+    assert old_keyset.unit == Unit.auth
+    outputs, _, _ = _outputs(old_keyset.id, [1, 1], "rejected-auth")
+    new_keyset = await auth_ledger.rotate_next_keyset(Unit.auth)
+
+    with pytest.raises(KeysetInactiveError):
+        await auth_ledger.mint_blind_auth(outputs=outputs, user=user)
+
+    assert not old_keyset.active
+    assert new_keyset.active
+    assert await auth_ledger._check_outputs_pending_or_issued_before(outputs) == []
+    for keyset in [old_keyset, new_keyset]:
+        balance, _ = await auth_ledger.crud.get_balance(
+            db=auth_ledger.db, keyset=keyset
+        )
+        assert balance.amount == 0
+    unchanged_user = await auth_ledger.auth_crud.get_user(
+        db=auth_ledger.db, user_id=user.id
+    )
+    assert unchanged_user
+    assert unchanged_user.last_access == user.last_access
+
+
+@pytest.mark.parametrize("rotate_after", ["verification", "storage"])
+async def test_blind_auth_honors_outputs_after_rotation(
+    auth_ledger: AuthLedger, monkeypatch, rotate_after
+):
+    user = await auth_ledger.auth_crud.get_user(
+        db=auth_ledger.db, user_id="rotation-test-user"
+    )
+    assert user
+    old_keyset = auth_ledger.keyset
+    assert old_keyset.unit == Unit.auth
+    outputs, secrets, rs = _outputs(old_keyset.id, [1, 1], "accepted-auth")
+    method_name = (
+        "_verify_outputs"
+        if rotate_after == "verification"
+        else "_store_blinded_messages"
+    )
+    original = getattr(auth_ledger, method_name)
+
+    async def accept_then_rotate(*args, **kwargs):
+        await original(*args, **kwargs)
+        await auth_ledger.rotate_next_keyset(Unit.auth)
+
+    monkeypatch.setattr(auth_ledger, method_name, accept_then_rotate)
+    signatures = await auth_ledger.mint_blind_auth(outputs=outputs, user=user)
+
+    assert not old_keyset.active
+    assert [signature.amount for signature in signatures] == [1, 1]
+    proofs = _unblind(auth_ledger, outputs, signatures, secrets, rs)
+    restored_outputs, restored = await auth_ledger.restore(outputs)
+    assert restored_outputs == outputs
+    assert restored == signatures
+    balance, _ = await auth_ledger.crud.get_balance(
+        db=auth_ledger.db, keyset=old_keyset
+    )
+    assert balance.amount == 2
+    updated_user = await auth_ledger.auth_crud.get_user(
+        db=auth_ledger.db, user_id=user.id
+    )
+    assert updated_user
+    assert updated_user.last_access is not None
+
+    for proof in proofs:
+        token = AuthProof.from_proof(proof).to_base64()
+        async with auth_ledger.verify_blind_auth(token):
+            pass
+    states = await auth_ledger.db_read.get_proofs_states([proof.Y for proof in proofs])
+    assert all(state.spent for state in states)
+    balance, _ = await auth_ledger.crud.get_balance(
+        db=auth_ledger.db, keyset=old_keyset
+    )
     assert balance.amount == 0
