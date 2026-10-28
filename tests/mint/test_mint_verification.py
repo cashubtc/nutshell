@@ -1252,8 +1252,14 @@ async def test_verify_transaction_swap_orders_inputs_nut10_outputs_together(
         calls.append("inputs")
 
     async def verify_outputs(
-        outputs, skip_amount_check=False, expected_unit=None, conn=None
+        outputs,
+        skip_amount_check=False,
+        expected_unit=None,
+        conn=None,
+        *,
+        allow_inactive_keysets=False,
     ):
+        assert not allow_inactive_keysets
         calls.append("outputs")
 
     def together(proofs, outputs):
@@ -1289,10 +1295,16 @@ async def test_verify_transaction_melt_passes_quote_and_skips_balance_check(
         captured["inputs"] = proofs
 
     async def verify_outputs(
-        outputs, skip_amount_check=False, expected_unit=None, conn=None
+        outputs,
+        skip_amount_check=False,
+        expected_unit=None,
+        conn=None,
+        *,
+        allow_inactive_keysets=False,
     ):
         captured["skip_amount_check"] = skip_amount_check
         captured["expected_unit"] = expected_unit
+        captured["allow_inactive_keysets"] = allow_inactive_keysets
 
     with (
         patch.object(
@@ -1309,12 +1321,14 @@ async def test_verify_transaction_melt_passes_quote_and_skips_balance_check(
             skip_output_amount_check=True,
             expected_output_unit=Unit.sat,
             verify_input_output_balance=False,
+            allow_inactive_keysets=True,
         )
 
     assert captured["quote"] == "quote-1"
     assert captured["outputs"] == outs
     assert captured["skip_amount_check"] is True
     assert captured["expected_unit"] == Unit.sat
+    assert captured["allow_inactive_keysets"] is True
     together.assert_not_called()
 
 

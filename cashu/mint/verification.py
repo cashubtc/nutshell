@@ -100,6 +100,7 @@ class LedgerVerification(
         skip_output_amount_check: bool = False,
         expected_output_unit: Optional[Unit] = None,
         verify_input_output_balance: bool = True,
+        allow_inactive_keysets: bool = False,
     ) -> None:
         # 1. Verify the inputs generically: amounts, secret and witness
         # criteria, duplicate-input prevention, ECASH signature validity, and
@@ -122,6 +123,7 @@ class LedgerVerification(
             skip_amount_check=skip_output_amount_check,
             expected_unit=expected_output_unit,
             conn=conn,
+            allow_inactive_keysets=allow_inactive_keysets,
         )
 
         # 4. For transaction types that require normal input/output balance and
@@ -183,6 +185,8 @@ class LedgerVerification(
         skip_amount_check=False,
         expected_unit: Optional[Unit] = None,
         conn: Optional[Connection] = None,
+        *,
+        allow_inactive_keysets: bool = False,
     ):
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
@@ -191,10 +195,10 @@ class LedgerVerification(
         # Verify all outputs have the same keyset id
         if not all([o.id == outputs[0].id for o in outputs]):
             raise TransactionError("outputs have different keyset ids.")
-        # Verify that the keyset id is known and active
+        # Only melt change may use a known inactive keyset.
         if outputs[0].id not in self.keysets:
             raise TransactionError("keyset id unknown.")
-        if not self.keysets[outputs[0].id].active:
+        if not self.keysets[outputs[0].id].active and not allow_inactive_keysets:
             raise KeysetInactiveError()
         if expected_unit and self.keysets[outputs[0].id].unit != expected_unit:
             raise TransactionError(

@@ -340,7 +340,9 @@ class Ledger(
             raise TransactionError("change outputs exceed overpaid fee.")
 
         async with self.db.get_connection(conn) as conn:
-            return_promises = await self._sign_blinded_messages(outputs, conn)
+            return_promises = await self._sign_blinded_messages(
+                outputs, conn, allow_inactive_keysets=True
+            )
             # delete remaining unsigned blank outputs from db
             if melt_id:
                 await self.crud.delete_blinded_messages_melt_id(
@@ -1444,6 +1446,7 @@ class Ledger(
             skip_output_amount_check=True,
             expected_output_unit=unit,
             verify_input_output_balance=False,
+            allow_inactive_keysets=True,
         )
 
         # verify that the amount of the input proofs is equal to the amount of the quote
@@ -1714,7 +1717,8 @@ class Ledger(
                     raise TransactionError(f"keyset {output.id} not found")
                 if output.id != keyset.id:
                     raise TransactionError("keyset id does not match output id")
-                if not keyset.active:
+                # Melt change remains bound to its keyset across rotations.
+                if not keyset.active and not melt_id:
                     raise KeysetInactiveError()
                 logger.trace(f"Storing blinded message with keyset {keyset.id}.")
                 await self.crud.store_blinded_message(
@@ -1734,6 +1738,8 @@ class Ledger(
         self,
         outputs: List[BlindedMessage],
         conn: Optional[Connection] = None,
+        *,
+        allow_inactive_keysets: bool = False,
     ) -> list[BlindedSignature]:
         """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
 
@@ -1747,6 +1753,7 @@ class Ledger(
             keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset.
                 If not given will use the keyset of the first output. Defaults to None.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
+            allow_inactive_keysets (bool): Only enable when signing melt change.
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
@@ -1760,7 +1767,7 @@ class Ledger(
             keyset = self.keysets[output.id]
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
-            if not keyset.active:
+            if not keyset.active and not allow_inactive_keysets:
                 raise KeysetInactiveError()
             keyset_id = output.id
             logger.trace(f"Generating promise with keyset {keyset_id}.")
