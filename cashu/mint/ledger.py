@@ -36,7 +36,6 @@ from ..core.errors import (
     BatchDuplicateQuotesError,
     CashuError,
     InvoiceAlreadyPaidError,
-    KeysetInactiveError,
     LightningError,
     LightningPaymentFailedError,
     MintingDisabledError,
@@ -1700,7 +1699,10 @@ class Ledger(
         swap_id: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> None:
-        """Stores a blinded message in the database.
+        """Stores previously verified blinded messages in the database.
+
+        Keyset activity is checked during output verification. Honor accepted
+        outputs even if their keyset has rotated before storage.
 
         Args:
             outputs (List[BlindedMessage]): Blinded messages to store.
@@ -1714,8 +1716,6 @@ class Ledger(
                     raise TransactionError(f"keyset {output.id} not found")
                 if output.id != keyset.id:
                     raise TransactionError("keyset id does not match output id")
-                if not keyset.active:
-                    raise KeysetInactiveError()
                 logger.trace(f"Storing blinded message with keyset {keyset.id}.")
                 await self.crud.store_blinded_message(
                     id=keyset.id,
