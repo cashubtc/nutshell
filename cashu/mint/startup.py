@@ -12,7 +12,7 @@ from loguru import logger
 import cashu.mint.management_rpc.management_rpc as management_rpc
 
 from ..core.base import Method, Unit
-from ..core.db import Database
+from ..core.db import Database, mask_db_location
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -44,8 +44,8 @@ for key, value in settings.model_dump().items():
     ]:
         value = "********" if value is not None else None
 
-    if key == "mint_database" and value and value.startswith("postgres://"):
-        value = "postgres://********"
+    if key in ["mint_database", "mint_test_database", "mint_auth_database"]:
+        value = mask_db_location(value)
 
     logger.debug(f"{key}: {value}")
 
