@@ -31,7 +31,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Programmable ecash: P2PK and HTLCs ([NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md))
 - Wallet and mint support for keyset rotations
 - DLEQ proofs for offline transactions ([NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md))
-- Optional caching using Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
+- Response caching in memory or Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
 - Optional authentication using Keycloak ([NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md))
 
 ## The Cashu protocol
@@ -234,16 +234,9 @@ poetry run mint
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
-### NUT-19 Caching with Redis
+### NUT-19 Response caching
 
-To cache HTTP responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)), you can either install Redis manually or use the docker compose file in `docker/redis/docker-compose.yaml` to start Redis in a container.
-
-Edit the `.env` file and uncomment the Redis lines:
-
-```bash
-MINT_REDIS_CACHE_ENABLED=TRUE
-MINT_REDIS_CACHE_URL=redis://localhost:6379
-```
+Nutshell caches successful mint, swap, and melt responses in memory by default so wallets can recover lost responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). Redis can be enabled for shared caching across workers or instances. See [Response caching](docs/response-caching.md) for configuration and cache limits.
 
 ### NUT-21 Authentication with Keycloak
 

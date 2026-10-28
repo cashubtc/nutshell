@@ -415,7 +415,7 @@ async def test_redis_cache_hit_and_miss(monkeypatch):
     monkeypatch.setattr(settings, "mint_redis_cache_enabled", True)
     monkeypatch.setattr(settings, "mint_redis_cache_url", "redis://cache")
     monkeypatch.setattr(settings, "mint_redis_cache_ttl", 12)
-    monkeypatch.setattr("cashu.mint.cache.from_url", lambda url: fake_redis)
+    monkeypatch.setattr("cashu.mint.cache.from_url", lambda url, **kwargs: fake_redis)
     cache = RedisCache()
 
     @cache.cache()
