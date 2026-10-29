@@ -188,11 +188,14 @@ class SparkL2Wallet(LightningBackend):
 
             # The payment hash is our checking ID
             invoice_obj = bolt11.decode(invoice)
+            if not invoice_obj.amount_msat or invoice_obj.amount_msat <= 0:
+                raise ValueError("Spark returned an invoice without a positive amount")
 
             return InvoiceResponse(
                 ok=True,
                 checking_id=invoice_obj.payment_hash,
                 payment_request=invoice,
+                amount=Amount(Unit.msat, int(invoice_obj.amount_msat)).to(amount.unit),
             )
         except Exception as e:
             logger.error(f"Failed to create invoice: {str(e)}")

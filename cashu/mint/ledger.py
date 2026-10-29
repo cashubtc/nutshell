@@ -665,11 +665,25 @@ class Ledger(
         if not (invoice_response.payment_request and invoice_response.checking_id):
             raise LightningError("could not fetch bolt11 payment request from backend")
 
+        quote_amount = invoice_response.amount or Amount(unit, quote_request.amount)
+        if quote_amount.unit != unit or quote_amount.amount <= 0:
+            raise LightningError("backend returned an invalid mint quote amount")
+        if (
+            settings.mint_max_mint_bolt11_sat
+            and quote_amount.amount > settings.mint_max_mint_bolt11_sat
+        ):
+            raise TransactionAmountExceedsLimitError(
+                f"Maximum mint amount is {settings.mint_max_mint_bolt11_sat} sat."
+            )
+        if (
+            settings.mint_max_balance
+            and balance + quote_amount.amount > settings.mint_max_balance
+        ):
+            raise NotAllowedError("Mint has reached maximum balance.")
+
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
-        self._verify_mint_quote_invoice_amount(
-            invoice_obj, Amount(unit, quote_request.amount)
-        )
+        self._verify_mint_quote_invoice_amount(invoice_obj, quote_amount)
 
         # NOTE: we normalize the request to lowercase to avoid case sensitivity
         # This works with Lightning but might not work with other methods
@@ -688,7 +702,7 @@ class Ledger(
             request=request,
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
-            amount=quote_request.amount,
+            amount=quote_amount.amount,
             state=MintQuoteState.unpaid,
             created_time=now,
             expiry=expiry,

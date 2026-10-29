@@ -33,6 +33,9 @@ class InvoiceResponse(BaseModel):
     checking_id: Optional[str] = None
     payment_request: Optional[str] = None
     error_message: Optional[str] = None
+    # The backend may normalize the requested amount to its invoice precision.
+    # When omitted, the requested amount is used for backwards compatibility.
+    amount: Optional[Amount] = None
 
 
 class PaymentResult(Enum):
