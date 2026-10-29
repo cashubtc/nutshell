@@ -6,8 +6,8 @@ on:
       python-version:
         default: "3.12"
         type: string
-      poetry-version:
-        default: "2.3.2"
+      uv-version:
+        default: "0.13.0"
         type: string
       os-version:
         default: "ubuntu-latest"
@@ -45,7 +45,7 @@ jobs:
       - uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
+          uv-version: ${{ inputs.uv-version }}
 
       - name: Checkout Regtest
         uses: actions/checkout@v6

@@ -23,14 +23,14 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.13.0"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       mint-database: ${{ matrix.mint-database }}
 
   wallet-compatibility:
@@ -39,12 +39,12 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.13.0"]
     uses: ./.github/workflows/wallet-compatibility.yml
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
 
   tests_redis_cache:
     strategy:
@@ -52,13 +52,13 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.13.0"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_redis_cache.yml
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       mint-database: ${{ matrix.mint-database }}
 
   tests_keycloak_auth:
@@ -67,13 +67,13 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.13.0"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_keycloak_auth.yml
     with:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       mint-database: ${{ matrix.mint-database }}
 
   regtest-mint:
@@ -82,14 +82,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.13.0"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "SparkL2Wallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}
 
@@ -99,13 +99,13 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
-        poetry-version: ["2.3.2"]
+        uv-version: ["0.13.0"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "SparkL2Wallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
+      uv-version: ${{ matrix.uv-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
       mint-database: ${{ matrix.mint-database }}
