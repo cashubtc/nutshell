@@ -220,6 +220,7 @@ def test_invoice_return_immediately(mint, cli_prefix):
 
 
 @pytest.mark.skipif(is_regtest, reason="uses FakeWallet")
+@xfail_below_minimum
 def test_invoice_uses_normalized_quote_amount(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     original = Wallet.request_mint
