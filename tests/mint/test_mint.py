@@ -380,7 +380,7 @@ async def test_mint_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_melt_quote_ttl_setting_overrides_invoice_expiry(ledger: Ledger):
+async def test_melt_quote_ttl_setting_limits_invoice_expiry(ledger: Ledger):
     ttl = 600  # 10 minutes
     settings.melt_quote_ttl = ttl
     try:

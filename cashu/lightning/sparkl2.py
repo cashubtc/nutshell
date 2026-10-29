@@ -7,6 +7,7 @@ import breez_sdk_spark
 from loguru import logger
 
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -121,6 +122,14 @@ class SparkL2Wallet(LightningBackend):
         except Exception as e:
             logger.error(f"Failed to initialize Breez Spark SDK: {e}")
             raise Exception(f"Failed to initialize Breez Spark SDK: {e}")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = bolt11.decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         try:

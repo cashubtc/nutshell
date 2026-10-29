@@ -9,13 +9,14 @@ from cashu.core.settings import settings
 from cashu.mint.management_rpc.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 
-from .helpers import is_fake
+from .helpers import get_fake_invoice, get_real_invoice, is_fake, is_regtest
 
-payment_request = (
-    "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
-    "p575z0n39w2j7zgnpqtdlrgz9rycner4eptjm3lz363dzylnrm3h4s9qyyssqfz8jglcshnlcf0zkw4qu8fyr564lg59x5al724kms3h6gpuhx9xrfv27tgx3l3u3cyf6"
-    "3r52u0xmac6max8mdupghfzh84t4hfsvrfsqwnuszf"
-)
+
+@pytest.fixture
+def payment_request():
+    if is_regtest:
+        return get_real_invoice(100)["payment_request"]
+    return get_fake_invoice(100)
 
 
 @pytest.fixture(autouse=True)
@@ -152,11 +153,9 @@ async def test_update_mint_quote(cli_prefix):
 
 
 @pytest.mark.asyncio
-async def test_update_melt_quote(cli_prefix):
+async def test_update_melt_quote(cli_prefix, payment_request):
     wallet = await init_wallet()
-    melt_quote = await wallet.melt_quote(
-        "lnbc1u1p5qefdgsp5xj5cl559ks226f3vf3d7x2ev2qadplmkswp4649h755cfekdufsspp5sxenacdev78ssuwn5vehycs7ch2ds23hhzytut4ncm27gywtv6rqdqqcqpjrzjqdgp5ar48c8k4cns58jw9lamcdlh57trvrn9psgjrsvwz94j9tqsvrqsvcqqvqsqqqqqqqlgqqqzwyqq2q9qxpqysgqzg8e75zkcxazmd0wqmre6xgkumt7sl4ftsw0q4c6zvz8hn6zjxwz9fmdmwpupw7tw79f7gmukyeeh8vusvt03pgwfud9shj849rvrnqpgcpusw"
-    )
+    melt_quote = await wallet.melt_quote(payment_request)
     assert melt_quote.quote
     await asyncio.sleep(1)
     runner = CliRunner()
@@ -183,11 +182,9 @@ async def test_get_mint_quote(cli_prefix):
 
 
 @pytest.mark.asyncio
-async def test_get_melt_quote(cli_prefix):
+async def test_get_melt_quote(cli_prefix, payment_request):
     wallet = await init_wallet()
-    melt_quote = await wallet.melt_quote(
-        "lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj"
-    )
+    melt_quote = await wallet.melt_quote(payment_request)
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
@@ -215,12 +212,10 @@ async def test_get_quote_ttl_mint_quote(cli_prefix):
 
 
 @pytest.mark.asyncio
-async def test_get_quote_ttl_melt_quote(cli_prefix):
+async def test_get_quote_ttl_melt_quote(cli_prefix, payment_request):
     """Melt quotes persist expiry; GetQuoteTtl should return the expiry timestamp."""
     wallet = await init_wallet()
-    melt_quote = await wallet.melt_quote(
-        "lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj"
-    )
+    melt_quote = await wallet.melt_quote(payment_request)
     await asyncio.sleep(1)
     runner = CliRunner()
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
