@@ -18,6 +18,7 @@ from cashu.core.base import (
     TokenV3Token,
     TokenV4,
     Unit,
+    WalletTransactionType,
 )
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.nuts.nut18 import serialize
@@ -204,8 +205,8 @@ async def test_redeem_token_with_multiple_mints(wallets):
         bob.keyset_id,
     }
 
-    receipts = [r for r in await get_history(bob.db) if r["type"] == "receive"]
-    assert {(r["mint"], r["amount"]) for r in receipts} == {
+    receipts = [r for r in await get_history(bob.db) if r.type == WalletTransactionType.receive]
+    assert {(r.mint, r.amount) for r in receipts} == {
         (alice.url, 64), (bob.url, 16)
     }
 
@@ -532,8 +533,8 @@ async def test_history_preserves_successful_leg_when_later_mint_rejects(
         with pytest.raises(Exception, match="already spent"):
             await receive(recipient, token)
         rows = await get_history(recipient.db)
-        assert [(r["type"], r["amount"], r["mint"]) for r in rows] == [
-            ("receive", 64, alice.url)
+        assert [(r.type, r.amount, r.mint) for r in rows] == [
+            (WalletTransactionType.receive, 64, alice.url)
         ]
     finally:
         await recipient.db.engine.dispose()
@@ -557,12 +558,11 @@ async def test_history_uses_actual_export_and_net_receipt_with_fees(wallets, tmp
         assert fee > 0
         await receive(receiver, token)
         rows = await get_history(receiver.db)
-        assert [(r["type"], r["amount"]) for r in rows] == [
-            ("receive", token.amount - fee)
+        assert [(r.type, r.amount) for r in rows] == [
+            (WalletTransactionType.receive, token.amount - fee)
         ]
-        assert rows[0]["amount"] == receiver.balance.amount
-        exports = [r for r in await get_history(sender.db) if r["type"] == "send"]
-        assert exports[0]["amount"] == -token.amount
+        assert rows[0].amount == receiver.balance.amount
+        exports = [r for r in await get_history(sender.db) if r.type == WalletTransactionType.send]
+        assert exports[0].amount == -token.amount
     finally:
         await receiver.db.engine.dispose()
-

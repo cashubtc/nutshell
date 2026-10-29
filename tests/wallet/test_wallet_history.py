@@ -15,6 +15,8 @@ from cashu.core.base import (
     MintQuote,
     MintQuoteState,
     Unit,
+    WalletTransaction,
+    WalletTransactionType,
 )
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
@@ -112,12 +114,12 @@ async def test_quote_only_upgrade_and_projection(tmp_path):
                 ),
             )
         await migrate_databases(db, migrations)
-        assert [(r["reference"], r["amount"]) for r in await get_history(db)] == [
+        assert [(r.reference, r.amount) for r in await get_history(db)] == [
             ("reused", 12),
             ("legacy", 64),
         ]
-        assert (await get_history(db))[1]["created_time"] is None
-        assert all(r["mint"] == "https://old-mint.test" for r in await get_history(db))
+        assert (await get_history(db))[1].created_time is None
+        assert all(r.mint == "https://old-mint.test" for r in await get_history(db))
         # A second startup must not recreate the table or fabricate old events.
         await migrate_databases(db, migrations)
         assert not await db.fetchall("SELECT * FROM ecash_transactions")
@@ -131,18 +133,19 @@ async def test_history_has_stable_ties_and_preserves_mints_units(
 ):
     monkeypatch.setattr("cashu.wallet.crud.time.time", lambda: 100)
     for kind, amount, unit, mint in [
-        ("send", 8, "sat", "https://a.test"),
-        ("receive", 123, "usd", "https://b.test"),
-        ("send", 2, "sat", "https://a.test"),
+        (WalletTransactionType.send, 8, "sat", "https://a.test"),
+        (WalletTransactionType.receive, 123, "usd", "https://b.test"),
+        (WalletTransactionType.send, 2, "sat", "https://a.test"),
     ]:
         await store_ecash_transaction(
             wallet_db, tx_type=kind, amount=amount, unit=unit, mint=mint
         )
     rows = await get_history(wallet_db)
-    assert [(r["type"], r["amount"], r["unit"], r["mint"]) for r in rows] == [
-        ("receive", 123, "usd", "https://b.test"),
-        ("send", -8, "sat", "https://a.test"),
-        ("send", -2, "sat", "https://a.test"),
+    assert all(isinstance(row, WalletTransaction) for row in rows)
+    assert [(r.type, r.amount, r.unit, r.mint) for r in rows] == [
+        (WalletTransactionType.receive, 123, Unit.usd, "https://b.test"),
+        (WalletTransactionType.send, -8, Unit.sat, "https://a.test"),
+        (WalletTransactionType.send, -2, Unit.sat, "https://a.test"),
     ]
     assert await get_history(wallet_db) == rows
 
@@ -163,25 +166,25 @@ async def test_real_transfer_melt_and_reload(wallets):
         proofs, invoice.payment_request, quote.fee_reserve, quote.quote
     )
     rows = await get_history(sender.db)
-    assert sorted((r["type"], r["amount"]) for r in rows) == [
-        ("melt", -8),
-        ("mint", 64),
-        ("send", -16),
+    assert sorted(((r.type, r.amount) for r in rows), key=lambda r: r[0].value) == [
+        (WalletTransactionType.melt, -8),
+        (WalletTransactionType.mint, 64),
+        (WalletTransactionType.send, -16),
     ]
-    assert all(r["mint"] == sender.url and r["unit"] == "sat" for r in rows)
-    mint_row = next(r for r in rows if r["type"] == "mint")
-    assert mint_row["method"] == "bolt11"
-    assert mint_row["reference"]
-    melt_row = next(r for r in rows if r["type"] == "melt")
-    assert melt_row["reference"] == quote.quote
-    assert melt_row["request"] == invoice.payment_request
-    assert melt_row["payment_preimage"] == response.payment_preimage
-    send_row = next(r for r in rows if r["type"] == "send")
-    assert send_row["method"] is None
-    assert send_row["request"] is None
-    assert send_row["payment_preimage"] is None
-    assert [(r["type"], r["amount"]) for r in await get_history(receiver.db)] == [
-        ("receive", 16)
+    assert all(r.mint == sender.url and r.unit == Unit.sat for r in rows)
+    mint_row = next(r for r in rows if r.type == WalletTransactionType.mint)
+    assert mint_row.method == "bolt11"
+    assert mint_row.reference
+    melt_row = next(r for r in rows if r.type == WalletTransactionType.melt)
+    assert melt_row.reference == quote.quote
+    assert melt_row.request == invoice.payment_request
+    assert melt_row.payment_preimage == response.payment_preimage
+    send_row = next(r for r in rows if r.type == WalletTransactionType.send)
+    assert send_row.method is None
+    assert send_row.request is None
+    assert send_row.payment_preimage is None
+    assert [(r.type, r.amount) for r in await get_history(receiver.db)] == [
+        (WalletTransactionType.receive, 16)
     ]
     reloaded = await Wallet.with_db(sender.url, sender.db.db_location)
     try:
@@ -210,7 +213,10 @@ async def test_owned_inputs_do_not_become_income_when_cache_is_empty(wallets):
         await reopened.redeem(proofs)
         await reopened.load_proofs(reload=True)
         await reopened.redeem(reopened.proofs)  # selfpay/refresh
-        assert {r["type"] for r in await get_history(reopened.db)} == {"mint", "send"}
+        assert {r.type for r in await get_history(reopened.db)} == {
+            WalletTransactionType.mint,
+            WalletTransactionType.send,
+        }
     finally:
         await reopened.db.engine.dispose()
 
@@ -225,22 +231,26 @@ async def test_mixed_owned_and_outside_inputs_count_only_outside_credit(wallets)
     outside = token.proofs
     await receiver._expand_short_keyset_ids(outside)
     await receiver.redeem(owned + outside)
-    assert sorted((r["type"], r["amount"]) for r in await get_history(receiver.db)) == [
-        ("mint", 16),
-        ("receive", 8),
+    assert sorted(
+        ((r.type, r.amount) for r in await get_history(receiver.db)),
+        key=lambda r: r[0].value,
+    ) == [
+        (WalletTransactionType.mint, 16),
+        (WalletTransactionType.receive, 8),
     ]
 
 
+@pytest.mark.parametrize("method", ["bolt11", "bolt12"])
 @pytest.mark.parametrize("cached", [False, True], ids=["uncached", "cached"])
-def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch, cached):
+def test_history_cli_empty_formats_units_and_does_not_poll(
+    tmp_path, monkeypatch, cached, method
+):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     monkeypatch.setattr(settings, "debug", False)
     host = settings.mint_url if cached else "https://uncached-mint.invalid"
 
     async def prepare():
-        wallet = await Wallet.with_db(
-            host, str(tmp_path / "cli"), name="cli"
-        )
+        wallet = await Wallet.with_db(host, str(tmp_path / "cli"), name="cli")
         if cached:
             await wallet.load_mint()
         else:
@@ -261,13 +271,17 @@ def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch
     async def add_rows():
         db = Database("cli", str(tmp_path / "cli"))
         await store_ecash_transaction(
-            db, tx_type="receive", amount=123, unit="usd", mint="https://usd.test"
+            db,
+            tx_type=WalletTransactionType.receive,
+            amount=123,
+            unit="usd",
+            mint="https://usd.test",
         )
         await store_bolt11_mint_quote(
             db,
             MintQuote(
                 quote="legacy",
-                method="bolt11",
+                method=method,
                 request="legacy",
                 checking_id="",
                 unit="sat",
@@ -286,7 +300,7 @@ def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch
                 db,
                 MeltQuote(
                     quote=f"melt-{name}",
-                    method="bolt11",
+                    method=method,
                     request=f"test-request-{name}",
                     checking_id="",
                     unit="sat",
@@ -307,8 +321,20 @@ def test_history_cli_empty_formats_units_and_does_not_poll(tmp_path, monkeypatch
     result = runner.invoke(cli, args)
     assert result.exit_code == 0, result.output
     assert "+$1.23 USD" in result.output and "https://usd.test" in result.output
-    assert "+8 sat" in result.output and "unknown" in result.output
-    assert "Payment method: bolt11" in result.output
+    assert "+8 sat" in result.output
+    assert "unknown" not in result.output
+    assert result.output.count(f"Payment method: {method}") == 4
+    mint_line = next(
+        line
+        for line in result.output.splitlines()
+        if line.startswith(WalletTransactionType.mint.value)
+    )
+    assert mint_line.split() == [
+        WalletTransactionType.mint.value,
+        "+8",
+        "sat",
+        "https://sat.test",
+    ]
     assert "Quote ID: legacy" in result.output
     for name in ("missing", "empty", "supplied"):
         assert f"Payment request: test-request-{name}" in result.output

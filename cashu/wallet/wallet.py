@@ -21,6 +21,7 @@ from ..core.base import (
     Unit,
     WalletKeyset,
     WalletMint,
+    WalletTransactionType,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import is_supported_keyset_version
@@ -729,7 +730,7 @@ class Wallet(
         if received_amount > 0:
             await store_ecash_transaction(
                 self.db,
-                tx_type="receive",
+                tx_type=WalletTransactionType.receive,
                 amount=received_amount,
                 unit=self.unit.name,
                 mint=self.url,

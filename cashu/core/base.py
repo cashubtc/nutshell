@@ -1645,6 +1645,25 @@ class AuthProof(BaseModel):
         return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)
 
 
+class WalletTransactionType(Enum):
+    mint = "mint"
+    melt = "melt"
+    send = "send"
+    receive = "receive"
+
+
+class WalletTransaction(BaseModel):
+    type: WalletTransactionType
+    amount: int
+    unit: Unit
+    mint: str
+    created_time: Optional[int]
+    reference: str
+    method: Optional[str]
+    request: Optional[str]
+    payment_preimage: Optional[str]
+
+
 class WalletMint(BaseModel):
     url: str
     info: str

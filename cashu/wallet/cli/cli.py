@@ -29,6 +29,7 @@ from ...core.base import (
     SupportedMethod,
     TokenV4,
     Unit,
+    WalletTransactionType,
 )
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
@@ -1400,23 +1401,23 @@ async def history(ctx: Context):
         return
     print(f"{'Type':<8} {'Amount':>18}  {'Time (UTC)':<19}  Mint")
     for entry in entries:
-        amount = entry["amount"]
+        amount = entry.amount
         sign = "+" if amount >= 0 else "-"
-        formatted_amount = sign + Unit[entry["unit"]].str(abs(amount))
-        timestamp = entry["created_time"]
-        date = (
-            datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            if timestamp is not None
-            else "unknown"
-        )
-        print(f"{entry['type']:<8} {formatted_amount:>18}  {date:<19}  {entry['mint']}")
-        if entry["type"] == "mint":
-            print(f"  Payment method: {entry['method']}")
-            print(f"  Quote ID: {entry['reference']}")
-        elif entry["type"] == "melt":
-            print(f"  Payment request: {entry['request']}")
-            if entry["payment_preimage"]:
-                print(f"  Preimage: {entry['payment_preimage']}")
+        formatted_amount = sign + entry.unit.str(abs(amount))
+        date = ""
+        if entry.created_time is not None:
+            date = datetime.fromtimestamp(entry.created_time, timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        print(f"{entry.type.value:<8} {formatted_amount:>18}  {date:<19}  {entry.mint}")
+        if entry.type in (WalletTransactionType.mint, WalletTransactionType.melt):
+            print(f"  Payment method: {entry.method}")
+        if entry.type == WalletTransactionType.mint:
+            print(f"  Quote ID: {entry.reference}")
+        elif entry.type == WalletTransactionType.melt:
+            print(f"  Payment request: {entry.request}")
+            if entry.payment_preimage:
+                print(f"  Preimage: {entry.payment_preimage}")
 
 
 @cli.command("invoices", help="List of all invoices.")
