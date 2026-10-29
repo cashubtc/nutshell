@@ -1,6 +1,6 @@
 # NUT-19 Response caching
 
-Nutshell caches successful mint, swap, and melt responses in memory by default ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). A wallet can replay the same request to recover a lost response. Concurrent identical requests within a process share the same operation, which continues if the original caller disconnects. Failed operations are not cached.
+Nutshell caches successful mint, batch mint, swap, and melt responses in memory by default ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). A wallet can replay the same request to recover a lost response. Concurrent identical requests within a process share the same operation, which continues if the original caller disconnects. Failed operations are not cached.
 
 ## In-memory cache
 

@@ -461,6 +461,7 @@ async def mint_quote_check(
     response_description="A list of blinded signatures that can be used to create proofs.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
 async def mint_batch(
     request: Request, payload: PostMintBatchRequest
 ) -> PostMintBatchResponse:

@@ -297,6 +297,7 @@ def test_cache_features_advertised_for_both_backends(monkeypatch, enabled, ttl):
     features = LedgerFeatures().add_cache_features({})[CACHE_NUT]
     assert features["cached_endpoints"] == [
         {"method": "POST", "path": "/v1/mint/bolt11"},
+        {"method": "POST", "path": "/v1/mint/bolt11/batch"},
         {"method": "POST", "path": "/v1/melt/bolt11"},
         {"method": "POST", "path": "/v1/swap"},
     ]
