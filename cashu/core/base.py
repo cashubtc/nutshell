@@ -348,6 +348,7 @@ class MeltQuote(LedgerEvent):
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
             mint=mint,
+            payment_preimage=melt_quote_resp.payment_preimage,
             change=melt_quote_resp.change,
         )
 
@@ -1642,6 +1643,25 @@ class AuthProof(BaseModel):
 
     def to_proof(self):
         return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)
+
+
+class WalletTransactionType(Enum):
+    mint = "mint"
+    melt = "melt"
+    send = "send"
+    receive = "receive"
+
+
+class WalletTransaction(BaseModel):
+    type: WalletTransactionType
+    amount: int
+    unit: Unit
+    mint: str
+    created_time: Optional[int]
+    reference: str
+    method: Optional[str]
+    request: Optional[str]
+    payment_preimage: Optional[str]
 
 
 class WalletMint(BaseModel):

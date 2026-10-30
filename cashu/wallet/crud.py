@@ -8,8 +8,11 @@ from ..core.base import (
     MintQuote,
     MintQuoteState,
     Proof,
+    Unit,
     WalletKeyset,
     WalletMint,
+    WalletTransaction,
+    WalletTransactionType,
 )
 from ..core.db import Connection, Database
 
@@ -19,6 +22,65 @@ class _UnsetType:
 
 
 _UNSET = _UnsetType()
+
+
+async def store_ecash_transaction(
+    db: Database,
+    *,
+    tx_type: WalletTransactionType,
+    amount: int,
+    unit: str,
+    mint: str,
+) -> None:
+    await db.execute(
+        """
+        INSERT INTO ecash_transactions (type, amount, unit, mint, created_time)
+        VALUES (:type, :amount, :unit, :mint, :created_time)
+        """,
+        {
+            "type": tx_type.value,
+            "amount": amount,
+            "unit": unit,
+            "mint": mint,
+            "created_time": int(time.time()),
+        },
+    )
+
+
+async def get_history(db: Database) -> List[WalletTransaction]:
+    """Read local activity; Lightning rows remain owned by their quote tables."""
+    rows = await db.fetchall(
+        """
+        SELECT * FROM (
+            SELECT :mint_type AS type, COALESCE(amount_issued, amount) AS amount,
+                   unit, mint, COALESCE(paid_time, created_time) AS created_time,
+                   quote AS reference, method, request, NULL AS payment_preimage
+            FROM bolt11_mint_quotes
+            WHERE amount_issued > 0 OR (amount_issued IS NULL AND state = :issued_state)
+            UNION ALL
+            SELECT :melt_type, -amount, unit, mint,
+                   COALESCE(paid_time, created_time), quote, method, request,
+                   payment_preimage
+            FROM bolt11_melt_quotes WHERE state = :paid_state
+            UNION ALL
+            SELECT type, CASE WHEN type = :send_type THEN -amount ELSE amount END,
+                   unit, mint, created_time, CAST(id AS TEXT), NULL, NULL, NULL
+            FROM ecash_transactions
+        ) AS history
+        ORDER BY created_time DESC NULLS LAST, type, reference
+        """,
+        {
+            "mint_type": WalletTransactionType.mint.value,
+            "melt_type": WalletTransactionType.melt.value,
+            "send_type": WalletTransactionType.send.value,
+            "issued_state": MintQuoteState.issued.value,
+            "paid_state": MeltQuoteState.paid.value,
+        },
+    )
+    return [
+        WalletTransaction.model_validate({**row, "unit": Unit[row["unit"]]})
+        for row in rows
+    ]
 
 
 async def store_proof(
