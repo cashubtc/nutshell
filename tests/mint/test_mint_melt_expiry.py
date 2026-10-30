@@ -233,7 +233,9 @@ async def test_expired_invoice_does_not_strand_proofs(
     monkeypatch.setattr(backend, "pay_invoice", payment)
     status = AsyncMock(return_value=PaymentStatus(result=PaymentStatusResult.NOT_FOUND))
     monkeypatch.setattr(backend, "get_payment_status", status)
-    validate = Mock(side_effect=AssertionError("payment must use the stored quote expiry"))
+    validate = Mock(
+        side_effect=AssertionError("payment must use the stored quote expiry")
+    )
     monkeypatch.setattr(backend, "validate_payment_request", validate)
     monkeypatch.setattr(ledger, "backends", {Method.bolt11: {Unit.sat: backend}})
     channel = Mock(side_effect=AssertionError("must not contact LND"))
@@ -277,7 +279,9 @@ async def test_internal_melt_expiring_after_preparation_releases_proofs(
         PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
     )
     outputs, _ = make_outputs(ledger, 1, Unit.sat)
-    balance_before, _ = await ledger.crud.get_balance(db=ledger.db, keyset=ledger.keyset)
+    balance_before, _ = await ledger.crud.get_balance(
+        db=ledger.db, keyset=ledger.keyset
+    )
     pending = await ledger._prepare_melt(
         proofs=proofs, quote=quote.quote, outputs=outputs
     )
@@ -298,7 +302,9 @@ async def test_internal_melt_expiring_after_preparation_releases_proofs(
         for state in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
     )
     assert (
-        await ledger.crud.get_blinded_messages_melt_id(db=ledger.db, melt_id=quote.quote)
+        await ledger.crud.get_blinded_messages_melt_id(
+            db=ledger.db, melt_id=quote.quote
+        )
         == []
     )
     balance_after, _ = await ledger.crud.get_balance(db=ledger.db, keyset=ledger.keyset)

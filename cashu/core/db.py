@@ -283,7 +283,9 @@ class Database(Compat):
             connection_ready = False
             with anyio.CancelScope() as cleanup_scope:
                 try:
-                    logger.trace(f"Connecting to database trial: {trial} ({random_int})")
+                    logger.trace(
+                        f"Connecting to database trial: {trial} ({random_int})"
+                    )
                     async with session.begin() as txn:  # type: ignore
                         try:
                             logger.trace("Connected to database. Starting transaction")
@@ -309,7 +311,9 @@ class Database(Compat):
                             retry_delay, timeout, start_time
                         )
                     else:
-                        logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
+                        logger.error(
+                            f"Error in session trial: {trial} ({random_int}): {e}"
+                        )
                         raise
                 finally:
                     cleanup_scope.shield = True
@@ -342,9 +346,7 @@ class Database(Compat):
         for lock in locks:
             await self._acquire_lock(wconn, lock)
 
-    def _order_locks(
-        self, locks: Sequence[LockOptions]
-    ) -> tuple[LockOptions, ...]:
+    def _order_locks(self, locks: Sequence[LockOptions]) -> tuple[LockOptions, ...]:
         """Return locks ordered by table name."""
         return tuple(sorted(locks, key=lambda lock: lock.table))
 

@@ -47,11 +47,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         if ret_db is None and from_mnemonic is None:
             # if there is no seed in the database, generate a new one
             mnemonic_str = mnemo.generate()
-            wallet_name = (
-                f' for wallet "{self.name}"'
-                if self.name != "wallet"
-                else ""
-            )
+            wallet_name = f' for wallet "{self.name}"' if self.name != "wallet" else ""
             print(
                 f"Generated a new mnemonic{wallet_name}. To view it, run"
                 f' "cashu --wallet {self.name} info --mnemonic".'

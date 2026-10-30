@@ -53,7 +53,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('users')}
+            INSERT INTO {db.table_with_schema("users")}
             (id)
             VALUES (:id)
             """,
@@ -69,7 +69,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> Optional[User]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('users')}
+            SELECT * from {db.table_with_schema("users")}
             WHERE id = :user_id
             """,
             {"user_id": user_id},
@@ -85,7 +85,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('users')}
+            UPDATE {db.table_with_schema("users")}
             SET last_access = :last_access
             WHERE id = :user_id
             """,
