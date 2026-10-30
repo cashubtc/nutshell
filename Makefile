@@ -6,15 +6,21 @@ ruff:
 ruff-check:
 	poetry run ruff check .
 
+ruff-format:
+	poetry run ruff format .
+
+ruff-format-check:
+	poetry run ruff format --check .
+
 fuzz:
 	poetry run pytest tests/fuzz
 
 mypy:
 	poetry run mypy cashu --check-untyped-defs
 
-format: ruff
+format: ruff ruff-format
 
-check: ruff-check mypy
+check: ruff-check ruff-format-check mypy
 
 clean:
 	rm -r cashu.egg-info/ || true
@@ -87,9 +93,10 @@ upload: package
 	poetry publish
 
 install-pre-commit-hook:
-	@echo "Installing pre-commit hook to git"
-	@echo "Uninstall the hook with poetry run pre-commit uninstall"
-	poetry run pre-commit install
+	@echo "Installing the pre-commit and commit-msg hooks to git"
+	@echo "(the commit-msg hook enforces Conventional Commits, see AGENTS.md)"
+	@echo "Uninstall with: poetry run pre-commit uninstall --hook-type pre-commit --hook-type commit-msg"
+	poetry run pre-commit install --hook-type pre-commit --hook-type commit-msg
 
 pre-commit:
 	poetry run pre-commit run --all-files

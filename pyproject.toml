@@ -59,7 +59,10 @@ pytest-cov = "^6.3.0"
 pytest = "^8.4.2"
 fastapi-profiler = "^1.5.0"
 respx = "^0.21.1"
-ruff = "^0.7.4"
+# Pinned to the exact same version as .pre-commit-config.yaml (ruff-pre-commit
+# rev) and the ruff job in .github/workflows/checks.yml, so that the Makefile,
+# the pre-commit hook, and CI cannot drift apart.
+ruff = "0.15.4"
 mypy = "^1.20.2"
 pre-commit = "^4.6.2"
 types-redis = "^4.6.0"
@@ -84,8 +87,8 @@ forkserver_warmup = "none"
 pytest_add_cli_args_test_selection = ["tests/", "--ignore=tests/fuzz"]
 pytest_add_cli_args = ["-o", "addopts=", "-x", "-q"]
 do_not_mutate = [
-    "cashu/lightning/lnd_grpc/protos/*",
-    "cashu/mint/management_rpc/protos/*",
+    "protos",
+    "protos",
 ]
 # Mutmut 3.6 drops grouping parentheses when removing this multiline `not`,
 # producing invalid Python in cashu/lightning/blink.py.
@@ -99,6 +102,15 @@ mint-cli = "cashu.mint.management_rpc.cli.cli:cli"
 [tool.ruff]
 line-length = 88
 show-fixes = true
+# Enforce the exclusions even for files passed directly on the command
+# line (pre-commit hands changed files to ruff/ruff-format).
+force-exclude = true
+# Generated protobuf files; also ignored by mypy.ini and [tool.mutmut].
+# Kept out of ruff (lint + format) so they stay exactly as generated.
+extend-exclude = [
+    "cashu/lightning/lnd_grpc/protos/*",
+    "cashu/mint/management_rpc/protos/*",
+]
 
 [tool.ruff.lint]
 # (`I`) means isorting
@@ -111,6 +123,7 @@ unfixable = []
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
+    "cashu/core/bolt11.py",
     "cashu/core/bolt11.py",
     ".bzr",
     ".direnv",
