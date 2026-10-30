@@ -1612,9 +1612,9 @@ class AuthProof(BaseModel):
     def max_token_length(cls) -> int:
         # JSON can use two six-character Unicode escapes per input character.
         # Include field names/separators and padded base64 encoding overhead.
-        max_json_length = 12 * (
-            MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN
-        ) + 64
+        max_json_length = (
+            12 * (MAX_KEYSET_ID_LEN + cls.max_secret_length + MAX_PUBKEY_LEN) + 64
+        )
         return len(cls.prefix) + 4 * ((max_json_length + 2) // 3)
 
     @classmethod
@@ -1710,5 +1710,7 @@ class PaymentRequest(BaseModel):
         self.m = self.m or None
         self.sm = self.sm or None
         if (self.a is not None or self.sm is not None) and not self.u:
-            raise ValueError("Payment request amount or supported methods require a unit")
+            raise ValueError(
+                "Payment request amount or supported methods require a unit"
+            )
         return self

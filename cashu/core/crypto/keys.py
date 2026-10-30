@@ -213,7 +213,9 @@ def is_supported_keyset_version(keyset_id: str) -> bool:
         if version == "base64":
             return True
         # If the version prefix is not a 2-hex-digit string, it represents a legacy keyset ID.
-        is_hex_version = len(version) == 2 and all(c in "0123456789abcdefABCDEF" for c in version)
+        is_hex_version = len(version) == 2 and all(
+            c in "0123456789abcdefABCDEF" for c in version
+        )
         if not is_hex_version:
             return True
         return version in ("00", "01")

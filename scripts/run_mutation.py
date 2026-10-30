@@ -27,9 +27,7 @@ def configuration_fingerprint():
     environment = {
         name: value
         for name, value in os.environ.items()
-        if (
-            name.startswith(("CASHU_", "PYTEST_")) and name != "PYTEST_CURRENT_TEST"
-        )
+        if (name.startswith(("CASHU_", "PYTEST_")) and name != "PYTEST_CURRENT_TEST")
         or name
         in ("GITHUB_ACTIONS", "MUTATION_TESTING", "PYTHONPATH", "PYTHONHASHSEED")
     }

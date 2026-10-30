@@ -1049,9 +1049,7 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
 
     # Invoice for 64 sats (+2 fee = 66 sats needed)
     invoice = (
-        get_real_invoice(64)["payment_request"]
-        if is_regtest
-        else get_fake_invoice(64)
+        get_real_invoice(64)["payment_request"] if is_regtest else get_fake_invoice(64)
     )
     melt_quote1 = await wallet.melt_quote(invoice)
     melt_quote2 = await wallet.melt_quote(invoice)

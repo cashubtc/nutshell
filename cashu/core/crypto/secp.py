@@ -6,7 +6,7 @@ from coincurve import PrivateKey, PublicKey
 class PublicKeyExt(PublicKey):
     def __add__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
-            return self.combine([pubkey2])    # type: ignore
+            return self.combine([pubkey2])  # type: ignore
         else:
             raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 

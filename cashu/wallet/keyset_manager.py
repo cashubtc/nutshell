@@ -36,14 +36,16 @@ class KeysetManager:
         self._short_to_full_cache[short_id] = full_id
         return short_id
 
-    def get_full_keyset_id(self, short_id: str, keysets: Dict[str, Any] | None = None) -> str:
+    def get_full_keyset_id(
+        self, short_id: str, keysets: Dict[str, Any] | None = None
+    ) -> str:
         """
         Resolve a short keyset id to the full keyset id.
         - First use in-memory cache
         - Then, if mapping not present, try to resolve from the known keysets of the currently selected mint
         - If ambiguous (multiple matches), raise
         - If not found, raise
-        
+
         Args:
             short_id: The short keyset ID to resolve
             keysets: Optional dict of keysets (values must have .id attribute)

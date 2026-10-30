@@ -276,7 +276,14 @@ def get_real_invoice_fee_leaf(sats: int) -> str:
     ]
     destination = run_cmd_json([*cmd, "getinfo"])["identity_pubkey"]
     _wait_for_route(
-        [*docker_lightning_mint_cli, "queryroutes", "--dest", destination, "--amt", str(sats)],
+        [
+            *docker_lightning_mint_cli,
+            "queryroutes",
+            "--dest",
+            destination,
+            "--amt",
+            str(sats),
+        ],
         "routes",
     )
     return run_cmd_json([*cmd, "addinvoice", str(sats)])["payment_request"]

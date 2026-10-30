@@ -44,7 +44,11 @@ def test_get_spending_requirements_htlc_after_locktime_keeps_receiver_and_adds_r
     raw_secret = secret_str(
         kind=SecretKind.HTLC,
         data=digest,
-        extra_tags=[["locktime", past], ["pubkeys", receiver_pub], ["refund", refund_pub]],
+        extra_tags=[
+            ["locktime", past],
+            ["pubkeys", receiver_pub],
+            ["refund", refund_pub],
+        ],
     )
     secret = HTLCSecret.from_secret(Secret.deserialize(raw_secret))
 
@@ -76,7 +80,9 @@ def test_verify_input_spending_conditions_accepts_valid_htlc_preimage():
     preimage = "11" * 32
     digest = sha256(bytes.fromhex(preimage)).hexdigest()
     raw_secret = secret_str(kind=SecretKind.HTLC, data=digest)
-    assert cond._verify_input_spending_conditions(proof(raw_secret, htlc_preimage=preimage))
+    assert cond._verify_input_spending_conditions(
+        proof(raw_secret, htlc_preimage=preimage)
+    )
 
 
 def test_verify_htlc_preimage_rejects_missing_preimage():

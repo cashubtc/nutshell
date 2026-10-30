@@ -26,13 +26,16 @@ NUT10_KINDS_REV = {0: "P2PK", 1: "HTLC"}
 
 # ─── Bech32m ────────────────────────────────────────────────────────
 
+
 def _bech32m_create_checksum(hrp: str, data: List[int]) -> List[int]:
     values = bech32_hrp_expand(hrp) + list(data)
     polymod = bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ BECH32M_CONST
     return [(polymod >> 5 * (5 - i)) & 31 for i in range(6)]
 
+
 def _bech32m_verify_checksum(hrp: str, data: List[int]) -> bool:
     return bech32_polymod(bech32_hrp_expand(hrp) + list(data)) == BECH32M_CONST
+
 
 def bech32m_encode(hrp: str, data: List[int]) -> str:
     combined = list(data) + _bech32m_create_checksum(hrp, data)
@@ -59,8 +62,10 @@ def bech32m_decode(bech: str) -> Tuple[Optional[str], Optional[List[int]]]:
 
 # ─── TLV primitives ─────────────────────────────────────────────────
 
+
 def _tlv_entry(tag: int, value: bytes) -> bytes:
     return struct.pack(">BH", tag, len(value)) + value
+
 
 def _tlv_parse(
     data: bytes, singletons: Tuple[int, ...] = ()
@@ -84,7 +89,9 @@ def _tlv_parse(
         pos += 3 + length
     return entries
 
+
 # ─── Tag tuple encoding ─────────────────────────────────────────────
+
 
 def _encode_tag_tuple(tag: List[str]) -> bytes:
     key = tag[0].encode()
@@ -93,6 +100,7 @@ def _encode_tag_tuple(tag: List[str]) -> bytes:
         vb = v.encode()
         out += bytes([len(vb)]) + vb
     return out
+
 
 def _decode_tag_tuple(data: bytes) -> List[str]:
     pos = 0
@@ -108,7 +116,9 @@ def _decode_tag_tuple(data: bytes) -> List[str]:
         pos += vl
     return result
 
+
 # ─── Nostr helpers ───────────────────────────────────────────────────
+
 
 def _parse_nostr_target(target_str: str) -> Tuple[bytes, List[str]]:
     """Parse npub/nprofile -> (32-byte pubkey, relay_urls)."""
@@ -140,6 +150,7 @@ def _parse_nostr_target(target_str: str) -> Tuple[bytes, List[str]]:
             relays.append(v.decode())
     return (pubkey, relays)
 
+
 def _encode_nostr_target(pubkey: bytes, relays: List[str]) -> str:
     """Encode 32-byte pubkey + relays -> npub or nprofile."""
     if not relays:
@@ -158,7 +169,9 @@ def _encode_nostr_target(pubkey: bytes, relays: List[str]) -> str:
         raise ValueError("Failed to encode nostr profile")
     return _bech32_encode("nprofile", five)
 
+
 # ─── Transport encode/decode ────────────────────────────────────────
+
 
 def _encode_transport(tr: Transport) -> bytes:
     kind = TRANSPORT_KINDS.get(tr.t)
@@ -186,6 +199,7 @@ def _encode_transport(tr: Transport) -> bytes:
             inner += _tlv_entry(0x03, _encode_tag_tuple(tag))
 
     return inner
+
 
 def _decode_transport(data: bytes) -> Transport:
     entries = _tlv_parse(data, singletons=(0x01, 0x02))
@@ -220,7 +234,9 @@ def _decode_transport(data: bytes) -> Transport:
         g=other_tags if other_tags else None,
     )
 
+
 # ─── NUT-10 encode/decode ───────────────────────────────────────────
+
 
 def _encode_nut10(opt: NUT10Option) -> bytes:
     kind = NUT10_KINDS.get(opt.k)
@@ -235,6 +251,7 @@ def _encode_nut10(opt: NUT10Option) -> bytes:
             inner += _tlv_entry(0x03, _encode_tag_tuple(tag))
 
     return inner
+
 
 def _decode_nut10(data: bytes) -> NUT10Option:
     entries = _tlv_parse(data, singletons=(0x01, 0x02))
@@ -259,13 +276,16 @@ def _decode_nut10(data: bytes) -> NUT10Option:
         t=tags if tags else None,
     )
 
+
 # ─── Supported method encode/decode ─────────────────────────────────
+
 
 def _encode_supported_method(sm: SupportedMethod) -> bytes:
     inner = _tlv_entry(0x01, sm.mn.encode())
     if sm.mf is not None:
         inner += _tlv_entry(0x02, struct.pack(">Q", sm.mf))
     return inner
+
 
 def _decode_supported_method(data: bytes) -> SupportedMethod:
     entries = _tlv_parse(data, singletons=(0x01, 0x02))
@@ -285,7 +305,9 @@ def _decode_supported_method(data: bytes) -> SupportedMethod:
 
     return SupportedMethod(mn=mn, mf=mf)
 
+
 # ─── PaymentRequest <-> TLV bytes ───────────────────────────────────
+
 
 def _pr_to_tlv(pr: PaymentRequest) -> bytes:
     out = b""
@@ -316,6 +338,7 @@ def _pr_to_tlv(pr: PaymentRequest) -> bytes:
         for method in pr.sm:
             out += _tlv_entry(0x0A, _encode_supported_method(method))
     return out
+
 
 def _tlv_to_pr(data: bytes) -> PaymentRequest:
     entries = _tlv_parse(data, singletons=(0x01, 0x02, 0x03, 0x04, 0x06, 0x08, 0x09))
@@ -370,7 +393,9 @@ def _tlv_to_pr(data: bytes) -> PaymentRequest:
 
     return PaymentRequest(**kwargs)
 
+
 # ─── Public API ──────────────────────────────────────────────────────
+
 
 def serialize(pr: PaymentRequest) -> str:
     """Serialize a PaymentRequest to NUT-26 Bech32m format (uppercase)."""
@@ -379,6 +404,7 @@ def serialize(pr: PaymentRequest) -> str:
     if five_bit is None:
         raise ValueError("Failed to encode payment request")
     return bech32m_encode(HRP, five_bit).upper()
+
 
 def deserialize(token: str) -> PaymentRequest:
     """Deserialize a NUT-26 Bech32m payment request."""
