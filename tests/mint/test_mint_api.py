@@ -577,9 +577,9 @@ async def test_melt_external_with_routing_fee(ledger: Ledger, wallet: Wallet):
 
     # change must compensate exactly for the unspent part of the reserve
     change_sat = sum([c.amount for c in resp_quote.change or []])
-    assert (
-        change_sat == quote.fee_reserve - melt_quote.fee_paid
-    ), "Wrong change returned"
+    assert change_sat == quote.fee_reserve - melt_quote.fee_paid, (
+        "Wrong change returned"
+    )
 
 
 @pytest.mark.asyncio
@@ -756,9 +756,9 @@ async def test_mint_batch_success(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
 
-    assert (
-        response.status_code == 200
-    ), f"{response.url} {response.status_code} {response.text}"
+    assert response.status_code == 200, (
+        f"{response.url} {response.status_code} {response.text}"
+    )
     result = response.json()
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 64

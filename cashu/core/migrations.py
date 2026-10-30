@@ -47,7 +47,7 @@ async def migrate_databases(db: Database, migrations_module):
     async def set_migration_version(conn, db_name, version):
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('dbversions')} (db, version) VALUES (:db, :version)
+            INSERT INTO {db.table_with_schema("dbversions")} (db, version) VALUES (:db, :version)
             ON CONFLICT (db) DO UPDATE SET version = :version
             """,
             {"db": db_name, "version": version},

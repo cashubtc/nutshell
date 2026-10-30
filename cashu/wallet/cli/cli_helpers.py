@@ -50,7 +50,7 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i + 1} ({unit}) – Balance: {unit.str(int(v['available']))}")
         print("")
 
         if ctx.obj.get("YES"):
@@ -143,7 +143,10 @@ async def get_payment_request_wallet(ctx: Context, request: PaymentRequest) -> W
     mints = [mint.rstrip("/") for mint in request.m or []]
     urls = sorted(
         balances,
-        key=lambda url: (url.rstrip("/") not in mints, -int(balances[url]["available"])),
+        key=lambda url: (
+            url.rstrip("/") not in mints,
+            -int(balances[url]["available"]),
+        ),
     )
     for url in urls:
         listed = url.rstrip("/") in mints
@@ -207,8 +210,8 @@ async def print_mint_balances(
         for i, (k, v) in enumerate(mint_balances.items()):
             unit = Unit[str(v["unit"])]
             print(
-                f"Mint {i+1}: Balance: {unit.str(int(v['available']))} (pending:"
-                f" {unit.str(int(v['balance'])-int(v['available']))}) URL: {k}"
+                f"Mint {i + 1}: Balance: {unit.str(int(v['available']))} (pending:"
+                f" {unit.str(int(v['balance']) - int(v['available']))}) URL: {k}"
             )
         print("")
 
