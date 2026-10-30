@@ -62,7 +62,7 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
             )
             if not unit_nr_str:  # default unit
                 unit = Unit[settings.wallet_unit]
-            elif unit_nr_str.isdigit() and int(unit_nr_str) <= len(
+            elif unit_nr_str.isdecimal() and 1 <= int(unit_nr_str) <= len(
                 unit_balances
             ):  # specific unit
                 unit = list(unit_balances.keys())[int(unit_nr_str) - 1]
@@ -110,7 +110,7 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
             )
             if not mint_nr_str:  # largest balance
                 mint_url = url_max
-            elif mint_nr_str.isdigit() and int(mint_nr_str) <= len(
+            elif mint_nr_str.isdecimal() and 1 <= int(mint_nr_str) <= len(
                 mint_balances
             ):  # specific mint
                 mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
@@ -120,6 +120,8 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
         mint_url = ctx.obj["HOST"]
     elif len(mint_balances) == 1:
         mint_url = list(mint_balances.keys())[0]
+    else:
+        mint_url = wallet.url
 
     # load this mint_url into a wallet
     mint_wallet = await Wallet.with_db(
