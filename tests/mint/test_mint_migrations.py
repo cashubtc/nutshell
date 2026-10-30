@@ -471,7 +471,7 @@ async def test_auth_m005_migration_preserves_existing_promises(tmp_path):
     async with db.connect() as conn:
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')} (id, amount, b_, c_, created)
+            INSERT INTO {db.table_with_schema("promises")} (id, amount, b_, c_, created)
             VALUES (:id, :amount, :b_, :c_, :created)
             """,
             {

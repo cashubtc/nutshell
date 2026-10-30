@@ -353,9 +353,7 @@ def test_payment_request_swaps_proofs_with_insufficient_net_value(
 ):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     monkeypatch.setattr(settings, "mint_url", mint[1])
-    asyncio.run(
-        _fund_request_wallet(mint[0], tmp_path, "payer", 32, split=[16, 16])
-    )
+    asyncio.run(_fund_request_wallet(mint[0], tmp_path, "payer", 32, split=[16, 16]))
     request = PaymentRequest(a=15, u="sat", m=[mint[0]])
     prefix = ["--wallet", "payer", "--tests", "--yes"]
     if explicit:
@@ -432,7 +430,9 @@ def test_request_selection_requires_net_funded_proofs(
     monkeypatch.setattr(settings, "mint_url", mint[1])
     for url, amount in zip(mint, [7 if locked else 3, 64]):
         asyncio.run(
-            _fund_request_wallet(url, tmp_path, "payer", amount, split=amount_split(amount))
+            _fund_request_wallet(
+                url, tmp_path, "payer", amount, split=amount_split(amount)
+            )
         )
     request = PaymentRequest(
         a=1,
@@ -474,7 +474,9 @@ def test_request_selection_handles_unavailable_mint(
     monkeypatch.setattr(settings, "mint_url", mint[1])
     for url, amount in zip(mint, [preferred_amount, 64]):
         asyncio.run(
-            _fund_request_wallet(url, tmp_path, "payer", amount, split=amount_split(amount))
+            _fund_request_wallet(
+                url, tmp_path, "payer", amount, split=amount_split(amount)
+            )
         )
 
     get_keysets = Wallet._get_keysets

@@ -693,7 +693,9 @@ async def test_melt_rejects_deprecated_response(monkeypatch, api: LedgerAPI):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets_and_get_keys_filters_unsupported_versions(monkeypatch, api: LedgerAPI):
+async def test_get_keysets_and_get_keys_filters_unsupported_versions(
+    monkeypatch, api: LedgerAPI
+):
     async def fake_request(self, method, path, **kwargs):
         if path == "keysets":
             return _response(
@@ -765,7 +767,9 @@ async def test_restore_rejects_oversized_mint_response(
 
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     monkeypatch.setattr(api, "keysets", {output.id: object()}, raising=False)
-    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
 
     with pytest.raises(ValidationError) as exc:
         await api.restore_promises([output])
@@ -818,7 +822,9 @@ async def test_wallet_sends_proof_above_local_mint_secret_limit(
     monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     monkeypatch.setattr(api, "keysets", {proof.id: object()}, raising=False)
-    monkeypatch.setattr("cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "cashu.wallet.v1_api.httpx.AsyncClient", lambda **kwargs: object()
+    )
 
     if operation == "swap":
         await api.split([proof], [output])

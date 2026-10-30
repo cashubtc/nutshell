@@ -304,9 +304,7 @@ class Database(Compat):
         for lock in locks:
             await self._acquire_lock(wconn, lock)
 
-    def _order_locks(
-        self, locks: Sequence[LockOptions]
-    ) -> tuple[LockOptions, ...]:
+    def _order_locks(self, locks: Sequence[LockOptions]) -> tuple[LockOptions, ...]:
         """Return locks ordered by table name."""
         return tuple(sorted(locks, key=lambda lock: lock.table))
 
