@@ -1159,6 +1159,27 @@ class Ledger(
             expiry=quote.expiry,
         )
 
+    @staticmethod
+    def _melt_request_expired(melt_quote: MeltQuote, now: Optional[int] = None) -> bool:
+        """Returns True if the quote's bolt11 request has expired.
+
+        An expired invoice can never be paid by the backend (LND rejects
+        expired invoices), so a melt quote for it can be safely failed once
+        the backend reports the payment as not found. Returns False only if
+        the request cannot be decoded (conservative: keep the quote
+        pending) -- bolt11 defaults a missing expiry tag to 3600 s, so a
+        decodable request always has a determinable expiry.
+        """
+        try:
+            invoice = bolt11.decode(melt_quote.request)
+        except Exception:
+            return False
+        if not invoice.expiry:
+            return False
+        if now is None:
+            now = int(time.time())
+        return invoice.date + invoice.expiry < now
+
     async def _resolve_melt_payment_status(
         self, melt_quote: MeltQuote
     ) -> Tuple[MeltQuote, PaymentStatus]:
@@ -1194,12 +1215,24 @@ class Ledger(
                 melt_quote = await self._finalize_melt_failed(
                     melt_quote.quote, expected_attempt=melt_quote.attempt
                 )
-            case (
-                PaymentStatusResult.PENDING
-                | PaymentStatusResult.NOT_FOUND
-                | PaymentStatusResult.ERROR
-            ):
+            case PaymentStatusResult.PENDING | PaymentStatusResult.ERROR:
                 pass
+            case PaymentStatusResult.NOT_FOUND:
+                # The backend has no record of this payment. If the invoice
+                # has expired, no future payment attempt can succeed anymore
+                # (the backend rejects expired invoices), so we fail the
+                # quote to release its pending proofs. This recovers quotes
+                # whose pay call died before the backend recorded anything,
+                # e.g. on a dropped connection to the Lightning node.
+                if self._melt_request_expired(melt_quote):
+                    logger.info(
+                        f"Melt quote {melt_quote.quote}: payment not found and"
+                        " invoice expired, failing quote to release pending"
+                        " proofs"
+                    )
+                    melt_quote = await self._finalize_melt_failed(
+                        melt_quote.quote, expected_attempt=melt_quote.attempt
+                    )
 
         return melt_quote, status
 
