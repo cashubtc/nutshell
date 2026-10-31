@@ -1,7 +1,7 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .base import Method, Unit
 from .json_rpc.base import JSONRPCSubscriptionKinds
@@ -53,7 +53,7 @@ class MintInfo(BaseModel):
     tos_url: Optional[str]
     time: Optional[int]
     max_array_length: Optional[int] = None
-    nuts: Dict[int, Any]
+    nuts: Dict[Annotated[Union[int, str], Field(union_mode="left_to_right")], Any]
 
     def __str__(self):
         return f"{self.name} ({self.description})"
@@ -62,7 +62,7 @@ class MintInfo(BaseModel):
     def from_json_str(cls, json_str: str):
         return cls.model_validate(json.loads(json_str))
 
-    def supports_nut(self, nut: int) -> bool:
+    def supports_nut(self, nut: Union[int, str]) -> bool:
         if not self.nuts or nut not in self.nuts:
             return False
         if nut in BOOLEAN_SUPPORTED_NUTS:

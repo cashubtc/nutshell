@@ -35,6 +35,7 @@ from ..core.db import Connection, Database, LockOptions
 from ..core.errors import (
     AmountMismatchError,
     BatchDuplicateQuotesError,
+    BatchSizeExceededError,
     CashuError,
     InvoiceAlreadyPaidError,
     KeysetInactiveError,
@@ -57,7 +58,9 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
+    PostMintQuotesByPubkeyRequest,
 )
+from ..core.nuts import nutxx
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -77,6 +80,7 @@ from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .keysets import LedgerKeysets
+from .quote_lookup import QuoteLookupCursor
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
 from .watchdog import LedgerWatchdog
@@ -144,6 +148,7 @@ class Ledger(
 
         self.db = db
         self.crud = crud
+        self.quote_lookup_cursor = QuoteLookupCursor()
 
         if backends:
             self.backends = backends
@@ -801,6 +806,71 @@ class Ledger(
                 raise TransactionError(f"quote {quote_id} not found")
             quotes.append(quote)
         return quotes
+
+    async def mint_quotes_by_pubkey(
+        self, payload: PostMintQuotesByPubkeyRequest
+    ) -> Tuple[List[MintQuote], Optional[str]]:
+        """Authenticate every key and return one page in immutable quote-ID order."""
+        if abs(int(time.time()) - payload.timestamp) > nutxx.TIMESTAMP_WINDOW_SECONDS:
+            raise CashuError(
+                "Mint quote lookup timestamp is outside the accepted window."
+            )
+        if len(payload.pubkeys) > settings.mint_quote_lookup_max_pubkeys:
+            raise BatchSizeExceededError(
+                f"Maximum number of pubkeys is {settings.mint_quote_lookup_max_pubkeys}."
+            )
+        if not payload.pubkeys:
+            raise CashuError("Mint quote lookup pubkeys must not be empty.")
+        if len({key.lower() for key in payload.pubkeys}) != len(payload.pubkeys):
+            raise CashuError("Mint quote lookup pubkeys must not contain duplicates.")
+        if len(payload.pubkeys) != len(payload.pubkey_signatures):
+            raise CashuError("Mint quote lookup signature missing or invalid.")
+        if not self.pubkey:
+            raise CashuError("Mint public key is not available.")
+
+        mint_pubkey = self.pubkey.format().hex()
+        verified_pubkeys: List[str] = []
+        for pubkey_hex, signature_hex in zip(
+            payload.pubkeys, payload.pubkey_signatures
+        ):
+            try:
+                pubkey = PublicKey(bytes.fromhex(pubkey_hex))
+                signature = bytes.fromhex(signature_hex)
+                if not nutxx.verify_signature(
+                    mint_pubkey, pubkey_hex, signature, payload.timestamp
+                ):
+                    raise ValueError("invalid signature")
+            except ValueError as exc:
+                raise CashuError(
+                    "Mint quote lookup signature missing or invalid."
+                ) from exc
+            verified_pubkeys.append(pubkey.format().hex())
+
+        method = Method.bolt11.name
+        after = (
+            self.quote_lookup_cursor.decode(payload.cursor, method, verified_pubkeys)
+            if payload.cursor is not None
+            else None
+        )
+        page_size = min(
+            payload.limit or settings.mint_quote_lookup_max_page_size,
+            settings.mint_quote_lookup_max_page_size,
+        )
+        quotes = await self.crud.get_mint_quotes_by_pubkeys(
+            pubkeys=verified_pubkeys,
+            method=method,
+            db=self.db,
+            limit=page_size + 1,
+            after=after,
+        )
+        next_cursor = (
+            self.quote_lookup_cursor.encode(
+                method, verified_pubkeys, quotes[page_size - 1].quote
+            )
+            if len(quotes) > page_size
+            else None
+        )
+        return quotes[:page_size], next_cursor
 
     async def mint(
         self,
