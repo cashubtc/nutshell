@@ -59,7 +59,9 @@ class MintSettings(CashuSettings):
     )  # Postgres lock timeout in milliseconds
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
-    mint_max_witness_length: int = Field(default=1024)
+    # Witnesses carry one signature per accepted SIG_ALL message format per signer
+    # (NUT-11), so they get more headroom than secrets.
+    mint_max_witness_length: int = Field(default=8192)
 
     mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
