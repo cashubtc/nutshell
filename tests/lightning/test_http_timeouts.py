@@ -12,7 +12,7 @@ from cashu.core.base import Unit
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
 from cashu.lightning.clnrest import CLNRestWallet
-from cashu.lightning.http import DEFAULT_READ_TIMEOUT
+from cashu.lightning.http import STREAM_READ_TIMEOUT
 from cashu.lightning.lndrest import INVOICE_PAGE_SIZE, LndRestWallet
 from cashu.lightning.strike import StrikeWallet
 from tests.lightning.test_lightning_backends_mocked import _quote
@@ -23,7 +23,9 @@ TEST_STREAM_WAIT_TIMEOUT_SECONDS = 2.0
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("backend", [CLNRestWallet, LndRestWallet, StrikeWallet])
-async def test_http_backend_defaults_are_bounded(monkeypatch, backend):
+async def test_http_backends_have_no_default_timeouts(monkeypatch, backend):
+    """Only paid invoice streams get a timeout; melts and other requests must not
+    time out, since a timeout could be mistaken for a failed payment."""
     monkeypatch.setattr(settings, "mint_clnrest_url", "http://backend.test")
     monkeypatch.setattr(settings, "mint_clnrest_rune", "test-rune")
     monkeypatch.setattr(settings, "mint_clnrest_cert", None)
@@ -35,8 +37,9 @@ async def test_http_backend_defaults_are_bounded(monkeypatch, backend):
     wallet = backend(Unit.sat)
     try:
         timeout = wallet.client.timeout
+        assert isinstance(timeout, httpx.Timeout)
         assert all(
-            value is not None and value > 0
+            value is None
             for value in (timeout.connect, timeout.read, timeout.write, timeout.pool)
         )
     finally:
@@ -122,11 +125,13 @@ async def test_invoice_stream_recovers_from_silent_connection(monkeypatch, backe
     client = httpx.AsyncClient(base_url=f"http://127.0.0.1:{port}", timeout=None)
     cast(Any, wallet).client = client
     wallet.unit = Unit.sat
-    monkeypatch.setattr(
-        f"{backend.__module__}.http_timeout",
-        lambda read=DEFAULT_READ_TIMEOUT: httpx.Timeout(TEST_READ_TIMEOUT_SECONDS),
-        raising=False,
-    )
+
+    def stream_timeout(read):
+        # the paid invoice stream is the only call site of http_timeout
+        assert read == STREAM_READ_TIMEOUT
+        return httpx.Timeout(TEST_READ_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(f"{backend.__module__}.http_timeout", stream_timeout)
     stream = wallet.paid_invoices_stream()
     try:
         assert (

@@ -26,12 +26,11 @@ from .base import (
     StatusResponse,
     Unsupported,
 )
-from .http import PAYMENT_READ_TIMEOUT, STREAM_READ_TIMEOUT, http_timeout
+from .http import STREAM_READ_TIMEOUT, http_timeout
 
 CLN_PAYMENT_STATUS_COMPLETE = "complete"
 CLN_PAYMENT_STATUS_PENDING = "pending"
 CLN_PAYMENT_STATUS_FAILED = "failed"
-STATUS_TIMEOUT_SECONDS = 5
 
 # https://docs.corelightning.org/reference/listpays
 PAYMENT_RESULT_MAP = {
@@ -95,7 +94,7 @@ class CLNRestWallet(LightningBackend):
             base_url=self.url,
             verify=self.cert,
             headers=self.auth,
-            timeout=http_timeout(),
+            timeout=None,
         )
         self.last_pay_index = 0
 
@@ -106,7 +105,7 @@ class CLNRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.post("/v1/listfunds", timeout=STATUS_TIMEOUT_SECONDS)
+        r = await self.client.post("/v1/listfunds", timeout=5)
         r.raise_for_status()
         if r.is_error or "message" in r.json():
             try:
@@ -219,9 +218,7 @@ class CLNRestWallet(LightningBackend):
                 return PaymentResponse(
                     result=PaymentResult.FAILED, error_message=error_message
                 )
-        r = await self.client.post(
-            "/v1/xpay", data=post_data, timeout=http_timeout(PAYMENT_READ_TIMEOUT)
-        )
+        r = await self.client.post("/v1/xpay", data=post_data, timeout=None)
 
         if r.is_error or "message" in r.json():
             try:

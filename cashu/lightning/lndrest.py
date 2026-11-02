@@ -26,7 +26,7 @@ from .base import (
     PaymentStatusResult,
     StatusResponse,
 )
-from .http import PAYMENT_READ_TIMEOUT, STREAM_READ_TIMEOUT, http_timeout
+from .http import STREAM_READ_TIMEOUT, http_timeout
 from .macaroon import load_macaroon
 
 PAYMENT_RESULT_MAP = {
@@ -59,10 +59,6 @@ INVOICE_STATUS_RESULT_MAP = {
 MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
-PAYMENT_TIMEOUT_GRACE_SECONDS = 30
-SEND_PAYMENT_READ_TIMEOUT_SECONDS = (
-    PAYMENT_TIMEOUT_SECONDS + PAYMENT_TIMEOUT_GRACE_SECONDS
-)
 FEE_PROBE_TIMEOUT_SECONDS = 5
 INVOICE_PAGE_SIZE = 1000
 
@@ -125,7 +121,7 @@ class LndRestWallet(LightningBackend):
             base_url=self.endpoint,
             headers=self.auth,
             verify=self.cert,
-            timeout=http_timeout(),
+            timeout=None,
         )
         if self.supports_mpp:
             logger.info("LNDRestWallet enabling MPP feature")
@@ -234,10 +230,7 @@ class LndRestWallet(LightningBackend):
         }
 
         async with self.client.stream(
-            "POST",
-            "/v2/router/send",
-            json=data,
-            timeout=http_timeout(SEND_PAYMENT_READ_TIMEOUT_SECONDS),
+            "POST", "/v2/router/send", json=data, timeout=None
         ) as r:
             async for json_line in r.aiter_lines():
                 try:
@@ -334,7 +327,7 @@ class LndRestWallet(LightningBackend):
                     "fee_limit": lnrpcFeeLimit,
                     "use_mission_control": True,
                 },
-                timeout=http_timeout(),
+                timeout=None,
             )
 
             assert route
@@ -371,7 +364,7 @@ class LndRestWallet(LightningBackend):
                     ).decode(),
                     "route": route_data["routes"][0],
                 },
-                timeout=http_timeout(PAYMENT_READ_TIMEOUT),
+                timeout=None,
             )
 
             assert response
@@ -450,7 +443,7 @@ class LndRestWallet(LightningBackend):
             "ascii"
         )
         url = f"/v2/router/track/{checking_id}"
-        async with self.client.stream("GET", url, timeout=http_timeout()) as r:
+        async with self.client.stream("GET", url, timeout=None) as r:
             async for json_line in r.aiter_lines():
                 try:
                     line = json.loads(json_line)

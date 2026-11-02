@@ -17,10 +17,8 @@ from .base import (
     PaymentStatusResult,
     StatusResponse,
 )
-from .http import PAYMENT_READ_TIMEOUT, http_timeout
 
 USDT = "USDT"
-STATUS_TIMEOUT_SECONDS = 15
 
 
 class StrikeAmount(BaseModel):
@@ -139,14 +137,12 @@ class StrikeWallet(LightningBackend):
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
             headers=bearer_auth,
-            timeout=http_timeout(),
+            timeout=None,
         )
 
     async def status(self) -> StatusResponse:
         try:
-            r = await self.client.get(
-                url=f"{self.endpoint}/v1/balances", timeout=STATUS_TIMEOUT_SECONDS
-            )
+            r = await self.client.get(url=f"{self.endpoint}/v1/balances", timeout=15)
             r.raise_for_status()
         except Exception as exc:
             return StatusResponse(
@@ -234,7 +230,7 @@ class StrikeWallet(LightningBackend):
             r = await self.client.post(
                 url=f"{self.endpoint}/v1/payment-quotes/lightning",
                 json={"sourceCurrency": self.currency, "lnInvoice": bolt11},
-                timeout=http_timeout(),
+                timeout=None,
             )
             r.raise_for_status()
         except httpx.RequestError:
@@ -264,7 +260,7 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.patch(
                 url=f"{self.endpoint}/v1/payment-quotes/{quote.checking_id}/execute",
-                timeout=http_timeout(PAYMENT_READ_TIMEOUT),
+                timeout=None,
             )
             r.raise_for_status()
         except httpx.RequestError as exc:
