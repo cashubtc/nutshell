@@ -294,6 +294,9 @@ class MeltQuote(LedgerEvent):
     fee_reserve: int
     state: MeltQuoteState
     attempt: str = ""
+    melt_lock: str = ""
+    melt_lock_expires_at: float = 0
+    payment_uncertain: bool = False
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
@@ -317,6 +320,9 @@ class MeltQuote(LedgerEvent):
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
         attempt = row.get("attempt")  # type: ignore
+        melt_lock = row.get("melt_lock")  # type: ignore
+        melt_lock_expires_at = row.get("melt_lock_expires_at")  # type: ignore
+        payment_uncertain = row.get("payment_uncertain")  # type: ignore
 
         return cls(
             quote=row["quote"],
@@ -328,6 +334,9 @@ class MeltQuote(LedgerEvent):
             fee_reserve=row["fee_reserve"],
             state=MeltQuoteState(row["state"]),
             attempt=str(attempt) if attempt is not None else "",
+            melt_lock=str(melt_lock) if melt_lock is not None else "",
+            melt_lock_expires_at=float(melt_lock_expires_at or 0),
+            payment_uncertain=bool(payment_uncertain or False),
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
@@ -367,6 +376,11 @@ class MeltQuote(LedgerEvent):
     @property
     def pending(self) -> bool:
         return self.state == MeltQuoteState.pending
+
+    @property
+    def locked(self) -> bool:
+        """A lease owner is recorded; validity is checked against database time."""
+        return bool(self.melt_lock)
 
     @property
     def paid(self) -> bool:

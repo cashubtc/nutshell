@@ -252,6 +252,17 @@ def update_melt_quote(ctx: Context, quote_id: str, state: str):
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
 
+@update.command("unlock-melt-quote", help="Release the execution lock of a melt quote (NUT-05) so a later status poll can resolve it.")
+@click.argument("quote_id")
+@click.pass_context
+def unlock_melt_quote(ctx: Context, quote_id: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UnlockNut05Quote(management_pb2.GetNut05QuoteRequest(quote_id=quote_id))
+        click.echo("Successfully unlocked!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
 @update.command("lightning-fee", help="Set new lightning fees.")
 @click.argument("fee_percent", required=False, type=float)
 @click.argument("min_fee_reserve", required=False, type=int)

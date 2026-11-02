@@ -234,6 +234,29 @@ poetry run mint
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
+### Melt execution and recovery
+
+Melt execution uses a renewable database lease. Its duration defaults to 60
+seconds (`MINT_MELT_LEASE_SECONDS`), and execution has a 120-second budget
+(`MINT_MELT_EXECUTION_TIMEOUT_SECONDS`). Starting another worker preserves live
+leases. After a lease expires, status polling or periodic reconciliation can
+claim recovery without sending another payment.
+
+Payments awaiting a definitive backend result remain pending. Before manual
+recovery, confirm that no executor can resume and verify the current payment
+outcome with the Lightning backend. To release execution ownership, use the
+management RPC command:
+
+```bash
+poetry run mint-cli update unlock-melt-quote <quote-id>
+```
+
+Unlocking retains the current quote and proof states. Reconciliation continues
+through the normal status polling and periodic recovery paths.
+
+Stop all older workers before upgrading. Migration `m042` adds lease expiry and
+payment uncertainty, treating existing pending payments as uncertain.
+
 ### NUT-19 Response caching
 
 Nutshell caches successful mint, swap, and melt responses in memory by default so wallets can recover lost responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). Redis can be enabled for shared caching across workers or instances. See [Response caching](docs/response-caching.md) for configuration and cache limits.

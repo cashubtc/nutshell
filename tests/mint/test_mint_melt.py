@@ -1,6 +1,7 @@
 import asyncio
 from typing import List, Tuple
 
+import grpc
 import pytest
 import pytest_asyncio
 
@@ -13,11 +14,13 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
+from cashu.core.db import Database
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     LightningPaymentFailedError,
     OutputsAlreadySignedError,
     OutputsArePendingError,
+    ProofsArePendingError,
     QuoteAlreadyIssuedError,
     QuotePendingError,
     TransactionError,
@@ -30,10 +33,13 @@ from cashu.lightning.base import (
     PaymentStatus,
     PaymentStatusResult,
 )
+from cashu.lightning.lnd_grpc import lnd_grpc
+from cashu.mint.db.lease import maintain_melt_lease
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    expire_melt_lease,
     get_fake_invoice,
     get_real_invoice,
     is_fake,
@@ -68,6 +74,13 @@ async def wallet(ledger: Ledger):
     )
     await wallet1.load_mint()
     yield wallet1
+
+
+async def fund_wallet(ledger: Ledger, wallet: Wallet, amount: int = 64):
+    mint_quote = await wallet.request_mint(amount)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: marks it paid
+    await wallet.mint(amount, quote_id=mint_quote.quote)
+    assert wallet.balance == amount
 
 
 async def create_pending_melts(
@@ -184,6 +197,9 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
     monkeypatch.setattr(backend, "pay_invoice", delayed_settled_payment)
     monkeypatch.setattr(backend, "get_payment_status", settled_payment_status)
 
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+
     payment_task = asyncio.create_task(
         ledger._execute_melt_payment(quote, [proof], outputs=None)
     )
@@ -201,21 +217,16 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
     )
     stale_failure_result = await ledger._finalize_melt_failed(quote.quote)
 
-    assert lookup_result.paid
+    assert lookup_result.pending
     assert payment_result.state == MeltQuoteState.paid.value
     assert stale_failure_result.paid
-    assert (
-        lookup_result.change
-        == payment_result.change
-        == retry_result.change
-        == stale_failure_result.change
-    )
-    assert lookup_result.change
-    assert sum(promise.amount for promise in lookup_result.change) == 5
+    assert payment_result.change == retry_result.change == stale_failure_result.change
+    assert payment_result.change
+    assert sum(promise.amount for promise in payment_result.change) == 5
 
     persisted = await ledger.get_melt_quote(quote.quote)
     assert persisted.paid
-    assert persisted.change == lookup_result.change
+    assert persisted.change == payment_result.change
 
     pending = await ledger.crud.get_pending_proofs_for_quote(
         quote_id=quote.quote,
@@ -234,7 +245,7 @@ async def test_finalize_melt_paid_is_idempotent_under_concurrency(
         db=ledger.db,
         melt_id=quote.quote,
     )
-    assert len(signed) == len(lookup_result.change)
+    assert len(signed) == len(payment_result.change)
     assert unsigned == []
 
     balance_after, _ = await ledger.crud.get_balance(
@@ -558,16 +569,23 @@ async def test_execute_melt_failed_payment_uses_settled_status(
     monkeypatch.setattr(backend, "pay_invoice", failed_payment)
     monkeypatch.setattr(backend, "get_payment_status", settled_status)
 
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+
     response = await ledger._execute_melt_payment(quote, [proof], outputs=None)
     assert response.state == MeltQuoteState.paid.value
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and not current.locked
+    assert current.melt_lock_expires_at == 0
 
     states = await ledger.db_read.get_proofs_states([proof.Y])
     assert states[0].spent
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("stale_failed", [False, True])
 async def test_execute_melt_payment_and_status_exceptions_keep_pending(
-    ledger: Ledger, monkeypatch: pytest.MonkeyPatch
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, stale_failed: bool
 ):
     proof, quote = await create_pending_melts(ledger)
     backend = ledger.backends[Method.bolt11][Unit.sat]
@@ -576,13 +594,21 @@ async def test_execute_melt_payment_and_status_exceptions_keep_pending(
         raise RuntimeError("payment error")
 
     async def status_exception(checking_id: str):
+        if stale_failed:
+            return PaymentStatus(result=PaymentStatusResult.FAILED)
         raise RuntimeError("status error")
 
     monkeypatch.setattr(backend, "pay_invoice", payment_exception)
     monkeypatch.setattr(backend, "get_payment_status", status_exception)
 
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+
     response = await ledger._execute_melt_payment(quote, [proof], outputs=None)
     assert response.state == MeltQuoteState.pending.value
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and not current.locked
+    assert current.melt_lock_expires_at == 0
 
     states = await ledger.db_read.get_proofs_states([proof.Y])
     assert states[0].pending
@@ -873,9 +899,12 @@ async def test_melt_quote_lookup_after_backend_id_update(
     await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
     await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
 
-    await ledger.db_write._set_melt_quote_pending(quote1)
+    pending = await ledger.db_write._set_melt_quote_pending(quote1)
     updated = await ledger._update_melt_checking_id(
-        quote1.quote, "backend-payment-attempt-id"
+        quote1.quote,
+        "backend-payment-attempt-id",
+        expected_attempt=pending.attempt,
+        lock_token=pending.melt_lock,
     )
     assert updated.checking_id == "backend-payment-attempt-id"
 
@@ -1076,9 +1105,9 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
 
     # We expect them to NOT be pending if the bug is fixed
-    assert not any(s.pending for s in states), (
-        "Proofs from failed melt request stuck in pending!"
-    )
+    assert not any(
+        s.pending for s in states
+    ), "Proofs from failed melt request stuck in pending!"
 
 
 @pytest.mark.asyncio
@@ -1230,6 +1259,10 @@ async def test_internal_melt_concurrently_issued_quote(ledger: Ledger, monkeypat
     )
 
     with pytest.raises(QuoteAlreadyIssuedError) as exc_info:
+        internal_melt_quote = await ledger.db_write.claim_melt_quote_lease(
+            internal_melt_quote
+        )
+        assert internal_melt_quote is not None
         await ledger._execute_melt_payment(
             internal_melt_quote,
             [proof],
@@ -1400,13 +1433,28 @@ async def test_melt_status_resolution_across_attempts(
     backend = ledger.backends[Method.bolt11][Unit.sat]
 
     async def failed_status_with_concurrent_remelt(checking_id: str):
-        await ledger._finalize_melt_failed(quote.quote, expected_attempt=quote.attempt)
+        current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+        assert current is not None
+        await ledger._finalize_melt_failed(
+            quote.quote, expected_attempt=quote.attempt, lock_token=current.melt_lock
+        )
         quote_db = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
         assert quote_db is not None
         remelted_quote = await ledger.db_write.verify_and_set_melt_quote_pending(
             quote=quote_db, proofs=[proof_b], keysets=ledger.keysets
         )
         assert remelted_quote.attempt != quote.attempt
+        # Complete the synthetic attempt's preparation for status resolution.
+        await ledger._update_melt_checking_id(
+            remelted_quote.quote,
+            remelted_quote.checking_id,
+            expected_attempt=remelted_quote.attempt,
+            lock_token=remelted_quote.melt_lock,
+            payment_uncertain=False,
+        )
+        await ledger.db_write.unlock_melt_quote(
+            remelted_quote.quote, remelted_quote.melt_lock
+        )
         return PaymentStatus(result=PaymentStatusResult.FAILED)
 
     monkeypatch.setattr(
@@ -1428,3 +1476,825 @@ async def test_melt_status_resolution_across_attempts(
     assert result.state == MeltQuoteState.unpaid
     states = await ledger.db_read.get_proofs_states([proof_b.Y])
     assert states[0].unspent
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses FakeWallet knobs")
+async def test_melt_quote_during_payment(
+    ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
+):
+    """Check quote, lease, and proof states throughout an active payment."""
+    await fund_wallet(ledger, wallet, 64)
+    proofs = wallet.proofs
+    proof_Ys = [p.Y for p in proofs]
+
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    balance_before = backend.balance[Unit.sat].amount
+
+    # Use a controlled payment delay and backend status.
+    monkeypatch.setattr(settings, "fakewallet_delay_outgoing_payment", 3)
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state", "SETTLED")
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "FAILED")
+
+    melt_task = asyncio.create_task(ledger.melt(proofs=proofs, quote=quote_id))
+
+    # Wait for payment preparation to finish.
+    for _ in range(100):
+        q = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+        if q and q.pending:
+            break
+        await asyncio.sleep(0.02)
+    else:
+        melt_task.cancel()
+        pytest.fail("melt quote never reached PENDING")
+
+    # Check the active lease and pending proofs.
+    assert q.locked, "melt lock must be armed while the payment executes"
+
+    states = await ledger.db_read.get_proofs_states(proof_Ys)
+    assert all(s.pending for s in states), "proofs should be pending mid-payment"
+
+    # Read the quote during payment execution.
+    polled_quote = await ledger.get_melt_quote(quote_id)
+    assert polled_quote.pending, "active quote remains pending"
+    assert polled_quote.locked
+
+    states = await ledger.db_read.get_proofs_states(proof_Ys)
+    assert all(s.pending for s in states), "proofs remain pending"
+
+    # Check reservation behavior for pending proofs.
+    secrets, rs, _ = await wallet.generate_n_secrets(len(proofs))
+    outputs, rs = wallet._construct_outputs([p.amount for p in proofs], secrets, rs)
+    with pytest.raises(Exception):
+        await ledger.swap(proofs=proofs, outputs=outputs)
+
+    # Finalization follows the active lease owner.
+    q2 = await ledger._finalize_melt_failed(quote_id)
+    assert q2.pending, "finalizing a locked quote without the token must be refused"
+    q3 = await ledger._finalize_melt_paid(quote_id)
+    assert q3.pending, "finalizing a locked quote without the token must be refused"
+
+    # Complete the payment.
+    result = await melt_task
+    assert result.state == MeltQuoteState.paid.value
+
+    # lock released, proofs consumed exactly once, invoice paid exactly once
+    q4 = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+    assert q4 is not None and not q4.locked, "lock must be cleared on finalize"
+    states = await ledger.db_read.get_proofs_states(proof_Ys)
+    assert all(s.spent for s in states), "proofs are spent by the melt, once"
+    balance_after = backend.balance[Unit.sat].amount
+    assert balance_after == balance_before - 62
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses FakeWallet knobs")
+async def test_melt_pending_response_reconciliation(
+    ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
+):
+    """Check status reconciliation after a pending payment response."""
+    await fund_wallet(ledger, wallet, 64)
+    proofs = wallet.proofs
+
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+
+    # pay_invoice returns PENDING (payment in doubt), but the payment later
+    # settles at the backend
+    monkeypatch.setattr(settings, "fakewallet_delay_outgoing_payment", None)
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state", "PENDING")
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "SETTLED")
+
+    result = await ledger.melt(proofs=proofs, quote=quote_id)
+    assert result.state == MeltQuoteState.pending.value
+
+    # the executor released the lock even though it did not finalize
+    q = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+    assert q is not None and q.pending and not q.locked
+
+    # now a poller may resolve the (settled) payment and finalize the quote
+    resolved = await ledger.get_melt_quote(quote_id)
+    assert resolved.paid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses FakeWallet knobs")
+async def test_lock_cleared_on_every_state_transition(ledger: Ledger, wallet: Wallet):
+    """The lock is only meaningful while PENDING: every helper that moves a
+    quote out of PENDING must clear it."""
+    await fund_wallet(ledger, wallet, 64)
+    proofs = wallet.proofs
+    assert len(proofs) >= 3
+
+    async def locked_quote(quote_id: str, proof) -> MeltQuote:
+        quote = MeltQuote(
+            quote=quote_id,
+            method="bolt11",
+            request=f"req-{quote_id}",
+            checking_id=f"cid-{quote_id}",
+            unit="sat",
+            state=MeltQuoteState.unpaid,
+            amount=100,
+            fee_reserve=1,
+        )
+        await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+        quote_db = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+        assert quote_db is not None
+        locked = await ledger.db_write.verify_and_set_melt_quote_pending(
+            quote=quote_db, proofs=[proof], keysets=ledger.keysets
+        )
+        assert locked.locked
+        return locked
+
+    # _unset_melt_quote_pending (via unset_melt_quote_pending_and_proofs)
+    q1 = await locked_quote("lock-unset-pending", proofs[0])
+    await ledger.db_write.unset_melt_quote_pending_and_proofs(
+        q1, [proofs[0]], ledger.keysets, MeltQuoteState.unpaid
+    )
+    r1 = await ledger.crud.get_melt_quote(quote_id=q1.quote, db=ledger.db)
+    assert r1 is not None and r1.unpaid and not r1.locked
+
+    # _update_melt_quote_state (management RPC path) refuses locked quotes;
+    # an operator must release the lock explicitly first
+    q2 = await locked_quote("lock-mgmt-rpc", proofs[1])
+    with pytest.raises(TransactionError):
+        await ledger.db_write._update_melt_quote_state(q2.quote, MeltQuoteState.unpaid)
+    released = await ledger.db_write.force_unlock_melt_quote(q2.quote)
+    assert released
+    await ledger.db_write._update_melt_quote_state(q2.quote, MeltQuoteState.unpaid)
+    r2 = await ledger.crud.get_melt_quote(quote_id=q2.quote, db=ledger.db)
+    assert r2 is not None and r2.unpaid and not r2.locked
+
+    # set_melt_quote_paid_and_invalidate_proofs
+    q3 = await locked_quote("lock-set-paid", proofs[2])
+    await ledger.db_write.set_melt_quote_paid_and_invalidate_proofs(
+        q3, [proofs[2]], ledger.keysets, keyset_fees={}
+    )
+    r3 = await ledger.crud.get_melt_quote(quote_id=q3.quote, db=ledger.db)
+    assert r3 is not None and r3.paid and not r3.locked
+
+
+@pytest.mark.asyncio
+async def test_melt_lease_renewal_and_cleanup(ledger: Ledger, monkeypatch):
+    _, quote = await create_pending_melts(ledger)
+    monkeypatch.setattr(settings, "mint_melt_lease_seconds", 1)
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+    renewed = asyncio.Event()
+    calls = 0
+    original_renew = ledger.db_write.renew_melt_quote_lease
+
+    async def observe_renew(current):
+        nonlocal calls
+        result = await original_renew(current)
+        calls += 1
+        if calls > 1:
+            renewed.set()
+        return result
+
+    monkeypatch.setattr(ledger.db_write, "renew_melt_quote_lease", observe_renew)
+    async with maintain_melt_lease(ledger.db_write, quote):
+        await asyncio.wait_for(renewed.wait(), 2)
+        current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+        assert current is not None
+        assert current.melt_lock_expires_at > quote.melt_lock_expires_at
+        assert current.melt_lock == quote.melt_lock
+    # The renewal task was awaited on exit, including when its owner is cancelled.
+    assert not any(
+        "maintain_melt_lease.<locals>.renew" in task.get_coro().__qualname__
+        for task in asyncio.all_tasks()
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_lease_budget_stops_renewal_during_slow_cleanup(
+    ledger: Ledger, monkeypatch
+):
+    _, quote = await create_pending_melts(ledger)
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+    monkeypatch.setattr(settings, "mint_melt_lease_seconds", 1)
+    monkeypatch.setattr(settings, "mint_melt_execution_timeout_seconds", 0.1)
+    calls = 0
+    original_renew = ledger.db_write.renew_melt_quote_lease
+
+    async def observe_renew(current):
+        nonlocal calls
+        calls += 1
+        return await original_renew(current)
+
+    monkeypatch.setattr(ledger.db_write, "renew_melt_quote_lease", observe_renew)
+    async with maintain_melt_lease(ledger.db_write, quote):
+        # Model a backend that takes longer than the execution timeout to cancel.
+        await asyncio.sleep(0.3)
+        assert calls == 1  # Initial acquisition only; no later heartbeat.
+
+
+@pytest.mark.asyncio
+async def test_expired_melt_lease_has_one_recovery_owner(ledger: Ledger):
+    proof, quote = await create_pending_melts(ledger)
+    owner = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert owner is not None
+    await expire_melt_lease(ledger, quote.quote)
+    assert not await ledger.db_write.renew_melt_quote_lease(owner)
+    claims = await asyncio.gather(
+        ledger.db_write.claim_melt_quote_lease(owner),
+        ledger.db_write.claim_melt_quote_lease(owner),
+    )
+    winners = [claim for claim in claims if claim is not None]
+    assert len(winners) == 1
+    winner = winners[0]
+    assert winner.attempt == owner.attempt
+    assert winner.melt_lock != owner.melt_lock
+    assert not await ledger.db_write.renew_melt_quote_lease(owner)
+    await ledger.db_write.unlock_melt_quote(owner.quote, owner.melt_lock)
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and current.melt_lock == winner.melt_lock
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="uses a controlled payment backend")
+async def test_melt_lease_recovery_and_finalization(
+    ledger: Ledger, wallet: Wallet, monkeypatch
+):
+    await fund_wallet(ledger, wallet)
+    proofs = wallet.proofs
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+    started, finish = asyncio.Event(), asyncio.Event()
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+
+    async def delayed_payment(quote, fee_limit_msat):
+        started.set()
+        await finish.wait()
+        return PaymentResponse(result=PaymentResult.SETTLED)
+
+    monkeypatch.setattr(backend, "pay_invoice", delayed_payment)
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "FAILED")
+    task = asyncio.create_task(ledger.melt(proofs=proofs, quote=quote_id))
+    try:
+        await asyncio.wait_for(started.wait(), 2)
+        owner = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+        assert owner is not None and owner.payment_uncertain
+        await expire_melt_lease(ledger, quote_id)
+        assert (await ledger.get_melt_quote(quote_id)).pending
+        assert all(
+            s.pending
+            for s in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+        )
+        # Finalization follows the current lease owner.
+        assert (
+            await ledger._finalize_melt_paid(
+                quote_id, expected_attempt=owner.attempt, lock_token=owner.melt_lock
+            )
+        ).pending
+        assert (
+            await ledger._finalize_melt_failed(
+                quote_id, expected_attempt=owner.attempt, lock_token=owner.melt_lock
+            )
+        ).pending
+        with pytest.raises(TransactionError, match="lease lost"):
+            await ledger._update_melt_checking_id(
+                quote_id,
+                "late-id",
+                expected_attempt=owner.attempt,
+                lock_token=owner.melt_lock,
+            )
+        finish.set()
+        with pytest.raises(TransactionError, match="lease lost"):
+            await asyncio.wait_for(task, 2)
+        monkeypatch.setattr(settings, "fakewallet_payment_state", "SETTLED")
+        assert (await ledger.get_melt_quote(quote_id)).paid
+        assert all(
+            s.spent
+            for s in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+        )
+        assert (await ledger.get_melt_quote(quote_id)).paid
+    finally:
+        finish.set()
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+
+@pytest.mark.asyncio
+async def test_melt_execution_timeout_state(ledger: Ledger, monkeypatch):
+    proof, quote = await create_pending_melts(ledger)
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+    quote.payment_uncertain = True
+    await ledger.crud.update_melt_quote(quote=quote, db=ledger.db)
+    cancelled = asyncio.Event()
+
+    async def hung_payment(quote, fee_limit_msat):
+        try:
+            await asyncio.Future()
+        finally:
+            cancelled.set()
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    monkeypatch.setattr(backend, "pay_invoice", hung_payment)
+    monkeypatch.setattr(settings, "mint_melt_execution_timeout_seconds", 0.1)
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "FAILED")
+    result = await ledger._execute_melt_payment(quote, [proof], outputs=None)
+    assert result.state == MeltQuoteState.pending.value and cancelled.is_set()
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and not current.locked
+    assert current.melt_lock_expires_at == 0
+    assert (await ledger.get_melt_quote(quote.quote)).pending
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
+    assert not any(
+        "maintain_melt_lease.<locals>.renew" in task.get_coro().__qualname__
+        for task in asyncio.all_tasks()
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_lease_loss_cancels_executor(ledger: Ledger, monkeypatch):
+    proof, quote = await create_pending_melts(ledger)
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+    monkeypatch.setattr(settings, "mint_melt_lease_seconds", 1)
+    original_renew = ledger.db_write.renew_melt_quote_lease
+    calls = 0
+    cancelled = asyncio.Event()
+
+    async def lose_lease(current):
+        nonlocal calls
+        calls += 1
+        return await original_renew(current) if calls == 1 else False
+
+    async def hung_payment(quote, fee_limit_msat):
+        try:
+            await asyncio.Future()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(ledger.db_write, "renew_melt_quote_lease", lose_lease)
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", hung_payment
+    )
+    with pytest.raises(TransactionError, match="lease lost"):
+        await asyncio.wait_for(ledger._execute_melt_payment(quote, [proof], None), 2)
+    assert cancelled.is_set()
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and not current.locked
+    assert current.melt_lock_expires_at == 0
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_melt_executor_exit_releases_lease(
+    ledger: Ledger, monkeypatch, cancelled: bool
+):
+    proof, quote = await create_pending_melts(ledger)
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+    started = asyncio.Event()
+
+    async def payment(current, fee_limit_msat):
+        started.set()
+        if cancelled:
+            await asyncio.Future()
+        return PaymentResponse(result=PaymentResult.PENDING)
+
+    async def persistence_error(*args, **kwargs):
+        raise RuntimeError("could not persist payment result")
+
+    monkeypatch.setattr(ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", payment)
+    monkeypatch.setattr(ledger, "_update_melt_checking_id", persistence_error)
+    task = asyncio.create_task(ledger._execute_melt_payment(quote, [proof], None))
+    await asyncio.wait_for(started.wait(), 2)
+    if cancelled:
+        task.cancel()
+    with pytest.raises(asyncio.CancelledError if cancelled else RuntimeError):
+        await task
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and current.pending and not current.locked
+    assert current.melt_lock_expires_at == 0
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="uses a controlled payment backend")
+@pytest.mark.parametrize(
+    "stage, failure",
+    [
+        ("outputs", "exception"),
+        ("outputs", "cancelled"),
+        ("outputs", "timeout"),
+        ("outputs", "expired"),
+        ("outputs", "interrupted"),
+        ("pending", "interrupted"),
+    ],
+)
+async def test_prepare_melt_failure_rolls_back(
+    ledger: Ledger, wallet: Wallet, monkeypatch, stage: str, failure: str
+):
+    class PreparationInterrupted(BaseException):
+        pass
+
+    await fund_wallet(ledger, wallet)
+    balance_before = await ledger.crud.get_balance(db=ledger.db, keyset=ledger.keyset)
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+    secrets, rs, _ = await wallet.generate_n_secrets(1)
+    outputs, _ = wallet._construct_outputs([1], secrets, rs)
+    started = asyncio.Event()
+    target = ledger if stage == "outputs" else ledger.db_write
+    operation = (
+        "_store_blinded_messages"
+        if stage == "outputs"
+        else "verify_and_set_melt_quote_pending"
+    )
+    original_operation = getattr(target, operation)
+    monkeypatch.setattr(settings, "mint_melt_lease_seconds", 1)
+    if failure == "timeout":
+        monkeypatch.setattr(settings, "mint_melt_execution_timeout_seconds", 0.1)
+
+    async def interrupt_preparation(*args, **kwargs):
+        await original_operation(*args, **kwargs)
+        started.set()
+        if failure in ("cancelled", "timeout"):
+            await asyncio.Future()
+        if failure == "expired":
+            await asyncio.sleep(1.5)
+        if failure == "interrupted":
+            raise PreparationInterrupted()
+        raise RuntimeError("could not prepare melt")
+
+    async def unexpected_send(*args, **kwargs):
+        pytest.fail("Failed preparation must not send a Lightning payment")
+
+    monkeypatch.setattr(target, operation, interrupt_preparation)
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", unexpected_send
+    )
+    task = asyncio.create_task(
+        ledger.melt(proofs=wallet.proofs, quote=quote_id, outputs=outputs)
+    )
+    await asyncio.wait_for(started.wait(), 2)
+    if failure == "cancelled":
+        task.cancel()
+    expected_error = {
+        "cancelled": asyncio.CancelledError,
+        "timeout": asyncio.TimeoutError,
+        "interrupted": PreparationInterrupted,
+    }.get(failure, RuntimeError)
+    with pytest.raises(expected_error):
+        await task
+    current = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+    assert current is not None and current.unpaid and not current.locked
+    assert current.melt_lock_expires_at == 0
+    assert not current.payment_uncertain
+    assert all(
+        state.unspent
+        for state in await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+    )
+    assert await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=quote_id
+    ) == []
+    assert (
+        await ledger.crud.get_balance(db=ledger.db, keyset=ledger.keyset)
+        == balance_before
+    )
+
+
+@pytest.mark.asyncio
+async def test_accepted_pending_melt_can_recover_failure(ledger: Ledger, monkeypatch):
+    proof, quote = await create_pending_melts(ledger)
+    quote = await ledger.db_write.claim_melt_quote_lease(quote)
+    assert quote is not None
+    quote.payment_uncertain = True
+    await ledger.crud.update_melt_quote(quote=quote, db=ledger.db)
+
+    async def accepted_payment(quote, fee_limit_msat):
+        return PaymentResponse(result=PaymentResult.PENDING)
+
+    async def failed_status(checking_id):
+        return PaymentStatus(result=PaymentStatusResult.FAILED)
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    monkeypatch.setattr(backend, "pay_invoice", accepted_payment)
+    monkeypatch.setattr(backend, "get_payment_status", failed_status)
+    assert (await ledger._execute_melt_payment(quote, [proof], None)).state == "PENDING"
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and not current.payment_uncertain and not current.locked
+    assert (await ledger.get_melt_quote(quote.quote)).unpaid
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].unspent
+
+
+@pytest.mark.asyncio
+async def test_melt_recovery_bounds_stalled_status_lookup(ledger: Ledger, monkeypatch):
+    proof, quote = await create_pending_melts(ledger)
+    monkeypatch.setattr(settings, "mint_melt_lease_seconds", 1)
+
+    async def hung_status(checking_id):
+        await asyncio.Future()
+
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat], "get_payment_status", hung_status
+    )
+    assert (await asyncio.wait_for(ledger.get_melt_quote(quote.quote), 2)).pending
+    current = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert current is not None and not current.locked
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="uses FakeWallet invoices")
+@pytest.mark.parametrize("settled_internally", [False, True])
+@pytest.mark.parametrize("overpaid", [False, True])
+async def test_expired_internal_melt_recovers_without_lightning_send(
+    ledger: Ledger, wallet: Wallet, monkeypatch, settled_internally: bool, overpaid: bool
+):
+    await fund_wallet(ledger, wallet)
+    _, proofs = await wallet.swap_to_send(wallet.proofs, 64 if overpaid else 16)
+    secrets, rs, _ = await wallet.generate_n_secrets(2)
+    outputs, _ = wallet._construct_outputs([1, 1], secrets, rs)
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=16))
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+        )
+    ).quote
+    owner = await ledger._prepare_melt(
+        proofs=proofs, quote=quote_id, outputs=outputs if overpaid else None
+    )
+    if settled_internally:
+        # Model a crash between the internal transfer and consuming its proofs.
+        await ledger.melt_mint_settle_internally(owner, proofs)
+    await expire_melt_lease(ledger, quote_id)
+
+    async def unexpected_send(quote, fee_limit_msat):
+        pytest.fail("Recovering an internal melt must not send a Lightning payment")
+
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", unexpected_send
+    )
+    recovered = await ledger.get_melt_quote(quote_id)
+    assert recovered.paid
+    assert sum(p.amount for p in recovered.change or []) == (48 if overpaid else 0)
+    assert all(
+        s.spent for s in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    )
+    current_mint = await ledger.crud.get_mint_quote(
+        quote_id=mint_quote.quote, db=ledger.db
+    )
+    assert current_mint is not None and current_mint.paid
+    repeated = await ledger.get_melt_quote(quote_id)
+    assert repeated.paid and repeated.change == recovered.change
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses FakeWallet knobs")
+@pytest.mark.parametrize("raise_exception", [False, True], ids=["ERROR", "exception"])
+async def test_melt_payment_response_reconciliation(
+    ledger: Ledger,
+    wallet: Wallet,
+    monkeypatch: pytest.MonkeyPatch,
+    raise_exception: bool,
+):
+    """Check reconciliation after an interrupted payment response."""
+    await fund_wallet(ledger, wallet)
+    proofs = wallet.proofs
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    original_pay = backend.pay_invoice
+    continue_payment = asyncio.Event()
+    remote_payment = None
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state", "SETTLED")
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "FAILED")
+
+    async def pay_remotely(quote, fee_limit):
+        await continue_payment.wait()
+        return await original_pay(quote, fee_limit)
+
+    async def lose_payment_response(quote, fee_limit):
+        nonlocal remote_payment
+        remote_payment = asyncio.create_task(pay_remotely(quote, fee_limit))
+        if raise_exception:
+            raise ConnectionError("Response lost after payment request delivery")
+        return PaymentResponse(result=PaymentResult.ERROR)
+
+    monkeypatch.setattr(backend, "pay_invoice", lose_payment_response)
+    try:
+        response = await ledger.melt(proofs=proofs, quote=quote_id)
+        assert response.state == MeltQuoteState.pending.value
+        # Check repeated reads before settlement is confirmed.
+        for _ in range(2):
+            quote = await ledger.get_melt_quote(quote_id)
+            assert quote.pending and quote.payment_uncertain
+        stored = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+        assert stored is not None and not stored.locked
+        assert stored.melt_lock_expires_at == 0
+        states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+        assert all(state.pending for state in states)
+        secrets, rs, _ = await wallet.generate_n_secrets(len(proofs))
+        outputs, _ = wallet._construct_outputs([p.amount for p in proofs], secrets, rs)
+        with pytest.raises(ProofsArePendingError):
+            await ledger.swap(proofs=proofs, outputs=outputs)
+
+        # Confirmed settlement permits automatic recovery of the reserved proofs.
+        continue_payment.set()
+        assert remote_payment is not None
+        assert (await remote_payment).settled
+        monkeypatch.setattr(settings, "fakewallet_payment_state", "SETTLED")
+        assert (await ledger.get_melt_quote(quote_id)).paid
+        states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+        assert all(state.spent for state in states)
+    finally:
+        if remote_payment is not None:
+            remote_payment.cancel()
+            await asyncio.gather(remote_payment, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses mocked LND RPCs")
+async def test_lnd_mpp_payment_response_reconciliation(
+    ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
+):
+    """Check reconciliation with an interrupted LND MPP response."""
+    await fund_wallet(ledger, wallet)
+    proofs = wallet.proofs
+    continue_payment = asyncio.Event()
+    remote_payment = None
+    payment_results = []
+
+    class MockChannel:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+    class MockStub:
+        def __init__(self, channel):
+            pass
+
+        async def QueryRoutes(self, request):
+            return lnd_grpc.lnrpc.QueryRoutesResponse(
+                routes=[lnd_grpc.lnrpc.Route(hops=[lnd_grpc.lnrpc.Hop()])]
+            )
+
+        async def SendToRouteV2(self, request):
+            nonlocal remote_payment
+            remote_payment = asyncio.create_task(continue_payment.wait())
+            raise grpc.aio.AioRpcError(
+                code=grpc.StatusCode.UNAVAILABLE,
+                initial_metadata=None,
+                trailing_metadata=None,
+                details="Response lost after payment request delivery",
+            )
+
+        async def TrackPaymentV2(self, request):
+            # Return the controlled status for this payment phase.
+            settled = remote_payment is not None and remote_payment.done()
+            yield lnd_grpc.lnrpc.Payment(
+                status=(
+                    lnd_grpc.lnrpc.Payment.SUCCEEDED
+                    if settled
+                    else lnd_grpc.lnrpc.Payment.FAILED
+                ),
+                payment_preimage="1" * 64 if settled else "0" * 64,
+            )
+
+    monkeypatch.setattr(
+        lnd_grpc.grpc.aio, "secure_channel", lambda *args: MockChannel()
+    )
+    monkeypatch.setattr(lnd_grpc.lightningstub, "LightningStub", MockStub)
+    monkeypatch.setattr(lnd_grpc.routerstub, "RouterStub", MockStub)
+    backend = object.__new__(lnd_grpc.LndRPCWallet)
+    backend.unit = Unit.sat
+    backend.supports_mpp = True
+    backend.endpoint = "localhost:10009"
+    backend.combined_creds = None
+    original_pay = backend.pay_invoice
+
+    async def observe_payment(quote, fee_limit):
+        result = await original_pay(quote, fee_limit)
+        payment_results.append(result)
+        return result
+
+    monkeypatch.setattr(backend, "pay_invoice", observe_payment)
+    monkeypatch.setitem(ledger.backends[Method.bolt11], Unit.sat, backend)
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(
+            unit="sat", request=get_fake_invoice(62), options={"mpp": {"amount": 31000}}
+        )
+    )
+    stored = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert stored is not None
+    assert (await backend.get_payment_status(stored.checking_id)).failed
+    try:
+        response = await ledger.melt(proofs=proofs, quote=quote.quote)
+        assert payment_results[0].result == PaymentResult.ERROR
+        assert payment_results[0].error_message is not None
+        assert "Response lost" in payment_results[0].error_message
+        assert response.state == MeltQuoteState.pending.value
+        assert remote_payment is not None and not remote_payment.done()
+        for _ in range(2):
+            polled = await ledger.get_melt_quote(quote.quote)
+            assert polled.pending and polled.payment_uncertain
+        stored = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+        assert stored is not None and not stored.locked
+        assert stored.melt_lock_expires_at == 0
+        states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+        assert all(state.pending for state in states)
+        secrets, rs, _ = await wallet.generate_n_secrets(len(proofs))
+        outputs, _ = wallet._construct_outputs([p.amount for p in proofs], secrets, rs)
+        with pytest.raises(ProofsArePendingError):
+            await ledger.swap(proofs=proofs, outputs=outputs)
+
+        continue_payment.set()
+        await remote_payment
+        assert (await ledger.get_melt_quote(quote.quote)).paid
+        states = await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+        assert all(state.spent for state in states)
+    finally:
+        if remote_payment is not None:
+            remote_payment.cancel()
+            await asyncio.gather(remote_payment, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses FakeWallet knobs")
+async def test_melt_lease_across_ledger_startup(
+    ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
+):
+    """Check execution ownership across ledger startup."""
+    await fund_wallet(ledger, wallet)
+    proofs = wallet.proofs
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    original_pay = backend.pay_invoice
+    payment_started = asyncio.Event()
+    continue_payment = asyncio.Event()
+    monkeypatch.setattr(settings, "fakewallet_pay_invoice_state", "SETTLED")
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "FAILED")
+
+    async def pay_slowly(quote, fee_limit):
+        payment_started.set()
+        await continue_payment.wait()
+        return await original_pay(quote, fee_limit)
+
+    monkeypatch.setattr(backend, "pay_invoice", pay_slowly)
+    second = Ledger(
+        db=Database("mint", ledger.db.db_location),
+        seed=ledger.seed,
+        derivation_path=ledger.derivation_path,
+        backends=ledger.backends,
+        crud=ledger.crud,
+    )
+    payment = asyncio.create_task(ledger.melt(proofs=proofs, quote=quote_id))
+    try:
+        await asyncio.wait_for(payment_started.wait(), 5)
+        await second.startup_ledger()
+        await second._check_pending_proofs_and_melt_quotes()
+        quote = await second.get_melt_quote(quote_id)
+        assert quote.pending and quote.locked
+        states = await second.db_read.get_proofs_states([p.Y for p in proofs])
+        assert all(state.pending for state in states)
+        secrets, rs, _ = await wallet.generate_n_secrets(len(proofs))
+        outputs, _ = wallet._construct_outputs([p.amount for p in proofs], secrets, rs)
+        with pytest.raises(ProofsArePendingError):
+            await second.swap(proofs=proofs, outputs=outputs)
+
+        continue_payment.set()
+        assert (await payment).state == MeltQuoteState.paid.value
+        quote = await second.get_melt_quote(quote_id)
+        assert quote.paid and not quote.locked
+        states = await second.db_read.get_proofs_states([p.Y for p in proofs])
+        assert all(state.spent for state in states)
+    finally:
+        payment.cancel()
+        await asyncio.gather(payment, return_exceptions=True)
+        await second.shutdown_ledger()

@@ -17,6 +17,15 @@ from cashu.core.errors import CashuError
 from cashu.core.settings import settings
 
 
+async def expire_melt_lease(ledger, quote_id: str):
+    """Expire a lease directly for deterministic recovery tests."""
+    await ledger.db.execute(
+        f"UPDATE {ledger.db.table_with_schema('melt_quotes')} "
+        "SET melt_lock_expires_at = 0 WHERE quote = :quote",
+        {"quote": quote_id},
+    )
+
+
 async def assert_err(f, msg: Union[str, CashuError]):
     """Compute f() and expect an error message 'msg'."""
     try:

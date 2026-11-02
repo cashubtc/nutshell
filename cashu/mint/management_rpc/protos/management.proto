@@ -42,6 +42,9 @@ service Mint {
     rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     // UpdateNut05Quote updates the state of a specific NUT-05 (melting) quote.
     rpc UpdateNut05Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
+    // UnlockNut05Quote releases the melt execution lock of a specific NUT-05
+    // (melting) quote, so that a later status poll can resolve it.
+    rpc UnlockNut05Quote(GetNut05QuoteRequest) returns (UpdateResponse) {}
     // RotateNextKeyset initiates the rotation to a new keyset for a given unit.
     rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
     // UpdateLightningFee updates the lightning network fee configuration for the mint.
