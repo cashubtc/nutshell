@@ -350,7 +350,7 @@ async def start_unrecorded_melt(ledger, quote, proofs):
     """Send through the real backend without recording its result in the mint.
 
     This simulates a mint stopping after submitting a payment: startup must
-    recover using the quote's persisted checking ID and the backend's history.
+    recover using the quote's persisted checking ID.
     """
     pending_quote = await ledger._prepare_melt(proofs=proofs, quote=quote.quote)
     backend = ledger.backends[Method.bolt11][Unit.sat]
@@ -430,15 +430,17 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     await asyncio.wait_for(task, 90)
     await asyncio.sleep(SLEEP_TIME)
 
+    # The payment has finished, but its result has not been recorded by the mint.
+    # It is tracked by the checking id the backend assigned to this send (the
+    # payment hash for hash-based backends), not by the invoice's payment hash.
+    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert pending and pending.pending
     await wait_for_result(
         lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
-            bolt11.decode(invoice_payment_request).payment_hash
+            pending.checking_id
         ),
         lambda status: status.settled,
     )
-    # The payment has finished, but its result has not been recorded by the mint.
-    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
-    assert pending and pending.pending
     # The dead executor stops renewing; recovery begins when its lease expires.
     await expire_melt_lease(ledger, quote.quote)
     await ledger._check_pending_proofs_and_melt_quotes()
@@ -486,15 +488,17 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     await asyncio.wait_for(task, 90)
     await asyncio.sleep(SLEEP_TIME)
 
+    # The payment has finished, but its result has not been recorded by the mint.
+    # It is tracked by the checking id the backend assigned to this send (the
+    # payment hash for hash-based backends), not by the invoice's payment hash.
+    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert pending and pending.pending
     await wait_for_result(
         lambda: ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
-            bolt11.decode(invoice_payment_request).payment_hash
+            pending.checking_id
         ),
         lambda status: status.failed,
     )
-    # The payment has finished, but its result has not been recorded by the mint.
-    pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
-    assert pending and pending.pending
     # The dead executor stops renewing; recovery begins when its lease expires.
     await expire_melt_lease(ledger, quote.quote)
     await ledger._check_pending_proofs_and_melt_quotes()
