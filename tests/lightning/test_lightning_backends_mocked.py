@@ -1,5 +1,6 @@
 import base64
 import json
+import uuid
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -7,10 +8,14 @@ from unittest.mock import AsyncMock
 import grpc
 import httpx
 import pytest
+import pytest_asyncio
 
 import cashu.lightning.lnd_grpc.protos.lightning_pb2 as lnrpc
-from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
+from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Proof, Unit
+from cashu.core.crypto.b_dhke import hash_to_curve
+from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
+from cashu.core.migrations import migrate_databases
 from cashu.core.models import (
     PostMeltQuoteRequest,
     PostMeltRequestOptionMpp,
@@ -31,6 +36,8 @@ from cashu.lightning.lnd_grpc.lnd_grpc import (
 )
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.lightning.strike import StrikeWallet
+from cashu.mint import migrations as migrations_mint
+from cashu.mint.ledger import Ledger
 from cashu.wallet.lightning import LightningWallet
 
 
@@ -839,26 +846,24 @@ async def test_spark_completed_transfer_waits_for_lightning_preimage(operation):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("unit", [Unit.sat, Unit.msat])
 @pytest.mark.parametrize("state", ["PENDING", "FAILED", "COMPLETED"])
-async def test_spark_checks_payment_by_quote_hash_after_reconnecting(state):
+async def test_spark_checks_payment_by_id_after_reconnecting(unit, state):
     import breez_sdk_spark as breez
 
     from cashu.lightning.sparkl2 import SparkL2Wallet
 
-    # A new backend instance has no in-memory mapping from BOLT11 hash to UUID.
-    wallet = SparkL2Wallet(Unit.sat)
+    wallet = SparkL2Wallet(unit)
     sdk = AsyncMock()
     wallet.sdk = sdk
     preimage = "b" * 64 if state == "COMPLETED" else None
     payment = _spark_lightning_payment(
         getattr(breez.PaymentStatus, state), preimage=preimage
     )
-    unrelated = _spark_lightning_payment(
-        breez.PaymentStatus.COMPLETED, preimage="c" * 64, payment_hash="d" * 64
-    )
-    sdk.list_payments.return_value = SimpleNamespace(payments=[unrelated, payment])
+    payment.id = str(uuid.uuid4())
+    sdk.get_payment.return_value = SimpleNamespace(payment=payment)
 
-    status = await wallet.get_payment_status("a" * 64)
+    status = await wallet.get_payment_status(payment.id)
 
     assert (
         status.result
@@ -869,10 +874,175 @@ async def test_spark_checks_payment_by_quote_hash_after_reconnecting(state):
         }[state]
     )
     assert status.preimage == preimage
-    request = sdk.list_payments.call_args.args[0]
-    assert request.type_filter == [breez.PaymentType.SEND]
-    assert request.sort_ascending is False
-    sdk.get_payment.assert_not_awaited()
+    sdk.get_payment.assert_awaited_once()
+    request = sdk.get_payment.call_args.args[0]
+    assert request.payment_id == payment.id
+    sdk.list_payments.assert_not_awaited()
+    if status.settled:
+        assert status.fee == Amount(unit, 7 if unit == Unit.sat else 7000)
+
+
+@pytest.mark.asyncio
+async def test_spark_payment_identifier_derivation():
+    import breez_sdk_spark as breez
+
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    wallet = SparkL2Wallet(Unit.sat)
+    sdk = AsyncMock()
+    wallet.sdk = sdk
+    sdk.prepare_send_payment.return_value = SimpleNamespace(
+        payment_method=SimpleNamespace(
+            is_bolt11_invoice=lambda: True,
+            lightning_fee_sats=0,
+            spark_transfer_fee_sats=0,
+        )
+    )
+    sdk.send_payment.return_value = SimpleNamespace(
+        payment=_spark_lightning_payment(
+            breez.PaymentStatus.COMPLETED, preimage="b" * 64
+        )
+    )
+    quote = _quote("invoice-one")
+    keys = []
+    for changes in (
+        {},
+        {},
+        {"attempt": "next-attempt"},
+        {"quote": "another-quote"},
+        {"request": "invoice-two"},
+    ):
+        assert (
+            await wallet.pay_invoice(quote.model_copy(update=changes), 1000)
+        ).settled
+        key = sdk.send_payment.call_args.args[0].idempotency_key
+        assert str(uuid.UUID(key)) == key
+        keys.append(key)
+
+    assert keys[0] == keys[1]
+    assert len(set(keys)) == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "recovery, final_state",
+    [
+        ("lost_response", "COMPLETED"),
+        ("lost_response", "FAILED"),
+        ("restart_before_send", None),
+        ("restart_after_send", "COMPLETED"),
+        ("restart_after_send", "FAILED"),
+    ],
+)
+async def test_spark_melt_lifecycle_reconciliation(
+    spark_ledger: Ledger, monkeypatch, recovery, final_state
+):
+    import breez_sdk_spark as breez
+
+    from cashu.lightning.sparkl2 import SparkL2Wallet
+
+    ledger = spark_ledger
+    monkeypatch.setattr(settings, "fakewallet_delay_incoming_payment", 0)
+    invoice = await FakeWallet(Unit.sat).create_invoice(Amount(Unit.sat, 64))
+    assert invoice.payment_request and invoice.checking_id
+    old_id = "00000000-0000-4000-8000-000000000001"
+    quote = _quote(invoice.payment_request, amount=64)
+    quote.checking_id = old_id
+    quote.attempt = "previous-attempt"
+    quote.fee_reserve = 0
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+    proof = Proof(
+        id=ledger.keyset.id,
+        amount=64,
+        secret="spark-retry-proof",
+        C=(hash_to_curve(b"spark-retry-proof") * ledger.keyset.private_keys[64])
+        .format()
+        .hex(),
+    )
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db, keyset=ledger.keyset, amount=proof.amount
+    )
+    failed = _spark_lightning_payment(
+        breez.PaymentStatus.FAILED, payment_hash=invoice.checking_id
+    )
+    failed.id = old_id
+    payments = {old_id: failed}
+    sdk = AsyncMock()
+    sdk.prepare_send_payment.return_value = SimpleNamespace(
+        payment_method=SimpleNamespace(
+            is_bolt11_invoice=lambda: True,
+            lightning_fee_sats=0,
+            spark_transfer_fee_sats=0,
+        )
+    )
+
+    async def get_payment(request):
+        if request.payment_id not in payments:
+            raise RuntimeError("Query returned no rows")
+        return SimpleNamespace(payment=payments[request.payment_id])
+
+    async def send_payment(request):
+        payment = _spark_lightning_payment(
+            breez.PaymentStatus.PENDING, payment_hash=invoice.checking_id
+        )
+        payment.id = request.idempotency_key
+        payment.fees = 0
+        payments[payment.id] = payment
+        raise RuntimeError("Response lost after submitting payment")
+
+    sdk.get_payment.side_effect = get_payment
+    sdk.send_payment.side_effect = send_payment
+    spark = SparkL2Wallet(Unit.sat)
+    spark.sdk = sdk
+    monkeypatch.setitem(ledger.backends[Method.bolt11], Unit.sat, spark)
+
+    pending = await ledger._prepare_melt(proofs=[proof], quote=quote.quote)
+    if recovery == "lost_response":
+        response = await ledger._execute_melt_payment(pending, [proof], outputs=None)
+        assert response.state == MeltQuoteState.pending.value
+    else:
+        if recovery == "restart_after_send":
+            assert (await spark.pay_invoice(pending, 0)).error
+        # Recover only from persisted state, without recording the send result.
+        restarted = SparkL2Wallet(Unit.sat)
+        restarted.sdk = sdk
+        monkeypatch.setitem(ledger.backends[Method.bolt11], Unit.sat, restarted)
+
+    recovered = await ledger.get_melt_quote(quote.quote)
+    assert recovered.pending
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
+    assert recovered.checking_id != old_id
+    assert recovered.attempt != quote.attempt
+    assert str(uuid.UUID(recovered.checking_id)) == recovered.checking_id
+    if recovery != "restart_before_send":
+        assert (
+            sdk.send_payment.call_args.args[0].idempotency_key == recovered.checking_id
+        )
+        payment = payments[recovered.checking_id]
+        payment.status = getattr(breez.PaymentStatus, final_state)
+        if final_state == "COMPLETED":
+            payment.details.htlc_details.preimage = "b" * 64
+            assert (await ledger.get_melt_quote(quote.quote)).paid
+            assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].spent
+        else:
+            assert (await ledger.get_melt_quote(quote.quote)).unpaid
+            assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].unspent
+    sdk.list_payments.assert_not_awaited()
+
+
+@pytest_asyncio.fixture
+async def spark_ledger(tmp_path):
+    # Keep these transport-mocked cases independent of the shared HTTP mint.
+    ledger = Ledger(
+        db=Database("mint", str(tmp_path)),
+        seed="TEST_PRIVATE_KEY",
+        derivation_path=settings.mint_derivation_path,
+        backends={Method.bolt11: {Unit.sat: FakeWallet(Unit.sat)}},
+    )
+    await migrate_databases(ledger.db, migrations_mint)
+    await ledger._startup_keysets()
+    yield ledger
+    await ledger.shutdown_ledger()
 
 
 @pytest.mark.asyncio
@@ -1065,9 +1235,9 @@ async def test_spark_pay_invoice_send_error_is_unknown(monkeypatch):
 
     res = await wallet.pay_invoice(_quote("lnbc1fake"), 1000)
     assert res.result == PaymentResult.ERROR
-    assert res.checking_id == "checking-1"
     assert "Payment failed or unknown" in str(res.error_message)
     assert send_request
+    assert res.checking_id == send_request.idempotency_key
     assert send_request.options.prefer_spark is True
     assert (
         send_request.options.completion_timeout_secs
