@@ -132,7 +132,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
         mint_features[MINT_QUOTE_PUBKEY_NUT] = dict(
             supported=True,
-            max_pubkeys=settings.mint_quote_lookup_max_pubkeys,
+            max_pubkeys=min(
+                settings.mint_quote_lookup_max_pubkeys,
+                settings.mint_max_request_length,
+            ),
             max_page_size=settings.mint_quote_lookup_max_page_size,
         )
         return mint_features

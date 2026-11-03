@@ -846,9 +846,12 @@ class Ledger(
             raise CashuError(
                 "Mint quote lookup timestamp is outside the accepted window."
             )
-        if len(payload.pubkeys) > settings.mint_quote_lookup_max_pubkeys:
+        max_pubkeys = min(
+            settings.mint_quote_lookup_max_pubkeys, settings.mint_max_request_length
+        )
+        if len(payload.pubkeys) > max_pubkeys:
             raise BatchSizeExceededError(
-                f"Maximum number of pubkeys is {settings.mint_quote_lookup_max_pubkeys}."
+                f"Maximum number of pubkeys is {max_pubkeys}."
             )
         if not payload.pubkeys:
             raise CashuError("Mint quote lookup pubkeys must not be empty.")

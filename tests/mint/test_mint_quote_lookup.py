@@ -320,6 +320,72 @@ async def test_lookup_continuation_validation(ledger: Ledger, monkeypatch, failu
 
 
 @pytest.mark.asyncio
+async def test_lookup_continuation_with_fresh_authentication(ledger: Ledger, monkeypatch):
+    now = 1788825600
+    monkeypatch.setattr(ledger_module.time, "time", lambda: now)
+    key = PrivateKey()
+    pubkey = key.public_key.format().hex()
+    for index in range(2):
+        await store_quote(ledger, f"refresh-{index}", pubkey)
+
+    initial = signed_payload(ledger, [key], limit=1)
+    page, cursor = await ledger.mint_quotes_by_pubkey(initial)
+    assert [quote.quote for quote in page] == ["refresh-0"]
+    assert cursor
+
+    now += nutxx.TIMESTAMP_WINDOW_SECONDS + 1
+    with pytest.raises(CashuError, match="timestamp.*outside"):
+        await ledger.mint_quotes_by_pubkey(initial.model_copy(update={"cursor": cursor}))
+
+    page, cursor = await ledger.mint_quotes_by_pubkey(
+        signed_payload(ledger, [key], cursor=cursor)
+    )
+    assert [quote.quote for quote in page] == ["refresh-1"]
+    assert cursor is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("max_pubkeys,max_array_length", [(1, 3), (3, 1)])
+async def test_lookup_respects_both_advertised_key_limits(
+    ledger: Ledger, monkeypatch, max_pubkeys, max_array_length
+):
+    from cashu.mint import router
+    from cashu.mint.app import app
+
+    monkeypatch.setattr(router, "ledger", ledger)
+    monkeypatch.setattr(settings, "mint_quote_lookup_max_pubkeys", max_pubkeys)
+    monkeypatch.setattr(settings, "mint_max_request_length", max_array_length)
+    lookup = AsyncMock(return_value=[])
+    verify = Mock(wraps=nutxx.verify_signature)
+    monkeypatch.setattr(ledger.crud, "get_mint_quotes_by_pubkeys", lookup)
+    monkeypatch.setattr(nutxx, "verify_signature", verify)
+    keys = [PrivateKey(), PrivateKey()]
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+    ) as client:
+        response = await client.get("/v1/info")
+        assert response.status_code == 200
+        info = response.json()
+        assert info["max_array_length"] == max_array_length
+        assert info["nuts"][MINT_QUOTE_PUBKEY_NUT]["max_pubkeys"] == 1
+
+        payload = signed_payload(ledger, keys).model_dump(exclude_none=True)
+        response = await client.post("/v1/mint/quote/bolt11/pubkey", json=payload)
+        assert response.status_code == 400
+        assert response.json()["code"] == 11017
+        lookup.assert_not_awaited()
+        verify.assert_not_called()
+
+        payload = signed_payload(ledger, keys[:1]).model_dump(exclude_none=True)
+        response = await client.post("/v1/mint/quote/bolt11/pubkey", json=payload)
+        assert response.status_code == 200
+        assert response.json() == {"quotes": [], "next_cursor": None}
+        lookup.assert_awaited_once()
+        verify.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_lookup_api_pagination_and_limits(ledger: Ledger, monkeypatch):
     from cashu.mint import router
     from cashu.mint.app import app
