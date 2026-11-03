@@ -1449,7 +1449,9 @@ class Ledger(
         if melt_quote.pending:
             raise QuotePendingError(f"melt quote is not unpaid: {melt_quote.state}")
 
-        unit, _ = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, melt_quote.method
+        )
 
         # make sure that the proofs are in the same unit as the quote
         self._verify_proofs_unit(proofs, expected_unit=unit)
@@ -1483,7 +1485,10 @@ class Ledger(
 
         # set quote and proofs to pending to avoid race conditions
         melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
-            quote=melt_quote, proofs=proofs, keysets=self.keysets
+            quote=melt_quote,
+            proofs=proofs,
+            keysets=self.keysets,
+            get_checking_id=self.backends[method][unit].get_payment_checking_id,
         )
 
         try:

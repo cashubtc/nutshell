@@ -186,6 +186,10 @@ class LightningBackend(ABC):
     ) -> Coroutine[None, None, PaymentResponse]:
         pass
 
+    def get_payment_checking_id(self, quote: MeltQuote) -> str:
+        """Derive the attempt's checking ID before sending, without doing I/O."""
+        return quote.checking_id
+
     @abstractmethod
     def get_invoice_status(
         self, checking_id: str

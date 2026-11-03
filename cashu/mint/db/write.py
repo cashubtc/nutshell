@@ -1,7 +1,7 @@
 import secrets
 import time
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from loguru import logger
 
@@ -387,13 +387,17 @@ class DbWriteHelper:
         return quotes
 
     async def _set_melt_quote_pending(
-        self, quote: MeltQuote, conn: Optional[Connection] = None
+        self,
+        quote: MeltQuote,
+        conn: Optional[Connection] = None,
+        get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
     ) -> MeltQuote:
         """Sets the melt quote as pending.
 
         Args:
             quote (MeltQuote): Melt quote to set as pending.
             conn (Optional[Connection]): Connection to use. If not set, a new connection will be created.
+            get_checking_id: Optional derivation using the newly assigned attempt.
         """
         quote_copy = quote.model_copy()
         if not quote.checking_id:
@@ -435,6 +439,9 @@ class DbWriteHelper:
             if current_quote is None:
                 raise TransactionError("Melt quote not found.")
             quote_copy.attempt = _uuid7()
+            if get_checking_id is not None:
+                # Persist the backend identifier with the pending state.
+                quote_copy.checking_id = get_checking_id(quote_copy)
             quote_copy.state = MeltQuoteState.pending
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
@@ -577,6 +584,7 @@ class DbWriteHelper:
         quote: MeltQuote,
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
+        get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -584,6 +592,7 @@ class DbWriteHelper:
             quote (MeltQuote): Melt quote to set as pending.
             proofs (List[Proof]): Proofs to set as pending.
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
+            get_checking_id: Optional derivation using the newly assigned attempt.
 
         Returns:
             MeltQuote: Updated melt quote object.
@@ -603,7 +612,9 @@ class DbWriteHelper:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn
             )
-            quote = await self._set_melt_quote_pending(quote, conn=conn)
+            quote = await self._set_melt_quote_pending(
+                quote, conn=conn, get_checking_id=get_checking_id
+            )
 
         return quote
 
