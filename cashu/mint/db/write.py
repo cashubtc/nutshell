@@ -1,7 +1,7 @@
 import secrets
 import time
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from loguru import logger
 
@@ -388,13 +388,17 @@ class DbWriteHelper:
         return quotes
 
     async def _set_melt_quote_pending(
-        self, quote: MeltQuote, conn: Optional[Connection] = None
+        self,
+        quote: MeltQuote,
+        conn: Optional[Connection] = None,
+        get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
     ) -> MeltQuote:
         """Sets the melt quote as pending.
 
         Args:
             quote (MeltQuote): Melt quote to set as pending.
             conn (Optional[Connection]): Connection to use. If not set, a new connection will be created.
+            get_checking_id: Optional derivation using the newly assigned attempt.
         """
         quote_copy = quote.model_copy()
         if not quote.checking_id:
@@ -436,6 +440,9 @@ class DbWriteHelper:
             if current_quote is None:
                 raise TransactionError("Melt quote not found.")
             quote_copy.attempt = _uuid7()
+            if get_checking_id is not None:
+                # Persist the backend identifier with the pending state.
+                quote_copy.checking_id = get_checking_id(quote_copy)
             quote_copy.state = MeltQuoteState.pending
             # Persist execution ownership with the pending state.
             quote_copy.melt_lock = str(uuid.uuid4())
@@ -597,6 +604,7 @@ class DbWriteHelper:
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
         conn: Optional[Connection] = None,
+        get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -605,6 +613,7 @@ class DbWriteHelper:
             proofs (List[Proof]): Proofs to set as pending.
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
             conn (Optional[Connection]): Database connection to reuse.
+            get_checking_id: Optional derivation using the newly assigned attempt.
 
         Returns:
             MeltQuote: Updated melt quote object.
@@ -625,7 +634,9 @@ class DbWriteHelper:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn
             )
-            quote = await self._set_melt_quote_pending(quote, conn=conn)
+            quote = await self._set_melt_quote_pending(
+                quote, conn=conn, get_checking_id=get_checking_id
+            )
 
         return quote
 
@@ -667,7 +678,7 @@ class DbWriteHelper:
             ]
         ) as conn:
             result = await conn.execute(
-                f"""UPDATE {self.db.table_with_schema('melt_quotes')}
+                f"""UPDATE {self.db.table_with_schema("melt_quotes")}
                 SET melt_lock_expires_at = {self.db.epoch_now} + :ttl
                 WHERE quote = :quote AND attempt = :attempt AND melt_lock = :owner
                 AND state IN ('PENDING', 'PAID') AND melt_lock_expires_at > {self.db.epoch_now}
@@ -726,7 +737,7 @@ class DbWriteHelper:
         ) as conn:
             await conn.execute(
                 f"""
-                UPDATE {self.db.table_with_schema('melt_quotes')}
+                UPDATE {self.db.table_with_schema("melt_quotes")}
                 SET melt_lock = '', melt_lock_expires_at = 0
                 WHERE quote = :quote AND melt_lock = :lock_token
                 """,
@@ -751,7 +762,7 @@ class DbWriteHelper:
         ) as conn:
             result = await conn.execute(
                 f"""
-                UPDATE {self.db.table_with_schema('melt_quotes')}
+                UPDATE {self.db.table_with_schema("melt_quotes")}
                 SET melt_lock = '', melt_lock_expires_at = 0
                 WHERE quote = :quote AND melt_lock != ''
                 """,

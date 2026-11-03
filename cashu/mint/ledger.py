@@ -1520,7 +1520,9 @@ class Ledger(
         if melt_quote.pending:
             raise QuotePendingError(f"melt quote is not unpaid: {melt_quote.state}")
 
-        unit, _ = self._verify_and_get_unit_method(melt_quote.unit, melt_quote.method)
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, melt_quote.method
+        )
 
         # make sure that the proofs are in the same unit as the quote
         self._verify_proofs_unit(proofs, expected_unit=unit)
@@ -1570,7 +1572,11 @@ class Ledger(
                     timeout=settings.mint_melt_execution_timeout_seconds,
                 )
             melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
-                quote=melt_quote, proofs=proofs, keysets=self.keysets, conn=conn
+                quote=melt_quote,
+                proofs=proofs,
+                keysets=self.keysets,
+                conn=conn,
+                get_checking_id=self.backends[method][unit].get_payment_checking_id,
             )
 
         return melt_quote
@@ -1586,7 +1592,9 @@ class Ledger(
             async with maintain_melt_lease(self.db_write, melt_quote):
                 try:
                     return await asyncio.wait_for(
-                        self._execute_melt_payment_with_lease(melt_quote, proofs, outputs),
+                        self._execute_melt_payment_with_lease(
+                            melt_quote, proofs, outputs
+                        ),
                         timeout=settings.mint_melt_execution_timeout_seconds,
                     )
                 except asyncio.TimeoutError:
