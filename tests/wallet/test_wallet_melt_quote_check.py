@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import Optional, cast
 
 import pytest
 import pytest_asyncio
@@ -25,8 +26,10 @@ def quote_resp(amount: int, unit: str = "sat") -> PostMeltQuoteResponse:
     )
 
 
-def check(unit: Unit, amount: int, expected_msat, resp_unit=None):
-    wallet = SimpleNamespace(unit=unit)
+def check(
+    unit: Unit, amount: int, expected_msat: int, resp_unit: Optional[str] = None
+) -> None:
+    wallet = cast(Wallet, SimpleNamespace(unit=unit))
     Wallet._check_melt_quote(
         wallet, quote_resp(amount, resp_unit or unit.name), expected_msat
     )
@@ -64,11 +67,6 @@ def test_check_melt_quote_refuses_overquote(unit, amount, expected_msat):
 def test_check_melt_quote_refuses_other_unit():
     with pytest.raises(Exception, match="Mint quoted in msat"):
         check(Unit.sat, 20, 20_000, resp_unit="msat")
-
-
-def test_check_melt_quote_refuses_unknown_amount():
-    with pytest.raises(Exception, match="invoice has no amount"):
-        check(Unit.sat, 20, None)
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -109,6 +107,17 @@ async def test_melt_quote_overquote_refused_before_storing(
     monkeypatch.setattr(LedgerAPI, "melt_quote", inflated)
     await assert_err(wallet1.melt_quote(invoice), "at most 64 sat")
     assert await get_bolt11_melt_quote(db=wallet1.db, quote=seen["quote"]) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="needs the fake backend's internal invoices")
+async def test_melt_quote_zero_amount_msat_checks_invoice_amount(wallet1: Wallet):
+    # LedgerAPI.melt_quote sends no MPP option for a falsy amount_msat, so the
+    # mint quotes the whole invoice and the check must expect the same.
+    invoice = (await wallet1.request_mint(64)).request
+    quote = await wallet1.melt_quote(invoice, amount_msat=0)
+    assert quote.amount == 64
+    assert await get_bolt11_melt_quote(db=wallet1.db, quote=quote.quote)
 
 
 def mpp_stub(monkeypatch, wallet: Wallet, supported: bool, add: int = 0):

@@ -838,15 +838,21 @@ class Wallet(
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote_resp.fee_reserve)} as fee reserve."
         )
-        self._check_melt_quote(
-            melt_quote_resp, amount_msat or bolt11.decode(invoice).amount_msat
-        )
+        # As in LedgerAPI.melt_quote: a falsy amount_msat means no MPP amount,
+        # and the invoice itself must then carry the amount.
+        if amount_msat:
+            expected_msat = amount_msat
+        else:
+            invoice_amount_msat = bolt11.decode(invoice).amount_msat
+            assert invoice_amount_msat, "invoice must have amount"
+            expected_msat = invoice_amount_msat
+        self._check_melt_quote(melt_quote_resp, expected_msat)
         melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
         await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
         return melt_quote
 
     def _check_melt_quote(
-        self, melt_quote_resp: PostMeltQuoteResponse, expected_msat: Optional[int]
+        self, melt_quote_resp: PostMeltQuoteResponse, expected_msat: int
     ) -> None:
         """Refuses a bolt11 melt quote whose amount exceeds the amount requested.
 
@@ -865,11 +871,6 @@ class Wallet(
             )
         if self.unit not in (Unit.sat, Unit.msat):
             return
-        if expected_msat is None:
-            raise Exception(
-                "Cannot check the melt quote: the invoice has no amount and none"
-                " was given."
-            )
         if self.unit == Unit.sat:
             max_amount = -(-expected_msat // 1000)
         else:
