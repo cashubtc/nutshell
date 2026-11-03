@@ -71,6 +71,7 @@ from ..lightning.base import (
 )
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
+from .db.lease import maintain_melt_lease
 from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
@@ -165,6 +166,7 @@ class Ledger(
     # ------- STARTUP -------
 
     async def startup_ledger(self) -> None:
+        # A starting worker must respect other workers' live execution leases.
         await self._startup_keysets()
         for unitbackends in self.backends.values():
             for backend in unitbackends.values():
@@ -274,8 +276,11 @@ class Ledger(
             return
         logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
         for quote in pending_melt_quotes:
-            quote = await self.get_melt_quote(quote_id=quote.quote)
-            logger.info(f"Melt quote {quote.quote} state: {quote.state}")
+            try:
+                quote = await self.get_melt_quote(quote_id=quote.quote)
+                logger.info(f"Melt quote {quote.quote} state: {quote.state}")
+            except Exception as exc:
+                logger.error(f"Could not recover melt quote {quote.quote}: {exc}")
 
     # ------- ECASH -------
 
@@ -385,8 +390,13 @@ class Ledger(
         *,
         fee_paid: Optional[int] = None,
         preimage: Optional[str] = None,
+        lock_token: Optional[str] = None,
+        expected_attempt: Optional[str] = None,
     ) -> MeltQuote:
-        """Atomically issue change, spend proofs, and mark a melt quote paid."""
+        """Atomically issue change, spend proofs, and mark a melt quote paid.
+
+        Finalization uses the current execution attempt and lease owner.
+        """
         settled_proofs: List[Proof] = []
 
         async with self.db.get_connection(
@@ -405,6 +415,11 @@ class Ledger(
             )
             if not melt_quote:
                 raise TransactionError("Melt quote not found.")
+
+            if not await self.db_write.can_finalize_melt_quote(
+                melt_quote, expected_attempt, lock_token, conn
+            ):
+                return melt_quote
 
             await self._restore_melt_change_dleq(melt_quote, conn)
             settled_proofs = await self.crud.get_pending_proofs_for_quote(
@@ -479,6 +494,8 @@ class Ledger(
 
             if not melt_quote.paid:
                 melt_quote.state = MeltQuoteState.paid
+            melt_quote.melt_lock = ""
+            melt_quote.melt_lock_expires_at = 0
             await self.crud.update_melt_quote(
                 quote=melt_quote,
                 db=self.db,
@@ -500,8 +517,13 @@ class Ledger(
         self,
         quote_id: str,
         expected_attempt: Optional[str] = None,
+        lock_token: Optional[str] = None,
     ) -> MeltQuote:
-        """Finalize the unpaid outcome for the selected melt attempt."""
+        """Finalize the unpaid outcome for the selected melt attempt.
+
+        A leased quote requires its current owner and attempt. Expiry alone
+        does not establish failure; the status resolver checks send uncertainty.
+        """
         released_proofs: List[Proof] = []
 
         async with self.db.get_connection(
@@ -521,18 +543,16 @@ class Ledger(
             if not melt_quote:
                 raise TransactionError("Melt quote not found.")
 
+            if not await self.db_write.can_finalize_melt_quote(
+                melt_quote, expected_attempt, lock_token, conn
+            ):
+                return melt_quote
+
             # Return the existing paid result.
             if melt_quote.paid:
                 await self._restore_melt_change_dleq(melt_quote, conn)
                 return melt_quote
             if melt_quote.unpaid:
-                return melt_quote
-            if expected_attempt is not None and melt_quote.attempt != expected_attempt:
-                logger.warning(
-                    f"Not failing melt quote {quote_id}: attempt nonce changed "
-                    f"from {expected_attempt} to {melt_quote.attempt} since the "
-                    "payment failure was observed (quote was re-melted)."
-                )
                 return melt_quote
             if not melt_quote.pending:
                 raise TransactionError(
@@ -562,6 +582,8 @@ class Ledger(
                 conn=conn,
             )
             melt_quote.state = MeltQuoteState.unpaid
+            melt_quote.melt_lock = ""
+            melt_quote.melt_lock_expires_at = 0
             await self.crud.update_melt_quote(
                 quote=melt_quote,
                 db=self.db,
@@ -579,6 +601,10 @@ class Ledger(
         self,
         quote_id: str,
         checking_id: str,
+        *,
+        expected_attempt: Optional[str] = None,
+        lock_token: Optional[str] = None,
+        payment_uncertain: Optional[bool] = None,
     ) -> MeltQuote:
         """Update the backend checking ID within the quote transaction."""
         async with self.db.get_connection(
@@ -597,7 +623,13 @@ class Ledger(
             )
             if not melt_quote:
                 raise TransactionError("Melt quote not found.")
+            if not await self.db_write.can_finalize_melt_quote(
+                melt_quote, expected_attempt, lock_token, conn
+            ):
+                raise TransactionError("Melt execution lease lost.")
             melt_quote.checking_id = checking_id
+            if payment_uncertain is not None:
+                melt_quote.payment_uncertain = payment_uncertain
             await self.crud.update_melt_quote(
                 quote=melt_quote,
                 db=self.db,
@@ -1159,14 +1191,15 @@ class Ledger(
         )
 
     async def _resolve_melt_payment_status(
-        self, melt_quote: MeltQuote
+        self, melt_quote: MeltQuote, lock_token: Optional[str] = None
     ) -> Tuple[MeltQuote, PaymentStatus]:
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
         )
         try:
-            status = await self.backends[method][unit].get_payment_status(
-                melt_quote.checking_id
+            status = await asyncio.wait_for(
+                self.backends[method][unit].get_payment_status(melt_quote.checking_id),
+                timeout=min(10, settings.mint_melt_lease_seconds / 2),
             )
         except Exception as e:
             logger.error(
@@ -1187,11 +1220,18 @@ class Ledger(
                         status.fee.to(unit, round="up").amount if status.fee else None
                     ),
                     preimage=status.preimage,
+                    lock_token=lock_token,
+                    expected_attempt=melt_quote.attempt,
                 )
             case PaymentStatusResult.FAILED:
+                if melt_quote.payment_uncertain:
+                    # Await a definitive outcome before completing reconciliation.
+                    return melt_quote, status
                 logger.debug(f"Setting quote {melt_quote.quote} as unpaid")
                 melt_quote = await self._finalize_melt_failed(
-                    melt_quote.quote, expected_attempt=melt_quote.attempt
+                    melt_quote.quote,
+                    expected_attempt=melt_quote.attempt,
+                    lock_token=lock_token,
                 )
             case (
                 PaymentStatusResult.PENDING
@@ -1208,6 +1248,10 @@ class Ledger(
         If the melt quote is pending, checks status of the payment with the backend.
             - If settled, sets the quote as paid and invalidates pending proofs (commit).
             - If failed, sets the quote as unpaid and unsets pending proofs (rollback).
+
+        A valid execution lease blocks reconciliation by other workers. Recovery
+        claims expired ownership before checking status. Ambiguous payments keep
+        their proofs reserved until settlement is confirmed.
 
         Args:
             quote_id (str): ID of the melt quote.
@@ -1231,10 +1275,15 @@ class Ledger(
                 db=self.db,
             )
             if pending_proofs:
+                claimed = await self.db_write.claim_melt_quote_lease(melt_quote)
+                if not claimed:
+                    return melt_quote
                 return await self._finalize_melt_paid(
                     quote_id,
                     fee_paid=melt_quote.fee_paid,
                     preimage=melt_quote.payment_preimage,
+                    lock_token=claimed.melt_lock,
+                    expected_attempt=claimed.attempt,
                 )
 
         # we only check the state with the backend if there is no associated internal
@@ -1245,12 +1294,26 @@ class Ledger(
 
         is_internal = mint_quote is not None and mint_quote.unit == melt_quote.unit
 
-        if melt_quote.pending and not is_internal:
-            logger.debug(
-                "Lightning: checking outgoing Lightning payment"
-                f" {melt_quote.checking_id}"
-            )
-            melt_quote, _ = await self._resolve_melt_payment_status(melt_quote)
+        if melt_quote.pending:
+            claimed = await self.db_write.claim_melt_quote_lease(melt_quote)
+            if claimed:
+                try:
+                    if is_internal:
+                        proofs = await self.crud.get_pending_proofs_for_quote(
+                            quote_id=quote_id, db=self.db
+                        )
+                        await self.melt_mint_settle_internally(claimed, proofs)
+                        melt_quote = await self._finalize_melt_paid(
+                            quote_id,
+                            lock_token=claimed.melt_lock,
+                            expected_attempt=claimed.attempt,
+                        )
+                    else:
+                        melt_quote, _ = await self._resolve_melt_payment_status(
+                            claimed, lock_token=claimed.melt_lock
+                        )
+                finally:
+                    await self.db_write.unlock_melt_quote(quote_id, claimed.melt_lock)
 
         return melt_quote
 
@@ -1316,6 +1379,14 @@ class Ledger(
             )
             if not melt_quote:
                 raise TransactionError("Melt quote not found.")
+
+            if not await self.db_write.can_finalize_melt_quote(
+                melt_quote,
+                melt_quote_arg.attempt,
+                melt_quote_arg.melt_lock or None,
+                conn,
+            ):
+                raise TransactionError("Melt execution lease lost.")
 
             if melt_quote.paid:
                 raise InvoiceAlreadyPaidError("melt quote already paid")
@@ -1483,28 +1554,63 @@ class Ledger(
         if melt_quote.expiry is not None and melt_quote.expiry < time.time():
             raise QuoteExpiredError("quote expired")
 
-        # set quote and proofs to pending to avoid race conditions
-        melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
-            quote=melt_quote,
-            proofs=proofs,
-            keysets=self.keysets,
-            get_checking_id=self.backends[method][unit].get_payment_checking_id,
-        )
-
-        try:
-            # store the change outputs
+        async with self.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="checking_id = :checking_id",
+                    parameters={"checking_id": melt_quote.checking_id},
+                ),
+                LockOptions(table="proofs_pending", timeout=1),
+            ],
+        ) as conn:
             if outputs:
-                await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
-        except Exception as e:
-            logger.debug(f"Melt failed before backend payment: {e}")
-            await self._finalize_melt_failed(
-                melt_quote.quote, expected_attempt=melt_quote.attempt
+                await asyncio.wait_for(
+                    self._store_blinded_messages(
+                        outputs, melt_id=melt_quote.quote, conn=conn
+                    ),
+                    timeout=settings.mint_melt_execution_timeout_seconds,
+                )
+            melt_quote = await self.db_write.verify_and_set_melt_quote_pending(
+                quote=melt_quote,
+                proofs=proofs,
+                keysets=self.keysets,
+                conn=conn,
+                get_checking_id=self.backends[method][unit].get_payment_checking_id,
             )
-            raise e
 
         return melt_quote
 
     async def _execute_melt_payment(
+        self,
+        melt_quote: MeltQuote,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]],
+    ) -> PostMeltQuoteResponse:
+        lock_token = melt_quote.melt_lock
+        try:
+            async with maintain_melt_lease(self.db_write, melt_quote):
+                try:
+                    return await asyncio.wait_for(
+                        self._execute_melt_payment_with_lease(
+                            melt_quote, proofs, outputs
+                        ),
+                        timeout=settings.mint_melt_execution_timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(f"Melt execution timed out: {melt_quote.quote}")
+                    # Cancelling a local task does not cancel a Lightning payment.
+                    current = await self.crud.get_melt_quote(
+                        quote_id=melt_quote.quote, db=self.db
+                    )
+                    assert current is not None
+                    return PostMeltQuoteResponse.from_melt_quote(current)
+        finally:
+            # Terminal finalization already clears the lease atomically. All
+            # other exits release only ownership, leaving PENDING proofs reserved.
+            await self.db_write.unlock_melt_quote(melt_quote.quote, lock_token)
+
+    async def _execute_melt_payment_with_lease(
         self,
         melt_quote: MeltQuote,
         proofs: List[Proof],
@@ -1527,6 +1633,8 @@ class Ledger(
                     melt_quote.quote,
                     fee_paid=melt_quote.fee_paid,
                     preimage=melt_quote.payment_preimage,
+                    lock_token=melt_quote.melt_lock,
+                    expected_attempt=melt_quote.attempt,
                 )
                 return PostMeltQuoteResponse.from_melt_quote(melt_quote)
             # Expiry during preparation is still safe to roll back before payment.
@@ -1535,7 +1643,9 @@ class Ledger(
         except Exception as e:
             logger.debug(f"Melt failed before backend payment: {e}")
             await self._finalize_melt_failed(
-                melt_quote.quote, expected_attempt=melt_quote.attempt
+                melt_quote.quote,
+                expected_attempt=melt_quote.attempt,
+                lock_token=melt_quote.melt_lock,
             )
             raise e
 
@@ -1561,10 +1671,6 @@ class Ledger(
                 logger.warning(
                     f"pay_invoice returned different checking_id: {payment.checking_id} than melt quote: {melt_quote.checking_id}. Will use it for potentially checking payment status later."
                 )
-                melt_quote = await self._update_melt_checking_id(
-                    melt_quote.quote,
-                    payment.checking_id,
-                )
         except Exception as e:
             logger.error(f"Exception during pay_invoice: {e}")
             payment = PaymentResponse(
@@ -1572,15 +1678,31 @@ class Ledger(
                 error_message=str(e),
             )
 
+        # A response for this send establishes that it completed or was accepted.
+        # Exceptions/ERROR do not: the request may still be reaching the backend.
+        melt_quote = await self._update_melt_checking_id(
+            melt_quote.quote,
+            payment.checking_id or melt_quote.checking_id,
+            expected_attempt=melt_quote.attempt,
+            lock_token=melt_quote.melt_lock,
+            payment_uncertain=payment.error,
+        )
+
         match payment.result:
-            case PaymentResult.FAILED | PaymentResult.ERROR:
+            case PaymentResult.ERROR:
+                # Keep the payment uncertain after releasing execution ownership.
+                return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+
+            case PaymentResult.FAILED:
                 logger.debug(
                     f"Payment state is {payment.result.name}.{' Error: ' + payment.error_message + '.' if payment.error_message else ''} Checking status for {melt_quote.checking_id}."
                 )
-                melt_quote, status = await self._resolve_melt_payment_status(melt_quote)
+                melt_quote, status = await self._resolve_melt_payment_status(
+                    melt_quote, lock_token=melt_quote.melt_lock
+                )
                 if melt_quote.paid:
                     return PostMeltQuoteResponse.from_melt_quote(melt_quote)
-                if status.failed:
+                if status.failed and melt_quote.unpaid:
                     if status.error_message:
                         logger.error(f"Status check error: {status.error_message}")
                     raise LightningPaymentFailedError(
@@ -1595,6 +1717,8 @@ class Ledger(
                         payment.fee.to(unit, round="up").amount if payment.fee else None
                     ),
                     preimage=payment.preimage,
+                    lock_token=melt_quote.melt_lock,
+                    expected_attempt=melt_quote.attempt,
                 )
                 return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
@@ -1608,6 +1732,8 @@ class Ledger(
             melt_quote.quote,
             fee_paid=melt_quote.fee_paid,
             preimage=melt_quote.payment_preimage,
+            lock_token=melt_quote.melt_lock,
+            expected_attempt=melt_quote.attempt,
         )
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 

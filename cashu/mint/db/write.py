@@ -24,6 +24,7 @@ from ...core.errors import (
     QuotePendingError,
     TransactionError,
 )
+from ...core.settings import settings
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
 from .read import DbReadHelper
@@ -443,6 +444,13 @@ class DbWriteHelper:
                 # Persist the backend identifier with the pending state.
                 quote_copy.checking_id = get_checking_id(quote_copy)
             quote_copy.state = MeltQuoteState.pending
+            # Persist execution ownership with the pending state.
+            quote_copy.melt_lock = str(uuid.uuid4())
+            quote_copy.melt_lock_expires_at = (
+                await self._lease_time(conn) + settings.mint_melt_lease_seconds
+            )
+            # Record the send outcome before completing reconciliation.
+            quote_copy.payment_uncertain = True
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)
@@ -481,8 +489,14 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not found.")
             if quote_db.state != MeltQuoteState.pending:
                 raise TransactionError("Melt quote not pending.")
+            if not await self.can_finalize_melt_quote(
+                quote_db, quote.attempt, quote.melt_lock or None, conn
+            ):
+                raise TransactionError("Melt execution lease lost.")
             # Apply the transition to the row read within this transaction.
             quote_db.state = state
+            quote_db.melt_lock = ""
+            quote_db.melt_lock_expires_at = 0
             await self.crud.update_melt_quote(quote=quote_db, db=self.db, conn=conn)
 
         await self.events.submit(quote_db)
@@ -535,6 +549,11 @@ class DbWriteHelper:
             )
             if not melt_quote:
                 raise TransactionError("Melt quote not found.")
+            if melt_quote.locked:
+                raise TransactionError(
+                    "Melt quote is locked by an in-flight payment executor. "
+                    "Release the lock explicitly first (UnlockNut05Quote)."
+                )
             melt_quote.state = state
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
 
@@ -584,6 +603,7 @@ class DbWriteHelper:
         quote: MeltQuote,
         proofs: List[Proof],
         keysets: Dict[str, MintKeyset],
+        conn: Optional[Connection] = None,
         get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
@@ -592,6 +612,7 @@ class DbWriteHelper:
             quote (MeltQuote): Melt quote to set as pending.
             proofs (List[Proof]): Proofs to set as pending.
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
+            conn (Optional[Connection]): Database connection to reuse.
             get_checking_id: Optional derivation using the newly assigned attempt.
 
         Returns:
@@ -608,6 +629,7 @@ class DbWriteHelper:
                 ),
                 LockOptions(table="proofs_pending", timeout=1),
             ],
+            conn=conn,
         ) as conn:
             await self._verify_spent_proofs_and_set_pending(
                 proofs, keysets, quote_id=quote.quote, conn=conn
@@ -617,6 +639,136 @@ class DbWriteHelper:
             )
 
         return quote
+
+    async def _lease_time(self, conn: Connection) -> float:
+        row = await conn.fetchone(f"SELECT {self.db.epoch_now} AS lease_now")
+        assert row is not None
+        return float(row["lease_now"])
+
+    async def melt_lease_valid(self, quote: MeltQuote, conn: Connection) -> bool:
+        return bool(quote.melt_lock) and (
+            quote.melt_lock_expires_at > await self._lease_time(conn)
+        )
+
+    async def can_finalize_melt_quote(
+        self,
+        quote: MeltQuote,
+        expected_attempt: Optional[str],
+        lock_token: Optional[str],
+        conn: Connection,
+    ) -> bool:
+        """Check execution-attempt and lease ownership for finalization."""
+        if expected_attempt is not None and quote.attempt != expected_attempt:
+            return False
+        if lock_token is None:
+            return not quote.melt_lock
+        return quote.melt_lock == lock_token and await self.melt_lease_valid(
+            quote, conn
+        )
+
+    async def renew_melt_quote_lease(self, quote: MeltQuote) -> bool:
+        """Only a still-valid owner may renew; an expired lease cannot be revived."""
+        async with self.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote.quote},
+                )
+            ]
+        ) as conn:
+            result = await conn.execute(
+                f"""UPDATE {self.db.table_with_schema("melt_quotes")}
+                SET melt_lock_expires_at = {self.db.epoch_now} + :ttl
+                WHERE quote = :quote AND attempt = :attempt AND melt_lock = :owner
+                AND state IN ('PENDING', 'PAID') AND melt_lock_expires_at > {self.db.epoch_now}
+                """,
+                {
+                    "quote": quote.quote,
+                    "attempt": quote.attempt,
+                    "owner": quote.melt_lock,
+                    "ttl": settings.mint_melt_lease_seconds,
+                },
+            )
+            return result.rowcount > 0
+
+    async def claim_melt_quote_lease(self, quote: MeltQuote) -> Optional[MeltQuote]:
+        """Claim recovery of the same attempt, without authorizing another send."""
+        async with self.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote.quote},
+                )
+            ]
+        ) as conn:
+            current = await self.crud.get_melt_quote(
+                quote_id=quote.quote, db=self.db, conn=conn
+            )
+            if not current or current.attempt != quote.attempt:
+                return None
+            if not (current.pending or current.paid):
+                return None
+            if await self.melt_lease_valid(current, conn):
+                return None
+            current.melt_lock = str(uuid.uuid4())
+            current.melt_lock_expires_at = (
+                await self._lease_time(conn) + settings.mint_melt_lease_seconds
+            )
+            await self.crud.update_melt_quote(quote=current, db=self.db, conn=conn)
+            return current
+
+    async def unlock_melt_quote(self, quote_id: str, lock_token: str) -> None:
+        """Release the melt execution lock if it is still held by `lock_token`.
+
+        Called whenever an executor exits. Terminal finalization already clears
+        the lock, so this is then a no-op. Otherwise the quote and proofs stay
+        PENDING and status pollers or reconciliation may resolve the payment.
+        """
+        async with self.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
+        ) as conn:
+            await conn.execute(
+                f"""
+                UPDATE {self.db.table_with_schema("melt_quotes")}
+                SET melt_lock = '', melt_lock_expires_at = 0
+                WHERE quote = :quote AND melt_lock = :lock_token
+                """,
+                {"quote": quote_id, "lock_token": lock_token},
+            )
+
+    async def force_unlock_melt_quote(self, quote_id: str) -> bool:
+        """Release the melt execution lock regardless of the holder (operator
+        override). Returns True if a lock was released.
+
+        The quote and proofs stay in their current states. Late executor
+        writes are fenced, and recovery keeps uncertain payments pending.
+        """
+        async with self.db.get_connection(
+            locks=[
+                LockOptions(
+                    table="melt_quotes",
+                    select_statement="quote = :quote",
+                    parameters={"quote": quote_id},
+                )
+            ],
+        ) as conn:
+            result = await conn.execute(
+                f"""
+                UPDATE {self.db.table_with_schema("melt_quotes")}
+                SET melt_lock = '', melt_lock_expires_at = 0
+                WHERE quote = :quote AND melt_lock != ''
+                """,
+                {"quote": quote_id},
+            )
+        return result.rowcount > 0
 
     async def unset_melt_quote_pending_and_proofs(
         self,
@@ -645,8 +797,8 @@ class DbWriteHelper:
                 LockOptions(table="proofs_pending", timeout=1),
             ],
         ) as conn:
-            await self._unset_proofs_pending(proofs, keysets, spent=False, conn=conn)
             quote = await self._unset_melt_quote_pending(quote, state, conn=conn)
+            await self._unset_proofs_pending(proofs, keysets, spent=False, conn=conn)
             # Clean up blinded messages associated with this melt
             await self.crud.delete_blinded_messages_melt_id(
                 melt_id=quote.quote, db=self.db, conn=conn
@@ -751,6 +903,11 @@ class DbWriteHelper:
             if not quote_db:
                 raise TransactionError("Melt quote not found.")
 
+            if not await self.can_finalize_melt_quote(
+                quote_db, quote.attempt, quote.melt_lock or None, conn
+            ):
+                raise TransactionError("Melt execution lease lost.")
+
             # 1. Release the pending reservation and debit the final spend.
             await self.finalize_pending_proofs(
                 proofs=proofs,
@@ -764,6 +921,8 @@ class DbWriteHelper:
             if quote_db.state != MeltQuoteState.paid:
                 quote_db.state = MeltQuoteState.paid
                 quote_db.paid_time = int(time.time())
+            quote_db.melt_lock = ""
+            quote_db.melt_lock_expires_at = 0
             await self.crud.update_melt_quote(quote=quote_db, db=self.db, conn=conn)
 
         # Events

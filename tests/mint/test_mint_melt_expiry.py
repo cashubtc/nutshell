@@ -18,7 +18,7 @@ from cashu.lightning.base import (
 from cashu.lightning.lnd_grpc.lnd_grpc import LndRPCWallet
 from cashu.lightning.lndrest import LndRestWallet
 from cashu.mint.ledger import Ledger
-from tests.helpers import get_fake_invoice, is_regtest
+from tests.helpers import expire_melt_lease, get_fake_invoice, is_regtest
 from tests.mint.invoice_amount_helpers import make_outputs, unblind_promises
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.skipif(is_regtest, reason="fake wallet")]
@@ -324,6 +324,7 @@ async def test_expired_pending_quote_still_uses_backend_status(
     status = AsyncMock(return_value=PaymentStatus(result=result))
     monkeypatch.setattr(backend, "get_payment_status", status)
     monkeypatch.setattr("cashu.mint.ledger.time.time", lambda: now + 120)
+    await expire_melt_lease(ledger, quote.quote)
 
     resolved = await ledger.get_melt_quote(quote.quote)
 

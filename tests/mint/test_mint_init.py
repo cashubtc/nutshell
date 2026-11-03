@@ -11,6 +11,7 @@ from loguru import logger
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import (
     PaymentStatus,
@@ -24,6 +25,8 @@ from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     SLEEP_TIME,
     cancel_invoice,
+    expire_melt_lease,
+    get_fake_invoice,
     get_hold_invoice,
     get_real_invoice,
     is_fake,
@@ -298,6 +301,51 @@ async def test_startup_fakewallet_pending_quote_error(ledger: Ledger):
     assert states[0].pending
 
 
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="deterministic test uses FakeWallet knobs")
+async def test_startup_recovers_expired_leases(
+    ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
+):
+    """Recovery respects a valid lease and takes over after a dead owner expires."""
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
+    proofs = wallet.proofs
+
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=get_fake_invoice(62))
+        )
+    ).quote
+
+    # Model a process dying after committing PENDING without running cleanup.
+    q = await ledger._prepare_melt(proofs=proofs, quote=quote_id)
+    monkeypatch.setattr(settings, "fakewallet_payment_state", "SETTLED")
+    assert q.locked
+
+    # the quote is locked, so pollers ignore it
+    view = await ledger.get_melt_quote(quote_id)
+    assert view.pending
+
+    # Another worker's startup must not revoke this still-valid lease.
+    await ledger.startup_ledger()
+    view = await ledger.get_melt_quote(quote_id)
+    assert view.pending and view.melt_lock == q.melt_lock
+    # Stop this worker's routine so this test controls recovery deterministically.
+    for task in ledger.regular_tasks:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    await expire_melt_lease(ledger, quote_id)
+
+    # the regular reconciliation path now resolves the settled payment
+    resolved = await ledger.get_melt_quote(quote_id)
+    assert resolved.paid
+
+
 async def start_unrecorded_melt(ledger, quote, proofs):
     """Send through the real backend without recording its result in the mint.
 
@@ -334,6 +382,8 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     await wait_for_hold_invoice(invoice_payment_request)
     await asyncio.sleep(SLEEP_TIME)
 
+    # The dead executor stops renewing; recovery begins when its lease expires.
+    await expire_melt_lease(ledger, quote.quote)
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
@@ -389,6 +439,8 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     # The payment has finished, but its result has not been recorded by the mint.
     pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
     assert pending and pending.pending
+    # The dead executor stops renewing; recovery begins when its lease expires.
+    await expire_melt_lease(ledger, quote.quote)
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
@@ -443,17 +495,19 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     # The payment has finished, but its result has not been recorded by the mint.
     pending = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
     assert pending and pending.pending
+    # The dead executor stops renewing; recovery begins when its lease expires.
+    await expire_melt_lease(ledger, quote.quote)
     await ledger._check_pending_proofs_and_melt_quotes()
 
-    # expect that no melt quote is pending
+    # Check reconciliation for the interrupted payment.
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
         db=ledger.db
     )
-    assert not melt_quotes
+    assert melt_quotes and melt_quotes[0].pending
 
-    # expect that proofs are unspent
+    # An uncertain payment must retain its proof reservation.
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
-    assert all([s.unspent for s in states])
+    assert all([s.pending for s in states])
 
 
 @pytest.mark.asyncio
@@ -501,6 +555,8 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     await asyncio.sleep(SLEEP_TIME)
 
+    # The dead executor stops renewing; recovery begins when its lease expires.
+    await expire_melt_lease(ledger, quote.quote)
     # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 

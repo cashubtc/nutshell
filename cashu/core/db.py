@@ -46,6 +46,13 @@ class Compat:
     type: Optional[str] = "<inherited>"
     schema: Optional[str] = "<inherited>"
 
+    @property
+    def epoch_now(self) -> str:
+        """Database time in Unix seconds, for comparing persisted leases."""
+        if self.type in {POSTGRES, COCKROACH}:
+            return "EXTRACT(EPOCH FROM clock_timestamp())"
+        return "((julianday('now') - 2440587.5) * 86400.0)"
+
     def interval_seconds(self, seconds: int) -> str:
         if self.type in {POSTGRES, COCKROACH}:
             return f"interval '{seconds} seconds'"

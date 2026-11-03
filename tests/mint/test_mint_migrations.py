@@ -185,6 +185,9 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
         await crud.store_melt_quote(quote=quote, db=db)
 
         await mint_migrations.m039_add_attempt_to_melt_quotes(db)
+        # current write paths also use the melt_lock column added by m041
+        await mint_migrations.m041_add_melt_lock_to_melt_quotes(db)
+        await mint_migrations.m042_add_melt_execution_leases(db)
 
         loaded = await crud.get_melt_quote(quote_id=quote.quote, db=db)
         assert loaded is not None
@@ -490,3 +493,29 @@ async def test_auth_m005_migration_preserves_existing_promises(tmp_path):
     assert signature.C_ == c_
     assert signature.amount == 1
     assert signature.id == "keyset_id"
+
+
+@pytest.mark.asyncio
+async def test_m042_marks_existing_pending_payments_uncertain(tmp_path):
+    db = Database("mint", str(tmp_path / "lease_migration"))
+    try:
+        async with db.connect() as conn:
+            await conn.execute(
+                "CREATE TABLE melt_quotes (quote TEXT PRIMARY KEY, state TEXT, melt_lock TEXT)"
+            )
+            for state in ("PENDING", "PAID", "UNPAID"):
+                await conn.execute(
+                    "INSERT INTO melt_quotes VALUES (:state, :state, 'old-owner')",
+                    {"state": state},
+                )
+        await mint_migrations.m042_add_melt_execution_leases(db)
+        rows = await db.fetchall("SELECT * FROM melt_quotes")
+        assert all(row["melt_lock_expires_at"] == 0 for row in rows)
+        assert all(row["melt_lock"] == "old-owner" for row in rows)
+        assert {row["state"]: bool(row["payment_uncertain"]) for row in rows} == {
+            "PENDING": True,
+            "PAID": False,
+            "UNPAID": False,
+        }
+    finally:
+        await db.engine.dispose()

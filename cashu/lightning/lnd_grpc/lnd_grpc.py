@@ -304,12 +304,19 @@ class LndRPCWallet(LightningBackend):
                     ].mpp_record.total_amt_msat = total_amount_msat
 
                     # Send to route request
-                    response = await router_stub.SendToRouteV2(
-                        routerrpc.SendToRouteRequest(
-                            payment_hash=bytes.fromhex(invoice.payment_hash),
-                            route=route.routes[0],  # type: ignore
+                    try:
+                        response = await router_stub.SendToRouteV2(
+                            routerrpc.SendToRouteRequest(
+                                payment_hash=bytes.fromhex(invoice.payment_hash),
+                                route=route.routes[0],  # type: ignore
+                            )
                         )
-                    )
+                    except AioRpcError as e:
+                        # The payment may still execute after the RPC fails.
+                        return PaymentResponse(
+                            result=PaymentResult.ERROR,
+                            error_message=f"SendToRouteV2 failed: {e}",
+                        )
                     assert route and response
                     if response.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
                         if (
@@ -328,7 +335,7 @@ class LndRPCWallet(LightningBackend):
                             continue
                     break
         except AioRpcError as e:
-            logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
+            logger.error(f"QueryRoutes failed: {e}")
             err_msg = str(e)
             if settings.mint_lnd_allow_self_payment and (
                 "target not found" in err_msg.lower() or "no route" in err_msg.lower()

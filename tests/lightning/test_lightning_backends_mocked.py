@@ -39,6 +39,7 @@ from cashu.lightning.strike import StrikeWallet
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.ledger import Ledger
 from cashu.wallet.lightning import LightningWallet
+from tests.helpers import expire_melt_lease
 
 
 def _response(status_code: int, json_data=None, text: str = "") -> httpx.Response:
@@ -1007,6 +1008,7 @@ async def test_spark_melt_lifecycle_reconciliation(
         restarted = SparkL2Wallet(Unit.sat)
         restarted.sdk = sdk
         monkeypatch.setitem(ledger.backends[Method.bolt11], Unit.sat, restarted)
+        await expire_melt_lease(ledger, quote.quote)
 
     recovered = await ledger.get_melt_quote(quote.quote)
     assert recovered.pending
@@ -1025,8 +1027,9 @@ async def test_spark_melt_lifecycle_reconciliation(
             assert (await ledger.get_melt_quote(quote.quote)).paid
             assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].spent
         else:
-            assert (await ledger.get_melt_quote(quote.quote)).unpaid
-            assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].unspent
+            reconciled = await ledger.get_melt_quote(quote.quote)
+            assert reconciled.pending and reconciled.payment_uncertain
+            assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].pending
     sdk.list_payments.assert_not_awaited()
 
 
