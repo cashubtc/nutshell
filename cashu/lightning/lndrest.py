@@ -13,6 +13,7 @@ from bolt11 import (
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -115,14 +116,35 @@ class LndRestWallet(LightningBackend):
             self.cert = False
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
-        self.client = httpx.AsyncClient(
+        self.client = self._create_client()
+        if self.supports_mpp:
+            logger.info("LNDRestWallet enabling MPP feature")
+
+    def _create_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
             base_url=self.endpoint,
             headers=self.auth,
             verify=self.cert,
             timeout=None,
         )
-        if self.supports_mpp:
-            logger.info("LNDRestWallet enabling MPP feature")
+
+    async def startup(self) -> None:
+        if self.client.is_closed:
+            self.client = self._create_client()
+
+    async def cleanup(self) -> None:
+        try:
+            await self.client.aclose()
+        except RuntimeError as e:
+            logger.warning(f"Error closing wallet connection: {e}")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         try:

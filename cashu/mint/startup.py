@@ -12,7 +12,7 @@ from loguru import logger
 import cashu.mint.management_rpc.management_rpc as management_rpc
 
 from ..core.base import Method, Unit
-from ..core.db import Database
+from ..core.db import Database, mask_db_location
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -31,6 +31,7 @@ logger.debug("Enviroment Settings:")
 for key, value in settings.model_dump().items():
     if key in [
         "mint_private_key",
+        "mint_mnemonic",
         "mint_seed_decryption_key",
         "mint_auth_private_key",
         "mint_strike_key",
@@ -43,8 +44,8 @@ for key, value in settings.model_dump().items():
     ]:
         value = "********" if value is not None else None
 
-    if key == "mint_database" and value and value.startswith("postgres://"):
-        value = "postgres://********"
+    if key in ["mint_database", "mint_test_database", "mint_auth_database"]:
+        value = mask_db_location(value)
 
     logger.debug(f"{key}: {value}")
 
@@ -74,8 +75,13 @@ if settings.mint_backend_bolt11_eur:
 if not backends:
     raise Exception("No backends are set.")
 
-if not settings.mint_private_key:
-    raise Exception("No mint private key is set.")
+if not settings.mint_private_key and not settings.mint_mnemonic:
+    raise Exception("No mint private key or mnemonic is set.")
+if not settings.mint_mnemonic:
+    logger.warning(
+        "MINT_PRIVATE_KEY is deprecated. Set MINT_MNEMONIC to derive new keysets"
+        " from a BIP-39 mnemonic."
+    )
 
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
@@ -87,11 +93,13 @@ ledger = Ledger(
 )
 
 # start auth ledger
-# fall back to a seed derived from the mint private key if no dedicated
-# auth private key is configured
+# fall back to a seed derived from the mint private key or mnemonic if no
+# dedicated auth private key is configured
 auth_seed = (
     settings.mint_auth_private_key
-    or hashlib.sha256(f"auth:{settings.mint_private_key}".encode()).hexdigest()
+    or hashlib.sha256(
+        f"auth:{settings.mint_private_key or settings.mint_mnemonic}".encode()
+    ).hexdigest()
 )
 auth_ledger = AuthLedger(
     db=Database("auth", settings.mint_auth_database),

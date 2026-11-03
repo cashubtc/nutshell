@@ -19,6 +19,7 @@ from bolt11 import (
 )
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -117,6 +118,24 @@ class FakeWallet(LightningBackend):
         self.assert_unit_supported(unit)
         self.unit = unit
         self._paid_invoices_queue = None
+        self.tasks: set[asyncio.Task] = set()
+
+    async def cleanup(self) -> None:
+        """Cancel and await simulated incoming payments before shutdown."""
+        for task in self.tasks:
+            task.cancel()
+        if self.tasks:
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+            self.tasks.clear()
+        self._paid_invoices_queue = None
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         return StatusResponse(
@@ -233,7 +252,9 @@ class FakeWallet(LightningBackend):
         payment_request = encode(bolt11, self.privkey)
 
         if settings.fakewallet_brr:
-            asyncio.create_task(self.mark_invoice_paid(bolt11))
+            task = asyncio.create_task(self.mark_invoice_paid(bolt11))
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
 
         return InvoiceResponse(
             ok=True, checking_id=payment_hash, payment_request=payment_request

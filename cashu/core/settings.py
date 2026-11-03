@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "0.21.0"
+VERSION = "0.22.0"
 
 
 def find_env_file():
@@ -47,6 +47,7 @@ class EnvSettings(CashuSettings):
 
 class MintSettings(CashuSettings):
     mint_private_key: Optional[str] = Field(default=None)
+    mint_mnemonic: Optional[str] = Field(default=None)
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
@@ -82,6 +83,9 @@ class MintSettings(CashuSettings):
         title="Regular tasks interval",
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
+
+    mint_melt_lease_seconds: int = Field(default=60, gt=0)
+    mint_melt_execution_timeout_seconds: int = Field(default=120, gt=0)
 
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
@@ -362,6 +366,8 @@ class AuthSettings(MintSettings):
 
 
 class MintRedisCache(MintSettings):
+    mint_memory_cache_max_entries: int = Field(default=10_000, gt=0)
+    mint_memory_cache_max_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
     mint_redis_cache_enabled: bool = Field(default=False)
     mint_redis_cache_url: Optional[str] = Field(default=None)
     mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week

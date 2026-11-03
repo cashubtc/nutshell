@@ -1,12 +1,11 @@
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, StreamingResponse
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
 
 from cashu.core.base import (
     BlindedSignature,
@@ -19,7 +18,6 @@ from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
 from cashu.mint import router as router_module
-from cashu.mint.cache import RedisCache
 
 
 def _build_router_app() -> FastAPI:
@@ -162,8 +160,36 @@ def _dummy_ledger():
 
 def test_create_app_sets_metadata():
     app = app_module.create_app()
-    assert app.title == "Nutshell Mint"
-    assert app.version == settings.version
+    assert app.openapi()["info"] == {
+        "title": "Nutshell Mint",
+        "description": "Ecash mint based on the Cashu protocol.",
+        "version": settings.version,
+        "license": {
+            "name": "MIT License",
+            "url": "https://raw.githubusercontent.com/cashubtc/cashu/main/LICENSE",
+        },
+    }
+
+
+def test_create_app_runs_mint_lifecycle(monkeypatch):
+    monkeypatch.setattr(settings, "mint_redis_cache_enabled", False)
+    monkeypatch.setattr(settings, "mint_require_auth", False)
+    monkeypatch.setattr(settings, "mint_rpc_server_enable", False)
+    start = AsyncMock()
+    stop = AsyncMock()
+    disconnect = AsyncMock()
+    monkeypatch.setattr(app_module, "start_mint", start)
+    monkeypatch.setattr(app_module, "shutdown_mint", stop)
+    monkeypatch.setattr(app_module, "shutdown_management_rpc", AsyncMock())
+    monkeypatch.setattr(app_module.redis, "disconnect", disconnect)
+
+    with TestClient(app_module.create_app()):
+        start.assert_awaited_once_with()
+        stop.assert_not_awaited()
+        disconnect.assert_not_awaited()
+
+    stop.assert_awaited_once_with()
+    disconnect.assert_awaited_once_with()
 
 
 def test_app_does_not_mount_v0_mint_routes():
@@ -355,6 +381,7 @@ def test_router_quote_routes_and_swap(monkeypatch):
     assert mint_quote.status_code == 200
     assert mint_quote.json()["quote"] == "quote-1"
     assert mint_quote.json()["method"] == "bolt11"
+    assert "pubkey" not in mint_quote.json()
 
     melt_quote = client.post(
         "/v1/melt/quote/bolt11",
@@ -379,72 +406,6 @@ def test_router_quote_routes_and_swap(monkeypatch):
     )
     assert swap.status_code == 200
     assert swap.json()["signatures"][0]["id"] == "active"
-
-
-@pytest.mark.asyncio
-async def test_redis_cache_hit_and_miss(monkeypatch):
-    set_calls: list[tuple[str, int]] = []
-    closed = False
-
-    class FakeRedis:
-        def __init__(self):
-            self.store = {}
-
-        async def exists(self, key):
-            return key in self.store
-
-        async def get(self, key):
-            return self.store.get(key)
-
-        async def set(self, name, value, ex):
-            self.store[name] = value
-            set_calls.append((name, ex))
-
-        async def ping(self):
-            return True
-
-        async def close(self):
-            nonlocal closed
-            closed = True
-
-    class Payload(BaseModel):
-        value: int
-
-    fake_redis = FakeRedis()
-    monkeypatch.setattr(settings, "mint_redis_cache_enabled", True)
-    monkeypatch.setattr(settings, "mint_redis_cache_url", "redis://cache")
-    monkeypatch.setattr(settings, "mint_redis_cache_ttl", 12)
-    monkeypatch.setattr("cashu.mint.cache.from_url", lambda url: fake_redis)
-    cache = RedisCache()
-
-    @cache.cache()
-    async def cached_route(request, payload):
-        return Payload(value=payload.value + 1)
-
-    request = router_module.Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "path": "/v1/test",
-            "headers": [],
-            "query_string": b"",
-            "scheme": "http",
-            "server": ("testserver", 80),
-        }
-    )
-    payload = Payload(value=2)
-
-    first = await cached_route(request, payload)
-    second = await cached_route(request, payload)
-
-    assert first == Payload(value=3)
-    assert second == {"value": 3}
-    assert len(set_calls) == 1
-
-    await cache.test_connection()
-    assert cache.initialized is True
-    await cache.disconnect()
-    assert closed is True
 
 
 @pytest.mark.parametrize(

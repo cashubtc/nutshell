@@ -21,11 +21,12 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     assert_err,
+    get_fake_invoice,
+    get_real_invoice,
     is_github_actions,
+    is_regtest,
     pay_if_regtest,
 )
-
-payment_request = "lnbc1u1p5qeft3sp5jn5cqclnxvucfqtjm8qnlar2vhevcuudpccv7tsuglruj3qm579spp5ygdhy0t7xu53myke8z3z024xhz4kzgk9fcqk64sp0fyeqzhmaswqdqqcqpjrzjq0euzzxv65mts5ngg8c2t3vzz2aeuevy5845jvyqulqucd8c9kkhzrtp55qq63qqqqqqqqqqqqqzwyqqyg9qxpqysgqscprcpnk8whs3askqhgu6z5a4hupyn8du2aahdcf00s5pxrs4g94sv9f95xdn4tu0wec7kfyzj439wu9z27k6m6e3q4ysjquf5agx7gp0eeye4"
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -142,7 +143,7 @@ async def test_mint_quote_legacy_empty_pubkey(ledger: Ledger):
         websocket.send_text.call_args.args[0]
     )
     assert notification.params["payload"]["quote"] == quote.quote
-    assert notification.params["payload"]["pubkey"] is None
+    assert "pubkey" not in notification.params["payload"]
 
 
 @pytest.mark.asyncio
@@ -431,6 +432,11 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
+    payment_request = (
+        get_real_invoice(100)["payment_request"]
+        if is_regtest
+        else get_fake_invoice(100)
+    )
     melt_quote = await wallet.melt_quote(payment_request)
     await ledger.db_write._update_melt_quote_state(
         melt_quote.quote, MeltQuoteState.paid

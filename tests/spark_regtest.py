@@ -121,6 +121,16 @@ def spark_regtest_config():
             return response
 
         sdk.receive_payment = receive
+        disconnect = sdk.disconnect
+
+        async def close():
+            try:
+                await disconnect()
+            finally:
+                if sdk in clients:
+                    clients.remove(sdk)
+
+        sdk.disconnect = close
         clients.append(sdk)
         return sdk
 
@@ -163,6 +173,6 @@ async def spark_regtest_clients(spark_regtest_config, mint):
         import breez_sdk_spark as breez
 
         breez.uniffi_set_event_loop(asyncio.get_running_loop())
-        for sdk in clients:
+        for sdk in list(clients):
             await asyncio.wait_for(sdk.disconnect(), TIMEOUT)
         clients.clear()

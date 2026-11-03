@@ -567,23 +567,21 @@ async def test_verify_outputs_rejects_inactive_keyset(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "operation_name", ["_store_blinded_messages", "_sign_blinded_messages"]
-)
-async def test_blinded_message_operations_reject_inactive_keyset(
-    ledger: Ledger, operation_name: str
-):
-    output = _blinded_output(ledger, label=operation_name)
-    keyset = ledger.keysets[output.id]
-    previous_active = keyset.active
-    try:
-        keyset.active = False
-        operation = getattr(ledger, operation_name)
-        with pytest.raises(KeysetInactiveError) as exc_info:
-            await operation([output])
-        assert exc_info.value.code == 12002
-    finally:
-        keyset.active = previous_active
+async def test_sign_blinded_messages_honors_outputs_after_rotation(ledger: Ledger):
+    output = _blinded_output(ledger, label="accepted-before-rotation")
+    await ledger._verify_outputs([output])
+    await ledger._store_blinded_messages([output])
+
+    await ledger.rotate_next_keyset(Unit.sat)
+    assert not ledger.keysets[output.id].active
+    signatures = await ledger._sign_blinded_messages([output])
+
+    assert len(signatures) == 1
+    assert signatures[0].id == output.id
+    assert signatures[0].amount == output.amount
+    restored_outputs, restored = await ledger.restore([output])
+    assert restored_outputs == [output]
+    assert restored == signatures
 
 
 @pytest.mark.asyncio

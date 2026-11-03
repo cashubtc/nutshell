@@ -9,12 +9,21 @@ from bip32 import BIP32
 
 from .secp import PrivateKey, PublicKey
 
+BIP39_DERIVATION_PATH = "m/129372'"
+
 
 def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     """
     Deterministic derivation of keys for 2^n values.
     """
-    bip32 = BIP32.from_seed(mnemonic.encode())
+    return derive_keys_from_seed(mnemonic.encode(), derivation_path, amounts)
+
+
+def derive_keys_from_seed(seed: bytes, derivation_path: str, amounts: List[int]):
+    """
+    Deterministic derivation of keys for 2^n values from a seed.
+    """
+    bip32 = BIP32.from_seed(seed)
     orders_str = [f"/{a}'" for a in range(len(amounts))]
     return {
         a: PrivateKey(
@@ -22,6 +31,21 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
         )
         for i, a in enumerate(amounts)
     }
+
+
+def derive_bip39_derivation_path(unit: str, index: int) -> str:
+    """
+    Derivation path of a keyset derived from a BIP-39 seed. The unit's index is taken
+    from the hash of its uppercase name.
+    """
+    unit_hash = hashlib.sha256(unit.upper().encode()).digest()
+    unit_index = int.from_bytes(unit_hash[:4], "big") & 0x7FFFFFFF
+    return f"{BIP39_DERIVATION_PATH}/{unit_index}'/{index}'"
+
+
+def derive_bip39_pubkey(seed: bytes) -> PublicKey:
+    """Public key of the master key of a BIP-39 seed."""
+    return PublicKey(BIP32.from_seed(seed).get_pubkey_from_path("m"))
 
 
 def derive_keys_deprecated_pre_0_15(

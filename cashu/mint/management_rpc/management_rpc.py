@@ -167,7 +167,9 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
     async def GetNut05Quote(self, request, _):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
-        melt_quote_dict = melt_quote.model_dump(exclude={"attempt"})
+        melt_quote_dict = melt_quote.model_dump(
+            exclude={"attempt", "melt_lock", "melt_lock_expires_at", "payment_uncertain"}
+        )
         melt_quote_dict['state'] = str(melt_quote_dict['state'])
         del melt_quote_dict['mint']
         return management_pb2.GetNut05QuoteResponse(
@@ -178,6 +180,17 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         logger.debug("gRPC UpdateNut05Quote has been called")
         state = MeltQuoteState(request.state)
         await self.ledger.db_write._update_melt_quote_state(request.quote_id, state)
+        return management_pb2.UpdateResponse()
+
+    async def UnlockNut05Quote(self, request, _):
+        logger.debug("gRPC UnlockNut05Quote has been called")
+        released = await self.ledger.db_write.force_unlock_melt_quote(request.quote_id)
+        if released:
+            logger.warning(
+                f"Melt quote {request.quote_id} was force-unlocked by an operator"
+            )
+        else:
+            logger.info(f"Melt quote {request.quote_id} had no lock to release")
         return management_pb2.UpdateResponse()
 
     async def RotateNextKeyset(self, request, context):

@@ -33,6 +33,9 @@ class InvoiceResponse(BaseModel):
     checking_id: Optional[str] = None
     payment_request: Optional[str] = None
     error_message: Optional[str] = None
+    # The backend may normalize the requested amount to its invoice precision.
+    # When omitted, the requested amount is used for backwards compatibility.
+    amount: Optional[Amount] = None
 
 
 class PaymentResult(Enum):
@@ -142,6 +145,24 @@ class LightningBackend(ABC):
         if unit not in self.supported_units:
             raise Unsupported(f"Unit {unit} is not supported")
 
+    async def startup(self) -> None:
+        """Prepare resources when starting or restarting the backend."""
+        pass
+
+    async def cleanup(self) -> None:
+        """Release backend resources after ledger background tasks have stopped."""
+        pass
+
+    @abstractmethod
+    def validate_payment_request(self, request: str) -> Optional[int]:
+        """Validate locally and return the request's absolute expiry, if any.
+
+        Raise if the request cannot be paid. Do not submit a payment or make
+        network calls. Return the expiry as a Unix timestamp in seconds, or
+        None for a request without an expiry.
+        """
+        pass
+
     @abstractmethod
     def __init__(self, unit: Unit, **kwargs):
         pass
@@ -164,6 +185,10 @@ class LightningBackend(ABC):
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> Coroutine[None, None, PaymentResponse]:
         pass
+
+    def get_payment_checking_id(self, quote: MeltQuote) -> str:
+        """Derive the attempt's checking ID before sending, without doing I/O."""
+        return quote.checking_id
 
     @abstractmethod
     def get_invoice_status(

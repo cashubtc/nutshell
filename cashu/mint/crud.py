@@ -923,7 +923,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id, attempt = :attempt WHERE quote = :quote
+            UPDATE {db.table_with_schema("melt_quotes")} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id, attempt = :attempt, melt_lock = :melt_lock, melt_lock_expires_at = :melt_lock_expires_at, payment_uncertain = :payment_uncertain WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -937,6 +937,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
                 "attempt": quote.attempt,
+                "melt_lock": quote.melt_lock,
+                "melt_lock_expires_at": quote.melt_lock_expires_at,
+                "payment_uncertain": int(quote.payment_uncertain),
             },
         )
 
@@ -955,7 +958,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {
                 "id": keyset.id,
-                "seed": keyset.seed,
+                "seed": "" if keyset.encrypted_seed else keyset.seed,
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
@@ -1110,7 +1113,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {
                 "id": keyset.id,
-                "seed": keyset.seed,
+                "seed": "" if keyset.encrypted_seed else keyset.seed,
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,

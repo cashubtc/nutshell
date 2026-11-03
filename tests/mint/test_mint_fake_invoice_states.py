@@ -179,17 +179,19 @@ async def test_pending_invoice_fails_on_check(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_pay_err_with_failed_check_releases_proofs(
+async def test_invoice_payment_response_reconciliation(
     wallet: Wallet, ledger: Ledger
 ):
     proofs, melt_quote = await quote_melt(
         wallet, description(check_payment_state="FAILED", pay_err=True)
     )
 
-    with pytest.raises(Exception, match="Lightning payment failed"):
-        await ledger.melt(proofs=proofs, quote=melt_quote.quote)
+    response = await ledger.melt(proofs=proofs, quote=melt_quote.quote)
+    assert response.state == MeltQuoteState.pending.value
 
-    assert all(s.unspent for s in await proof_states(ledger, proofs))
+    quote = await ledger.get_melt_quote(melt_quote.quote)
+    assert quote.state == MeltQuoteState.pending
+    assert all(s.pending for s in await proof_states(ledger, proofs))
 
 
 @pytest.mark.asyncio

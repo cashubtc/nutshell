@@ -17,6 +17,7 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
 import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
 import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from cashu.core.helpers import fee_reserve
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -110,6 +111,14 @@ class LndRPCWallet(LightningBackend):
 
         if self.supports_mpp:
             logger.info("LndRPCWallet enabling MPP feature")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = bolt11.decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         r = None
@@ -295,12 +304,19 @@ class LndRPCWallet(LightningBackend):
                     ].mpp_record.total_amt_msat = total_amount_msat
 
                     # Send to route request
-                    response = await router_stub.SendToRouteV2(
-                        routerrpc.SendToRouteRequest(
-                            payment_hash=bytes.fromhex(invoice.payment_hash),
-                            route=route.routes[0],  # type: ignore
+                    try:
+                        response = await router_stub.SendToRouteV2(
+                            routerrpc.SendToRouteRequest(
+                                payment_hash=bytes.fromhex(invoice.payment_hash),
+                                route=route.routes[0],  # type: ignore
+                            )
                         )
-                    )
+                    except AioRpcError as e:
+                        # The payment may still execute after the RPC fails.
+                        return PaymentResponse(
+                            result=PaymentResult.ERROR,
+                            error_message=f"SendToRouteV2 failed: {e}",
+                        )
                     assert route and response
                     if response.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
                         if (
@@ -319,7 +335,7 @@ class LndRPCWallet(LightningBackend):
                             continue
                     break
         except AioRpcError as e:
-            logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
+            logger.error(f"QueryRoutes failed: {e}")
             err_msg = str(e)
             if settings.mint_lnd_allow_self_payment and (
                 "target not found" in err_msg.lower() or "no route" in err_msg.lower()

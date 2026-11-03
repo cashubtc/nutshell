@@ -19,6 +19,13 @@ POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
 SQLITE = "SQLITE"
 
+
+def mask_db_location(db_location: str) -> str:
+    """Hide everything after the scheme of a database URL so it can be logged."""
+    scheme, separator, _ = db_location.partition("://")
+    return f"{scheme}{separator}********" if separator else db_location
+
+
 @dataclass(frozen=True)
 class LockOptions:
     """Describes one table or row lock in an ordered transaction lock set."""
@@ -38,6 +45,13 @@ class LockOptions:
 class Compat:
     type: Optional[str] = "<inherited>"
     schema: Optional[str] = "<inherited>"
+
+    @property
+    def epoch_now(self) -> str:
+        """Database time in Unix seconds, for comparing persisted leases."""
+        if self.type in {POSTGRES, COCKROACH}:
+            return "EXTRACT(EPOCH FROM clock_timestamp())"
+        return "((julianday('now') - 2440587.5) * 86400.0)"
 
     def interval_seconds(self, seconds: int) -> str:
         if self.type in {POSTGRES, COCKROACH}:

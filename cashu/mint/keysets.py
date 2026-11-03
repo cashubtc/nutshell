@@ -4,13 +4,13 @@ from typing import Dict, List, Optional
 from loguru import logger
 
 from ..core.base import MintKeyset, Unit
-from ..core.crypto.keys import derive_keyset_id
+from ..core.crypto.keys import derive_bip39_derivation_path, derive_keyset_id
 from ..core.errors import KeysetError, KeysetNotFoundError
 from ..core.settings import settings
-from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
+from .protocols import SupportsBackends, SupportsDb, SupportsKeysets, SupportsSeed
 
 
-class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
+class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends):
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -49,6 +49,9 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             4. de-activates the old keyset
             5. stores the new keyset to DB
 
+        With MINT_MNEMONIC set, the unit rotates to a keyset derived from the mnemonic
+        instead, see `activate_mnemonic_keyset`.
+
         Args:
             unit (Unit): Unit of the keyset.
             max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
@@ -79,6 +82,11 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             )
             raise Exception(
                 f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+            )
+
+        if settings.mint_mnemonic:
+            return await self.activate_mnemonic_keyset(
+                unit, max_order, input_fee_ppk, final_expiry
             )
 
         logger.info(f"Rotating keyset {selected_keyset.id}")
@@ -112,6 +120,55 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         self.keysets[selected_keyset.id] = selected_keyset
 
         logger.debug(f"Keyset {keyset.id} was de-activated")
+        return new_keyset
+
+    async def activate_mnemonic_keyset(
+        self,
+        unit: Unit,
+        max_order: Optional[int] = None,
+        input_fee_ppk: Optional[int] = None,
+        final_expiry: Optional[int] = None,
+    ) -> MintKeyset:
+        """
+        Stores the next keyset of `unit` derived from MINT_MNEMONIC and de-activates all
+        other keysets of the unit, including legacy keysets derived from MINT_PRIVATE_KEY.
+
+        Args:
+            unit (Unit): Unit of the keyset.
+            max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
+            input_fee_ppk (Optional[int], optional): The new keyset's fee
+            final_expiry (Optional[int], optional): The keyset's expiration date, after which it might be dropped from the database.
+        Returns:
+            MintKeyset: The new active keyset of the unit
+        """
+        counters = [
+            int(keyset.derivation_path.split("/")[-1].replace("'", ""))
+            for keyset in self.keysets.values()
+            if keyset.from_mnemonic and keyset.unit == unit
+        ]
+        derivation_path = derive_bip39_derivation_path(
+            unit.name, max(counters, default=0) + 1
+        )
+        amounts = [2**i for i in range(max_order)] if max_order else self.amounts
+
+        new_keyset = MintKeyset(
+            derivation_path=derivation_path,
+            unit=unit.name,
+            amounts=amounts,
+            input_fee_ppk=input_fee_ppk,
+            active=True,
+            final_expiry=final_expiry,
+        )
+        logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
+        await self.crud.store_keyset(keyset=new_keyset, db=self.db)
+
+        for keyset in list(self.keysets.values()):
+            if keyset.active and keyset.unit == unit:
+                logger.debug(f"De-activating keyset {keyset.id}...")
+                keyset.active = False
+                await self.crud.update_keyset(keyset=keyset, db=self.db)
+
+        self.keysets[new_keyset.id] = new_keyset
         return new_keyset
 
     async def activate_keyset(
@@ -213,6 +270,50 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         # DEPRECATION 0.16.1 – disable base64 keysets if hex equivalent exists
         if settings.mint_inactivate_base64_keysets:
             await self.inactivate_base64_keysets()
+
+    async def init_mnemonic_keysets(self) -> None:
+        """Initializes the keysets of a mint with MINT_MNEMONIC set. Loads all past keysets
+        from the db and activates a keyset derived from the mnemonic for every unit with a
+        backend but no active keyset. Units that still sign with legacy keysets keep them
+        until they are rotated.
+        """
+        # load all past keysets from db, the keys will be generated at instantiation
+        for keyset in await self.crud.get_keyset(db=self.db):
+            self.keysets[keyset.id] = keyset
+
+        logger.info(f"Loaded {len(self.keysets)} keysets from database.")
+
+        # DEPRECATION 0.16.1 – disable base64 keysets if hex equivalent exists
+        if settings.mint_inactivate_base64_keysets:
+            await self.inactivate_base64_keysets()
+
+        units = [
+            unit
+            for unit in Unit
+            if any(unit in backends for backends in self.backends.values())
+        ]
+        if not units:
+            raise KeysetError("No backends are set.")
+
+        for unit in units:
+            active_keysets = [
+                k for k in self.keysets.values() if k.active and k.unit == unit
+            ]
+            if not active_keysets:
+                await self.activate_mnemonic_keyset(
+                    unit, input_fee_ppk=settings.mint_input_fee_ppk
+                )
+            elif not all(k.from_mnemonic for k in active_keysets):
+                logger.warning(
+                    f"Unit {unit.name} still signs with keysets derived from"
+                    " MINT_PRIVATE_KEY. Rotate its keyset to switch to MINT_MNEMONIC."
+                )
+
+        # the current keyset is an active keyset of the first unit, sat if the mint has it
+        self.keyset = next(
+            k for k in self.keysets.values() if k.active and k.unit == units[0]
+        )
+        logger.info(f"Current keyset: {self.keyset.id}")
 
     async def inactivate_base64_keysets(self) -> None:
         """Inactivates all base64 keysets that have a hex equivalent."""

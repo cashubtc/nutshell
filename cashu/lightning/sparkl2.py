@@ -1,5 +1,6 @@
 import asyncio
 import os
+import uuid
 from typing import AsyncGenerator, Optional
 
 import bolt11
@@ -7,6 +8,7 @@ import breez_sdk_spark
 from loguru import logger
 
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -66,6 +68,13 @@ class SparkL2Wallet(LightningBackend):
         self.payment_queue: asyncio.Queue[str] = asyncio.Queue()
         self.listener: Optional[_SdkEventListener] = None
 
+    async def cleanup(self) -> None:
+        if self.sdk is not None:
+            await self.sdk.disconnect()
+            self.sdk = None
+        self.listener = None
+        self.payment_queue = asyncio.Queue()
+
     async def _ensure_sdk(self):
         if self.sdk is not None:
             return
@@ -114,6 +123,14 @@ class SparkL2Wallet(LightningBackend):
         except Exception as e:
             logger.error(f"Failed to initialize Breez Spark SDK: {e}")
             raise Exception(f"Failed to initialize Breez Spark SDK: {e}")
+
+    def validate_payment_request(self, request: str) -> int:
+        invoice = bolt11.decode(request)
+        if not invoice.amount_msat:
+            raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+        if invoice.has_expired():
+            raise QuoteExpiredError("invoice expired")
+        return invoice.expiry_time
 
     async def status(self) -> StatusResponse:
         try:
@@ -172,17 +189,28 @@ class SparkL2Wallet(LightningBackend):
 
             # The payment hash is our checking ID
             invoice_obj = bolt11.decode(invoice)
+            if not invoice_obj.amount_msat or invoice_obj.amount_msat <= 0:
+                raise ValueError("Spark returned an invoice without a positive amount")
 
             return InvoiceResponse(
                 ok=True,
                 checking_id=invoice_obj.payment_hash,
                 payment_request=invoice,
+                amount=Amount(Unit.msat, int(invoice_obj.amount_msat)).to(amount.unit),
             )
         except Exception as e:
             logger.error(f"Failed to create invoice: {str(e)}")
             return InvoiceResponse(
                 ok=False, error_message=f"Failed to create invoice: {str(e)}"
             )
+
+    def get_payment_checking_id(self, quote: MeltQuote) -> str:
+        # The SDK uses the idempotency UUID as the transfer's payment ID.
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL, f"{quote.quote}:{quote.attempt}:{quote.request}"
+            )
+        )
 
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
@@ -191,6 +219,7 @@ class SparkL2Wallet(LightningBackend):
         if not self.sdk:
             raise Exception("SDK not initialized")
 
+        checking_id = self.get_payment_checking_id(quote)
         try:
             # The Spark SDK has prepare_send_payment -> send_payment flow.
             prepare_req = breez_sdk_spark.PrepareSendPaymentRequest(
@@ -234,6 +263,7 @@ class SparkL2Wallet(LightningBackend):
             send_req = breez_sdk_spark.SendPaymentRequest(
                 prepare_response=prepare_res,
                 options=send_options,
+                idempotency_key=checking_id,
             )
         except Exception as e:
             return PaymentResponse(
@@ -246,11 +276,10 @@ class SparkL2Wallet(LightningBackend):
         except Exception as e:
             return PaymentResponse(
                 result=PaymentResult.ERROR,
-                checking_id=quote.checking_id,
+                checking_id=checking_id,
                 error_message=f"Payment failed or unknown: {str(e)}",
             )
 
-        checking_id = quote.checking_id
         try:
             payment = send_res.payment
             if not payment:
@@ -364,36 +393,10 @@ class SparkL2Wallet(LightningBackend):
             raise Exception("SDK not initialized")
 
         try:
-            if len(checking_id) == 64:
-                # Quotes use the BOLT11 hash, while the SDK assigns a UUID to
-                # the send. Resolve the hash even before send_payment returns,
-                # including after reconnecting to the persisted SDK storage.
-                res = await self.sdk.list_payments(
-                    breez_sdk_spark.ListPaymentsRequest(
-                        type_filter=[breez_sdk_spark.PaymentType.SEND],
-                        asset_filter=breez_sdk_spark.AssetFilter.BITCOIN(),
-                        payment_details_filter=[
-                            breez_sdk_spark.PaymentDetailsFilter.LIGHTNING(None)
-                        ],
-                        sort_ascending=False,
-                    )
-                )
-                payment = next(
-                    (
-                        p
-                        for p in res.payments
-                        if p.details
-                        and p.details.is_lightning()
-                        and p.details.htlc_details
-                        and p.details.htlc_details.payment_hash == checking_id
-                    ),
-                    None,
-                )
-            else:
-                res = await self.sdk.get_payment(
-                    breez_sdk_spark.GetPaymentRequest(payment_id=checking_id)
-                )
-                payment = res.payment if res else None
+            res = await self.sdk.get_payment(
+                breez_sdk_spark.GetPaymentRequest(payment_id=checking_id)
+            )
+            payment = res.payment if res else None
 
             if not payment:
                 return PaymentStatus(

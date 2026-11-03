@@ -109,8 +109,9 @@ async def test_websocket_start_exits_on_disconnect_message(monkeypatch):
 async def test_handle_request_subscribe_and_unsubscribe_roundtrip(monkeypatch):
     manager = _client_manager(FakeWebSocket())
     monkeypatch.setattr(
-        "cashu.mint.events.client.asyncio.create_task",
-        lambda coro: (coro.close(), None)[1],
+        manager,
+        "create_task",
+        lambda coro: coro.close(),
     )
     req = JSONRPCRequest(
         id=1,
@@ -253,6 +254,9 @@ async def test_event_manager_submits_only_to_matching_subscribers(monkeypatch):
         def __init__(self, subscriptions):
             self.subscriptions = subscriptions
 
+        def create_task(self, coro):
+            created.append(coro)
+
         async def _send_obj(self, data: dict, subId: str):
             sent.append((subId, data))
 
@@ -269,15 +273,7 @@ async def test_event_manager_submits_only_to_matching_subscribers(monkeypatch):
         ],
     )
 
-    created = []
-
-    def fake_create_task(coro):
-        created.append(coro)
-        return cast(Any, coro)
-
-    monkeypatch.setattr(
-        "cashu.mint.events.events.asyncio.create_task", fake_create_task
-    )
+    created: list[Any] = []
 
     event = MintQuote(
         quote="quote-1",
@@ -318,8 +314,9 @@ def test_remove_subscription_removes_all_filter_entries_for_subid(monkeypatch):
     """
     manager = _client_manager(FakeWebSocket())
     monkeypatch.setattr(
-        "cashu.mint.events.client.asyncio.create_task",
-        lambda coro: (coro.close(), None)[1],
+        manager,
+        "create_task",
+        lambda coro: coro.close(),
     )
     manager.add_subscription(
         JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,

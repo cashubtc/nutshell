@@ -77,12 +77,13 @@ async def migrate(no_dry_run):
         "Decryption key:"
         f" {settings.mint_seed_decryption_key[0]}{'*'*10}{settings.mint_seed_decryption_key[-1]}"
     )
-    click.echo(
-        f"Seed: {settings.mint_private_key[0]}{'*'*10}{settings.mint_private_key[-1]}" # type: ignore
-    )
+    if settings.mint_private_key:
+        click.echo(
+            f"Seed: {settings.mint_private_key[0]}{'*'*10}{settings.mint_private_key[-1]}"
+        )
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
-        seed=settings.mint_private_key, # type: ignore
+        seed=settings.mint_private_key,
         derivation_path=settings.mint_derivation_path,
         backends={},
         crud=LedgerCrudSqlite(),
@@ -139,24 +140,26 @@ async def migrate(no_dry_run):
                 click.echo(f"Updating keyset {keyset_dict['id']}")
                 await conn.execute(
                     f"UPDATE {ledger.db.table_with_schema('keysets')} SET seed='',"
-                    " encrypted_seed = ?, seed_encryption_method = ? WHERE id = ?",
-                    (
-                        keyset_dict["encrypted_seed"],
-                        keyset_dict["seed_encryption_method"],
-                        keyset_dict["id"],
-                    ),
+                    " encrypted_seed = :encrypted_seed, seed_encryption_method ="
+                    " :seed_encryption_method WHERE id = :id",
+                    {
+                        "encrypted_seed": keyset_dict["encrypted_seed"],
+                        "seed_encryption_method": keyset_dict["seed_encryption_method"],
+                        "id": keyset_dict["id"],
+                    },
                 )
 
-        click.echo("Initializing mint with encrypted seeds.")
-        encrypted_mint_private_key = aes.encrypt(settings.mint_private_key.encode()) # type: ignore
-        ledger = Ledger(
-            db=Database("mint", settings.mint_database),
-            seed=encrypted_mint_private_key,
-            seed_decryption_key=settings.mint_seed_decryption_key,
-            derivation_path=settings.mint_derivation_path,
-            backends={},
-            crud=LedgerCrudSqlite(),
-        )
+        if settings.mint_private_key:
+            click.echo("Initializing mint with encrypted seeds.")
+            encrypted_mint_private_key = aes.encrypt(settings.mint_private_key.encode())
+            ledger = Ledger(
+                db=Database("mint", settings.mint_database),
+                seed=encrypted_mint_private_key,
+                seed_decryption_key=settings.mint_seed_decryption_key,
+                derivation_path=settings.mint_derivation_path,
+                backends={},
+                crud=LedgerCrudSqlite(),
+            )
         click.echo("✅ Migration complete.")
 
 

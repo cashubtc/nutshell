@@ -1347,3 +1347,40 @@ async def m039_add_attempt_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
             "ADD COLUMN attempt TEXT NOT NULL DEFAULT ''"
         )
+
+
+async def m040_remove_plaintext_seeds_with_encrypted_seed(db: Database):
+    """Remove plaintext seeds from keysets that also store an encrypted seed."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('keysets')} SET seed = '' "
+            "WHERE encrypted_seed IS NOT NULL AND seed != ''"
+        )
+
+
+async def m041_add_melt_lock_to_melt_quotes(db: Database):
+    """Add persisted execution ownership to melt quotes."""
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes')} "
+            "ADD COLUMN melt_lock TEXT NOT NULL DEFAULT ''"
+        )
+
+
+async def m042_add_melt_execution_leases(db: Database):
+    """Add lease deadlines and payment reconciliation metadata.
+
+    Stop older workers before upgrading. Existing pending quotes retain their
+    reconciliation state until settlement is confirmed.
+    """
+    async with db.connect() as conn:
+        table = db.table_with_schema("melt_quotes")
+        await conn.execute(
+            f"ALTER TABLE {table} ADD COLUMN melt_lock_expires_at DOUBLE PRECISION NOT NULL DEFAULT 0"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table} ADD COLUMN payment_uncertain INT NOT NULL DEFAULT 0"
+        )
+        await conn.execute(
+            f"UPDATE {table} SET payment_uncertain = 1 WHERE state = 'PENDING'"
+        )

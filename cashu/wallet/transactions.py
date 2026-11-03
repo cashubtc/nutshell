@@ -28,6 +28,16 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         fees = max((sum([keyset.input_fee_ppk for a in amounts]) + 999) // 1000, 0)
         return fees
 
+    def get_send_amount(self, amount: int, keyset_id: Optional[str] = None) -> int:
+        """Return the token value needed to cover its redemption fee."""
+        keyset = self.keysets[keyset_id or self.keyset_id]
+        send_amount = amount
+        fee = self.get_fees_for_keyset(amount_split(send_amount), keyset)
+        while send_amount - fee < amount:
+            send_amount = amount + fee
+            fee = self.get_fees_for_keyset(amount_split(send_amount), keyset)
+        return send_amount
+
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         # for each proof, find the keyset with the same id and sum the fees
         fees_ppk = []
@@ -108,7 +118,10 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             )
         sum_selected_proofs = sum_proofs(selected_proofs)
 
-        if sum_selected_proofs < amount_to_send and next_bigger:
+        selected_fees = (
+            self.get_fees_for_proofs_ppk(selected_proofs) / 1000 if include_fees else 0
+        )
+        if sum_selected_proofs - selected_fees < amount_to_send and next_bigger:
             logger.trace("> adding next bigger proof")
             return [next_bigger]
 
@@ -213,11 +226,8 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         keep_amt, send_amt = total - amount, amount
 
         if include_fees:
-            keyset_id = keyset_id_outputs or self.keyset_id
-            tmp_proofs = [Proof(id=keyset_id) for _ in amount_split(send_amt)]
-            fee = self.get_fees_for_proofs(tmp_proofs)
-            keep_amt -= fee
-            send_amt += fee
+            send_amt = self.get_send_amount(amount, keyset_id_outputs)
+            keep_amt = total - send_amt
 
         logger.trace(f"Keep amount: {keep_amt}, send amount: {send_amt}")
         logger.trace(f"Total input: {sum_proofs(proofs)}")

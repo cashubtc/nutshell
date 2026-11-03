@@ -237,25 +237,28 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         self,
         mint_features: Dict[Union[int, str], Union[List[Any], Dict[str, Any]]],
     ):
-        if settings.mint_redis_cache_enabled:
-            cache_features: dict[str, list[dict[str, str]] | int] = {
-                "cached_endpoints": [
-                    {
-                        "method": "POST",
-                        "path": "/v1/mint/bolt11",
-                    },
-                    {
-                        "method": "POST",
-                        "path": "/v1/melt/bolt11",
-                    },
-                    {
-                        "method": "POST",
-                        "path": "/v1/swap",
-                    },
-                ]
-            }
-            if settings.mint_redis_cache_ttl:
-                cache_features["ttl"] = settings.mint_redis_cache_ttl
+        cache_features: dict[str, list[dict[str, str]] | int] = {
+            "cached_endpoints": [
+                {
+                    "method": "POST",
+                    "path": "/v1/mint/bolt11",
+                },
+                {
+                    "method": "POST",
+                    "path": "/v1/mint/bolt11/batch",
+                },
+                {
+                    "method": "POST",
+                    "path": "/v1/melt/bolt11",
+                },
+                {
+                    "method": "POST",
+                    "path": "/v1/swap",
+                },
+            ]
+        }
+        if settings.mint_redis_cache_ttl:
+            cache_features["ttl"] = settings.mint_redis_cache_ttl
 
-            mint_features[CACHE_NUT] = cache_features
+        mint_features[CACHE_NUT] = cache_features
         return mint_features

@@ -31,7 +31,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Programmable ecash: P2PK and HTLCs ([NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md))
 - Wallet and mint support for keyset rotations
 - DLEQ proofs for offline transactions ([NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md))
-- Optional caching using Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
+- Response caching in memory or Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
 - Optional authentication using Keycloak ([NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md))
 
 ## The Cashu protocol
@@ -76,7 +76,7 @@ You can skip the entire next section about Poetry and jump right to [Using Cashu
 
 The easiest way to get a mint running is through Docker.
 
-You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`.
+You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`, and replace the public test `MINT_MNEMONIC` with your own.
 
 ```bash
 docker compose up mint
@@ -221,12 +221,12 @@ This command runs the mint on your local computer. Skip this step if you want to
 Run the mint using the pre-built Docker image. This method sets environment variables directly and works reliably regardless of local `.env` files:
 
 ```bash
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.21.0 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.22.0 poetry run mint
 ```
 
 ## From this repository
 
-Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_PRIVATE_KEY` in your `.env` file.
+Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_MNEMONIC` to a BIP-39 mnemonic in your `.env` file. The mint derives all of its keys from the mnemonic, so back it up securely: without it, the mint can't start.
 
 ```bash
 poetry run mint
@@ -234,16 +234,32 @@ poetry run mint
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
-### NUT-19 Caching with Redis
+### Melt execution and recovery
 
-To cache HTTP responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)), you can either install Redis manually or use the docker compose file in `docker/redis/docker-compose.yaml` to start Redis in a container.
+Melt execution uses a renewable database lease. Its duration defaults to 60
+seconds (`MINT_MELT_LEASE_SECONDS`), and execution has a 120-second budget
+(`MINT_MELT_EXECUTION_TIMEOUT_SECONDS`). Starting another worker preserves live
+leases. After a lease expires, status polling or periodic reconciliation can
+claim recovery without sending another payment.
 
-Edit the `.env` file and uncomment the Redis lines:
+Payments awaiting a definitive backend result remain pending. Before manual
+recovery, confirm that no executor can resume and verify the current payment
+outcome with the Lightning backend. To release execution ownership, use the
+management RPC command:
 
 ```bash
-MINT_REDIS_CACHE_ENABLED=TRUE
-MINT_REDIS_CACHE_URL=redis://localhost:6379
+poetry run mint-cli update unlock-melt-quote <quote-id>
 ```
+
+Unlocking retains the current quote and proof states. Reconciliation continues
+through the normal status polling and periodic recovery paths.
+
+Stop all older workers before upgrading. Migration `m042` adds lease expiry and
+payment uncertainty, treating existing pending payments as uncertain.
+
+### NUT-19 Response caching
+
+Nutshell caches successful mint, swap, and melt responses in memory by default so wallets can recover lost responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). Redis can be enabled for shared caching across workers or instances. See [Response caching](docs/response-caching.md) for configuration and cache limits.
 
 ### NUT-21 Authentication with Keycloak
 

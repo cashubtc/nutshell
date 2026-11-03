@@ -127,6 +127,11 @@ class MintStub(object):
                 request_serializer=management__pb2.UpdateQuoteRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
+        self.UnlockNut05Quote = channel.unary_unary(
+                '/cashu.Mint/UnlockNut05Quote',
+                request_serializer=management__pb2.GetNut05QuoteRequest.SerializeToString,
+                response_deserializer=management__pb2.UpdateResponse.FromString,
+                _registered_method=True)
         self.RotateNextKeyset = channel.unary_unary(
                 '/cashu.Mint/RotateNextKeyset',
                 request_serializer=management__pb2.RotateNextKeysetRequest.SerializeToString,
@@ -286,6 +291,14 @@ class MintServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UnlockNut05Quote(self, request, context):
+        """UnlockNut05Quote releases the melt execution lock of a specific NUT-05
+        (melting) quote, so that a later status poll can resolve it.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def RotateNextKeyset(self, request, context):
         """RotateNextKeyset initiates the rotation to a new keyset for a given unit.
         """
@@ -412,6 +425,11 @@ def add_MintServicer_to_server(servicer, server):
             'UpdateNut05Quote': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateNut05Quote,
                     request_deserializer=management__pb2.UpdateQuoteRequest.FromString,
+                    response_serializer=management__pb2.UpdateResponse.SerializeToString,
+            ),
+            'UnlockNut05Quote': grpc.unary_unary_rpc_method_handler(
+                    servicer.UnlockNut05Quote,
+                    request_deserializer=management__pb2.GetNut05QuoteRequest.FromString,
                     response_serializer=management__pb2.UpdateResponse.SerializeToString,
             ),
             'RotateNextKeyset': grpc.unary_unary_rpc_method_handler(
@@ -928,6 +946,33 @@ class Mint(object):
             target,
             '/cashu.Mint/UpdateNut05Quote',
             management__pb2.UpdateQuoteRequest.SerializeToString,
+            management__pb2.UpdateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UnlockNut05Quote(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/cashu.Mint/UnlockNut05Quote',
+            management__pb2.GetNut05QuoteRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
             channel_credentials,

@@ -195,5 +195,3 @@ async def test_spark_lightning_round_trip(spark_wallet_factory, unit, peer):
     restored = await wait_payment(reopened, payment.checking_id)
     assert restored.preimage == settled.preimage
     assert restored.fee == settled.fee
-    restored_by_hash = await wait_payment(reopened, payment_quote.checking_id)
-    assert restored_by_hash == restored

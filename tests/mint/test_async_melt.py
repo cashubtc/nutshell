@@ -152,3 +152,112 @@ async def test_async_melt_nonexistent_quote(ledger):
     )
     # Expect failure (404 or 400 is fine)
     assert response.status_code != 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
+async def test_shutdown_drains_external_melt_before_cleanup(ledger, monkeypatch):
+    """Keep resources open until an in-flight payment returns its outcome."""
+    from unittest.mock import AsyncMock
+
+    from cashu.lightning.base import PaymentResponse, PaymentResult
+    from cashu.wallet.wallet import Wallet
+
+    wallet = await Wallet.with_db(
+        url=SERVER_ENDPOINT,
+        db="test_data/wallet_async_melt_shutdown",
+        name="wallet_async_melt_shutdown",
+    )
+    await wallet.load_mint()
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    proofs = await wallet.mint(64, quote_id=mint_quote.quote)
+
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    invoice = await backend.create_invoice(Amount(Unit.sat, 32))
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=invoice.payment_request, unit="sat")
+    )
+    paying = asyncio.Event()
+    complete = asyncio.Event()
+
+    async def pay_invoice(*args):
+        paying.set()
+        await complete.wait()
+        return PaymentResponse(result=PaymentResult.PENDING)
+
+    monkeypatch.setattr(backend, "pay_invoice", AsyncMock(side_effect=pay_invoice))
+    response = await ledger.async_melt(proofs=proofs, quote=quote.quote)
+    assert response.state == MeltQuoteState.pending.value
+    await asyncio.wait_for(paying.wait(), timeout=1)
+    tasks = list(ledger.melt_tasks)
+
+    shutdown = asyncio.create_task(ledger.shutdown_ledger())
+    await asyncio.sleep(0)
+    assert not shutdown.done()
+    complete.set()
+    await asyncio.wait_for(shutdown, timeout=2)
+
+    assert tasks and all(task.done() and not task.cancelled() for task in tasks)
+    assert not ledger.melt_tasks
+    persisted = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
+    assert persisted is not None
+    assert persisted.state == MeltQuoteState.pending
+    states = await ledger.db_read.get_proofs_states([proof.Y for proof in proofs])
+    assert all(state.pending for state in states)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
+async def test_shutdown_completes_internal_melt_without_stranding_proofs(
+    ledger, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.models import PostMintQuoteRequest
+    from cashu.wallet.wallet import Wallet
+
+    wallet = await Wallet.with_db(
+        url=SERVER_ENDPOINT,
+        db="test_data/wallet_internal_melt_shutdown",
+        name="wallet_internal_melt_shutdown",
+    )
+    await wallet.load_mint()
+    funding = await wallet.request_mint(64)
+    await pay_if_regtest(funding.request)
+    proofs = await wallet.mint(64, quote_id=funding.quote)
+
+    # Leave this mint's receiving quote unpaid so the melt settles internally.
+    monkeypatch.setattr(settings, "fakewallet_brr", False)
+    receiving = await ledger.mint_quote(PostMintQuoteRequest(amount=32, unit="sat"))
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=receiving.request, unit="sat")
+    )
+    settling = asyncio.Event()
+    complete = asyncio.Event()
+    settle_internally = ledger.melt_mint_settle_internally
+
+    async def settle(*args):
+        settling.set()
+        await complete.wait()
+        return await settle_internally(*args)
+
+    monkeypatch.setattr(ledger, "melt_mint_settle_internally", settle)
+    backend = ledger.backends[Method.bolt11][Unit.sat]
+    pay_invoice = AsyncMock()
+    monkeypatch.setattr(backend, "pay_invoice", pay_invoice)
+    await ledger.async_melt(proofs=proofs, quote=quote.quote)
+    await asyncio.wait_for(settling.wait(), timeout=1)
+
+    shutdown = asyncio.create_task(ledger.shutdown_ledger())
+    await asyncio.sleep(0)
+    assert not shutdown.done()
+    complete.set()
+    await asyncio.wait_for(shutdown, timeout=2)
+
+    persisted = await ledger.get_melt_quote(quote.quote)
+    assert persisted.state == MeltQuoteState.paid
+    states = await ledger.db_read.get_proofs_states([proof.Y for proof in proofs])
+    assert all(state.spent for state in states)
+    assert not ledger.melt_tasks
+    pay_invoice.assert_not_awaited()

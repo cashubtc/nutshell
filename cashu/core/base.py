@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
+from mnemonic import Mnemonic
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -27,8 +28,10 @@ from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
+    BIP39_DERIVATION_PATH,
     derive_keys,
     derive_keys_deprecated_pre_0_15,
+    derive_keys_from_seed,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
@@ -291,6 +294,9 @@ class MeltQuote(LedgerEvent):
     fee_reserve: int
     state: MeltQuoteState
     attempt: str = ""
+    melt_lock: str = ""
+    melt_lock_expires_at: float = 0
+    payment_uncertain: bool = False
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
@@ -314,6 +320,9 @@ class MeltQuote(LedgerEvent):
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
         attempt = row.get("attempt")  # type: ignore
+        melt_lock = row.get("melt_lock")  # type: ignore
+        melt_lock_expires_at = row.get("melt_lock_expires_at")  # type: ignore
+        payment_uncertain = row.get("payment_uncertain")  # type: ignore
 
         return cls(
             quote=row["quote"],
@@ -325,6 +334,9 @@ class MeltQuote(LedgerEvent):
             fee_reserve=row["fee_reserve"],
             state=MeltQuoteState(row["state"]),
             attempt=str(attempt) if attempt is not None else "",
+            melt_lock=str(melt_lock) if melt_lock is not None else "",
+            melt_lock_expires_at=float(melt_lock_expires_at or 0),
+            payment_uncertain=bool(payment_uncertain or False),
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
@@ -364,6 +376,11 @@ class MeltQuote(LedgerEvent):
     @property
     def pending(self) -> bool:
         return self.state == MeltQuoteState.pending
+
+    @property
+    def locked(self) -> bool:
+        """A lease owner is recorded; validity is checked against database time."""
+        return bool(self.melt_lock)
 
     @property
     def paid(self) -> bool:
@@ -978,6 +995,12 @@ class MintKeyset:
 
         self.derivation_path = derivation_path
 
+        # keysets on the BIP-39 derivation path store no seed, their keys are
+        # derived from MINT_MNEMONIC
+        self.from_mnemonic = derivation_path.startswith(
+            f"{BIP39_DERIVATION_PATH}/"
+        ) and not (seed or encrypted_seed)
+
         if encrypted_seed and not settings.mint_seed_decryption_key:
             raise Exception("MINT_SEED_DECRYPTION_KEY not set, but seed is encrypted.")
         if settings.mint_seed_decryption_key and encrypted_seed:
@@ -987,7 +1010,17 @@ class MintKeyset:
         else:
             self.seed = seed
 
-        assert self.seed, "seed not set"
+        if not self.seed and not self.from_mnemonic:
+            raise Exception("seed not set")
+
+        # keep the seed encrypted at rest if a decryption key is set
+        if settings.mint_seed_decryption_key and self.seed and not encrypted_seed:
+            encrypted_seed = AESCipher(settings.mint_seed_decryption_key).encrypt(
+                self.seed.encode()
+            )
+            seed_encryption_method = "aes"
+        self.encrypted_seed = encrypted_seed
+        self.seed_encryption_method = seed_encryption_method
 
         if amounts:
             self.amounts = amounts
@@ -1034,9 +1067,6 @@ class MintKeyset:
             self.unit = Unit[unit]
 
         # generate keys from seed
-        assert self.seed, "seed not set"
-        assert self.derivation_path, "derivation path not set"
-
         self.generate_keys()
 
         logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
@@ -1071,8 +1101,33 @@ class MintKeyset:
 
     def generate_keys(self):
         """Generates keys of a keyset from a seed."""
-        assert self.seed, "seed not set"
-        assert self.derivation_path, "derivation path not set"
+        if not self.derivation_path:
+            raise Exception("derivation path not set")
+
+        if self.from_mnemonic:
+            if not settings.mint_mnemonic:
+                raise Exception("MINT_MNEMONIC not set, but keyset is derived from it.")
+            self.private_keys = derive_keys_from_seed(
+                Mnemonic.to_seed(settings.mint_mnemonic),
+                self.derivation_path,
+                self.amounts,
+            )
+            public_keys = derive_pubkeys(self.private_keys, self.amounts)
+            self.public_keys = public_keys
+            keyset_id = derive_keyset_id_v2(
+                public_keys,
+                self.unit.name,
+                self.final_expiry,
+                self.input_fee_ppk,
+            )
+            # a keyset loaded from the db must derive to its stored id
+            if self.id and self.id != keyset_id:
+                raise Exception(f"Keyset {self.id} was not derived from MINT_MNEMONIC.")
+            self.id = keyset_id
+            return
+
+        if not self.seed:
+            raise Exception("seed not set")
 
         # BEGIN: BACKWARDS COMPATIBILITY < 0.15.0
         # we overwrite keyset id only if it isn't already set in the database
@@ -1646,12 +1701,28 @@ class NUT10Option(BaseModel):
     t: Optional[List[List[str]]] = None  # tags
 
 
+class SupportedMethod(BaseModel):
+    mn: str = Field(min_length=1)  # method name
+    # per-method fee, absent = 0; u64 range per NUT-26
+    mf: Optional[int] = Field(default=None, ge=0, lt=2**64)
+
+
 class PaymentRequest(BaseModel):
     i: Optional[str] = None  # payment id
-    a: Optional[int] = None  # amount
+    a: Optional[int] = Field(default=None, ge=0, lt=2**64)  # amount
     u: Optional[str] = None  # unit
     s: Optional[bool] = None  # single use
     m: Optional[List[str]] = None  # mints
+    mp: Optional[bool] = None  # mint list preferred
+    sm: Optional[List[SupportedMethod]] = None  # supported methods
     d: Optional[str] = None  # description
     t: Optional[List[Transport]] = None  # transports
     nut10: Optional[NUT10Option] = None
+
+    @model_validator(mode="after")
+    def validate_request(self) -> "PaymentRequest":
+        self.m = self.m or None
+        self.sm = self.sm or None
+        if (self.a is not None or self.sm is not None) and not self.u:
+            raise ValueError("Payment request amount or supported methods require a unit")
+        return self
