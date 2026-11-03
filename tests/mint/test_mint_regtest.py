@@ -1,4 +1,5 @@
 import asyncio
+from uuid import uuid4
 
 import bolt11
 import pytest
@@ -271,6 +272,14 @@ async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
         amount=64,
         fee_reserve=0,
     )
+    # The ledger marks a quote pending with a fresh attempt and the backend's
+    # per-attempt checking id (the payment hash for hash-based backends)
+    # before submitting a payment. Mirror that here so that status polls
+    # track this send.
+    quote.attempt = str(uuid4())
+    quote.checking_id = ledger.backends[Method.bolt11][
+        Unit.sat
+    ].get_payment_checking_id(quote)
 
     async def pay():
         payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(
@@ -358,6 +367,14 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
         amount=64,
         fee_reserve=0,
     )
+    # The ledger marks a quote pending with a fresh attempt and the backend's
+    # per-attempt checking id (the payment hash for hash-based backends)
+    # before submitting a payment. Mirror that here so that status polls
+    # track this send.
+    quote.attempt = str(uuid4())
+    quote.checking_id = ledger.backends[Method.bolt11][
+        Unit.sat
+    ].get_payment_checking_id(quote)
 
     async def pay():
         payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(
