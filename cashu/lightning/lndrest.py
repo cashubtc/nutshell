@@ -60,7 +60,6 @@ MAX_ROUTE_RETRIES = 50
 TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
 PAYMENT_TIMEOUT_SECONDS = 60
 FEE_PROBE_TIMEOUT_SECONDS = 5
-INVOICE_PAGE_SIZE = 1000
 
 
 class LndRestWallet(LightningBackend):
@@ -490,44 +489,13 @@ class LndRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
-        settle_index = 0
-        reconnecting = False
 
         while True:
             try:
-                if reconnecting and settle_index == 0:
-                    # LND treats zero as "new events only". If the very first
-                    # settlement was lost, recover it before subscribing again.
-                    offset = 0
-                    settled: list[dict] = []
-                    while True:
-                        response = await self.client.get(
-                            "/v1/invoices",
-                            params={
-                                "index_offset": offset,
-                                "num_max_invoices": INVOICE_PAGE_SIZE,
-                            },
-                        )
-                        response.raise_for_status()
-                        page = response.json()
-                        invoices = page.get("invoices", [])
-                        settled.extend(inv for inv in invoices if inv.get("settled"))
-                        next_offset = int(page.get("last_index_offset", 0))
-                        if len(invoices) < INVOICE_PAGE_SIZE or next_offset <= offset:
-                            break
-                        offset = next_offset
-                    for inv in sorted(
-                        settled, key=lambda inv: int(inv["settle_index"])
-                    ):
-                        payment_hash = base64.b64decode(inv["r_hash"]).hex()
-                        settle_index = int(inv["settle_index"])
-                        yield payment_hash
-                reconnecting = True
                 url = "/v1/invoices/subscribe"
                 async with self.client.stream(
                     "GET",
                     url,
-                    params={"settle_index": settle_index},
                     timeout=http_timeout(STREAM_READ_TIMEOUT),
                 ) as r:
                     # Reset retry delay on successful connection
@@ -537,9 +505,6 @@ class LndRestWallet(LightningBackend):
                             inv = json.loads(line)["result"]
                             if not inv["settled"]:
                                 continue
-                            settle_index = max(
-                                settle_index, int(inv.get("settle_index", 0))
-                            )
                         except Exception:
                             continue
 
