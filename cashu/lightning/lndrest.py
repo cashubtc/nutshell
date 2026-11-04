@@ -27,6 +27,7 @@ from .base import (
     PaymentStatusResult,
     StatusResponse,
 )
+from .http import STREAM_READ_TIMEOUT, http_timeout
 from .macaroon import load_macaroon
 
 PAYMENT_RESULT_MAP = {
@@ -514,7 +515,11 @@ class LndRestWallet(LightningBackend):
         while True:
             try:
                 url = "/v1/invoices/subscribe"
-                async with self.client.stream("GET", url, timeout=None) as r:
+                async with self.client.stream(
+                    "GET",
+                    url,
+                    timeout=http_timeout(STREAM_READ_TIMEOUT),
+                ) as r:
                     # Reset retry delay on successful connection
                     retry_delay = 0
                     async for line in r.aiter_lines():

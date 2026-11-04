@@ -27,6 +27,7 @@ from .base import (
     StatusResponse,
     Unsupported,
 )
+from .http import STREAM_READ_TIMEOUT, http_timeout
 
 CLN_PAYMENT_STATUS_COMPLETE = "complete"
 CLN_PAYMENT_STATUS_PENDING = "pending"
@@ -374,7 +375,7 @@ class CLNRestWallet(LightningBackend):
                     data={
                         "lastpay_index": self.last_pay_index,
                     },
-                    timeout=None,
+                    timeout=http_timeout(STREAM_READ_TIMEOUT),
                 ) as r:
                     # Reset retry delay on successful connection
                     retry_delay = 0

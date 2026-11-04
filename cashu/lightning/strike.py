@@ -220,6 +220,8 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.post(url=f"{self.endpoint}/v1/invoices", json=payload)
             r.raise_for_status()
+        except httpx.RequestError as exc:
+            return InvoiceResponse(ok=False, error_message=str(exc))
         except Exception:
             return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
@@ -231,6 +233,8 @@ class StrikeWallet(LightningBackend):
                 f"{self.endpoint}/v1/invoices/{invoice.invoiceId}/quote", json=payload
             )
             r2.raise_for_status()
+        except httpx.RequestError as exc:
+            return InvoiceResponse(ok=False, error_message=str(exc))
         except Exception:
             return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
@@ -250,6 +254,8 @@ class StrikeWallet(LightningBackend):
                 timeout=None,
             )
             r.raise_for_status()
+        except httpx.RequestError:
+            raise
         except Exception:
             error_message = r.json()["data"]["message"]
             raise Exception(error_message)
@@ -278,6 +284,12 @@ class StrikeWallet(LightningBackend):
                 timeout=None,
             )
             r.raise_for_status()
+        except httpx.RequestError as exc:
+            return PaymentResponse(
+                result=PaymentResult.ERROR,
+                checking_id=quote.checking_id,
+                error_message=str(exc),
+            )
         except Exception:
             error_message = r.json()["data"]["message"]
             return PaymentResponse(
