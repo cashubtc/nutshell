@@ -45,6 +45,34 @@ def package_files(root):
     return names
 
 
+def validate_metadata(root, sources):
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib
+
+    project = tomllib.loads(sources["pyproject.toml"].read_text(encoding="utf-8"))[
+        "project"
+    ]
+    names = []
+    readme = project.get("readme")
+    if isinstance(readme, str):
+        names.append(readme)
+    elif isinstance(readme, dict) and "file" in readme:
+        names.append(readme["file"])
+    license = project.get("license")
+    if isinstance(license, dict) and "file" in license:
+        names.append(license["file"])
+    licenses = project.get("license-files", [])
+    if not isinstance(licenses, list):
+        raise ValueError("Invalid metadata file list")
+    names.extend(licenses)
+    for name in names:
+        if not isinstance(name, str) or name not in sources:
+            raise ValueError(f"Invalid metadata file: {name!r}")
+        regular_file(root, name)
+
+
 def source_files(root):
     # Do not traverse links, including unlisted, broken and directory links.
     if (root / "cashu").is_symlink():
@@ -54,9 +82,11 @@ def source_files(root):
             path = Path(directory, name)
             if path.is_symlink():
                 raise ValueError(f"Packaging refuses symlink: {path.relative_to(root)}")
-    return {
+    sources = {
         name: regular_file(root, name) for name in (*SOURCE_FILES, *package_files(root))
     }
+    validate_metadata(root, sources)
+    return sources
 
 
 def build_snapshot(hook, output_directory, config_settings, metadata_directory=None):

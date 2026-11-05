@@ -9,9 +9,10 @@ import tarfile
 import tempfile
 import venv
 import zipfile
+from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 
-from build_backend import SOURCE_FILES, package_files
+from build_backend import SOURCE_FILES, package_files, regular_file
 
 
 def check_paths(names, expected):
@@ -30,9 +31,20 @@ def check_member(name):
         raise ValueError(f"Unsafe distribution path: {name!r}")
 
 
+def check_metadata(content, readme):
+    metadata = BytesParser().parsebytes(content)
+    if metadata.get_payload(decode=True) != readme:
+        raise ValueError("Distribution metadata does not match README.md")
+    if metadata.get_all("License-File") != ["LICENSE.md"]:
+        raise ValueError("Distribution metadata has unexpected license files")
+
+
 def check_contents(wheel, sdist):
     """Check all paths, not just known secret filenames, before installing."""
-    allowed = set(package_files(Path(__file__).resolve().parents[1]))
+    root = Path(__file__).resolve().parents[1]
+    allowed = set(package_files(root))
+    readme = regular_file(root, "README.md").read_bytes()
+    license = regular_file(root, "LICENSE.md").read_bytes()
     with zipfile.ZipFile(wheel) as archive:
         names = []
         for member in archive.infolist():
@@ -62,6 +74,10 @@ def check_contents(wheel, sdist):
                 )
             },
         )
+        wheel_metadata = archive.read(f"{prefix}/METADATA")
+        check_metadata(wheel_metadata, readme)
+        if archive.read(f"{prefix}/licenses/LICENSE.md") != license:
+            raise ValueError("Distribution license does not match LICENSE.md")
     with tarfile.open(sdist) as archive:
         names = []
         prefix = sdist.name.removesuffix(".tar.gz") + "/"
@@ -79,6 +95,17 @@ def check_contents(wheel, sdist):
         check_paths(
             names, allowed | set(SOURCE_FILES) | {"PKG-INFO", "pyproject.toml.orig"}
         )
+        metadata = archive.extractfile(f"{prefix}PKG-INFO").read()
+        check_metadata(metadata, readme)
+        if metadata != wheel_metadata:
+            raise ValueError("Wheel and source distribution metadata differ")
+        for name in ("README.md", "LICENSE.md", "pyproject.toml.orig"):
+            source = "pyproject.toml" if name.endswith(".orig") else name
+            if (
+                archive.extractfile(f"{prefix}{name}").read()
+                != regular_file(root, source).read_bytes()
+            ):
+                raise ValueError(f"Distribution source does not match {source}")
 
 
 def run(*args, cwd, env):

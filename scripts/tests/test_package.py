@@ -2,6 +2,7 @@
 
 import importlib.util
 import io
+import json
 import os
 import shutil
 import stat
@@ -10,6 +11,7 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -118,7 +120,13 @@ def test_build_excludes_local_secrets_and_preserves_resources(project, git_check
         if os.name != "nt":
             for name in ("cashu/tor/bundle/linux/tor", "cashu/tor/bundle/mac/tor"):
                 assert archive.getinfo(name).external_attr >> 16 & stat.S_IXUSR
-        entry_points = archive.read("cashu-0.21.0.dist-info/entry_points.txt").decode()
+        entry_points = archive.read(
+            next(
+                name
+                for name in archive.namelist()
+                if name.endswith("/entry_points.txt")
+            )
+        ).decode()
         assert "mint = cashu.mint.main:main" in entry_points
         assert "cashu = cashu.wallet.cli.cli:cli" in entry_points
         assert "mint-cli = cashu.mint.management_rpc.cli.cli:cli" in entry_points
@@ -129,6 +137,153 @@ def test_build_excludes_local_secrets_and_preserves_resources(project, git_check
     direct = next((project / "direct").glob("*.whl"))
     checker.check_contents(direct, sdist)
     assert_no_canary(direct)
+
+
+@pytest.mark.parametrize("wheel_only", [False, True])
+@pytest.mark.parametrize(
+    "field", ["readme", "readme-table", "license", "license-files"]
+)
+@pytest.mark.parametrize("absolute", [False, True])
+def test_build_validates_metadata_files(project, tmp_path, field, absolute, wheel_only):
+    outside = tmp_path / "document.md"
+    outside.write_bytes(CANARY)
+    name = json.dumps(str(outside) if absolute else "../document.md")
+    metadata = project / "pyproject.toml"
+    text = metadata.read_text()
+    if field == "readme":
+        text = text.replace('readme = "README.md"', f"readme = {name}")
+    elif field == "readme-table":
+        text = text.replace(
+            'readme = "README.md"',
+            f'readme = {{file = {name}, content-type = "text/markdown"}}',
+        )
+    elif field == "license":
+        text = text.replace('license = "MIT"', f"license = {{file = {name}}}")
+    else:
+        text = text.replace(
+            'license-files = ["LICENSE.md"]', f"license-files = [{name}]"
+        )
+    metadata.write_text(text)
+
+    result = build(project, *(["--wheel"] if wheel_only else []))
+    assert result.returncode != 0
+    assert "Invalid metadata file" in result.stderr
+    assert not list((project / "dist").glob("*.whl"))
+    assert not list((project / "dist").glob("*.tar.gz"))
+
+
+@pytest.mark.parametrize(
+    "hook",
+    [
+        "build_wheel",
+        "build_sdist",
+        "build_editable",
+        "prepare_metadata_for_build_wheel",
+        "prepare_metadata_for_build_editable",
+    ],
+)
+@pytest.mark.parametrize(
+    "name", ["../document.md", "/document.md", "C:/document.md", "unlisted.md"]
+)
+def test_metadata_validation_precedes_backend_hooks(project, monkeypatch, hook, name):
+    metadata = project / "pyproject.toml"
+    metadata.write_text(
+        metadata.read_text().replace(
+            'readme = "README.md"', f"readme = {json.dumps(name)}"
+        )
+    )
+    (project / "unlisted.md").write_bytes(CANARY)
+
+    def unexpected_call(*args, **kwargs):
+        pytest.fail("Backend hook ran before validation")
+
+    monkeypatch.setitem(
+        sys.modules, "uv_build", SimpleNamespace(**{hook: unexpected_call})
+    )
+    monkeypatch.chdir(project)
+    with pytest.raises(ValueError, match="Invalid metadata file"):
+        getattr(backend, hook)(str(project / "output"))
+
+
+def test_build_accepts_readme_table(project):
+    metadata = project / "pyproject.toml"
+    metadata.write_text(
+        metadata.read_text().replace(
+            'readme = "README.md"',
+            'readme = {file = "README.md", content-type = "text/markdown"}',
+        )
+    )
+    result = build(project)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("name", ["../*.md", "/tmp/*.md", "*.md", "C:LICENSE.md"])
+def test_metadata_requires_explicit_source_files(project, name):
+    metadata = project / "pyproject.toml"
+    metadata.write_text(
+        metadata.read_text().replace(
+            'license-files = ["LICENSE.md"]', f"license-files = [{json.dumps(name)}]"
+        )
+    )
+    with pytest.raises(ValueError, match="Invalid metadata file"):
+        backend.source_files(project)
+
+
+@pytest.fixture(scope="module")
+def artifacts(tmp_path_factory):
+    project = tmp_path_factory.mktemp("package")
+    for name in (*backend.SOURCE_FILES, *backend.package_files(ROOT)):
+        target = project / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, target)
+    result = build(project)
+    assert result.returncode == 0, result.stderr
+    wheel = next((project / "dist").glob("*.whl"))
+    sdist = next((project / "dist").glob("*.tar.gz"))
+    checker.check_contents(wheel, sdist)
+    return wheel, sdist
+
+
+@pytest.mark.parametrize(
+    "artifact,member",
+    [
+        ("wheel", "METADATA"),
+        ("wheel", "licenses/LICENSE.md"),
+        ("sdist", "PKG-INFO"),
+        ("sdist", "README.md"),
+        ("sdist", "LICENSE.md"),
+        ("sdist", "pyproject.toml.orig"),
+    ],
+)
+def test_artifact_check_validates_metadata_contents(
+    tmp_path, artifacts, artifact, member
+):
+    wheel, sdist = (tmp_path / source.name for source in artifacts)
+    for source, target in zip(artifacts, (wheel, sdist)):
+        if source.suffix == ".whl":
+            with (
+                zipfile.ZipFile(source) as original,
+                zipfile.ZipFile(target, "w") as copy,
+            ):
+                for item in original.infolist():
+                    data = original.read(item)
+                    if artifact == "wheel" and item.filename.split("/", 1)[1] == member:
+                        data += CANARY
+                    copy.writestr(item, data)
+        else:
+            with tarfile.open(source) as original, tarfile.open(target, "w:gz") as copy:
+                for item in original.getmembers():
+                    if item.isdir():
+                        copy.addfile(item)
+                        continue
+                    data = original.extractfile(item).read()
+                    if artifact == "sdist" and item.name.split("/", 1)[1] == member:
+                        data += CANARY
+                    item.size = len(data)
+                    item.pax_headers.pop("size", None)
+                    copy.addfile(item, io.BytesIO(data))
+    with pytest.raises(ValueError, match="metadata|license|source"):
+        checker.check_contents(wheel, sdist)
 
 
 @pytest.mark.parametrize("wheel_only", [False, True])
@@ -206,43 +361,38 @@ def test_manifest_rejects_unsafe_paths(project, path):
     "attack",
     ["secret", "metadata-secret", "symlink", "hardlink", "traversal", "duplicate"],
 )
-def test_artifact_check_rejects_unexpected_contents(tmp_path, artifact, attack):
-    wheel = tmp_path / "cashu-0.21.0-py3-none-any.whl"
-    sdist = tmp_path / "cashu-0.21.0.tar.gz"
-    package = backend.package_files(ROOT)
-    metadata = [
-        "METADATA",
-        "WHEEL",
-        "RECORD",
-        "entry_points.txt",
-        "licenses/LICENSE.md",
-    ]
+def test_artifact_check_rejects_unexpected_contents(
+    tmp_path, artifacts, artifact, attack
+):
+    wheel, sdist = (tmp_path / source.name for source in artifacts)
+    prefix = sdist.name.removesuffix(".tar.gz")
     attack_name = {
         "secret": "cashu/mint/.env",
-        "metadata-secret": "cashu-0.21.0.dist-info/.env",
+        "metadata-secret": f"{prefix}.dist-info/.env",
         "symlink": "cashu/leak.py",
         "hardlink": "cashu/leak.py",
         "traversal": "cashu/../../outside",
         "duplicate": "cashu/__init__.py",
     }[attack]
-    with zipfile.ZipFile(wheel, "w") as archive:
-        for name in package + [f"cashu-0.21.0.dist-info/{name}" for name in metadata]:
-            archive.writestr(name, b"safe")
+    with (
+        zipfile.ZipFile(artifacts[0]) as original,
+        zipfile.ZipFile(wheel, "w") as archive,
+    ):
+        for member in original.infolist():
+            archive.writestr(member, original.read(member))
         if artifact == "wheel":
             member = zipfile.ZipInfo(attack_name)
             member.create_system = 3
             kind = stat.S_IFLNK if attack in ("symlink", "hardlink") else stat.S_IFREG
             member.external_attr = (kind | 0o644) << 16
             archive.writestr(member, CANARY)
-    with tarfile.open(sdist, "w:gz") as archive:
-        for name in (
-            package + list(backend.SOURCE_FILES) + ["PKG-INFO", "pyproject.toml.orig"]
-        ):
-            member = tarfile.TarInfo(f"cashu-0.21.0/{name}")
-            member.size = 4
-            archive.addfile(member, io.BytesIO(b"safe"))
+    with tarfile.open(artifacts[1]) as original, tarfile.open(sdist, "w:gz") as archive:
+        for member in original.getmembers():
+            archive.addfile(
+                member, original.extractfile(member) if member.isfile() else None
+            )
         if artifact == "sdist":
-            member = tarfile.TarInfo(f"cashu-0.21.0/{attack_name}")
+            member = tarfile.TarInfo(f"{prefix}/{attack_name}")
             if attack in ("symlink", "hardlink"):
                 member.type = (
                     tarfile.SYMTYPE if attack == "symlink" else tarfile.LNKTYPE
