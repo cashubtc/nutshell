@@ -45,6 +45,7 @@ cashu/lightning/__init__.py
 cashu/lightning/base.py
 cashu/lightning/clnrest.py
 cashu/lightning/fake.py
+cashu/lightning/http.py
 cashu/lightning/lnd_grpc/lnd_grpc.py
 cashu/lightning/lnd_grpc/protos/download_and_build.sh
 cashu/lightning/lnd_grpc/protos/lightning.proto
@@ -72,6 +73,7 @@ cashu/mint/auth/server.py
 cashu/mint/cache.py
 cashu/mint/conditions.py
 cashu/mint/crud.py
+cashu/mint/db/lease.py
 cashu/mint/db/read.py
 cashu/mint/db/write.py
 cashu/mint/encrypt.py
