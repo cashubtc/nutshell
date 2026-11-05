@@ -1,4 +1,5 @@
 import secrets
+from decimal import ROUND_CEILING, Decimal
 from typing import AsyncGenerator, Dict, Optional, Union
 
 import bolt11
@@ -109,23 +110,23 @@ class StrikeWallet(LightningBackend):
         unit: Unit,
     ) -> int:
         fee_str = strike_quote.totalFee.amount
-        fee: int = 0
+        fee = Decimal(0)
         if strike_quote.totalFee.currency == self.currency_map[Unit.sat]:
             if unit == Unit.sat:
-                fee = int(float(fee_str) * 1e8)
+                fee = Decimal(fee_str) * 100_000_000
             elif unit == Unit.msat:
-                fee = int(float(fee_str) * 1e11)
+                fee = Decimal(fee_str) * 100_000_000_000
         elif strike_quote.totalFee.currency in [
             self.currency_map[Unit.usd],
             self.currency_map[Unit.eur],
             USDT,
         ]:
-            fee = int(float(fee_str) * 100)
+            fee = Decimal(fee_str) * 100
         else:
             raise Exception(
                 f"Unexpected currency {strike_quote.totalFee.currency} in fee"
             )
-        return fee
+        return int(fee.to_integral_value(rounding=ROUND_CEILING))
 
     def __init__(self, unit: Unit, **kwargs):
         self.assert_unit_supported(unit)
