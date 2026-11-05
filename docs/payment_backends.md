@@ -276,3 +276,107 @@ Do not retry an ambiguous outgoing payment with new proofs until its status is
 known. Check both the mint and processor logs using the quote ID. Preserve the
 processor's data directory across restarts because it contains the durable
 payment state needed for reconciliation.
+
+## Upgrading payment backends
+
+Back up the mint database and stop all workers before running migrations or the
+identity repair tool. First-time upgrades keep historical accounting unchanged:
+zero-fee payments alone do not establish whether a settlement was internal.
+Databases that already ran an earlier version of this PR should have their
+`amount_paid_internal` records checked against their original backend records.
+The upgrade does not automatically rewrite these credits or merge funded quotes.
+
+Quote identities are unique per payment method. Bounded SHA-256 identity indexes
+support long requests without serializing unrelated quote creation. If an upgrade
+reports conflicting identities, run the offline audit:
+
+```sh
+poetry run python -m cashu.mint.payment_audit --database "$MINT_DATABASE"
+```
+
+The report lists conflicting quote IDs and internal credits to verify. For an
+unfunded, unissued quote whose stored identity is incorrect, obtain the correct
+identity from its original backend and validate a correction:
+
+```sh
+poetry run python -m cashu.mint.payment_audit --database "$MINT_DATABASE" \
+  --quote QUOTE_ID --field checking_id --expected OLD_ID --replacement CORRECT_ID
+```
+
+This is a dry run. Add `--apply` to make that specific correction. Funded quotes,
+quotes with issuance records, and ambiguous histories require reconciliation
+with the original backend; the tool refuses to delete or rewrite their balances.
+
+When switching BOLT11 backends, reconcile pending melts and outstanding mint
+quotes first. The gRPC adapter accepts legacy 64-character Lightning payment
+hashes when the new processor uses the same underlying Lightning wallet. Other
+backend-specific identifiers cannot be safely transferred to a different wallet.
+Keep the original backend available until those records are reconciled.
+
+## Processor units and availability
+
+The configured unit is the ecash unit. A Lightning processor may report `msat`
+while the mint issues `sat`. The adapter converts requests, receipts and fees;
+fees round up to the ecash unit and incoming receipts are summed before rounding.
+A processor using `sat` cannot represent fractional-sat requests. Unrelated
+currency conversions and fiat amountless BOLT12 payments are rejected. An `msat`
+ecash configuration also needs an `msat` keyset, for example a derivation path
+`m/0'/1'/0'` in `MINT_DERIVATION_PATH_LIST`.
+
+`allow_insecure` accepts JSON booleans only; use `true` exclusively for a trusted
+local transport. The default requires mutual TLS. Unary calls have configurable
+positive finite deadlines: `rpc_timeout` defaults to 30 seconds and
+`payment_timeout` to 120 seconds. Channels use keepalive, and interrupted event
+streams reconnect. A payment timeout does not authorize an automatic second send;
+its state remains subject to backend reconciliation.
+
+## Amounts, recovery and capabilities
+
+BOLT11 quotes remain single-use. Reusable receiving methods explicitly enable
+`allows_repeated_payments`; reusable outgoing offers and addresses use independent
+quote and execution identities. `allows_partial_mint` controls partial issuance.
+For methods other than BOLT11, observed receipts are retained even when they
+exceed a requested amount. A method without partial issuance waits until its
+requested amount is covered and then issues the available balance. Partial or
+repeated methods can claim subsequent available credit according to their flags.
+
+A non-BOLT11 quote deadline expires the original payment terms, not already
+verified receipts: funded credit can still be claimed afterwards. Underpaid
+quotes without partial issuance need additional funding or operator-assisted
+recovery with the original backend. Use partial issuance for deposit addresses
+that need independent recovery of arbitrary deposits. Issuance remains subject
+to the configured method limits and mint balance ceiling.
+
+Plugins can supply separate `mint_options` and `melt_options`, directional
+`mint_min_amount`, `mint_max_amount`, `melt_min_amount`, `melt_max_amount`, and
+enable switches. Shared `min_amount`/`max_amount` remain compatibility defaults.
+The mint advertises and enforces the same policy. Legacy BOLT11 sat limits apply
+to sat/msat with unit conversion; other currencies use their explicit policy.
+Management state changes preserve cumulative receipt and issuance counters.
+
+The CLI accepts `cashu invoice --amountless --method bolt12` (or an omitted/zero
+amount for a method allowing it), and polls the quote's available paid balance.
+NUT-17 notifications use the standardized BOLT11 and BOLT12 subscription kinds.
+Custom methods currently use polling; custom websocket kinds require a separate
+protocol extension and are not advertised as supported.
+
+## Authentication compatibility
+
+The default blind-auth patterns include `POST /v1/mint/*` and
+`POST /v1/melt/*`, including quote and batch endpoints. Existing explicit operator
+lists are retained: update them to cover each newly enabled payment method.
+Older wallets that do not send blind-auth tokens to these endpoints need an
+upgrade or an explicitly chosen compatible endpoint policy. Review the mint's
+advertised authentication settings before enabling additional methods.
+
+Processor extension keys beginning with `_` are reserved for internal persisted
+method state and are excluded from public melt quote responses.
+
+Non-reusable methods keep an issued quote terminal. Later receipts remain
+recorded for reconciliation with the original backend; only methods explicitly
+allowing repeated payments can reopen a fully issued quote.
+
+Python plugins can override `supports_reusable_requests` for outgoing request
+reuse independently of incoming accounting. Its default follows the repeated
+payment capability for methods other than BOLT11. Earlier development schemas
+with overlapping migration numbers are reconciled during the upgrade.
