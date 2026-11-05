@@ -202,12 +202,12 @@ async def m006_add_active_window_to_keysets(db: Database):
         await conn.execute(
             f"""
                 ALTER TABLE {db.table_with_schema('keysets')}
-                ADD COLUMN active_from INTEGER NULL
+                ADD COLUMN active_from BIGINT NULL
             """
         )
         await conn.execute(
             f"""
                 ALTER TABLE {db.table_with_schema('keysets')}
-                ADD COLUMN active_until INTEGER NULL
+                ADD COLUMN active_until BIGINT NULL
             """
         )
