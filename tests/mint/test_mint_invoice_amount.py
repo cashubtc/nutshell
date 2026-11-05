@@ -322,9 +322,11 @@ async def test_mint_rejects_invalid_backend_quote_amount(
 async def test_backend_normalization_respects_mint_limit(
     amount_ledger, monkeypatch, limit, error
 ):
-    monkeypatch.setattr(settings, limit, 1500)
-    invoice = invoice_response(2000)
-    invoice.amount = Amount(Unit.msat, 2000)
+    monkeypatch.setattr(
+        settings, limit, 2 if limit == "mint_max_mint_bolt11_sat" else 1500
+    )
+    invoice = invoice_response(3000)
+    invoice.amount = Amount(Unit.msat, 3000)
     backend = amount_ledger.backends[Method.bolt11][Unit.msat]
     monkeypatch.setattr(backend, "create_invoice", AsyncMock(return_value=invoice))
     with pytest.raises(error):

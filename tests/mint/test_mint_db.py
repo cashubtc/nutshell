@@ -405,6 +405,8 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await ledger.get_mint_quote(mint_quote.quote, force_backend_check=True)
     await ledger.db_write._update_mint_quote_state(
         mint_quote.quote, MintQuoteState.paid
     )
@@ -415,7 +417,8 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     assert mint_quote_db
     assert mint_quote_db.state == MintQuoteState.paid
 
-    # Update it to issued
+    await wallet.mint(128, quote_id=mint_quote.quote)
+    # Updating an already recorded state is idempotent.
     await ledger.db_write._update_mint_quote_state(
         mint_quote_db.quote, MintQuoteState.issued
     )

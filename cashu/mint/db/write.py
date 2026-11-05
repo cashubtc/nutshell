@@ -481,6 +481,7 @@ class DbWriteHelper:
         quote: MeltQuote,
         conn: Optional[Connection] = None,
         get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
+        reusable: bool = False,
     ) -> MeltQuote:
         """Sets the melt quote as pending.
 
@@ -496,9 +497,7 @@ class DbWriteHelper:
             locks=[
                 LockOptions(
                     table="melt_quotes",
-                    select_statement=(
-                        "checking_id = :checking_id OR request = :request"
-                    ),
+                    select_statement=("checking_id = :checking_id OR request = :request"),
                     parameters={
                         "checking_id": quote.checking_id,
                         "request": quote.request,
@@ -510,13 +509,18 @@ class DbWriteHelper:
             quotes_by_checking_id = await self.crud.get_melt_quotes_by_checking_id(
                 checking_id=quote.checking_id, db=self.db, conn=conn
             )
-            quotes_by_request = await self.crud.get_melt_quotes_by_request(
-                request=quote.request, db=self.db, conn=conn
+            quotes_by_request = (
+                []
+                if reusable
+                else await self.crud.get_melt_quotes_by_request(
+                    request=quote.request, db=self.db, conn=conn
+                )
             )
             quotes_db = list(
                 {
                     existing.quote: existing
                     for existing in quotes_by_checking_id + quotes_by_request
+                    if existing.method == quote.method and existing.unit == quote.unit
                 }.values()
             )
             if len(quotes_db) == 0:
@@ -606,7 +610,22 @@ class DbWriteHelper:
             )
             if not mint_quote:
                 raise TransactionError("Mint quote not found.")
-            self._set_mint_quote_state(mint_quote, state)
+            self._ensure_mint_quote_accounting(mint_quote)
+            if mint_quote.state == state:
+                return
+            if mint_quote.issued:
+                raise TransactionError("Cannot change state of an issued mint quote.")
+            if state == MintQuoteState.unpaid and (mint_quote.amount_issued or 0):
+                raise TransactionError("quote state conflicts with recorded issuance")
+            if state == MintQuoteState.paid and (mint_quote.amount_paid or 0) <= (
+                mint_quote.amount_issued or 0
+            ):
+                raise QuoteNotPaidError("quote has no verified available balance")
+            if state == MintQuoteState.issued and (mint_quote.amount_issued or 0) != (
+                mint_quote.amount_paid or 0
+            ):
+                raise TransactionError("quote has an unissued balance")
+            self._restore_mint_quote_state(mint_quote, state)
             await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 
     async def _update_melt_quote_state(
@@ -645,7 +664,7 @@ class DbWriteHelper:
             melt_quote.state = state
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
 
-    async def _store_melt_quote(self, quote: MeltQuote):
+    async def _store_melt_quote(self, quote: MeltQuote, *, reusable: bool = False):
         """Stores a melt quote in the database. Will fail if a quote with the same checking_id is already pending or paid.
 
         Args:
@@ -658,9 +677,7 @@ class DbWriteHelper:
             locks=[
                 LockOptions(
                     table="melt_quotes",
-                    select_statement=(
-                        "checking_id = :checking_id OR request = :request"
-                    ),
+                    select_statement=("checking_id = :checking_id OR request = :request"),
                     parameters={
                         "checking_id": quote.checking_id,
                         "request": quote.request,
@@ -671,12 +688,17 @@ class DbWriteHelper:
             quotes_by_checking_id = await self.crud.get_melt_quotes_by_checking_id(
                 checking_id=quote.checking_id, db=self.db, conn=conn
             )
-            quotes_by_request = await self.crud.get_melt_quotes_by_request(
-                request=quote.request, db=self.db, conn=conn
+            quotes_by_request = (
+                []
+                if reusable
+                else await self.crud.get_melt_quotes_by_request(
+                    request=quote.request, db=self.db, conn=conn
+                )
             )
             quotes_db = {
                 existing.quote: existing
                 for existing in quotes_by_checking_id + quotes_by_request
+                if existing.method == quote.method and existing.unit == quote.unit
             }.values()
             if any([quote.state == MeltQuoteState.paid for quote in quotes_db]):
                 raise InvoiceAlreadyPaidError("Melt quote already paid or pending.")
@@ -693,6 +715,7 @@ class DbWriteHelper:
         keysets: Dict[str, MintKeyset],
         conn: Optional[Connection] = None,
         get_checking_id: Optional[Callable[[MeltQuote], str]] = None,
+        reusable: bool = False,
     ) -> MeltQuote:
         """Sets the melt quote and proofs as pending in a single transaction.
 
@@ -723,7 +746,7 @@ class DbWriteHelper:
                 proofs, keysets, quote_id=quote.quote, conn=conn
             )
             quote = await self._set_melt_quote_pending(
-                quote, conn=conn, get_checking_id=get_checking_id
+                quote, conn=conn, get_checking_id=get_checking_id, reusable=reusable
             )
 
         return quote

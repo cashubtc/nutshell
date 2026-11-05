@@ -542,6 +542,8 @@ class MintQuote(LedgerEvent):
             or mint_quote_resp.state == MintQuoteState.pending.value
         ):
             state = MintQuoteState.pending
+        elif mint_quote_resp.state in {"ISSUED", MintQuoteState.issued}:
+            state = MintQuoteState.issued
         elif amount_paid is not None and amount_issued is not None:
             if amount_paid == 0 and amount_issued == 0:
                 state = MintQuoteState.unpaid
@@ -633,10 +635,14 @@ class MintQuote(LedgerEvent):
 
     @property
     def state(self) -> MintQuoteState:
-        # UNPAID and PENDING are explicit orchestration states. In particular,
+        # UNPAID, PENDING and ISSUED are explicit orchestration states. In particular,
         # an observed partial payment must not implicitly make a non-reusable
         # quote issuable merely because amount_paid is non-zero.
-        if self.state_val in {MintQuoteState.unpaid, MintQuoteState.pending}:
+        if self.state_val in {
+            MintQuoteState.unpaid,
+            MintQuoteState.pending,
+            MintQuoteState.issued,
+        }:
             return self.state_val
         if self.amount_paid is not None and self.amount_issued is not None:
             if self.amount_paid > self.amount_issued:

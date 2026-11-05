@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.base import Amount, MeltQuote, MintQuote, Unit
 from ..core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from ..core.settings import settings
 from ..lightning.base import (
     InvoiceResponse,
     PaymentQuoteResponse,
@@ -25,8 +26,14 @@ class PaymentMethodSettings(BaseModel):
     min_amount: Optional[int] = Field(default=None, ge=0)
     max_amount: Optional[int] = Field(default=None, ge=0)
     options: Optional[dict[str, Any]] = None
+    mint_options: Optional[dict[str, Any]] = None
+    melt_options: Optional[dict[str, Any]] = None
     mint_enabled: bool = True
     melt_enabled: bool = True
+    mint_min_amount: Optional[int] = Field(default=None, ge=0)
+    mint_max_amount: Optional[int] = Field(default=None, ge=0)
+    melt_min_amount: Optional[int] = Field(default=None, ge=0)
+    melt_max_amount: Optional[int] = Field(default=None, ge=0)
 
 
 class PaymentMethodPlugin(ABC):
@@ -57,6 +64,10 @@ class PaymentMethodPlugin(ABC):
     def supports_internal_settlement(self, backend: Any) -> bool:
         return False
 
+    def supports_reusable_requests(self, backend: Any) -> bool:
+        """Whether independent outgoing payments may use the same request."""
+        return self.method != "bolt11" and self.supports_repeated_payments(backend)
+
     def amountless_payment_amount(self, request: PostMeltQuoteRequest) -> Optional[int]:
         if request.options and request.options.amountless:
             raise ValueError("backend does not support amountless melt options")
@@ -80,6 +91,42 @@ class PaymentMethodPlugin(ABC):
 
     def settings_for(self, backend: Any, unit: Unit) -> PaymentMethodSettings:
         return PaymentMethodSettings(method_name=self.method)
+
+    def operation_settings(
+        self, backend: Any, unit: Unit, *, melt: bool = False
+    ) -> PaymentMethodSettings:
+        policy = self.settings_for(backend, unit).model_copy(deep=True)
+        direction = "melt" if melt else "mint"
+        for bound in ("min_amount", "max_amount"):
+            value = getattr(policy, f"{direction}_{bound}")
+            if value is not None:
+                setattr(policy, bound, value)
+        policy.options = (
+            policy.melt_options if melt else policy.mint_options or policy.options
+        )
+        if self.method == "bolt11":
+            disabled = (
+                settings.mint_bolt11_disable_melt
+                if melt
+                else settings.mint_bolt11_disable_mint
+            )
+            setattr(
+                policy,
+                f"{direction}_enabled",
+                not disabled and getattr(policy, f"{direction}_enabled"),
+            )
+            cap = (
+                settings.mint_max_melt_bolt11_sat
+                if melt
+                else settings.mint_max_mint_bolt11_sat
+            )
+            if cap and unit in {Unit.sat, Unit.msat}:
+                cap *= 1000 if unit == Unit.msat else 1
+                policy.max_amount = (
+                    min(cap, policy.max_amount) if policy.max_amount is not None else cap
+                )
+                policy.min_amount = policy.min_amount or 0
+        return policy
 
     def supports_description(self, backend: Any) -> bool:
         return False

@@ -4,6 +4,7 @@ import re
 from importlib import metadata
 from typing import Iterable, Optional
 
+from ..core.errors import NotAllowedError
 from .base import PaymentMethodPlugin
 
 PAYMENT_METHOD_PATTERN = re.compile(r"^[a-z0-9_-]+$")
@@ -27,11 +28,14 @@ class PaymentMethodRegistry:
         self._plugins[method] = plugin
 
     def get(self, method: str) -> PaymentMethodPlugin:
-        self.validate_method(method)
+        try:
+            self.validate_method(method)
+        except ValueError as exc:
+            raise NotAllowedError(str(exc)) from exc
         try:
             return self._plugins[method]
         except KeyError as exc:
-            raise ValueError(f"unsupported payment method '{method}'") from exc
+            raise NotAllowedError(f"unsupported payment method '{method}'") from exc
 
     def maybe_get(self, method: str) -> Optional[PaymentMethodPlugin]:
         return self._plugins.get(method)
