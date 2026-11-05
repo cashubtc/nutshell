@@ -1684,3 +1684,65 @@ def test_pay_rejects_request_total_overflow(nut18_cli_prefix, encode):
     assert result.exit_code == 1
     assert "total exceeds the maximum amount" in result.output
     assert "cashuB" not in result.stdout
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize("amount_args", [[], ["0"], ["--amountless"]])
+def test_invoice_creates_amountless_method_quote(
+    nut18_cli_prefix, monkeypatch, amount_args
+):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.base import MintQuote, MintQuoteState
+
+    request = AsyncMock(
+        return_value=MintQuote(
+            quote="amountless",
+            method="bolt12",
+            unit="sat",
+            request="lno1offer",
+            checking_id="incoming",
+            amount=0,
+            state=MintQuoteState.unpaid,
+        )
+    )
+    monkeypatch.setattr(Wallet, "request_mint_for_method", request)
+    result = CliRunner().invoke(
+        cli, [*nut18_cli_prefix, "invoice", *amount_args, "--method", "bolt12", "-n"]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert request.await_args.args == ("bolt12", None)
+    assert "lno1offer" in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+def test_invoice_claims_amountless_paid_balance(nut18_cli_prefix, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.base import MintQuote, MintQuoteState
+
+    incoming = MintQuote(
+        quote="amountless",
+        method="bolt12",
+        unit="sat",
+        request="lno1offer",
+        checking_id="incoming",
+        amount=0,
+        state=MintQuoteState.unpaid,
+    )
+    paid = incoming.model_copy(
+        update={"state_val": MintQuoteState.paid, "amount_paid": 8, "amount_issued": 0}
+    )
+    monkeypatch.setattr(
+        Wallet, "request_mint_for_method", AsyncMock(return_value=incoming)
+    )
+    monkeypatch.setattr(
+        Wallet, "get_mint_quote_for_method", AsyncMock(return_value=paid)
+    )
+    mint = AsyncMock(return_value=[])
+    monkeypatch.setattr(Wallet, "mint", mint)
+    result = CliRunner().invoke(
+        cli, [*nut18_cli_prefix, "invoice", "--amountless", "--method", "bolt12"]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert mint.await_args.args[0] == 8 and mint.await_args.kwargs["method"] == "bolt12"

@@ -656,7 +656,8 @@ async def request(
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
-@click.argument("amount", type=float)
+@click.argument("amount", required=False, type=float)
+@click.option("--amountless", is_flag=True, help="Request payment instructions without a fixed amount.")
 @click.option("memo", "-m", default="", help="Memo for the invoice.", type=str)
 @click.option("--id", default="", help="Id of the paid invoice.", type=str)
 @click.option(
@@ -686,13 +687,14 @@ async def request(
 @init_auth_wallet
 async def invoice(
     ctx: Context,
-    amount: float,
+    amount: Optional[float],
     memo: str,
     id: str,
     split: int,
     no_check: bool,
     method: str,
     method_options: str,
+    amountless: bool = False,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
@@ -703,11 +705,33 @@ async def invoice(
             raise ValueError("must be a JSON object")
     except Exception as e:
         raise click.BadParameter(str(e), param_hint="--method-options") from e
-    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
-    print(f"Requesting invoice for {wallet.unit.str(amount)}.")
+    if amountless and amount not in (None, 0):
+        raise click.BadParameter(
+            "--amountless cannot be combined with a positive amount"
+        )
+    if (
+        method == Method.bolt11.name
+        and not id
+        and (amountless or amount is None or amount <= 0)
+    ):
+        raise click.BadParameter("bolt11 requires a positive amount")
+    if amount is not None and amount < 0:
+        raise click.BadParameter("amount must not be negative")
+    if amountless or amount is None or amount == 0:
+        amount = None
+    else:
+        amount = (
+            int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+        )
+    if amount is None:
+        print("Requesting amountless payment instructions.")
+    else:
+        print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
+        if amount is None:
+            raise click.BadParameter("--split requires a fixed amount")
         assert amount % split == 0, "split must be divisor of amount"
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
@@ -765,17 +789,19 @@ async def invoice(
             return
 
     # user requests an invoice
-    if amount and not id:
+    if not id:
         mint_supports_websockets = method == Method.bolt11.name and (
             wallet.mint_info.supports_websocket_mint_quote(Method.bolt11, wallet.unit)
         )
         if mint_supports_websockets and not no_check:
+            assert amount is not None
             mint_quote, subscription = await wallet.request_mint_with_callback(
                 amount, callback=mint_invoice_callback, memo=memo
             )
             invoice_nonlocal, subscription_nonlocal = mint_quote, subscription
         else:
             if method == Method.bolt11.name:
+                assert amount is not None
                 mint_quote = await wallet.request_mint(amount, memo=memo)
             else:
                 mint_quote = await wallet.request_mint_for_method(
@@ -784,7 +810,7 @@ async def invoice(
                     memo=memo,
                     method_options=parsed_method_options,
                 )
-        amount = mint_quote.amount
+        amount = mint_quote.amount or 0
         if split:
             assert amount % split == 0, "split must be divisor of quoted amount"
             optional_split = [split] * (amount // split)
@@ -823,7 +849,9 @@ async def invoice(
                 )
                 if mint_quote.state == MintQuoteState.paid:
                     await wallet.mint(
-                        mint_quote.amount,
+                        (mint_quote.amount_paid or 0) - (mint_quote.amount_issued or 0)
+                        if method != Method.bolt11.name
+                        else mint_quote.amount,
                         split=optional_split,
                         quote_id=mint_quote.quote,
                         method=method,
@@ -846,15 +874,19 @@ async def invoice(
             )
 
     # user paid invoice before and wants to check the quote id
-    elif amount and id:
+    elif id:
         quote = await get_payment_mint_quote(wallet.db, quote=id, method=method)
         if not quote:
             raise Exception("Quote not found")
+        if method != Method.bolt11.name:
+            quote = await wallet.get_mint_quote_for_method(method, id)
         if split:
             assert quote.amount % split == 0, "split must be divisor of quoted amount"
             optional_split = [split] * (quote.amount // split)
         await wallet.mint(
-            quote.amount,
+            (quote.amount_paid or 0) - (quote.amount_issued or 0)
+            if method != Method.bolt11.name
+            else quote.amount,
             split=optional_split,
             quote_id=quote.quote,
             method=method,
