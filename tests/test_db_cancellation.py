@@ -1,7 +1,9 @@
 import asyncio
 import threading
+import time
 
 import aiosqlite
+import anyio
 import pytest
 from sqlalchemy import event
 
@@ -9,6 +11,9 @@ from cashu.core.db import Database, LockOptions
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cancellation_mode", ["asyncio", "anyio_scope", "anyio_task_group"]
+)
 @pytest.mark.parametrize(
     "operation, cancellations, statement_fails",
     [
@@ -20,7 +25,7 @@ from cashu.core.db import Database, LockOptions
     ],
 )
 async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
-    tmp_path, monkeypatch, operation, cancellations, statement_fails
+    tmp_path, monkeypatch, operation, cancellations, statement_fails, cancellation_mode
 ):
     db = Database("mint", str(tmp_path))
     statement_ready = asyncio.Event()
@@ -30,6 +35,9 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
     query = f"SELECT {column} FROM cancellation_values WHERE id = 1"
     original_execute = aiosqlite.Connection._execute
     reader = None
+    cancel_scope = None
+    transaction_task = None
+    cancelled_errors = []
 
     @event.listens_for(db.engine.sync_engine, "connect")
     def set_busy_timeout(connection, record):
@@ -54,9 +62,27 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
         return await original_execute(self, fn, *args, **kwargs)
 
     async def read_in_transaction():
-        async with db.connect(locks=[LockOptions(table="cancellation_values")]) as conn:
-            await conn.execute("UPDATE cancellation_values SET value = 1 WHERE id = 1")
-            await getattr(conn, operation)(query)
+        nonlocal transaction_task
+        transaction_task = asyncio.current_task()
+        try:
+            async with db.connect(locks=[LockOptions(table="cancellation_values")]) as conn:
+                await conn.execute("UPDATE cancellation_values SET value = 1 WHERE id = 1")
+                await getattr(conn, operation)(query)
+        except asyncio.CancelledError as exc:
+            cancelled_errors.append(exc)
+            raise
+
+    async def run_reader():
+        nonlocal cancel_scope
+        if cancellation_mode == "asyncio":
+            await read_in_transaction()
+        elif cancellation_mode == "anyio_scope":
+            with anyio.CancelScope() as cancel_scope:
+                await read_in_transaction()
+        else:
+            async with anyio.create_task_group() as group:
+                cancel_scope = group.cancel_scope
+                group.start_soon(read_in_transaction)
 
     try:
         await db.execute(
@@ -64,17 +90,34 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
         )
         await db.execute("INSERT INTO cancellation_values VALUES (1, 0)")
         monkeypatch.setattr(aiosqlite.Connection, "_execute", pause_statement)
-        reader = asyncio.create_task(read_in_transaction())
+        reader = asyncio.create_task(run_reader())
         await asyncio.wait_for(statement_ready.wait(), timeout=10)
-        for _ in range(cancellations):
+        if cancel_scope is not None:
+            cancel_scope.cancel()
+        else:
             reader.cancel()
+        await asyncio.sleep(0)
+        for _ in range(cancellations - 1):
+            assert transaction_task is not None
+            transaction_task.cancel()
             await asyncio.sleep(0)
+
+        cpu_start = time.thread_time()
+        wall_start = time.monotonic()
+        await asyncio.sleep(0.2)
+        cpu_elapsed = time.thread_time() - cpu_start
+        wall_elapsed = time.monotonic() - wall_start
+        assert not reader.done()
         release_statement.set()
-        with pytest.raises(asyncio.CancelledError) as cancelled:
+        if cancellation_mode == "asyncio":
+            with pytest.raises(asyncio.CancelledError):
+                await reader
+        else:
             await reader
 
         # Retain the cancellation traceback while checking rollback and usability.
-        assert cancelled.type is asyncio.CancelledError
+        assert len(cancelled_errors) == 1
+        assert cpu_elapsed < wall_elapsed * 0.5
         row = await db.fetchone("SELECT value FROM cancellation_values WHERE id = 1")
         assert row["value"] == 0
         await db.execute("UPDATE cancellation_values SET value = 2 WHERE id = 1")
