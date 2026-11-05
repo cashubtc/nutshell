@@ -37,18 +37,54 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                     # Reset retry delay on successful connection to backend stream
                     retry_delay = settings.mint_retry_exponential_backoff_base_delay
                     async for checking_id in plugin.incoming_payment_stream(backend):
-                        await self.invoice_callback_dispatcher(
-                            checking_id, method_name, unit
-                        )
+                        try:
+                            await self.invoice_callback_dispatcher(
+                                checking_id, method_name, unit
+                            )
+                        except Exception:
+                            pending: set[tuple[str, Unit, str]] = getattr(
+                                self, "_event_refresh_pending", set()
+                            )
+                            self._event_refresh_pending = pending
+                            key = (method_name, unit, checking_id)
+                            if key not in pending:
+                                pending.add(key)
+                                if len(pending) >= 256:
+                                    await self._retry_invoice_refresh(key)
+                                else:
+                                    task = asyncio.create_task(
+                                        self._retry_invoice_refresh(key)
+                                    )
+                                    self.regular_tasks.append(task)  # type: ignore[attr-defined]
+                                    task.add_done_callback(self._discard_refresh_task)
                 except Exception as e:
                     logger.error(f"Error in invoice listener: {e}")
-                    logger.info(
-                        f"Restarting invoice listener in {retry_delay} seconds..."
-                    )
+                    logger.info(f"Restarting invoice listener in {retry_delay} seconds...")
                     await asyncio.sleep(retry_delay)
 
                     # Exponential backoff
                     retry_delay = min(retry_delay * 2, max_retry_delay)
+
+    def _discard_refresh_task(self, task: asyncio.Task) -> None:
+        tasks = self.regular_tasks  # type: ignore[attr-defined]
+        if task in tasks:
+            tasks.remove(task)
+
+    async def _retry_invoice_refresh(self, key: tuple[str, Unit, str]) -> None:
+        delay = settings.mint_retry_exponential_backoff_base_delay
+        try:
+            while True:
+                await asyncio.sleep(delay)
+                try:
+                    await self.invoice_callback_dispatcher(key[2], key[0], key[1])
+                    return
+                except Exception:
+                    logger.warning("Retrying payment event refresh")
+                    delay = min(
+                        delay * 2, settings.mint_retry_exponential_backoff_max_delay
+                    )
+        finally:
+            self._event_refresh_pending.discard(key)
 
     async def invoice_callback_dispatcher(
         self,
