@@ -137,7 +137,7 @@ async def test_payment_migrations_upgrade_existing_schema(tmp_path, version):
             )
         assert {"method_data", "amount_paid_internal"} <= mint_columns
         assert {"attempt", "method_data", "amountless_msat"} <= melt_columns
-        assert row and row["version"] == 46
+        assert row and row["version"] == 48
     finally:
         await db.engine.dispose()
 
@@ -643,7 +643,7 @@ async def test_m042_marks_existing_pending_payments_uncertain(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_internal_credit_migration_backfills_only_matching_settlements(ledger):
+async def test_internal_credit_migration_preserves_legacy_accounting(ledger):
     from cashu.core.base import MeltQuote, MeltQuoteState, MintQuote, MintQuoteState
     from cashu.mint import migrations as mint_migrations
 
@@ -690,7 +690,34 @@ async def test_internal_credit_migration_backfills_only_matching_settlements(led
         ledger.db
     )
     restored = await ledger.crud.get_mint_quote(quote_id=quote.quote, db=ledger.db)
-    assert restored.amount_paid_internal == 8
+    assert restored.amount_paid_internal == 0
     assert restored.amount_paid == 8
     outgoing = await ledger.crud.get_melt_quote(quote_id="internal", db=ledger.db)
     assert outgoing.amountless_msat is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [41, 42, 43, 44])
+async def test_payment_migrations_complete_older_development_schemas(tmp_path, version):
+    db = Database("mint", str(tmp_path / "development_schema"))
+    try:
+        await migrate_databases(db, _migrations_through(46))
+        await db.execute(
+            "INSERT INTO melt_quotes (quote, method, request, checking_id, unit, amount, fee_reserve, state) VALUES ('pending', 'bolt11', 'request', 'id', 'sat', 8, 0, 'PENDING')"
+        )
+        for column in ("melt_lock", "melt_lock_expires_at", "payment_uncertain"):
+            await db.execute(f"ALTER TABLE melt_quotes DROP COLUMN {column}")
+        if version == 41:
+            await db.execute("ALTER TABLE mint_quotes DROP COLUMN amount_paid_internal")
+            await db.execute("ALTER TABLE melt_quotes DROP COLUMN amountless_msat")
+        await db.execute(
+            "UPDATE dbversions SET version = :version WHERE db = 'mint'",
+            {"version": version},
+        )
+        await migrate_databases(db, mint_migrations)
+        await migrate_databases(db, mint_migrations)
+        row = await db.fetchone("SELECT * FROM melt_quotes WHERE quote = 'pending'")
+        assert row["melt_lock"] == "" and row["melt_lock_expires_at"] == 0
+        assert bool(row["payment_uncertain"])
+    finally:
+        await db.engine.dispose()

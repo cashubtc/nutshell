@@ -1,8 +1,10 @@
+import hashlib
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from ..core.base import (
     Amount,
@@ -18,7 +20,6 @@ from ..core.base import (
 from ..core.db import (
     Connection,
     Database,
-    LockOptions,
 )
 from ..core.errors import LightningError
 
@@ -627,71 +628,69 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
-        # Quote creation must serialize the check and insert, including when no
-        # existing row can be locked. Requests may exceed PostgreSQL's btree
-        # index size limit, so enforce their uniqueness under a table lock.
-        async with db.get_connection(
-            conn=conn, locks=[LockOptions(table="mint_quotes")]
-        ) as conn:
-            existing = await conn.fetchone(
-                f"""SELECT 1 FROM {db.table_with_schema('mint_quotes')}
-                    WHERE method = :method
-                      AND (request = :request OR checking_id = :checking_id)
-                    LIMIT 1""",
-                {
-                    "method": quote.method,
-                    "request": quote.request,
-                    "checking_id": quote.checking_id,
-                },
-            )
-            if existing:
+        try:
+            async with db.get_connection(conn=conn) as conn:
+                await conn.execute(
+                    f"""
+                    INSERT INTO {db.table_with_schema("mint_quotes")}
+                    (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, last_checked, pubkey, amount_paid, amount_issued, updated_at, method_data, amount_paid_internal, request_hash, checking_id_hash)
+                    VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :last_checked, :pubkey, :amount_paid, :amount_issued, :updated_at, :method_data, :amount_paid_internal, :request_hash, :checking_id_hash)
+                    """,
+                    {
+                        "quote": quote.quote,
+                        "method": quote.method,
+                        "request": quote.request,
+                        "checking_id": quote.checking_id,
+                        "unit": quote.unit,
+                        "amount": quote.amount,
+                        "state": quote.state.value,
+                        "created_time": db.to_timestamp(
+                            db.timestamp_from_seconds(quote.created_time) or ""
+                        ),
+                        "paid_time": db.to_timestamp(
+                            db.timestamp_from_seconds(quote.paid_time) or ""
+                        )
+                        if quote.paid_time
+                        else None,
+                        "issued_time": db.to_timestamp(
+                            db.timestamp_from_seconds(quote.issued_time) or ""
+                        )
+                        if quote.issued_time
+                        else None,
+                        "last_checked": db.to_timestamp(
+                            db.timestamp_from_seconds(quote.last_checked) or ""
+                        )
+                        if quote.last_checked
+                        else None,
+                        "pubkey": quote.pubkey or None,
+                        "amount_paid": quote.amount_paid,
+                        "amount_paid_internal": quote.amount_paid_internal,
+                        "amount_issued": quote.amount_issued,
+                        "updated_at": db.to_timestamp(
+                            db.timestamp_from_seconds(quote.updated_at) or ""
+                        )
+                        if quote.updated_at
+                        else None,
+                        "method_data": json.dumps(quote.method_data),
+                        "request_hash": hashlib.sha256(quote.request.encode()).hexdigest(),
+                        "checking_id_hash": hashlib.sha256(
+                            quote.checking_id.encode()
+                        ).hexdigest()
+                        if quote.checking_id
+                        else None,
+                    },
+                )
+        except IntegrityError as exc:
+            constraint = str(exc.orig)
+            if (
+                "mint_quotes_request_identity" in constraint
+                or "mint_quotes_checking_identity" in constraint
+                or "mint_quotes.method, mint_quotes." in constraint
+            ):
                 raise LightningError(
                     "payment backend returned a duplicate payment request or checking id"
-                )
-            await conn.execute(
-                f"""
-                INSERT INTO {db.table_with_schema("mint_quotes")}
-                (quote, method, request, checking_id, unit, amount, state, created_time, paid_time, issued_time, last_checked, pubkey, amount_paid, amount_issued, updated_at, method_data, amount_paid_internal)
-                VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :issued_time, :last_checked, :pubkey, :amount_paid, :amount_issued, :updated_at, :method_data, :amount_paid_internal)
-                """,
-                {
-                    "quote": quote.quote,
-                    "method": quote.method,
-                    "request": quote.request,
-                    "checking_id": quote.checking_id,
-                    "unit": quote.unit,
-                    "amount": quote.amount,
-                    "state": quote.state.value,
-                    "created_time": db.to_timestamp(
-                        db.timestamp_from_seconds(quote.created_time) or ""
-                    ),
-                    "paid_time": db.to_timestamp(
-                        db.timestamp_from_seconds(quote.paid_time) or ""
-                    )
-                    if quote.paid_time
-                    else None,
-                    "issued_time": db.to_timestamp(
-                        db.timestamp_from_seconds(quote.issued_time) or ""
-                    )
-                    if quote.issued_time
-                    else None,
-                    "last_checked": db.to_timestamp(
-                        db.timestamp_from_seconds(quote.last_checked) or ""
-                    )
-                    if quote.last_checked
-                    else None,
-                    "pubkey": quote.pubkey or None,
-                    "amount_paid": quote.amount_paid,
-                    "amount_paid_internal": quote.amount_paid_internal,
-                    "amount_issued": quote.amount_issued,
-                    "updated_at": db.to_timestamp(
-                        db.timestamp_from_seconds(quote.updated_at) or ""
-                    )
-                    if quote.updated_at
-                    else None,
-                    "method_data": json.dumps(quote.method_data),
-                },
-            )
+                ) from exc
+            raise
 
     async def get_mint_quote(
         self,
@@ -709,10 +708,14 @@ class LedgerCrudSqlite(LedgerCrud):
             clauses.append("quote = :quote_id")
             values["quote_id"] = quote_id
         if checking_id:
-            clauses.append("checking_id = :checking_id")
+            clauses.append(
+                "checking_id_hash = :checking_id_hash AND checking_id = :checking_id"
+            )
+            values["checking_id_hash"] = hashlib.sha256(checking_id.encode()).hexdigest()
             values["checking_id"] = checking_id
         if request:
-            clauses.append("request = :request")
+            clauses.append("request_hash = :request_hash AND request = :request")
+            values["request_hash"] = hashlib.sha256(request.encode()).hexdigest()
             values["request"] = request
         if method:
             clauses.append("method = :method")

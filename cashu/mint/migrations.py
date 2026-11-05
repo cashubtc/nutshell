@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 from typing import List
 
@@ -6,8 +7,19 @@ from sqlalchemy import RowMapping
 
 from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
-from ..core.db import Connection, Database
+from ..core.db import Connection, Database, LockOptions
 from ..core.settings import settings
+
+
+async def _has_column(conn: Connection, table: str, column: str) -> bool:
+    if conn.type == "SQLITE":
+        rows = await conn.fetchall(f"SELECT name FROM pragma_table_info('{table}')")
+        return any(row["name"] == column for row in rows)
+    row = await conn.fetchone(
+        "SELECT 1 FROM information_schema.columns WHERE table_schema = COALESCE(:schema, current_schema()) AND table_name = :table AND column_name = :column",
+        {"schema": conn.schema, "table": table, "column": column},
+    )
+    return row is not None
 
 
 async def m000_create_migrations_table(conn: Connection):
@@ -1390,20 +1402,7 @@ async def m043_add_payment_method_data_to_quotes(db: Database):
     """Add opaque, server-internal storage for method-specific quote state."""
     async with db.connect() as conn:
         for table in ("mint_quotes", "melt_quotes"):
-            if conn.type == "SQLITE":
-                columns = await conn.fetchall(
-                    f"SELECT name FROM pragma_table_info('{table}')"
-                )
-                exists = any(column["name"] == "method_data" for column in columns)
-            else:
-                column = await conn.fetchone(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name = :table AND column_name = 'method_data'",
-                    {"table": table},
-                )
-                exists = column is not None
-
-            if not exists:
+            if not await _has_column(conn, table, "method_data"):
                 await conn.execute(
                     f"ALTER TABLE {db.table_with_schema(table)} "
                     "ADD COLUMN method_data TEXT"
@@ -1415,24 +1414,16 @@ async def m044_separate_internal_credits_and_amountless_payments(db: Database):
     async with db.connect() as conn:
         mint_quotes = db.table_with_schema("mint_quotes")
         melt_quotes = db.table_with_schema("melt_quotes")
-        await conn.execute(
-            f"ALTER TABLE {mint_quotes} ADD COLUMN amount_paid_internal {db.big_int} NOT NULL DEFAULT 0"
-        )
-        # Internal settlements copy the mint checking id and charge no fee.
-        # Preserve credits on quotes that were settled before this migration.
-        await conn.execute(
-            f"""UPDATE {mint_quotes} SET amount_paid_internal = COALESCE((
-                SELECT SUM(melt.amount) FROM {melt_quotes} AS melt
-                WHERE melt.request = {mint_quotes}.request
-                  AND melt.checking_id = {mint_quotes}.checking_id
-                  AND melt.unit = {mint_quotes}.unit
-                  AND melt.method = {mint_quotes}.method
-                  AND melt.state = 'PAID' AND melt.fee_paid = 0
-            ), 0)"""
-        )
-        await conn.execute(
-            f"ALTER TABLE {melt_quotes} ADD COLUMN amountless_msat {db.big_int}"
-        )
+        if not await _has_column(conn, "mint_quotes", "amount_paid_internal"):
+            await conn.execute(
+                f"ALTER TABLE {mint_quotes} ADD COLUMN amount_paid_internal {db.big_int} NOT NULL DEFAULT 0"
+            )
+        # Historical records do not reliably identify settlement origin. Retain
+        # their existing accounting and leave new internal credits at zero.
+        if not await _has_column(conn, "melt_quotes", "amountless_msat"):
+            await conn.execute(
+                f"ALTER TABLE {melt_quotes} ADD COLUMN amountless_msat {db.big_int}"
+            )
 
 
 async def m045_backfill_mint_quote_accounting(db: Database):
@@ -1461,11 +1452,74 @@ async def m046_validate_mint_quote_payment_identities(db: Database):
         for field in ("request", "checking_id"):
             duplicate = await conn.fetchone(
                 f"""SELECT method FROM {db.table_with_schema('mint_quotes')}
-                    GROUP BY method, {field} HAVING COUNT(*) > 1 LIMIT 1"""
+                    WHERE {field} <> '' GROUP BY method, {field} HAVING COUNT(*) > 1 LIMIT 1"""
             )
             if duplicate:
                 raise RuntimeError(
                     f"Cannot upgrade mint database: duplicate {field} for payment "
                     f"method '{duplicate['method']}'. Resolve conflicting mint "
-                    "quotes before retrying."
+                    "quotes with `python -m cashu.mint.payment_audit` before retrying."
                 )
+
+
+async def m047_index_payment_identities(db: Database):
+    """Index bounded payment identities without changing historical accounting."""
+    async with db.get_connection(locks=[LockOptions(table="mint_quotes")]) as conn:
+        table = db.table_with_schema("mint_quotes")
+        for field in ("request_hash", "checking_id_hash"):
+            if not await _has_column(conn, "mint_quotes", field):
+                await conn.execute(f"ALTER TABLE {table} ADD COLUMN {field} TEXT")
+        cursor = ""
+        while True:
+            rows = await conn.fetchall(
+                f"SELECT quote, request, checking_id FROM {table} WHERE quote > :cursor ORDER BY quote LIMIT 500",
+                {"cursor": cursor},
+            )
+            if not rows:
+                break
+            await conn.conn.execute(
+                conn.rewrite_query(
+                    f"UPDATE {table} SET request_hash = :request_hash, checking_id_hash = :checking_id_hash WHERE quote = :quote"
+                ),
+                [
+                    {
+                        "quote": row["quote"],
+                        "request_hash": hashlib.sha256(
+                            row["request"].encode()
+                        ).hexdigest(),
+                        "checking_id_hash": hashlib.sha256(
+                            row["checking_id"].encode()
+                        ).hexdigest()
+                        if row["checking_id"]
+                        else None,
+                    }
+                    for row in rows
+                ],
+            )
+            cursor = rows[-1]["quote"]
+        for field, suffix in (
+            ("request_hash", "request"),
+            ("checking_id_hash", "checking"),
+        ):
+            await conn.execute(
+                f"CREATE UNIQUE INDEX IF NOT EXISTS mint_quotes_{suffix}_identity ON {table} (method, {field})"
+            )
+
+
+async def m048_reconcile_development_payment_schemas(db: Database):
+    """Complete schemas from development branches with overlapping versions."""
+    async with db.get_connection(locks=[LockOptions(table="melt_quotes")]) as conn:
+        table = db.table_with_schema("melt_quotes")
+        for column, definition in (
+            ("melt_lock", "TEXT NOT NULL DEFAULT ''"),
+            ("melt_lock_expires_at", "DOUBLE PRECISION NOT NULL DEFAULT 0"),
+            ("payment_uncertain", "INT NOT NULL DEFAULT 0"),
+        ):
+            if not await _has_column(conn, "melt_quotes", column):
+                await conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {definition}"
+                )
+                if column == "payment_uncertain":
+                    await conn.execute(
+                        f"UPDATE {table} SET payment_uncertain = 1 WHERE state = 'PENDING'"
+                    )
