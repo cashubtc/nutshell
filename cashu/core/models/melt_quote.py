@@ -83,5 +83,10 @@ class PostMeltQuoteResponse(BaseModel):
             "payment_preimage": melt_quote.payment_preimage,
             "change": melt_quote.change,
         }
-        response = {**melt_quote.method_data, **response}
+        public_data = {
+            key: value
+            for key, value in melt_quote.method_data.items()
+            if not key.startswith("_")
+        }
+        response = {**public_data, **response}
         return cls.model_validate(response)

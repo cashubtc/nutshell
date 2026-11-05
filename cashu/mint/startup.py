@@ -31,6 +31,7 @@ if not __debug__:
 logger.debug("Enviroment Settings:")
 for key, value in settings.model_dump().items():
     if key in [
+        "mint_payment_backends",
         "mint_private_key",
         "mint_mnemonic",
         "mint_seed_decryption_key",

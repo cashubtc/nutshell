@@ -139,7 +139,9 @@ async def test_grpc_payment_processor_is_cdk_compatible():
     )
     try:
         await processor.start(processor)
-        assert processor.settings_for(processor, Unit.sat).options == {"reusable": True}
+        assert processor.settings_for(processor, Unit.sat).mint_options == {
+            "reusable": True
+        }
 
         incoming = await processor.create_incoming_payment(
             processor,
@@ -316,9 +318,10 @@ async def test_grpc_bolt11_execution_respects_persisted_quote_amount(
     ledger: Ledger, unit: Unit, partial: bool
 ):
     invoice_msat = 3501
-    requested_msat = 2000 if partial else invoice_msat
+    requested_msat = 1001 if partial else invoice_msat
     quote_amount = Amount(Unit.msat, requested_msat).to(unit, round="up")
     processor = GrpcPaymentProcessor("bolt11", unit, {})
+    processor.native_unit = Unit.msat
     stub = AsyncMock()
     processor._stub = stub
     stub.GetPaymentQuote.return_value = pb.PaymentQuoteResponse(
@@ -352,6 +355,7 @@ async def test_grpc_bolt11_execution_respects_persisted_quote_amount(
         amount=priced.amount.amount,
         fee_reserve=priced.fee.amount,
         state=MeltQuoteState.unpaid,
+        method_data=priced.model_extra,
     )
     await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
     stored = await ledger.crud.get_melt_quote(quote_id=quote.quote, db=ledger.db)
@@ -375,6 +379,7 @@ async def test_grpc_bolt11_execution_respects_persisted_quote_amount(
 
     # A fresh adapter has no in-memory copy of the original MPP request.
     restarted = GrpcPaymentProcessor("bolt11", unit, {})
+    restarted.native_unit = Unit.msat
     restarted._stub = stub
     stub.MakePayment.side_effect = make_payment
     response = await restarted.execute_outgoing_payment(restarted, stored, priced.fee)

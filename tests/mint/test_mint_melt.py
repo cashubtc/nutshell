@@ -2316,10 +2316,11 @@ async def test_melt_lease_across_ledger_startup(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("unknown", [False, True])
+@pytest.mark.parametrize("processor_state", ["UNPAID", "FAILED", "UNSPECIFIED"])
 async def test_grpc_failed_payment_releases_proofs(
-    ledger, wallet, monkeypatch, unknown
+    ledger, wallet, monkeypatch, processor_state
 ):
+    unknown = processor_state != "FAILED"
     from unittest.mock import AsyncMock
 
     from cashu.core.base import ProofSpentState
@@ -2347,7 +2348,7 @@ async def test_grpc_failed_payment_releases_proofs(
     )
     result = pb.MakePaymentResponse(
         payment_identifier=identifier,
-        status=pb.QUOTE_STATE_UNSPECIFIED if unknown else pb.QUOTE_STATE_UNPAID,
+        status=getattr(pb, f"QUOTE_STATE_{processor_state}"),
         total_spent=pb.AmountMessage(value=0, unit="sat"),
     )
     stub.MakePayment.return_value = result
