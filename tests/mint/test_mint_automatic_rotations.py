@@ -5,9 +5,12 @@ import time
 import pytest
 
 from cashu.core.base import MintKeyset, Unit
+from cashu.core.crypto.keys import derive_bip39_derivation_path
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.mint.startup import ledger as global_ledger
+
+MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 
 @pytest.fixture(autouse=True)
@@ -136,12 +139,16 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("second_state", ["fresh", "stale", "inactive"])
 @pytest.mark.parametrize("second_path", ["m/0'/0'/1'", "m/1'/0'/3'"])
+@pytest.mark.parametrize("mnemonic_enabled", [False, True])
 async def test_automatic_rotation_with_multiple_keysets(
     ledger: Ledger,
     monkeypatch: pytest.MonkeyPatch,
     second_state: str,
     second_path: str,
+    mnemonic_enabled: bool,
 ):
+    if mnemonic_enabled:
+        monkeypatch.setattr(settings, "mint_mnemonic", MNEMONIC)
     monkeypatch.setattr(settings, "mint_keyset_rotation_enabled", True)
     monkeypatch.setattr(settings, "mint_keyset_rotation_interval_seconds", 86400)
     stale_timestamp = ledger.db.timestamp_from_seconds(int(time.time()) - 172800)
@@ -181,10 +188,15 @@ async def test_automatic_rotation_with_multiple_keysets(
         )
         assert replacement.active
         assert replacement.amounts == stale_keyset.amounts
-        assert (
-            replacement.derivation_path.rsplit("/", 1)[0]
-            == stale_keyset.derivation_path.rsplit("/", 1)[0]
+        expected_path = (
+            derive_bip39_derivation_path(stale_keyset.unit.name, 1)
+            if mnemonic_enabled
+            else stale_keyset.derivation_path
         )
+        assert replacement.from_mnemonic == mnemonic_enabled
+        assert replacement.derivation_path.rsplit("/", 1)[0] == expected_path.rsplit(
+            "/", 1
+        )[0]
     if second_state != "stale":
         db_second = next(k for k in db_keysets if k.id == second_keyset.id)
         assert db_second.active == (second_state == "fresh")
@@ -202,6 +214,17 @@ async def test_automatic_rotation_with_multiple_keysets(
     after_tick = await ledger.crud.get_keyset(db=ledger.db)
     assert {k.id for k in after_tick} == {k.id for k in db_keysets}
     assert {k.id for k in after_tick if k.active} == active_ids
+
+    restarted = Ledger(
+        db=ledger.db,
+        seed=ledger.seed,
+        derivation_path=ledger.derivation_path,
+        backends=ledger.backends,
+        crud=ledger.crud,
+    )
+    await restarted._startup_keysets()
+    assert set(restarted.keysets) == {k.id for k in db_keysets}
+    assert {k.id for k in restarted.keysets.values() if k.active} == active_ids
 
 
 @pytest.mark.asyncio
@@ -344,12 +367,17 @@ async def test_automatic_keyset_rotation_background(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_regression_non_atomic_rotation(ledger: Ledger):
+@pytest.mark.parametrize("mnemonic_enabled", [False, True])
+async def test_regression_non_atomic_rotation(
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, mnemonic_enabled: bool
+):
     """
     Regression test: rotation is not atomic.
     Verifies that if update_keyset fails, the entire transaction is rolled back.
     The new keyset is not saved, and only the old active keyset remains in DB.
     """
+    if mnemonic_enabled:
+        monkeypatch.setattr(settings, "mint_mnemonic", MNEMONIC)
     for task in ledger.regular_tasks:
         task.cancel()
     ledger.regular_tasks = []
@@ -419,13 +447,18 @@ async def test_regression_non_atomic_rotation(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_regression_concurrent_rotation_race(ledger: Ledger):
+@pytest.mark.parametrize("mnemonic_enabled", [False, True])
+async def test_regression_concurrent_rotation_race(
+    ledger: Ledger, monkeypatch: pytest.MonkeyPatch, mnemonic_enabled: bool
+):
     """
     Regression test: concurrent instances/manual rotation can race.
     Verifies that with locks and deactivation status checks, concurrent rotation requests
     safely serialize. The second request detects that the keyset was already rotated and skips gracefully,
     raising no exceptions.
     """
+    if mnemonic_enabled:
+        monkeypatch.setattr(settings, "mint_mnemonic", MNEMONIC)
     for task in ledger.regular_tasks:
         task.cancel()
     ledger.regular_tasks = []

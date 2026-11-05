@@ -180,6 +180,7 @@ class Ledger(
     async def _startup_keysets(self) -> None:
         if settings.mint_mnemonic:
             await self.init_mnemonic_keysets()
+            await self.rotate_keysets_if_needed()
             return
         await self.init_keysets()
         await self.rotate_keysets_if_needed()

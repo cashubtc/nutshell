@@ -239,9 +239,11 @@ For testing, you can use Nutshell without a Lightning backend by setting `MINT_B
 Nutshell supports automatic keyset rotations to ensure active keysets are regularly rotated. This behavior is **enabled by default** with a default rotation interval of **90 days**.
 
 When a keyset rotation occurs:
-1. A new keyset is activated (by automatically incrementing the derivation path counter, e.g., `m/0'/0'/0'` -> `m/0'/0'/1'`).
+1. A new keyset is activated using the next unused derivation counter. With `MINT_MNEMONIC` configured, the replacement is derived from the mnemonic.
 2. The old keyset is set to inactive but remains usable for redeeming existing ecash proofs.
 3. The mint automatically recovers the latest active keyset from the database on subsequent restarts. You do **not** need to manually update `MINT_DERIVATION_PATH` in your `.env` file.
+
+Each automatic rotation replaces the keyset that reached the interval and preserves its fee and amounts. Other active keysets for the same unit stay active until they reach the interval themselves.
 
 #### Configuration
 You can customize or disable automatic keyset rotations in your `.env`:

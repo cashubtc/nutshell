@@ -57,8 +57,9 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
             4. de-activates the old keyset
             5. stores the new keyset to DB
 
-        With MINT_MNEMONIC set, the unit rotates to a keyset derived from the mnemonic
-        instead, see `activate_mnemonic_keyset`.
+        With MINT_MNEMONIC set, the new keyset is derived from the mnemonic.
+        Manual rotation deactivates all other keysets of the unit; automatic
+        rotation replaces only the keyset identified by active_keyset_id.
 
         Args:
             unit (Unit): Unit of the keyset.
@@ -71,11 +72,6 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
         """
 
         logger.info(f"Attempting keyset rotation for unit {str(unit)}")
-
-        if settings.mint_mnemonic:
-            return await self.activate_mnemonic_keyset(
-                unit, max_order, input_fee_ppk, final_expiry
-            )
 
         async with self.db.connect(locks=[LockOptions(table="keysets")]) as conn:
             # Sync in-memory keysets from DB inside the lock preserving object identity
@@ -143,22 +139,34 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
 
             logger.info(f"Rotating keyset {selected_keyset.id}")
 
-            # Other active or retired keysets may already occupy later counters.
-            new_derivation_path = selected_keyset.derivation_path.split("/")
-            highest_counter = max(
-                int(k.derivation_path.split("/")[-1].replace("'", ""))
-                for k in self.keysets.values()
-                if k.derivation_path.split("/")[:-1] == new_derivation_path[:-1]
-            )
-            new_derivation_path[-1] = f"{highest_counter + 1}'"
+            if settings.mint_mnemonic:
+                counters = [
+                    int(k.derivation_path.split("/")[-1].replace("'", ""))
+                    for k in self.keysets.values()
+                    if k.from_mnemonic and k.unit == unit
+                ]
+                derivation_path = derive_bip39_derivation_path(
+                    unit.name, max(counters, default=0) + 1
+                )
+            else:
+                # Other active or retired keysets may already occupy later counters.
+                new_derivation_path = selected_keyset.derivation_path.split("/")
+                highest_counter = max(
+                    int(k.derivation_path.split("/")[-1].replace("'", ""))
+                    for k in self.keysets.values()
+                    if k.derivation_path.split("/")[:-1] == new_derivation_path[:-1]
+                )
+                new_derivation_path[-1] = f"{highest_counter + 1}'"
+                derivation_path = "/".join(new_derivation_path)
 
             # keys amounts for this keyset: if amounts is None we use `self.amounts`
             amounts = [2**i for i in range(max_order)] if max_order else self.amounts
 
             # Generate the keyset
             new_keyset = MintKeyset(
-                derivation_path="/".join(new_derivation_path),
-                seed=self.seed,
+                derivation_path=derivation_path,
+                seed=None if settings.mint_mnemonic else self.seed,
+                unit=unit.name,
                 amounts=amounts,
                 input_fee_ppk=input_fee_ppk,
                 active=True,
@@ -168,17 +176,23 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
             logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
             await self.crud.store_keyset(keyset=new_keyset, db=self.db, conn=conn)
 
-            logger.debug(f"De-activating keyset {selected_keyset.id}...")
-            inactive_keyset = copy.copy(selected_keyset)
-            inactive_keyset.active = False
-            await self.crud.update_keyset(keyset=inactive_keyset, db=self.db, conn=conn)
+            retired_keysets = [selected_keyset]
+            if settings.mint_mnemonic and not active_keyset_id:
+                retired_keysets = [
+                    k for k in self.keysets.values() if k.active and k.unit == unit
+                ]
+            for keyset in retired_keysets:
+                logger.debug(f"De-activating keyset {keyset.id}...")
+                inactive_keyset = copy.copy(keyset)
+                inactive_keyset.active = False
+                await self.crud.update_keyset(keyset=inactive_keyset, db=self.db, conn=conn)
 
         # Update live state only after the database transaction has committed.
-        selected_keyset.active = False
+        for keyset in retired_keysets:
+            keyset.active = False
         self.keysets[new_keyset.id] = new_keyset
-        self.keysets[selected_keyset.id] = selected_keyset
 
-        if self.keyset and self.keyset.id == selected_keyset.id:
+        if self.keyset and self.keyset.id in {k.id for k in retired_keysets}:
             self.keyset = new_keyset
             self.derivation_path = new_keyset.derivation_path
             logger.info(
