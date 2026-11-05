@@ -103,7 +103,7 @@ async def index(request: Request) -> HTMLResponse:
             set(
                 keyset.unit.name.upper()
                 for keyset in ledger.keysets.values()
-                if keyset.active
+                if keyset.is_active
             )
         )
     )

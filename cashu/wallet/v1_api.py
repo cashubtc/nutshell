@@ -1,4 +1,5 @@
 import json
+import time
 from posixpath import join
 from typing import List, Optional, Tuple, Union
 
@@ -327,6 +328,9 @@ class LedgerAPI(SupportsAuth):
         supported_keysets = []
         for keyset in keysets:
             if is_supported_keyset_version(keyset.id):
+                # NUT-02: inactive from final_expiry, whatever the mint reports
+                if keyset.final_expiry and keyset.final_expiry <= int(time.time()):
+                    keyset.active = False
                 supported_keysets.append(keyset)
             else:
                 logger.warning(f"Ignoring unsupported keyset version: {keyset.id}")

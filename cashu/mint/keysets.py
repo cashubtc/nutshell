@@ -186,31 +186,38 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
         NUT-02 forbids inactivating a keyset that has no published `active_until`, and
         forbids inactivating one early, so an unannounced keyset gets an `active_until`
         30 days out and stays active until then. A published value is never moved earlier.
+        A keyset inactivates at `final_expiry`, so one due inside the notice period gets
+        no `active_until`, which must precede it.
         """
         now = int(time.time())
-        if keyset.active_until is None:
-            keyset.active_until = now + ACTIVE_UNTIL_NOTICE_SECONDS
+        notice = now + ACTIVE_UNTIL_NOTICE_SECONDS
+        if keyset.is_expired or (
+            keyset.active_until is not None and keyset.active_until <= now
+        ):
+            keyset.active = False
+            logger.debug(f"Keyset {keyset.id} was de-activated")
+        elif keyset.active_until is not None:
+            logger.debug(f"Keyset {keyset.id} stays active until {keyset.active_until}")
+            return
+        elif keyset.final_expiry and keyset.final_expiry <= notice:
+            logger.debug(f"Keyset {keyset.id} stays active until its final expiry")
+            return
+        else:
+            keyset.active_until = notice
             logger.debug(
                 f"Keyset {keyset.id} will be de-activated at {keyset.active_until}"
             )
-        elif keyset.active_until > now:
-            logger.debug(f"Keyset {keyset.id} stays active until {keyset.active_until}")
-            return
-        else:
-            keyset.active = False
-            logger.debug(f"Keyset {keyset.id} was de-activated")
 
         self.keysets[keyset.id] = keyset
         await self.crud.update_keyset(keyset=keyset, db=self.db)
 
     async def inactivate_elapsed_keysets(self) -> None:
-        """Inactivate every keyset whose published `active_until` has passed."""
+        """Inactivate every keyset past its published `active_until` or `final_expiry`."""
         now = int(time.time())
         for keyset in list(self.keysets.values()):
-            if (
-                keyset.active
-                and keyset.active_until is not None
-                and keyset.active_until <= now
+            if keyset.active and (
+                keyset.is_expired
+                or (keyset.active_until is not None and keyset.active_until <= now)
             ):
                 await self.retire_keyset(keyset)
 

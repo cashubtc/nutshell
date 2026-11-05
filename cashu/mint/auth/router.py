@@ -30,12 +30,12 @@ async def keys():
     keyset = auth_ledger.keyset
     keyset_for_response = []
     for keyset in auth_ledger.keysets.values():
-        if keyset.active:
+        if keyset.is_active:
             keyset_for_response.append(
                 KeysResponseKeyset(
                     id=keyset.id,
                     unit=keyset.unit.name,
-                    active=keyset.active,
+                    active=keyset.is_active,
                     keys={k: v for k, v in keyset.public_keys_hex.items()},
                 )
             )
@@ -65,7 +65,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
         unit=keyset.unit.name,
-        active=keyset.active,
+        active=keyset.is_active,
         keys={k: v for k, v in keyset.public_keys_hex.items()},
     )
     return KeysResponse(keysets=[keyset_for_response])
@@ -87,7 +87,7 @@ async def keysets() -> KeysetsResponse:
             KeysetsResponseKeyset(
                 id=keyset.id,
                 unit=keyset.unit.name,
-                active=keyset.active,
+                active=keyset.is_active,
             )
         )
     return KeysetsResponse(keysets=keysets)

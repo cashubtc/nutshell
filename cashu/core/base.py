@@ -1101,10 +1101,18 @@ class MintKeyset:
         )
 
     @property
+    def is_expired(self) -> bool:
+        """Whether `final_expiry` has passed. Zero means no expiry, as in the keyset id."""
+        expiry = self.final_expiry
+        return expiry is not None and 0 < expiry <= int(time.time())
+
+    @property
     def is_active(self) -> bool:
-        """Activity as reported to wallets: a keyset announced with a future
-        `active_from` is not yet usable for outputs (NUT-02).
+        """Activity as reported to wallets: a keyset is usable for outputs from a future
+        `active_from` until its `final_expiry` (NUT-02).
         """
+        if self.is_expired:
+            return False
         if self.active_from is not None and self.active_from > int(time.time()):
             return False
         return self.active

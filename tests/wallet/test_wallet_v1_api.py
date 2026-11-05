@@ -1,3 +1,4 @@
+import time
 from types import MethodType
 from typing import Any, cast
 from unittest.mock import Mock
@@ -257,6 +258,27 @@ async def test_get_keysets_raises_for_empty_response(monkeypatch, api: LedgerAPI
     monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
     with pytest.raises(Exception, match="did not receive any keysets"):
         await api._get_keysets()
+
+
+@pytest.mark.asyncio
+async def test_get_keysets_inactivates_past_final_expiry(monkeypatch, api: LedgerAPI):
+    ids = ["01" + str(i) * 64 for i in range(3)]
+    expiries = [int(time.time()) - 1, int(time.time()) + 3600, 0]
+
+    async def fake_request(self, method, path, **kwargs):
+        return _response(
+            200,
+            {
+                "keysets": [
+                    {"id": id, "unit": "sat", "active": True, "final_expiry": expiry}
+                    for id, expiry in zip(ids, expiries)
+                ]
+            },
+        )
+
+    monkeypatch.setattr(api, "_request", MethodType(fake_request, api))
+    keysets = await api._get_keysets()
+    assert [k.active for k in keysets] == [False, True, True]
 
 
 @pytest.mark.asyncio
