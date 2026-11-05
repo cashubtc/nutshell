@@ -76,54 +76,67 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         Returns:
             List[Proof]: _description_
         """
-        # check that enough spendable proofs exist
-        if sum_proofs(proofs) < amount_to_send:
-            return []
+        # A loop, not recursion, so wallets with thousands of proofs don't hit the
+        # recursion limit. `steps` keeps what each step checks on the way back.
+        steps: List[Tuple[Proof, Union[int, float], Optional[Proof]]] = []
+        selected_proofs: List[Proof] = []
+        while True:
+            # check that enough spendable proofs exist
+            if sum_proofs(proofs) < amount_to_send:
+                break
 
-        logger.trace(
-            f"coinselect – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)} (sum: {sum_proofs(proofs)})"
-        )
-
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-
-        next_bigger = next(
-            (p for p in sorted_proofs if p.amount > amount_to_send), None
-        )
-
-        smaller_proofs = [p for p in sorted_proofs if p.amount <= amount_to_send]
-        smaller_proofs = sorted(smaller_proofs, key=lambda p: p.amount, reverse=True)
-
-        if not smaller_proofs and next_bigger:
             logger.trace(
-                "> no proofs smaller than amount_to_send, adding next bigger proof"
+                f"coinselect – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)} (sum: {sum_proofs(proofs)})"
             )
-            return [next_bigger]
 
-        if not smaller_proofs and not next_bigger:
-            logger.trace("> no proofs to select from")
-            return []
+            sorted_proofs = sorted(proofs, key=lambda p: p.amount)
 
-        remainder = amount_to_send
-        selected_proofs = [smaller_proofs[0]]
-        fee_ppk = self.get_fees_for_proofs_ppk(selected_proofs) if include_fees else 0
-        logger.trace(f"adding proof: {smaller_proofs[0].amount} – fee: {fee_ppk} ppk")
-        remainder -= smaller_proofs[0].amount - fee_ppk / 1000
-        logger.trace(f"remainder: {remainder}")
-        if remainder > 0:
+            next_bigger = next(
+                (p for p in sorted_proofs if p.amount > amount_to_send), None
+            )
+
+            smaller_proofs = [p for p in sorted_proofs if p.amount <= amount_to_send]
+            smaller_proofs = sorted(
+                smaller_proofs, key=lambda p: p.amount, reverse=True
+            )
+
+            if not smaller_proofs and next_bigger:
+                logger.trace(
+                    "> no proofs smaller than amount_to_send, adding next bigger proof"
+                )
+                selected_proofs = [next_bigger]
+                break
+
+            if not smaller_proofs and not next_bigger:
+                logger.trace("> no proofs to select from")
+                break
+
+            fee_ppk = (
+                self.get_fees_for_proofs_ppk([smaller_proofs[0]]) if include_fees else 0
+            )
+            logger.trace(
+                f"adding proof: {smaller_proofs[0].amount} – fee: {fee_ppk} ppk"
+            )
+            steps.append((smaller_proofs[0], amount_to_send, next_bigger))
+            remainder = amount_to_send - (smaller_proofs[0].amount - fee_ppk / 1000)
+            logger.trace(f"remainder: {remainder}")
+            if remainder <= 0:
+                break
             logger.trace(
                 f"> selecting more proofs from {amount_summary(smaller_proofs[1:], self.unit)} sum: {sum_proofs(smaller_proofs[1:])} to reach {remainder}"
             )
-            selected_proofs += self.coinselect(
-                smaller_proofs[1:], remainder, include_fees=include_fees
-            )
-        sum_selected_proofs = sum_proofs(selected_proofs)
+            proofs, amount_to_send = smaller_proofs[1:], remainder
 
-        selected_fees = (
-            self.get_fees_for_proofs_ppk(selected_proofs) / 1000 if include_fees else 0
-        )
-        if sum_selected_proofs - selected_fees < amount_to_send and next_bigger:
-            logger.trace("> adding next bigger proof")
-            return [next_bigger]
+        for proof, amount, next_bigger in reversed(steps):
+            selected_proofs = [proof] + selected_proofs
+            selected_fees = (
+                self.get_fees_for_proofs_ppk(selected_proofs) / 1000
+                if include_fees
+                else 0
+            )
+            if sum_proofs(selected_proofs) - selected_fees < amount and next_bigger:
+                logger.trace("> adding next bigger proof")
+                selected_proofs = [next_bigger]
 
         logger.trace(
             f"coinselect - selected proof amounts: {amount_summary(selected_proofs, self.unit)} (sum: {sum_proofs(selected_proofs)})"
