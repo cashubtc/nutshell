@@ -134,6 +134,77 @@ async def test_automatic_keyset_rotation_flow(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("second_state", ["fresh", "stale", "inactive"])
+@pytest.mark.parametrize("second_path", ["m/0'/0'/1'", "m/1'/0'/3'"])
+async def test_automatic_rotation_with_multiple_keysets(
+    ledger: Ledger,
+    monkeypatch: pytest.MonkeyPatch,
+    second_state: str,
+    second_path: str,
+):
+    monkeypatch.setattr(settings, "mint_keyset_rotation_enabled", True)
+    monkeypatch.setattr(settings, "mint_keyset_rotation_interval_seconds", 86400)
+    stale_timestamp = ledger.db.timestamp_from_seconds(int(time.time()) - 172800)
+
+    old_keyset = ledger.keyset
+    old_keyset.valid_from = stale_timestamp
+    await ledger.crud.update_keyset(keyset=old_keyset, db=ledger.db)
+
+    second_keyset = MintKeyset(
+        derivation_path=second_path,
+        seed=ledger.seed,
+        amounts=[2**i for i in range(20)],
+        input_fee_ppk=100,
+        active=second_state != "inactive",
+    )
+    if second_state == "stale":
+        second_keyset.valid_from = stale_timestamp
+    await ledger.crud.store_keyset(keyset=second_keyset, db=ledger.db)
+    await ledger.crud.update_keyset(keyset=second_keyset, db=ledger.db)
+    ledger.keysets[second_keyset.id] = second_keyset
+
+    before_ids = set(ledger.keysets)
+    stale_keysets = [old_keyset]
+    if second_state == "stale":
+        stale_keysets.append(second_keyset)
+
+    await ledger.rotate_keysets_if_needed()
+
+    db_keysets = await ledger.crud.get_keyset(db=ledger.db)
+    new_keysets = [k for k in db_keysets if k.id not in before_ids]
+    assert len(new_keysets) == len(stale_keysets)
+    for stale_keyset in stale_keysets:
+        assert not ledger.keysets[stale_keyset.id].active
+        assert not next(k for k in db_keysets if k.id == stale_keyset.id).active
+        replacement = next(
+            k for k in new_keysets if k.input_fee_ppk == stale_keyset.input_fee_ppk
+        )
+        assert replacement.active
+        assert replacement.amounts == stale_keyset.amounts
+        assert (
+            replacement.derivation_path.rsplit("/", 1)[0]
+            == stale_keyset.derivation_path.rsplit("/", 1)[0]
+        )
+    if second_state != "stale":
+        db_second = next(k for k in db_keysets if k.id == second_keyset.id)
+        assert db_second.active == (second_state == "fresh")
+        assert db_second.input_fee_ppk == 100
+        assert db_second.amounts == second_keyset.amounts
+
+    active_ids = {k.id for k in db_keysets if k.active}
+    assert len(active_ids) == (3 if second_state != "inactive" else 2)
+    assert {k.id for k in ledger.keysets.values() if k.active} == active_ids
+    assert ledger.keyset.id in {k.id for k in new_keysets}
+    assert ledger.keyset.input_fee_ppk == old_keyset.input_fee_ppk
+    assert ledger.derivation_path == ledger.keyset.derivation_path
+
+    await ledger.rotate_keysets_if_needed()
+    after_tick = await ledger.crud.get_keyset(db=ledger.db)
+    assert {k.id for k in after_tick} == {k.id for k in db_keysets}
+    assert {k.id for k in after_tick if k.active} == active_ids
+
+
+@pytest.mark.asyncio
 async def test_automatic_keyset_rotation_disabled(ledger: Ledger):
     # Cancel background tasks to avoid race conditions with manual triggering
     for task in ledger.regular_tasks:

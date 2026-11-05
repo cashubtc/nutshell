@@ -51,8 +51,8 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
     ) -> MintKeyset:
         """
         This function:
-            1. finds the highest counter keyset for `unit`
-            2. creates a new derivation path from the old one, increasing the counter by one
+            1. finds the requested keyset, or the highest counter active keyset for `unit`
+            2. creates a new derivation path using the next unused counter in that branch
             3. creates a new active keyset for the new derivation path
             4. de-activates the old keyset
             5. stores the new keyset to DB
@@ -117,21 +117,23 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
                             )
                         return active_keyset
 
-            # Select keyset with the greatest counter
-            selected_keyset = None
-            selected_keyset_counter = -1
-            for keyset in self.keysets.values():
-                if keyset.active and keyset.unit == unit:
-                    keyset_derivation_path = keyset.derivation_path.split("/")
-                    keyset_derivation_counter = int(
-                        keyset_derivation_path[-1].replace("'", "")
-                    )
-                    if keyset_derivation_counter > selected_keyset_counter:
-                        selected_keyset = keyset
-                        selected_keyset_counter = keyset_derivation_counter
+            if active_keyset_id:
+                selected_keyset = self.keysets.get(active_keyset_id)
+            else:
+                selected_keyset = max(
+                    (k for k in self.keysets.values() if k.active and k.unit == unit),
+                    key=lambda k: int(
+                        k.derivation_path.split("/")[-1].replace("'", "")
+                    ),
+                    default=None,
+                )
 
             # If no selected keyset, then there is no keyset for this unit
-            if not selected_keyset:
+            if (
+                not selected_keyset
+                or not selected_keyset.active
+                or selected_keyset.unit != unit
+            ):
                 logger.error(
                     f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
                 )
@@ -141,11 +143,14 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
 
             logger.info(f"Rotating keyset {selected_keyset.id}")
 
-            # New derivation path is just old derivation path with increased counter
+            # Other active or retired keysets may already occupy later counters.
             new_derivation_path = selected_keyset.derivation_path.split("/")
-            new_derivation_path[-1] = (
-                str(int(new_derivation_path[-1].replace("'", "")) + 1) + "'"
+            highest_counter = max(
+                int(k.derivation_path.split("/")[-1].replace("'", ""))
+                for k in self.keysets.values()
+                if k.derivation_path.split("/")[:-1] == new_derivation_path[:-1]
             )
+            new_derivation_path[-1] = f"{highest_counter + 1}'"
 
             # keys amounts for this keyset: if amounts is None we use `self.amounts`
             amounts = [2**i for i in range(max_order)] if max_order else self.amounts
