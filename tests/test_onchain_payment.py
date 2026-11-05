@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -62,6 +66,45 @@ def test_onchain_melt_quote_requires_amount():
     )
 
     assert request.amount == 123
+
+
+def test_grpc_onchain_configuration_can_replace_unused_bdk_plugin(tmp_path):
+    script = """
+from loguru import logger
+from cashu.core.base import Unit
+from cashu.core.settings import settings
+
+logger.remove()
+settings.mint_private_key = "TEST_PRIVATE_KEY"
+settings.mint_mnemonic = None
+settings.mint_seed_decryption_key = ""
+settings.mint_backend_bolt11_sat = "FakeWallet"
+settings.mint_backend_bolt11_msat = None
+settings.mint_backend_bolt11_usd = None
+settings.mint_backend_bolt11_eur = None
+settings.mint_payment_method_plugins = []
+settings.mint_database = "./mint"
+settings.mint_auth_database = "./auth"
+settings.mint_payment_backends = [{
+    "type": "GrpcPaymentProcessor", "method": "onchain", "unit": "sat",
+    "endpoint": "127.0.0.1:50051", "allow_insecure": True,
+}]
+from cashu.mint.startup import backends
+from cashu.payment import payment_method_registry
+from cashu.payment.grpc_processor import GrpcPaymentProcessor
+
+backend = backends["onchain"][Unit.sat]
+assert isinstance(backend, GrpcPaymentProcessor)
+assert payment_method_registry.get("onchain") is backend
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_nut30_mint_quote_response_has_no_fixed_amount():

@@ -9,6 +9,18 @@ Nutshell supports three kinds of mint payment backend:
 Python plugins and external gRPC processors can be used alongside each other.
 Each `(method, unit)` pair must be configured exactly once.
 
+## Built-in onchain regtest backend
+
+The built-in `onchain` plugin uses BDK 0.32.1 and Bitcoin Core RPC on regtest.
+The configuration example in [`.env.example`](../.env.example) specifies its
+wallet mnemonic file, persistent BDK database, and deposit confirmation count.
+For Bitcoin Core 28 and later, start the node with `-deprecatedrpc=warnings`:
+BDK 0.32 expects the older string-valued RPC warning field. The onchain regtest
+workflow enables this compatibility option.
+
+An explicit `GrpcPaymentProcessor` configuration for `onchain` selects the
+external processor instead of the unused built-in BDK plugin.
+
 ## External CDK gRPC payment processors
 
 The built-in adapter is named `GrpcPaymentProcessor`. The external processor

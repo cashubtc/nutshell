@@ -22,6 +22,7 @@ from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 from ..payment import PaymentMethodPlugin, payment_method_registry
 from ..payment.grpc_processor import GrpcPaymentProcessor
+from ..payment.onchain import onchain_payment_method
 
 # kill the program if python runs in non-__debug__ mode
 # which could lead to asserts not being executed for optimized code
@@ -106,7 +107,9 @@ for backend_config in settings.mint_payment_backends:
         backend = GrpcPaymentProcessor(method, unit, backend_config)
         registered = payment_method_registry.maybe_get(method)
         if registered is not None and not isinstance(registered, GrpcPaymentProcessor):
-            if method == Method.bolt11.name and existing_key not in backends:
+            if existing_key not in backends and (
+                method == Method.bolt11.name or registered is onchain_payment_method
+            ):
                 payment_method_registry.register(backend, replace=True)
                 registered = backend
             else:
