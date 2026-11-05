@@ -178,6 +178,9 @@ Implement the hooks defined by `cashu.payment.PaymentMethodPlugin`, including:
 
 Optional hooks cover request models, canonicalization, quote expiry, event
 streams, MPP, descriptions, lifecycle startup/shutdown, and balance support.
+`validate_payment_request` validates a request locally and returns its absolute
+expiry before quote creation. `get_payment_checking_id` derives the outgoing
+attempt's tracking identifier before sending. Both hooks must avoid network I/O.
 The watchdog sums balances by unit and `funding_source_id`. Plugins whose
 backend instances report the same reserves must return the same funding source
 ID to avoid counting that balance twice. If any method for a unit cannot report

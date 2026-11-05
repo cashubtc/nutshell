@@ -632,6 +632,7 @@ async def test_onchain_self_payment_uses_processor_amount_and_status(
     stub.CheckOutgoingPayment.return_value = pb.MakePaymentResponse(
         status=pb.QUOTE_STATE_PAID, total_spent=pb.AmountMessage(value=9, unit="sat")
     )
+    await ledger.db_write.unlock_melt_quote(quote.quote, quote.melt_lock)
     assert (await ledger.get_melt_quote(quote.quote)).state == MeltQuoteState.paid
     stub.CheckOutgoingPayment.assert_awaited_once()
     stored = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)

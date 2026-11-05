@@ -1258,11 +1258,7 @@ class Ledger(
         request = plugin.canonicalize_request(melt_quote.request)
         quote_id = generate_uuid_v7()
 
-        expiry = (
-            backend.validate_payment_request(request)
-            if method_name == Method.bolt11.name
-            else plugin.quote_expiry(request)
-        )
+        expiry = plugin.validate_payment_request(backend, request)
 
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
@@ -1737,6 +1733,8 @@ class Ledger(
         if melt_quote.expiry is not None and melt_quote.expiry < time.time():
             raise QuoteExpiredError("quote expired")
 
+        plugin = payment_method_registry.get(melt_quote.method)
+        backend = self._get_backend(method, unit)
         async with self.db.get_connection(
             locks=[
                 LockOptions(
@@ -1759,7 +1757,9 @@ class Ledger(
                 proofs=proofs,
                 keysets=self.keysets,
                 conn=conn,
-                get_checking_id=self.backends[method][unit].get_payment_checking_id,
+                get_checking_id=lambda quote: plugin.get_payment_checking_id(
+                    backend, quote
+                ),
             )
 
         return melt_quote

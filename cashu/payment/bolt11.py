@@ -5,7 +5,6 @@ from typing import Any, Optional
 import bolt11
 
 from ..core.base import Amount, MeltQuote, MintQuote, Unit
-from ..core.errors import TransactionError
 from ..core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from ..lightning.base import (
     InvoiceResponse,
@@ -81,6 +80,11 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
     ) -> PaymentQuoteResponse:
         return await backend.get_payment_quote(melt_quote=request)
 
+    def get_payment_checking_id(
+        self, backend: LightningBackend, quote: MeltQuote
+    ) -> str:
+        return backend.get_payment_checking_id(quote)
+
     async def execute_outgoing_payment(
         self, backend: Any, quote: MeltQuote, fee_limit: Amount
     ) -> PaymentResponse:
@@ -92,19 +96,16 @@ class Bolt11PaymentMethod(PaymentMethodPlugin):
     ) -> PaymentStatus:
         return await backend.get_payment_status(quote.checking_id)
 
+    def validate_payment_request(
+        self, backend: LightningBackend, request: str
+    ) -> Optional[int]:
+        return backend.validate_payment_request(request)
+
     def quote_expiry(self, payment_request: str) -> Optional[int]:
         invoice = bolt11.decode(payment_request)
         if invoice.expiry is None:
             return None
         return invoice.date + invoice.expiry
-
-    def validate_internal_settlement(
-        self, mint_quote: MintQuote, melt_quote: MeltQuote
-    ) -> None:
-        invoice = bolt11.decode(melt_quote.request)
-        if not invoice.amount_msat:
-            raise TransactionError("invoice has no amount.")
-        super().validate_internal_settlement(mint_quote, melt_quote)
 
 
 bolt11_payment_method = Bolt11PaymentMethod()

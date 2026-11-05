@@ -1410,7 +1410,7 @@ async def m043_add_payment_method_data_to_quotes(db: Database):
                 )
 
 
-async def m042_separate_internal_credits_and_amountless_payments(db: Database):
+async def m044_separate_internal_credits_and_amountless_payments(db: Database):
     """Keep internal credits and exact outgoing msat amounts across restarts."""
     async with db.connect() as conn:
         mint_quotes = db.table_with_schema("mint_quotes")
@@ -1435,7 +1435,7 @@ async def m042_separate_internal_credits_and_amountless_payments(db: Database):
         )
 
 
-async def m043_backfill_mint_quote_accounting(db: Database):
+async def m045_backfill_mint_quote_accounting(db: Database):
     """Initialize legacy NULL fields without overwriting cumulative accounting."""
     async with db.connect() as conn:
         await conn.execute(
@@ -1455,7 +1455,7 @@ async def m043_backfill_mint_quote_accounting(db: Database):
         )
 
 
-async def m044_validate_mint_quote_payment_identities(db: Database):
+async def m046_validate_mint_quote_payment_identities(db: Database):
     """Refuse ambiguous legacy funding records without deleting any quotes."""
     async with db.connect() as conn:
         for field in ("request", "checking_id"):

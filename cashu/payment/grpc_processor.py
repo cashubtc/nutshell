@@ -8,6 +8,7 @@ import bolt11
 import grpc
 
 from ..core.base import Amount, MeltQuote, MintQuote, Unit
+from ..core.errors import AmountlessInvoiceNotSupportedError, QuoteExpiredError
 from ..core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from ..lightning.base import (
     InvoiceResponse,
@@ -228,6 +229,16 @@ class GrpcPaymentProcessor(PaymentMethodPlugin):
     async def status(self, backend: Any) -> StatusResponse:
         processor: GrpcPaymentProcessor = backend
         return StatusResponse(balance=Amount(unit=processor.unit, amount=0))
+
+    def validate_payment_request(self, backend: Any, request: str) -> Optional[int]:
+        if self.method == "bolt11":
+            invoice = bolt11.decode(request)
+            if not invoice.amount_msat:
+                raise AmountlessInvoiceNotSupportedError("invoice has no amount.")
+            if invoice.has_expired():
+                raise QuoteExpiredError("invoice expired")
+            return invoice.expiry_time
+        return self.quote_expiry(request)
 
     def quote_expiry(self, payment_request: str) -> Optional[int]:
         return None

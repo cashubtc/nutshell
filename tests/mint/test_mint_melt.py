@@ -25,7 +25,11 @@ from cashu.core.errors import (
     QuotePendingError,
     TransactionError,
 )
-from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.models import (
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
+    PostMintQuoteRequest,
+)
 from cashu.core.settings import settings
 from cashu.lightning.base import (
     PaymentResponse,
@@ -2414,6 +2418,11 @@ async def test_grpc_settlement_preserves_payment_metadata(
         PostMeltQuoteRequest(unit="sat", request="merchant"), "testpay"
     )
     result = await ledger.melt(proofs=proofs, quote=quote.quote)
+    if recover_status:
+        assert result.state == "PENDING"
+        result = PostMeltQuoteResponse.from_melt_quote(
+            await ledger.get_melt_quote(quote.quote)
+        )
     assert result.state == "PAID"
     assert result.payment_preimage == "processor-proof"
     assert result.model_extra == {

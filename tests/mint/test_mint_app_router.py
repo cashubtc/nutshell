@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response, StreamingResponse
 from fastapi.testclient import TestClient
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from cashu.core.base import (
     BlindedSignature,
@@ -22,7 +22,6 @@ from cashu.core.settings import settings
 from cashu.mint import app as app_module
 from cashu.mint import middleware as middleware_module
 from cashu.mint import router as router_module
-from cashu.mint.cache import RedisCache
 from cashu.payment import payment_method_registry
 
 
@@ -361,6 +360,8 @@ def test_router_keyset_lookup_returns_cashu_error(monkeypatch):
 def test_melt_quote_custom_options_reach_plugin_validation(
     monkeypatch, custom_options, error
 ):
+    monkeypatch.setattr(router_module.limiter, "enabled", False)
+
     class CustomOptions(PostMeltRequestOptions):
         model_config = ConfigDict(extra="forbid")
         custom_confirmation: int = Field(ge=1, le=6)

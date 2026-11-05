@@ -422,6 +422,8 @@ async def test_internal_settlement_lookups_are_scoped_to_method(
         quote_id=response.quote, db=ledger.db
     )
     pending = await ledger.db_write._set_melt_quote_pending(melt_quote)
+    if not matching_mint_quote:
+        await ledger.db_write.unlock_melt_quote(pending.quote, pending.melt_lock)
 
     assert (await ledger.get_melt_quote(pending.quote)).pending
     settled = await ledger.melt_mint_settle_internally(pending, [])

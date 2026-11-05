@@ -101,7 +101,11 @@ class RedisCache:
             self._redis_failed()
 
     async def _execute(
-        self, func, request: Request, payload: BaseModel, key: str,
+        self,
+        func,
+        request: Request,
+        payload: BaseModel,
+        key: str,
         route_parameters: dict[str, Any],
     ):
         # Retain the existing Redis key format so deployed caches remain readable.
@@ -151,7 +155,9 @@ class RedisCache:
                 key = request.url.path + payload.model_dump_json()
                 task = self._inflight.get(key)
                 if task is None:
-                    task = asyncio.create_task(self._execute(func, request, payload, key, route_parameters))
+                    task = asyncio.create_task(
+                        self._execute(func, request, payload, key, route_parameters)
+                    )
                     self._inflight[key] = task
                     task.add_done_callback(self._consume_exception)
                 # Finish and cache successful operations even if the caller disconnects.

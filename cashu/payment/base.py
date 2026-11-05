@@ -117,6 +117,10 @@ class PaymentMethodPlugin(ABC):
     ) -> PaymentQuoteResponse:
         """Price an outgoing payment for a melt quote."""
 
+    def get_payment_checking_id(self, backend: Any, quote: MeltQuote) -> str:
+        """Identify an outgoing attempt before sending, without doing I/O."""
+        return quote.checking_id
+
     @abstractmethod
     async def execute_outgoing_payment(
         self, backend: Any, quote: MeltQuote, fee_limit: Amount
@@ -128,6 +132,10 @@ class PaymentMethodPlugin(ABC):
         self, backend: Any, quote: MeltQuote
     ) -> PaymentStatus:
         """Return the current outgoing payment status."""
+
+    def validate_payment_request(self, backend: Any, request: str) -> Optional[int]:
+        """Validate locally and return the payment request's absolute expiry."""
+        return self.quote_expiry(request)
 
     @abstractmethod
     def quote_expiry(self, payment_request: str) -> Optional[int]:
