@@ -20,6 +20,7 @@ def mint_context(monkeypatch, tmp_path):
     wallet = SimpleNamespace(
         url="https://default.test",
         name="my-wallet",
+        db=SimpleNamespace(db_location=str(tmp_path / "custom-db")),
         unit=Unit.usd,
         load_proofs=AsyncMock(),
         balance_per_minturl=AsyncMock(return_value=balances),
@@ -31,7 +32,7 @@ def mint_context(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     ctx = click.Context(
         click.Command("send"),
-        obj={"WALLET": wallet, "HOST": None, "WALLET_NAME": "wallet-dir", "YES": False},
+        obj={"WALLET": wallet, "HOST": None, "YES": False},
     )
     return SimpleNamespace(
         ctx=ctx,
@@ -39,7 +40,7 @@ def mint_context(monkeypatch, tmp_path):
         balances=balances,
         selected=selected,
         with_db=with_db,
-        db_path=str(tmp_path / "wallet-dir"),
+        db_path=wallet.db.db_location,
     )
 
 

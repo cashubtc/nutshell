@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shlex
 import time
 from pathlib import Path
 from typing import Tuple
@@ -111,6 +112,36 @@ def test_info(cli_prefix):
     print(result.output)
     result.output.startswith(f"Version: {settings.version}")
     assert result.exit_code == 0
+
+
+@pytest.mark.parametrize("name", ["wallet", "bob", "configured-default"])
+def test_wallet_name_preserves_configured_default(tmp_path, monkeypatch, name):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "wallet_name", "configured-default")
+    wallet_option = next(option for option in cli.params if option.name == "walletname")
+    monkeypatch.setattr(wallet_option, "default", "configured-default")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["--wallet", name, "--host", settings.mint_url, "--tests", "info"],
+    )
+
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert settings.wallet_name == "configured-default"
+    assert f"Wallet: {name}\n" in result.output
+    hint = result.output.split('To view it, run "', 1)[1].split('"', 1)[0]
+    reopened = runner.invoke(
+        cli,
+        ["--host", settings.mint_url, "--tests", *shlex.split(hint)[1:]],
+    )
+    assert reopened.exit_code == 0, (reopened.output, reopened.exception)
+    assert f"Wallet: {name}\n" in reopened.output
+    wallet_label = f' for wallet "{name}"' if name != "wallet" else ""
+    assert (
+        f"Generated a new mnemonic{wallet_label}. To view it, run"
+        f' "cashu --wallet {name} info --mnemonic".'
+    ) in result.output
+    assert (tmp_path / name / f"{name}.sqlite3").exists()
 
 
 def test_info_with_mint(cli_prefix):

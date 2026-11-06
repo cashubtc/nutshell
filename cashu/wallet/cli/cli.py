@@ -212,9 +212,7 @@ async def cli(
     ctx.obj["HOST"] = host or settings.mint_url
     ctx.obj["UNIT"] = unit or settings.wallet_unit
     unit = ctx.obj["UNIT"]
-    ctx.obj["WALLET_NAME"] = walletname
     ctx.obj["YES"] = yes
-    settings.wallet_name = walletname
     settings.wallet_verbose_requests = verbose
     ctx.obj["VERBOSE"] = verbose
 
@@ -1529,6 +1527,8 @@ async def invoices(ctx: Context, paid: bool, unpaid: bool, pending: bool, mint: 
 @click.pass_context
 @coro
 async def wallets(ctx: Context):
+    selected_wallet: Wallet = ctx.obj["WALLET"]
+    host = ctx.obj["HOST"]
     # list all directories
     wallets = [
         d for d in listdir(settings.cashu_dir) if isdir(join(settings.cashu_dir, d))
@@ -1538,13 +1538,11 @@ async def wallets(ctx: Context):
     except ValueError:
         pass
     for w in wallets:
-        wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, w), name=w)
+        wallet = Wallet(host, os.path.join(settings.cashu_dir, w), name=w)
         try:
             await wallet.load_proofs(reload=True, all_keysets=True)
             if wallet.proofs and len(wallet.proofs):
-                active_wallet = False
-                if w == ctx.obj["WALLET_NAME"]:
-                    active_wallet = True
+                active_wallet = w == selected_wallet.name
                 print(
                     f"Wallet: {w}\tBalance:"
                     f" {wallet.unit.str(sum_proofs(wallet.proofs))}"
@@ -1566,7 +1564,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
     await wallet.load_keysets_from_db(unit=None)
 
     print(f"Version: {settings.version}")
-    print(f"Wallet: {ctx.obj['WALLET_NAME']}")
+    print(f"Wallet: {wallet.name}")
     if settings.debug:
         print(f"Debug: {settings.debug}")
     print(f"Cashu dir: {settings.cashu_dir}")
@@ -1666,7 +1664,7 @@ async def restore(ctx: Context, to: int, batch: int):
         print("")
         print(
             "The wallet directory is:"
-            f" {os.path.join(settings.cashu_dir, ctx.obj['WALLET_NAME'])}"
+            f" {wallet.db.db_location}"
         )
         return
     # ask the user for a mnemonic but allow also no input

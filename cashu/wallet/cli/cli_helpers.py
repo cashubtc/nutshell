@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import os
 from itertools import groupby
 from operator import itemgetter
 
@@ -126,7 +125,7 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     # load this mint_url into a wallet
     mint_wallet = await Wallet.with_db(
         mint_url,
-        os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
+        wallet.db.db_location,
         name=wallet.name,
         unit=wallet.unit.name,
     )
@@ -220,8 +219,6 @@ async def verify_mint(ctx: Context, mint_wallet: Wallet, url: str):
     Throws an Exception if the user chooses to not trust the mint.
     """
     logger.debug(f"Verifying mint {url}")
-    # dummy Wallet to check the database later
-    # mint_wallet = Wallet(url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]))
     # we check the db whether we know this mint already and ask the user if not
     mint_keysets = await get_keysets(mint_url=url, db=mint_wallet.db)
     if mint_keysets is None:
@@ -255,7 +252,7 @@ async def receive_all_pending(ctx: Context, wallet: Wallet):
             mint_url, unit = await wallet._get_proofs_mint_unit(proofs)
             mint_wallet = await Wallet.with_db(
                 url=mint_url,
-                db=os.path.join(settings.cashu_dir, wallet.name),
+                db=wallet.db.db_location,
                 name=wallet.name,
                 unit=unit.name,
             )

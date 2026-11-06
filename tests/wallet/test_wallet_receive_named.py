@@ -1,10 +1,13 @@
 import os
 
+import click
 import pytest
 import pytest_asyncio
 
 from cashu.core.base import Proof, TokenV3, TokenV3Token
 from cashu.core.settings import settings
+from cashu.wallet.cli.cli_helpers import get_mint_wallet, receive_all_pending
+from cashu.wallet.crud import get_reserved_proofs
 from cashu.wallet.helpers import receive, redeem_TokenV3
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -103,3 +106,38 @@ async def test_redeem_tokenv3_custom_db_dir_reuses_receivers_private_key(
     mint_wallet = await redeem_TokenV3(wallet_receiver, token)
 
     assert mint_wallet.private_key.to_hex() == wallet_receiver.private_key.to_hex()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["wallet", "bob"])
+async def test_select_mint_and_receive_pending_reuse_wallet(tmp_path, monkeypatch, name):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path / "cli-default"))
+    wallet = await Wallet.with_db(SERVER_ENDPOINT, str(tmp_path / "custom"), name=name)
+    try:
+        await wallet.load_mint()
+        quote = await wallet.request_mint(64)
+        await pay_if_regtest(quote.request)
+        await wallet.mint(64, quote_id=quote.quote)
+        await wallet.swap_to_send(wallet.proofs, 8, set_reserved=True)
+        assert wallet.available_balance.amount == 56
+        ctx = click.Context(
+            click.Command("receive"),
+            obj={"WALLET": wallet, "HOST": None, "YES": True},
+        )
+
+        selected = await get_mint_wallet(ctx)
+        assert selected.db.path == wallet.db.path
+        assert selected.private_key.to_hex() == wallet.private_key.to_hex()
+        await receive_all_pending(ctx, selected)
+        received = ctx.obj["WALLET"]
+
+        await wallet.load_proofs(reload=True)
+        assert wallet.available_balance.amount == 64
+        assert not await get_reserved_proofs(wallet.db)
+        assert received.db.path == wallet.db.path
+        assert received.private_key.to_hex() == wallet.private_key.to_hex()
+        assert not (tmp_path / "cli-default" / name).exists()
+        await selected.db.engine.dispose()
+        await received.db.engine.dispose()
+    finally:
+        await wallet.db.engine.dispose()
