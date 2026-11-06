@@ -4,6 +4,7 @@ import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import bolt11
 from bip32 import BIP32
 from loguru import logger
 
@@ -837,9 +838,49 @@ class Wallet(
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote_resp.fee_reserve)} as fee reserve."
         )
+        # As in LedgerAPI.melt_quote: a falsy amount_msat means no MPP amount,
+        # and the invoice itself must then carry the amount.
+        if amount_msat:
+            expected_msat = amount_msat
+        else:
+            invoice_amount_msat = bolt11.decode(invoice).amount_msat
+            assert invoice_amount_msat, "invoice must have amount"
+            expected_msat = invoice_amount_msat
+        self._check_melt_quote(melt_quote_resp, expected_msat)
         melt_quote = MeltQuote.from_resp_wallet(melt_quote_resp, self.url)
         await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
         return melt_quote
+
+    def _check_melt_quote(
+        self, melt_quote_resp: PostMeltQuoteResponse, expected_msat: int
+    ) -> None:
+        """Refuses a bolt11 melt quote whose amount exceeds the amount requested.
+
+        Caps the quote's principal amount only, not the fee reserve. The
+        requested amount is the MPP ``amount_msat`` if one was given, otherwise
+        the invoice amount. Runs before the quote is stored or any proofs are
+        selected. As a compatibility policy the check is one-sided: mints round
+        sub-sat amounts differently, so any amount up to the rounded-up value is
+        accepted. Only sat and msat wallets are checked; other units would need
+        an exchange rate.
+        """
+        if melt_quote_resp.unit != self.unit.name:
+            raise Exception(
+                f"Mint quoted in {melt_quote_resp.unit}, but this wallet uses"
+                f" {self.unit.name}."
+            )
+        if self.unit not in (Unit.sat, Unit.msat):
+            return
+        if self.unit == Unit.sat:
+            max_amount = -(-expected_msat // 1000)
+        else:
+            max_amount = expected_msat
+        if melt_quote_resp.amount > max_amount:
+            raise Exception(
+                f"Mint quoted {self.unit.str(melt_quote_resp.amount)} for"
+                f" {expected_msat} msat; at most {self.unit.str(max_amount)}"
+                " expected."
+            )
 
     async def get_melt_quote(self, quote: str) -> Optional[MeltQuote]:
         """Fetches a melt quote from the mint and updates proofs in the database.
