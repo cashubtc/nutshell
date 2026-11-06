@@ -526,24 +526,6 @@ async def test_nut13_v3_derivation_type_vectors():
     assert len(derived) == 4
 
 
-def test_nut13_v3_quote_id_preimage_vectors():
-    """Type 0x05 shares the quote lock's counter and scope; its NUT-04 derived id matches."""
-    from cashu.core.crypto.transcript import derived_quote_id
-    from cashu.wallet.secrets import WalletSecrets
-
-    nut13 = VECTORS["nut13_v3"]
-    secrets = WalletSecrets()
-    secrets.seed = bytes.fromhex(nut13["seed_hex"])
-    for lock in nut13["quote_locks"]:
-        preimage = secrets.derive_v3_quote_id_preimage(
-            lock["counter"], nut13["mint_identity"]
-        )
-        assert preimage.hex() == lock["id_preimage"]
-        assert derived_quote_id(preimage) == lock["quote_id"]
-    with pytest.raises(ValueError, match="32 bytes"):
-        derived_quote_id(b"\x00" * 31)
-
-
 def test_v3_secret_must_be_lowercase_hex():
     """One spelling per secret: upper-case hex names the same point but the two
     sides hash it differently, so it is refused rather than accepted twice."""

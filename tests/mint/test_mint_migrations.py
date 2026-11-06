@@ -223,7 +223,12 @@ async def test_m041_adds_proof_digests_after_main_seed_cleanup(tmp_path):
         **{
             name: value
             for name, value in vars(mint_migrations).items()
-            if name not in ("m041_add_digest_to_proofs", "m042_add_melt_transactions")
+            if name
+            not in (
+                "m041_add_digest_to_proofs",
+                "m042_add_melt_transactions",
+                "m043_add_txout_quotes",
+            )
         }
     )
     try:
@@ -245,7 +250,7 @@ async def test_m041_adds_proof_digests_after_main_seed_cleanup(tmp_path):
 
         await migrate_databases(db, mint_migrations)
         version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
-        assert version and version["version"] == 42
+        assert version and version["version"] == 43
         for table in ("proofs_used", "proofs_pending"):
             row = await db.fetchone(
                 f"SELECT c, secret, digest FROM {db.table_with_schema(table)}"

@@ -29,7 +29,6 @@ from .secp import PublicKey
 
 TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
 SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
-QUOTE_ID_TAG = "Cashu_QuoteId"
 INPUT_QUOTE_ID_TAG = "Cashu_InputQuoteId"
 
 # The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
@@ -241,13 +240,6 @@ def spend_commitment(Y: bytes, input_digest_: bytes, witness: str) -> bytes:
         input_digest_,
         hashlib.sha256(witness.encode("utf-8")).digest(),
     )
-
-
-def derived_quote_id(id_preimage: bytes) -> str:
-    """A derived quote id (NUT-04): hex(tagged_hash("Cashu_QuoteId", id_preimage))."""
-    if len(id_preimage) != 32:
-        raise ValueError("Quote id preimage must be 32 bytes")
-    return tagged_hash(QUOTE_ID_TAG, id_preimage).hex()
 
 
 def build_request_transcript(method: str, target: str, body: bytes) -> bytes:
