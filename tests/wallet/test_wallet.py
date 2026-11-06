@@ -280,6 +280,16 @@ async def test_swap_to_send(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_coinselect_many_small_proofs(wallet1: Wallet):
+    # one selection step per proof used to be one recursion level
+    proofs = [
+        Proof(id=wallet1.keyset_id, amount=1, secret=str(i), C="") for i in range(1500)
+    ]
+    selected = wallet1.coinselect(proofs, 1200)
+    assert sum_proofs(selected) == 1200
+
+
+@pytest.mark.asyncio
 async def test_split_more_than_balance(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
