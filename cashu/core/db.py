@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Union
 
+import anyio
 from loguru import logger
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -112,18 +113,38 @@ class Connection(Compat):
         return text(query)
 
     async def fetchall(self, query: str, values: dict = {}):
-        result = await self.conn.execute(self.rewrite_query(query), values)
+        result = await self.execute(query, values)
         return [
             r._mapping for r in result.all()
         ]  # will return [] if result list is empty
 
     async def fetchone(self, query: str, values: dict = {}):
-        result = await self.conn.execute(self.rewrite_query(query), values)
+        result = await self.execute(query, values)
         r = result.fetchone()
         return r._mapping if r is not None else None
 
     async def execute(self, query: str, values: dict = {}):
-        return await self.conn.execute(self.rewrite_query(query), values)
+        statement = self.conn.execute(self.rewrite_query(query), values)
+        if self.type != SQLITE:
+            return await statement
+
+        # Finish the statement and close its cursor before cancellation reaches
+        # the transaction context, so rollback can release SQLite's write lock.
+        task = asyncio.create_task(statement)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            with anyio.CancelScope(shield=True):
+                while not task.done():
+                    try:
+                        await asyncio.shield(task)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+            if not task.cancelled():
+                task.exception()
+            raise
 
 
 class Database(Compat):
