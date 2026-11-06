@@ -658,8 +658,7 @@ async def invoice(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    amount = int(
-        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = round(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
@@ -1003,8 +1002,7 @@ async def send_command(
     timelock: Optional[int],
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    amount = int(
-        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = round(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     await send(
         wallet,
         amount=amount,
