@@ -30,6 +30,14 @@
 
 - Use LF line endings for all text files. The repository's `.gitattributes` enforces this convention; do not commit CRLF or mixed line endings.
 
+### Type annotations
+
+- Keep type annotations simple and readable. Extract complex nested types into
+  descriptive type aliases or named types.
+- For example, define `Step = Tuple[Proof, Union[int, float], Optional[Proof]]`
+  and use `List[Step]` instead of
+  `List[Tuple[Proof, Union[int, float], Optional[Proof]]]`.
+
 ### Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
