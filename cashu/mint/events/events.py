@@ -38,7 +38,9 @@ class LedgerEventManager:
 
     def serialize_event(self, event: LedgerEvent) -> dict:
         if isinstance(event, MintQuote):
-            return_dict = PostMintQuoteResponse.from_mint_quote(event).model_dump()
+            return_dict = PostMintQuoteResponse.from_mint_quote(event).model_dump(
+                exclude_none=True
+            )
         elif isinstance(event, MeltQuote):
             return_dict = PostMeltQuoteResponse.from_melt_quote(event).model_dump()
         elif isinstance(event, ProofState):

@@ -6,7 +6,6 @@ import pytest_asyncio
 
 from cashu.core.base import Unit
 from cashu.core.crypto.keys import generate_uuid_v7
-from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     BlindAuthFailedError,
     BlindAuthRateLimitExceededError,
@@ -203,12 +202,13 @@ async def test_wallet_auth_invoice_invalid_bat(wallet: Wallet):
     await auth_wallet.load_proofs()
     assert len(auth_wallet.proofs) == auth_wallet.mint_info.bat_max_mint
 
-    # invalidate blind auth proofs with unsigned point secrets
-    for p in auth_wallet.proofs:
-        tampered_secret = PrivateKey().public_key.format().hex()
+    # Invalidate signatures while retaining each BAT's request-signing key.
+    assert len(auth_wallet.proofs) > 1
+    for index, p in enumerate(auth_wallet.proofs):
+        tampered_signature = auth_wallet.proofs[(index + 1) % len(auth_wallet.proofs)].C
         await auth_wallet.db.execute(
-            "UPDATE proofs SET secret = :tampered_secret WHERE secret = :secret",
-            {"tampered_secret": tampered_secret, "secret": p.secret},
+            "UPDATE proofs SET c = :tampered_signature WHERE secret = :secret",
+            {"tampered_signature": tampered_signature, "secret": p.secret},
         )
 
     wallet.auth_db = auth_wallet.db
