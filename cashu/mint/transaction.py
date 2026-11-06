@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import bolt11
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
 
 from ..core.base import (
     Amount,
@@ -30,7 +29,6 @@ from ..core.errors import (
     QuoteNotPaidError,
     QuotePendingError,
     QuoteSignatureInvalidError,
-    TransactionDuplicateOutputsError,
     TransactionError,
 )
 from ..core.models import (
@@ -118,7 +116,7 @@ async def run(
         ],
         mint_quote_outputs=[
             TranscriptMintQuoteOutput(
-                pubkey=bytes.fromhex(c.pubkey), amount=c.amount, quote_id=c.quote_id
+                pubkey=bytes.fromhex(c.pubkey), amount=c.amount
             )
             for c in quote_outputs
         ],
@@ -126,8 +124,6 @@ async def run(
     if verified is None:
         raise TransactionError("transaction has no v3 transcript.")
     digest_bytes, quote_contexts, txout_ids = verified
-    if len(set(txout_ids)) != len(txout_ids):
-        raise TransactionDuplicateOutputsError("transaction repeats a txout quote id.")
     digest = digest_bytes.hex()
     for q, k in zip(payload.mint_quote_inputs, lock_keys):
         if not nut20.verify_quote_input_witness(
@@ -218,8 +214,6 @@ async def run(
         "mint_quote_outputs": json.dumps(created),
         "excess": inputs - fee - sum_outputs - melt_amount,
     }
-    # Read-only, so a claimed id fails before any input is reserved; the insert below decides.
-    await _refuse_claimed_ids(ledger, txout_ids)
     signatures: List[BlindedSignature] = []
     touched: List[MintQuote] = []
     # Acquire melt locks before mint/proof locks, including every invoice alias.
@@ -234,7 +228,7 @@ async def run(
         if melt
         else []
     )
-    # Id claims, input reservations and outputs commit or roll back together.
+    # Input reservations and outputs commit or roll back together.
     async with ledger.db.get_connection(locks=locks) as conn:
         quote_ids = [q.quote for q in payload.mint_quote_inputs]
         locked = await ledger.db_write._set_mint_quotes_pending(quote_ids, conn=conn)
@@ -261,7 +255,6 @@ async def run(
             await ledger.db_write._verify_spent_proofs_and_set_pending(
                 proofs, keysets=ledger.keysets, conn=conn, emit_events=False
             )
-        await _claim_mint_quote_ids(ledger, txout_ids, melt_id, conn)
         # Tagged with the melt quote, so its NUT-08 `change` carries the signatures.
         await ledger._store_blinded_messages(outputs, melt_id=melt_id, conn=conn)
         if melt:
@@ -363,47 +356,6 @@ async def paid_internally(
     )
 
 
-async def _refuse_claimed_ids(
-    ledger: "Ledger", ids: List[str], conn: Optional[Connection] = None
-) -> None:
-    """Refuse an id claimed by a transaction or held by any mint quote (NUT-04)."""
-    if not ids:
-        return
-    names = ",".join(f":id_{i}" for i in range(len(ids)))
-    if await (conn or ledger.db).fetchall(
-        f"""
-        SELECT quote_id FROM {ledger.db.table_with_schema("mint_quote_id_claims")}
-        WHERE quote_id IN ({names})
-        UNION
-        SELECT quote FROM {ledger.db.table_with_schema("mint_quotes")}
-        WHERE quote IN ({names})
-        """,
-        {f"id_{i}": quote_id for i, quote_id in enumerate(ids)},
-    ):
-        raise TransactionDuplicateOutputsError("txout quote id already claimed.")
-
-
-async def _claim_mint_quote_ids(
-    ledger: "Ledger", ids: List[str], melt_id: Optional[str], conn: Connection
-) -> None:
-    """Claim the fixed txout quote ids at acceptance (NUT-XX).
-
-    The primary key refuses a claimed id, including one a concurrent transaction is claiming.
-    """
-    await _refuse_claimed_ids(ledger, ids, conn)
-    for quote_id in ids:
-        try:
-            await conn.execute(
-                f"""
-                INSERT INTO {ledger.db.table_with_schema("mint_quote_id_claims")}
-                (quote_id, melt_quote) VALUES (:quote_id, :melt_quote)
-                """,
-                {"quote_id": quote_id, "melt_quote": melt_id},
-            )
-        except IntegrityError:
-            raise TransactionDuplicateOutputsError("txout quote id already claimed.")
-
-
 async def _finalize_proofs(ledger: "Ledger", proofs, conn: Connection) -> None:
     if not proofs:
         return
@@ -483,11 +435,6 @@ async def settle(
         await ledger.crud.store_mint_quote(quote=quote, db=ledger.db, conn=conn)
         touched.append(quote)
     if record["melt_quote"]:
-        # Settled ids stay claimed whatever later happens to the melt quote.
-        await conn.execute(
-            f"UPDATE {ledger.db.table_with_schema('mint_quote_id_claims')} SET melt_quote = NULL WHERE melt_quote = :melt_quote",
-            {"melt_quote": record["melt_quote"]},
-        )
         await _delete_pending(ledger, record["melt_quote"], conn)
     return signatures, touched
 
@@ -503,7 +450,7 @@ def fill_blanks(change: int, amounts: List[int], blanks: int) -> List[int]:
 
 
 async def fail(ledger: "Ledger", record, conn: Connection) -> List[MintQuote]:
-    """Return the quote inputs to paid and release the fixed txout quote ids."""
+    """Return the quote inputs to paid."""
     touched: List[MintQuote] = []
     for quote_id, _ in json.loads(record["mint_quotes"]):
         quote = await ledger.crud.get_mint_quote(
@@ -514,10 +461,6 @@ async def fail(ledger: "Ledger", record, conn: Connection) -> List[MintQuote]:
         ledger.db_write._set_mint_quote_state(quote, MintQuoteState.paid)
         await ledger.crud.update_mint_quote(quote=quote, db=ledger.db, conn=conn)
         touched.append(quote)
-    await conn.execute(
-        f"DELETE FROM {ledger.db.table_with_schema('mint_quote_id_claims')} WHERE melt_quote = :melt_quote",
-        {"melt_quote": record["melt_quote"]},
-    )
     await _delete_pending(ledger, record["melt_quote"], conn)
     return touched
 

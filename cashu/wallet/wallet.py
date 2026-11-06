@@ -895,7 +895,7 @@ class Wallet(
             else None,
             mint_quote_outputs=[
                 TranscriptMintQuoteOutput(
-                    pubkey=bytes.fromhex(c.pubkey), amount=c.amount, quote_id=c.quote_id
+                    pubkey=bytes.fromhex(c.pubkey), amount=c.amount
                 )
                 for c in mint_quote_outputs or []
             ],

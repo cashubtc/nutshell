@@ -70,8 +70,6 @@ class TranscriptBlindedOutput:
 @dataclass
 class TranscriptMintQuoteOutput:
     pubkey: bytes  # 33-byte compressed lock key (NUT-XX)
-    # A derived id (NUT-04); None binds the fixed txout quote's id to the inputs.
-    quote_id: Optional[str]
     amount: int
 
 
@@ -351,7 +349,7 @@ def parse_transaction_transcript(transcript: bytes) -> List[TranscriptContainer]
 
 
 def input_bound_quote_id(tx: TransactionShape, k: int) -> str:
-    """The id a fixed txout quote without id_preimage takes (NUT-XX).
+    """A fixed txout quote's id (NUT-XX), bound to the transaction's inputs.
 
     hex(tagged_hash("Cashu_InputQuoteId", SHA256(input section) || u32_BE(k))), k the
     output's position among the mint quote outputs. Only a transaction spending exactly
@@ -368,6 +366,5 @@ def input_bound_quote_id(tx: TransactionShape, k: int) -> str:
 def mint_quote_ids(tx: TransactionShape) -> List[str]:
     """Each mint quote output's id, in request order."""
     return [
-        c.quote_id if c.quote_id is not None else input_bound_quote_id(tx, k)
-        for k, c in enumerate(tx.mint_quote_outputs or [])
+        input_bound_quote_id(tx, k) for k in range(len(tx.mint_quote_outputs or []))
     ]

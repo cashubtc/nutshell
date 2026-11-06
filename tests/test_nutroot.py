@@ -611,7 +611,6 @@ def _tx_from_vector(tx: dict):
         TranscriptMintQuoteOutput,
         TranscriptProofInput,
         TranscriptQuote,
-        derived_quote_id,
     )
 
     return TransactionShape(
@@ -645,18 +644,8 @@ def _tx_from_vector(tx: dict):
             TranscriptQuote(amount=q["amount"], quote_id=q["quote_id"])
             for q in tx.get("melt_quote_outputs", [])
         ],
-        # A fixed txout quote is named by its preimage, or None for an id bound to
-        # the inputs (NUT-XX).
         mint_quote_outputs=[
-            TranscriptMintQuoteOutput(
-                pubkey=bytes.fromhex(c["pubkey"]),
-                amount=c["amount"],
-                quote_id=(
-                    derived_quote_id(bytes.fromhex(c["id_preimage"]))
-                    if "id_preimage" in c
-                    else None
-                ),
-            )
+            TranscriptMintQuoteOutput(pubkey=bytes.fromhex(c["pubkey"]), amount=c["amount"])
             for c in tx.get("mint_quote_outputs", [])
         ],
     )
