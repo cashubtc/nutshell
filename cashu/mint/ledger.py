@@ -851,7 +851,6 @@ class Ledger(
             Exception: Validation of outputs failed.
             Exception: Quote not paid.
             Exception: Quote already issued.
-            Exception: Quote expired.
             Exception: Amount to mint does not match quote amount.
 
         Returns:
@@ -882,8 +881,6 @@ class Ledger(
                 raise TransactionError("quote unit does not match output unit")
             if not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
-            if quote.expiry and quote.expiry < int(time.time()):
-                raise QuoteExpiredError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
             await self._store_blinded_messages(outputs, mint_id=quote_id)
@@ -1006,10 +1003,6 @@ class Ledger(
         quotes = await self.db_write._set_mint_quotes_pending(quote_ids=payload.quotes)
 
         try:
-            for quote in quotes:
-                if quote.expiry and quote.expiry < int(time.time()):
-                    raise QuoteExpiredError("quote expired")
-
             # Store all blinded messages
             await self._store_blinded_messages(
                 payload.outputs, mint_id=payload.quotes[0]
