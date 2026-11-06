@@ -17,6 +17,8 @@ from ..wallet.crud import (
 )
 from .protocols import SupportsDb, SupportsKeysets
 
+Step = Tuple[Proof, Union[int, float], Optional[Proof]]
+
 
 class WalletTransactions(SupportsDb, SupportsKeysets):
     keysets: Dict[str, WalletKeyset]  # holds keysets
@@ -78,7 +80,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         """
         # A loop, not recursion, so wallets with thousands of proofs don't hit the
         # recursion limit. `steps` keeps what each step checks on the way back.
-        steps: List[Tuple[Proof, Union[int, float], Optional[Proof]]] = []
+        steps: List[Step] = []
         selected_proofs: List[Proof] = []
         while True:
             # check that enough spendable proofs exist
