@@ -343,8 +343,7 @@ async def _pay(
             mint.rstrip("/") for mint in pr.m
         ]
         if mint_outside_list and not pr.mp:
-            print(
-                f"Error: Current mint {wallet.url} is not accepted by the receiver.")
+            print(f"Error: Current mint {wallet.url} is not accepted by the receiver.")
             print(f"Accepted mints: {pr.m}")
             return
 
@@ -373,7 +372,9 @@ async def _pay(
             print(f"Adding method fee of {wallet.unit.str(method_fee)} ({reason}).")
 
         if amount_to_pay >= 2**64:
-            raise click.ClickException("Payment request total exceeds the maximum amount.")
+            raise click.ClickException(
+                "Payment request total exceeds the maximum amount."
+            )
 
         if not yes and not ctx.obj.get("YES"):
             message = f"Pay {wallet.unit.str(amount_to_pay)}?"
@@ -432,13 +433,12 @@ async def _pay(
             if post_transports:
                 transport = post_transports[0]
                 url = transport.a
-                print(
-                    f"Sending token via POST to {url}...", end="", flush=True)
+                print(f"Sending token via POST to {url}...", end="", flush=True)
 
                 token_obj = deserialize_token_from_string(token)
-                assert isinstance(
-                    token_obj, TokenV4
-                ), "Only TokenV4 supported for POST transport"
+                assert isinstance(token_obj, TokenV4), (
+                    "Only TokenV4 supported for POST transport"
+                )
 
                 proofs = token_obj.proofs
 
@@ -585,7 +585,11 @@ def _parse_supported_method(spec: str) -> SupportedMethod:
     ),
 )
 @click.option(
-    "--single-use", "-s", default=False, is_flag=True, help="Mark the request single use."
+    "--single-use",
+    "-s",
+    default=False,
+    is_flag=True,
+    help="Mark the request single use.",
 )
 @click.option(
     "--bech32", default=False, is_flag=True, help="Encode as a NUT-26 bech32m request."
@@ -658,8 +662,7 @@ async def invoice(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    amount = int(
-        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
@@ -754,7 +757,9 @@ async def invoice(
                 flush=True,
             )
         if mint_supports_websockets:
-            ws_deadline = mint_quote.expiry or (time.time() + 5 * 60)  # wait for five minutes
+            ws_deadline = mint_quote.expiry or (
+                time.time() + 5 * 60
+            )  # wait for five minutes
             while not paid and time.time() < ws_deadline:
                 await asyncio.sleep(0.1)
 
@@ -833,8 +838,7 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(
-        input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
+    amount = int(input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -893,8 +897,7 @@ async def balance(ctx: Context, verbose):
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
             unit = k
-            print(
-                f"Unit {i+1} ({unit}) - Balance: {unit.str(int(v['available']))}")
+            print(f"Unit {i + 1} ({unit}) - Balance: {unit.str(int(v['available']))}")
         print("")
     if verbose:
         # show balances per keyset
@@ -906,7 +909,7 @@ async def balance(ctx: Context, verbose):
                 unit = Unit[str(v["unit"])]
                 print(
                     f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
-                    f" {unit.str(int(v['balance'])-int(v['available']))})"
+                    f" {unit.str(int(v['balance']) - int(v['available']))})"
                 )
             print("")
 
@@ -915,7 +918,7 @@ async def balance(ctx: Context, verbose):
     if verbose:
         print(
             f"Balance: {wallet.available_balance} (pending:"
-            f" {wallet.balance-wallet.available_balance}) in"
+            f" {wallet.balance - wallet.available_balance}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
@@ -1003,8 +1006,7 @@ async def send_command(
     timelock: Optional[int],
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    amount = int(
-        amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
+    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     await send(
         wallet,
         amount=amount,
@@ -1177,8 +1179,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter(
-            "send_id"), reverse=True)  # type: ignore
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"), reverse=True)  # type: ignore
         if number:
             number += offset
         for i, (key, value) in islice(
@@ -1593,8 +1594,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
-                        print(
-                            f"        - Description: {mint_info['description']}")
+                        print(f"        - Description: {mint_info['description']}")
                     if mint_info.get("description_long"):
                         print(
                             f"        - Long description: {mint_info['description_long']}"
@@ -1606,8 +1606,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
                     if mint_info.get("version"):
                         print(f"        - Version: {mint_info['version']}")
                     if mint_info.get("motd"):
-                        print(
-                            f"        - Message of the day: {mint_info['motd']}")
+                        print(f"        - Message of the day: {mint_info['motd']}")
                     if mint_info.get("time"):
                         print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
@@ -1751,8 +1750,7 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
 
     if mint:
         new_proofs = await auth_wallet.mint_blind_auth()
-        print(
-            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
+        print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
 
 @cli.group(cls=NaturalOrderGroup)

@@ -10,6 +10,7 @@ P2BK_DOMAIN_SEPARATOR = b"Cashu_P2BK_v1"
 # secp256k1 curve order
 SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
+
 def _compressed_pubkey(pubkey_hex: str) -> str:
     """Ensure a pubkey is in compressed SEC1 format (33 bytes / 66 hex chars).
     Silently adds '02' prefix to bare 32-byte (BIP-340 / Nostr) x-only keys.
@@ -22,12 +23,14 @@ def _compressed_pubkey(pubkey_hex: str) -> str:
         return pubkey_hex
     raise ValueError(f"Invalid pubkey length: {len(raw)} bytes")
 
+
 def ecdh_shared_secret(point: PublicKey, scalar: PrivateKey) -> bytes:
     """Compute x-only ECDH shared secret Zx = x(scalar * point)"""
     shared_point = point.multiply(bytes.fromhex(scalar.to_hex()))
     # compressed format is prefix (1 byte) + x-coordinate (32 bytes)
     compressed = shared_point.format(compressed=True)
     return compressed[1:]  # strip the 02/03 prefix to get Zx
+
 
 def derive_blinding_scalar(zx: bytes, slot_index: int) -> int:
     """Derive a deterministic blinding scalar r_i from ECDH shared secret and slot index."""
@@ -45,18 +48,21 @@ def derive_blinding_scalar(zx: bytes, slot_index: int) -> int:
             raise ValueError("P2BK: blinding scalar derivation failed")
     return r
 
+
 def _scalar_to_privkey(scalar: int) -> PrivateKey:
     """Convert an integer scalar to a PrivateKey."""
     return PrivateKey(scalar.to_bytes(32, "big"))
+
 
 def _pubkey_x(pubkey: PublicKey) -> bytes:
     """Get the x-coordinate (32 bytes) from a compressed public key."""
     return pubkey.format(compressed=True)[1:]
 
+
 def blind_pubkeys(
-    data_pubkey: str, 
-    additional_pubkeys: List[str], 
-    refund_pubkeys: List[str], 
+    data_pubkey: str,
+    additional_pubkeys: List[str],
+    refund_pubkeys: List[str],
     ephemeral_privkey: Optional[PrivateKey] = None,
 ) -> Tuple[str, List[str], List[str], str]:
     """Blind all pubkeys in a P2PK secret using per-key ECDH.

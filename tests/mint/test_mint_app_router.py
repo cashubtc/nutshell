@@ -418,7 +418,9 @@ def test_router_quote_routes_and_swap(monkeypatch):
         ("/v1/restore", {}),
     ],
 )
-def test_router_rejects_oversized_blinded_points_before_ledger(monkeypatch, path, fields):
+def test_router_rejects_oversized_blinded_points_before_ledger(
+    monkeypatch, path, fields
+):
     monkeypatch.setattr(settings, "mint_rate_limit", False)
     monkeypatch.setattr(settings, "mint_require_auth", False)
     monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
@@ -445,7 +447,9 @@ def test_router_rejects_oversized_blinded_points_before_ledger(monkeypatch, path
         ("/v1/mint/bolt11/batch", {"quotes": ["unpaid-quote"]}),
     ],
 )
-def test_oversized_point_is_not_rendered_in_validation_errors(monkeypatch, path, fields):
+def test_oversized_point_is_not_rendered_in_validation_errors(
+    monkeypatch, path, fields
+):
     monkeypatch.setattr(settings, "mint_rate_limit", False)
     monkeypatch.setattr(settings, "mint_require_auth", False)
     monkeypatch.setattr(router_module, "ledger", SimpleNamespace())
@@ -491,7 +495,8 @@ def test_router_rejects_long_secrets_before_hashing(
         path,
         json={
             **fields,
-            "inputs": [{"secret": "valid"}] * index + [
+            "inputs": [{"secret": "valid"}] * index
+            + [
                 {
                     "id": "00deadbeefdeadbe",
                     "amount": 1,
