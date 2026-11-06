@@ -12,7 +12,6 @@ from ..core.crypto.keys import get_keyset_id_version
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database, LockOptions
 from ..core.secret import Secret
-from ..core.settings import settings
 from ..wallet.crud import (
     bump_secret_derivation,
     get_seed_and_mnemonic,
@@ -22,6 +21,7 @@ from .protocols import SupportsDb, SupportsKeysets
 
 
 class WalletSecrets(SupportsDb, SupportsKeysets):
+    name: str
     keyset_id: str
     db: Database
 
@@ -47,19 +47,14 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         if ret_db is None and from_mnemonic is None:
             # if there is no seed in the database, generate a new one
             mnemonic_str = mnemo.generate()
-            wallet_command_prefix_str = (
-                f" --wallet {settings.wallet_name}"
-                if settings.wallet_name != "wallet"
-                else ""
-            )
             wallet_name = (
-                f' for wallet "{settings.wallet_name}"'
-                if settings.wallet_name != "wallet"
+                f' for wallet "{self.name}"'
+                if self.name != "wallet"
                 else ""
             )
             print(
                 f"Generated a new mnemonic{wallet_name}. To view it, run"
-                f' "cashu{wallet_command_prefix_str} info --mnemonic".'
+                f' "cashu --wallet {self.name} info --mnemonic".'
             )
         elif from_mnemonic:
             # or use the one provided
