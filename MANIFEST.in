@@ -1,6 +1,0 @@
-include requirements.txt
-recursive-include cashu/tor *
-recursive-include cashu/wallet *
-exclude tests/*
-global-exclude *.py[cod]
-prune tests/* */__pycache__/*

@@ -40,7 +40,7 @@ def profile_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     copy_settings(tmp_path)
     Path("pyproject.toml").touch()
-    Path("poetry.lock").touch()
+    Path("uv.lock").touch()
     return tmp_path
 
 
@@ -59,9 +59,10 @@ def test_shards_partition_entire_profile(profile, shards, monkeypatch):
     assert all(groups)
 
 
-def test_profile_cache_invalidates_dependency_changes(profile_project):
+@pytest.mark.parametrize("dependency_path", ["cashu/wallet/helper.py", "uv.lock"])
+def test_profile_cache_invalidates_dependency_changes(profile_project, dependency_path):
     Path("cashu/wallet").mkdir(parents=True)
-    dependency = Path("cashu/wallet/helper.py")
+    dependency = Path(dependency_path)
     dependency.write_text("value = 1\n")
     runner.prepare_profile_cache(["cashu/mint/ledger.py"])
     verdict = Path("mutants/verdict")
@@ -176,7 +177,7 @@ def test_profile_resumes_only_unchecked_mutants(tmp_path):
         'process_isolation = "forkserver"\nforkserver_warmup = "none"\n'
         'do_not_mutate = ["cashu/core/settings.py"]\n'
     )
-    (tmp_path / "poetry.lock").touch()
+    (tmp_path / "uv.lock").touch()
     command = [sys.executable, str(SCRIPTS / "run_mutation.py"), "--profile", "core"]
     env = {
         **os.environ,

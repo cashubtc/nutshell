@@ -1,16 +1,16 @@
-VERSION := $(shell poetry version -s)
+VERSION := $(shell uv version --short)
 
 ruff:
-	poetry run ruff check . --fix
+	uv run --locked ruff check . --fix
 
 ruff-check:
-	poetry run ruff check .
+	uv run --locked ruff check .
 
 fuzz:
-	poetry run pytest tests/fuzz
+	uv run --locked pytest tests/fuzz
 
 mypy:
-	poetry run mypy cashu --check-untyped-defs
+	uv run --locked mypy cashu --check-untyped-defs
 
 format: ruff
 
@@ -24,34 +24,34 @@ clean:
 	rm -rf docker-build || true
 
 package:
-	poetry export -f requirements.txt --without-hashes --output requirements.txt
-	poetry build --clean
+	uv export --locked --no-dev --no-emit-project --no-hashes --output-file requirements.txt
+	uv build --clear --no-sources
 
 test:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests --cov-report xml --cov cashu
+	uv run --locked pytest tests --cov-report xml --cov cashu
 
 test-wallet:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests/wallet --cov-report xml --cov cashu
+	uv run --locked pytest tests/wallet --cov-report xml --cov cashu
 
 test-mint:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests/mint --cov-report xml --cov cashu
+	uv run --locked pytest tests/mint --cov-report xml --cov cashu
 
 .PHONY: compatibility-targets test-wallet-compatibility
 compatibility-targets:
-	poetry run python -m tests.compatibility
+	uv run --locked python -m tests.compatibility
 
 test-wallet-compatibility:
 	@test -n "$$CASHU_TEST_MINT_IMAGE" || \
 		(echo "Set CASHU_TEST_MINT_IMAGE, e.g. CASHU_TEST_MINT_IMAGE=cashubtc/nutshell:0.20.3" && exit 1)
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
-	poetry run pytest tests/wallet --cov-report xml --cov cashu
+	uv run --locked pytest tests/wallet --cov-report xml --cov cashu
 
 .PHONY: test-spark-regtest test-spark-backend-regtest test-spark-mint test-spark-wallet
 test-spark-regtest:
@@ -64,7 +64,7 @@ test-spark-backend-regtest:
 	MINT_BACKEND_BOLT11_SAT=FakeWallet \
 	MINT_BACKEND_BOLT11_USD=FakeWallet \
 	TOR=FALSE \
-	poetry run pytest tests/lightning/test_spark_regtest.py -v
+	uv run --locked pytest tests/lightning/test_spark_regtest.py -v
 
 test-spark-mint:
 	CASHU_SPARK_REGTEST=true \
@@ -81,18 +81,18 @@ test-spark-wallet:
 	$(MAKE) test-wallet
 
 install: package
-	python -m pip install --upgrade dist/*.whl
+	uv sync --locked --no-dev --no-editable
 
 upload: package
-	poetry publish
+	uv publish
 
 install-pre-commit-hook:
 	@echo "Installing pre-commit hook to git"
-	@echo "Uninstall the hook with poetry run pre-commit uninstall"
-	poetry run pre-commit install
+	@echo "Uninstall the hook with uv run --locked pre-commit uninstall"
+	uv run --locked pre-commit install
 
 pre-commit:
-	poetry run pre-commit run --all-files
+	uv run --locked pre-commit run --all-files
 
 .PHONY: docker-build
 docker-build:
