@@ -90,13 +90,13 @@ def response_cache(request, monkeypatch):
             completed.add(key)
             return [BlindedSignature(id="00" * 8, amount=1, C_="02" + "11" * 32)]
 
-        async def mint(outputs, quote_id, signature):
+        async def mint(outputs, quote_id, signature, method_str="bolt11"):
             return process("/v1/mint/bolt11", quote_id)
 
-        async def mint_batch(payload):
+        async def mint_batch(payload, method_str="bolt11"):
             return process("/v1/mint/bolt11/batch", payload.quotes[0])
 
-        async def melt(proofs, quote, outputs):
+        async def melt(proofs, quote, outputs, method_str=None):
             process("/v1/melt/bolt11", quote)
             return PostMeltQuoteResponse(
                 quote=quote,

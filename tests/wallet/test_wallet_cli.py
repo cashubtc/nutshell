@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Tuple
 
 import bolt11
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -151,6 +152,55 @@ def test_balance(cli_prefix):
     w = asyncio.run(init_wallet())
     assert f"Balance: {w.available_balance}" in result.output
     assert result.exit_code == 0
+
+
+def test_pay_onchain_passes_amount_as_standard_field(monkeypatch):
+    payloads = []
+    original_request = Wallet._request
+
+    async def capture_request(wallet, method, path, **kwargs):
+        if path != "melt/quote/onchain":
+            return await original_request(wallet, method, path, **kwargs)
+        payloads.append(kwargs["json"])
+        return httpx.Response(
+            200,
+            json={
+                "quote": "onchain-cli-quote",
+                "method": "onchain",
+                "request": "bc1qexample",
+                "unit": "sat",
+                "amount": 10,
+                "fee_reserve": 1,
+                "state": "UNPAID",
+            },
+            request=httpx.Request("POST", wallet.url),
+        )
+
+    monkeypatch.setattr(Wallet, "_request", capture_request)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--wallet",
+            "test_method_quote_cli",
+            "--host",
+            settings.mint_url,
+            "--tests",
+            "pay",
+            "bc1qexample",
+            "10",
+            "--method",
+            "onchain",
+            "--method-options",
+            '{"account":"alice"}',
+            "--yes",
+        ],
+    )
+
+    assert result.exception is None
+    assert len(payloads) == 1
+    assert payloads[0]["amount"] == 10
+    assert payloads[0]["account"] == "alice"
+    assert "Balance too low" in result.output
 
 
 @pytest.mark.skipif(is_fake, reason="only works with FakeWallet")
@@ -1634,3 +1684,65 @@ def test_pay_rejects_request_total_overflow(nut18_cli_prefix, encode):
     assert result.exit_code == 1
     assert "total exceeds the maximum amount" in result.output
     assert "cashuB" not in result.stdout
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize("amount_args", [[], ["0"], ["--amountless"]])
+def test_invoice_creates_amountless_method_quote(
+    nut18_cli_prefix, monkeypatch, amount_args
+):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.base import MintQuote, MintQuoteState
+
+    request = AsyncMock(
+        return_value=MintQuote(
+            quote="amountless",
+            method="bolt12",
+            unit="sat",
+            request="lno1offer",
+            checking_id="incoming",
+            amount=0,
+            state=MintQuoteState.unpaid,
+        )
+    )
+    monkeypatch.setattr(Wallet, "request_mint_for_method", request)
+    result = CliRunner().invoke(
+        cli, [*nut18_cli_prefix, "invoice", *amount_args, "--method", "bolt12", "-n"]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert request.await_args.args == ("bolt12", None)
+    assert "lno1offer" in result.output
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+def test_invoice_claims_amountless_paid_balance(nut18_cli_prefix, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from cashu.core.base import MintQuote, MintQuoteState
+
+    incoming = MintQuote(
+        quote="amountless",
+        method="bolt12",
+        unit="sat",
+        request="lno1offer",
+        checking_id="incoming",
+        amount=0,
+        state=MintQuoteState.unpaid,
+    )
+    paid = incoming.model_copy(
+        update={"state_val": MintQuoteState.paid, "amount_paid": 8, "amount_issued": 0}
+    )
+    monkeypatch.setattr(
+        Wallet, "request_mint_for_method", AsyncMock(return_value=incoming)
+    )
+    monkeypatch.setattr(
+        Wallet, "get_mint_quote_for_method", AsyncMock(return_value=paid)
+    )
+    mint = AsyncMock(return_value=[])
+    monkeypatch.setattr(Wallet, "mint", mint)
+    result = CliRunner().invoke(
+        cli, [*nut18_cli_prefix, "invoice", "--amountless", "--method", "bolt12"]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert mint.await_args.args[0] == 8 and mint.await_args.kwargs["method"] == "bolt12"

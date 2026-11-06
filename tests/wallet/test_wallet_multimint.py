@@ -11,6 +11,7 @@ import pytest_asyncio
 from click.testing import CliRunner
 
 from cashu.core.base import (
+    MintQuoteState,
     NUT10Option,
     PaymentRequest,
     SupportedMethod,
@@ -32,6 +33,7 @@ from cashu.wallet.helpers import (
     send,
 )
 from cashu.wallet.wallet import Wallet
+from tests.helpers import wait_for_result
 
 MINT_RUNNER = """
 import sys
@@ -101,6 +103,10 @@ async def wallets(mint, tmp_path):
         wallet = await Wallet.with_db(url, str(tmp_path / f"wallet{index}"))
         await wallet.load_mint()
         quote = await wallet.request_mint(64)
+        await wait_for_result(
+            lambda: wallet.get_mint_quote(quote.quote),
+            lambda response: response.state == MintQuoteState.paid,
+        )
         await wallet.mint(64, quote_id=quote.quote)
         wallets.append(wallet)
     assert wallets[0].keyset_id != wallets[1].keyset_id
@@ -208,6 +214,10 @@ async def _fund_request_wallet(url, directory, name, amount, unit="sat", split=N
     try:
         await wallet.load_mint()
         quote = await wallet.request_mint(amount)
+        await wait_for_result(
+            lambda: wallet.get_mint_quote(quote.quote),
+            lambda response: response.state == MintQuoteState.paid,
+        )
         await wallet.mint(amount, split=split, quote_id=quote.quote)
     finally:
         await wallet.db.engine.dispose()

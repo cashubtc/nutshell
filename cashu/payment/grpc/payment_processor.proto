@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+package cdk_payment_processor;
+
+service CdkPaymentProcessor {
+  rpc GetSettings(EmptyRequest) returns (SettingsResponse);
+  rpc CreatePayment(CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc GetPaymentQuote(PaymentQuoteRequest) returns (PaymentQuoteResponse);
+  rpc MakePayment(MakePaymentRequest) returns (MakePaymentResponse);
+  rpc CheckIncomingPayment(CheckIncomingPaymentRequest) returns (CheckIncomingPaymentResponse);
+  rpc CheckOutgoingPayment(CheckOutgoingPaymentRequest) returns (MakePaymentResponse);
+  rpc WaitPaymentEvent(EmptyRequest) returns (stream PaymentEventResponse);
+}
+
+message EmptyRequest {}
+message AmountMessage { uint64 value = 1; string unit = 2; }
+message Bolt11Settings { bool mpp = 1; bool amountless = 2; bool invoice_description = 5; }
+message Bolt12Settings { bool amountless = 2; }
+message OnchainSettings { uint32 confirmations = 1; uint64 min_receive_amount_sat = 2; uint64 min_send_amount_sat = 3; }
+message SettingsResponse {
+  string unit = 1;
+  Bolt11Settings bolt11 = 2;
+  Bolt12Settings bolt12 = 3;
+  map<string, string> custom = 4;
+  OnchainSettings onchain = 5;
+}
+
+message Bolt11IncomingPaymentOptions { optional string description = 1; AmountMessage amount = 2; optional uint64 unix_expiry = 3; }
+message CustomIncomingPaymentOptions {
+  optional string description = 1;
+  optional AmountMessage amount = 2;
+  optional uint64 unix_expiry = 3;
+  optional string extra_json = 4;
+  string quote_id = 6;
+  optional string pubkey = 7;
+}
+message Bolt12IncomingPaymentOptions { optional string description = 1; optional AmountMessage amount = 2; optional uint64 unix_expiry = 3; }
+message OnchainIncomingPaymentOptions { string quote_id = 1; }
+message IncomingPaymentOptions {
+  oneof options {
+    Bolt11IncomingPaymentOptions bolt11 = 1;
+    Bolt12IncomingPaymentOptions bolt12 = 2;
+    CustomIncomingPaymentOptions custom = 3;
+    OnchainIncomingPaymentOptions onchain = 4;
+  }
+}
+message CreatePaymentRequest { IncomingPaymentOptions options = 2; }
+
+enum PaymentIdentifierType {
+  PAYMENT_IDENTIFIER_TYPE_UNSPECIFIED = 0;
+  PAYMENT_IDENTIFIER_TYPE_PAYMENT_HASH = 1;
+  PAYMENT_IDENTIFIER_TYPE_OFFER_ID = 2;
+  PAYMENT_IDENTIFIER_TYPE_LABEL = 3;
+  PAYMENT_IDENTIFIER_TYPE_BOLT12_PAYMENT_HASH = 4;
+  PAYMENT_IDENTIFIER_TYPE_CUSTOM_ID = 5;
+  PAYMENT_IDENTIFIER_TYPE_PAYMENT_ID = 6;
+  PAYMENT_IDENTIFIER_TYPE_QUOTE_ID = 7;
+}
+message PaymentIdentifier {
+  PaymentIdentifierType type = 1;
+  oneof value { string hash = 2; string id = 3; }
+}
+message CreatePaymentResponse {
+  PaymentIdentifier request_identifier = 1;
+  string request = 2;
+  optional uint64 expiry = 3;
+  optional string extra_json = 4;
+}
+
+message Mpp { uint64 amount = 1; }
+message Amountless { uint64 amount_msat = 1; }
+message MeltOptions { oneof options { Mpp mpp = 1; Amountless amountless = 2; } }
+enum OutgoingPaymentRequestType {
+  OUTGOING_PAYMENT_REQUEST_TYPE_UNSPECIFIED = 0;
+  OUTGOING_PAYMENT_REQUEST_TYPE_BOLT11_INVOICE = 1;
+  OUTGOING_PAYMENT_REQUEST_TYPE_BOLT12_OFFER = 2;
+  OUTGOING_PAYMENT_REQUEST_TYPE_CUSTOM = 3;
+  OUTGOING_PAYMENT_REQUEST_TYPE_ONCHAIN = 4;
+}
+message OnchainOutgoingPaymentOptions {
+  string address = 1;
+  AmountMessage amount = 2;
+  optional AmountMessage max_fee_amount = 3;
+  string quote_id = 4;
+  optional uint32 fee_index = 5;
+  optional string metadata = 6;
+}
+message PaymentQuoteRequest {
+  string request = 1;
+  string unit = 2;
+  optional MeltOptions options = 3;
+  OutgoingPaymentRequestType request_type = 4;
+  optional string extra_json = 5;
+  string quote_id = 6;
+  optional OnchainOutgoingPaymentOptions onchain_options = 7;
+  optional AmountMessage amount = 8;
+}
+enum QuoteState {
+  QUOTE_STATE_UNSPECIFIED = 0;
+  QUOTE_STATE_UNPAID = 1;
+  QUOTE_STATE_PAID = 2;
+  QUOTE_STATE_PENDING = 3;
+  QUOTE_STATE_UNKNOWN = 4;
+  QUOTE_STATE_FAILED = 5;
+  QUOTE_STATE_ISSUED = 6;
+}
+message OnchainFeeOption { uint64 fee_reserve = 1; uint32 estimated_blocks = 2; uint32 fee_index = 3; }
+message PaymentQuoteResponse {
+  PaymentIdentifier request_identifier = 1;
+  AmountMessage amount = 2;
+  AmountMessage fee = 3;
+  QuoteState state = 4;
+  optional string extra_json = 5;
+  optional uint32 estimated_blocks = 6;
+  repeated OnchainFeeOption fee_options = 7;
+}
+
+message Bolt11OutgoingPaymentOptions {
+  string bolt11 = 1; optional AmountMessage max_fee_amount = 2; optional uint64 timeout_secs = 3;
+  optional MeltOptions melt_options = 4; string quote_id = 5;
+}
+message Bolt12OutgoingPaymentOptions {
+  string offer = 1; optional AmountMessage max_fee_amount = 2; optional uint64 timeout_secs = 3;
+  optional MeltOptions melt_options = 5; string quote_id = 6;
+}
+message CustomOutgoingPaymentOptions {
+  string offer = 1; optional AmountMessage max_fee_amount = 2; optional uint64 timeout_secs = 3;
+  optional AmountMessage amount = 4; optional MeltOptions melt_options = 5; optional string extra_json = 6;
+  string quote_id = 7;
+}
+message OutgoingPaymentVariant {
+  oneof options {
+    Bolt11OutgoingPaymentOptions bolt11 = 1;
+    Bolt12OutgoingPaymentOptions bolt12 = 2;
+    CustomOutgoingPaymentOptions custom = 3;
+    OnchainOutgoingPaymentOptions onchain = 4;
+  }
+}
+message MakePaymentRequest {
+  OutgoingPaymentVariant payment_options = 1;
+  optional AmountMessage partial_amount = 2;
+  optional AmountMessage max_fee_amount = 3;
+  string unit = 4;
+}
+message MakePaymentResponse {
+  PaymentIdentifier payment_identifier = 1;
+  optional string payment_proof = 2;
+  QuoteState status = 3;
+  AmountMessage total_spent = 4;
+  optional string extra_json = 5;
+}
+message CheckIncomingPaymentRequest { PaymentIdentifier request_identifier = 1; }
+message WaitIncomingPaymentResponse { PaymentIdentifier payment_identifier = 1; AmountMessage payment_amount = 2; string payment_id = 3; }
+message CheckIncomingPaymentResponse { repeated WaitIncomingPaymentResponse payments = 1; }
+message CheckOutgoingPaymentRequest { PaymentIdentifier request_identifier = 1; }
+message PaymentSuccessfulResponse { string quote_id = 1; MakePaymentResponse details = 2; }
+message PaymentFailedResponse { string quote_id = 1; string reason = 2; }
+message PaymentEventResponse {
+  oneof event {
+    WaitIncomingPaymentResponse payment_received = 1;
+    PaymentSuccessfulResponse payment_successful = 2;
+    PaymentFailedResponse payment_failed = 3;
+  }
+}

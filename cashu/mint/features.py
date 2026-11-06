@@ -30,6 +30,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
+from ..payment import payment_method_registry
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -81,35 +82,52 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
+                method_name = method.name if isinstance(method, Method) else method
+                plugin = payment_method_registry.get(method_name)
+                plugin_settings = plugin.operation_settings(unit_dict[unit], unit)
                 mint_setting = MintMethodSetting(
-                    method=method.name, unit=unit.name, method_name=method.name
+                    method=method_name,
+                    unit=unit.name,
+                    method_name=plugin_settings.method_name,
+                    min_amount=plugin_settings.min_amount,
+                    max_amount=plugin_settings.max_amount,
+                    options=(
+                        MintMethodBolt11OptionSetting(
+                            description=plugin.supports_description(unit_dict[unit])
+                        )
+                        if method_name == Method.bolt11.name
+                        else plugin_settings.options
+                    ),
                 )
-                if settings.mint_max_mint_bolt11_sat:
-                    mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
-                    mint_setting.min_amount = 0
-                mint_setting.options = MintMethodBolt11OptionSetting(
-                    description=unit_dict[unit].supports_description
-                )
-                mint_method_settings.append(mint_setting)
+                if plugin_settings.mint_enabled:
+                    mint_method_settings.append(mint_setting)
         melt_method_settings: List[MeltMethodSetting] = []
         for method, unit_dict in self.backends.items():
-            for unit in unit_dict.keys():
-                melt_setting = MeltMethodSetting(
-                    method=method.name, unit=unit.name, method_name=method.name
+            for unit, backend in unit_dict.items():
+                method_name = method.name if isinstance(method, Method) else method
+                policy = payment_method_registry.get(method_name).operation_settings(
+                    backend, unit, melt=True
                 )
-                if settings.mint_max_melt_bolt11_sat:
-                    melt_setting.max_amount = settings.mint_max_melt_bolt11_sat
-                    melt_setting.min_amount = 0
-                melt_method_settings.append(melt_setting)
+                if policy.melt_enabled:
+                    melt_method_settings.append(
+                        MeltMethodSetting(
+                            method=method_name,
+                            unit=unit.name,
+                            method_name=policy.method_name,
+                            min_amount=policy.min_amount,
+                            max_amount=policy.max_amount,
+                            options=policy.options,
+                        )
+                    )
 
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
                 methods=mint_method_settings,
-                disabled=settings.mint_bolt11_disable_mint,
+                disabled=not bool(mint_method_settings),
             ),
             MELT_NUT: dict(
                 methods=melt_method_settings,
-                disabled=settings.mint_bolt11_disable_melt,
+                disabled=not bool(melt_method_settings),
             ),
         }
         return mint_features
@@ -134,7 +152,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[BATCH_MINT_NUT] = {
             "supported": True,
             "max_batch_size": settings.mint_max_request_length,
-            "methods": list(set([m.name for m in self.backends.keys()])),
+            "methods": list(
+                set([m.name if isinstance(m, Method) else m for m in self.backends])
+            ),
         }
         return mint_features
 
@@ -145,8 +165,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mpp_features = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
-                if unit_dict[unit].supports_mpp:
-                    mpp_features.append({"method": method.name, "unit": unit.name})
+                method_name = method.name if isinstance(method, Method) else method
+                plugin = payment_method_registry.get(method_name)
+                if plugin.supports_mpp(unit_dict[unit]):
+                    mpp_features.append({"method": method_name, "unit": unit.name})
 
         if mpp_features:
             mint_features[MPP_NUT] = dict(methods=mpp_features)
@@ -163,26 +185,24 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         }
         # we check the backend to see if "bolt11_mint_quote" is supported as well
         for method, unit_dict in self.backends.items():
-            if method == Method.bolt11:
-                for unit in unit_dict.keys():
-                    websocket_features[_SUPPORTED].append(
-                        {
-                            _METHOD: method.name,
-                            _UNIT: unit.name,
-                            _COMMANDS: [
-                                JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE.value,
-                                JSONRPCSubscriptionKinds.PROOF_STATE.value,
-                            ],
-                        }
-                    )
-                    if unit_dict[unit].supports_incoming_payment_stream:
-                        supported_features: List[str] = list(
-                            websocket_features[_SUPPORTED][-1][_COMMANDS]
-                        )
-                        websocket_features[_SUPPORTED][-1][_COMMANDS] = (
-                            supported_features
-                            + [JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE.value]
-                        )
+            method_name = method.name if isinstance(method, Method) else method
+            if method_name not in {"bolt11", "bolt12"}:
+                continue
+            plugin = payment_method_registry.get(method_name)
+            for unit, backend in unit_dict.items():
+                commands = [
+                    f"{method_name}_melt_quote",
+                    JSONRPCSubscriptionKinds.PROOF_STATE.value,
+                ]
+                if plugin.supports_incoming_payment_stream(backend):
+                    commands.append(f"{method_name}_mint_quote")
+                websocket_features[_SUPPORTED].append(
+                    {
+                        _METHOD: method_name,
+                        _UNIT: unit.name,
+                        _COMMANDS: commands,
+                    }
+                )
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
