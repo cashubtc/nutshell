@@ -4,7 +4,13 @@ from cashu.core.base import NutrootOption, TokenV4, TokenV4Proof, TokenV4Token
 from cashu.core.crypto.nutroot import NUTROOT_NUMS, NutrootLeaf, serialize_nutroot_leaf
 from cashu.wallet.crud import get_proofs
 from cashu.wallet.wallet import Wallet
+from tests.compatibility import mint_older_than
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
+
+pytestmark = pytest.mark.skipif(
+    mint_older_than("0.22.0"), reason="Nutroot requires a v3 mint"
+)
 
 
 @pytest.mark.asyncio
@@ -33,6 +39,7 @@ async def test_nutroot_payment_survives_storage_and_sweeps(tmp_path, script_only
                 ],
             )
         quote = await sender.request_mint(8)
+        await pay_if_regtest(quote.request)
         await sender.mint(8, quote.quote)
         _, sent = await sender.swap_to_send(sender.proofs, 8, nutroot_lock=requested)
         stored = {proof.secret: proof for proof in await get_proofs(db=sender.db)}
@@ -65,6 +72,7 @@ async def test_wallet_uses_seeded_quote_keys_and_can_draw_twice(tmp_path):
     try:
         await wallet.load_mint()
         quote = await wallet.request_mint(8)
+        await pay_if_regtest(quote.request)
         assert (
             quote.privkey
             == wallet.derive_v3_quote_lock_key(0, wallet.mint_info.pubkey).to_hex()
@@ -100,6 +108,7 @@ async def test_multisig_payment_uses_a_signing_package_and_existing_swap(tmp_pat
         )
         request = NutrootOption(k=NUTROOT_NUMS.format().hex(), l=[tree.hex()])
         quote = await sender.request_mint(8)
+        await pay_if_regtest(quote.request)
         await sender.mint(8, quote.quote)
         _, sent = await sender.swap_to_send(sender.proofs, 8, nutroot_lock=request)
         secrets, factors, paths = await alice.generate_n_secrets(1)

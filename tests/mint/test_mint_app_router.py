@@ -14,6 +14,7 @@ from cashu.core.base import (
     ProofState,
     Unit,
 )
+from cashu.core.constants import MAX_PUBKEY_LEN
 from cashu.core.errors import NotAllowedError
 from cashu.core.settings import settings
 from cashu.mint import app as app_module
@@ -355,6 +356,7 @@ def test_router_quote_routes_and_swap(monkeypatch):
     assert mint_quote.status_code == 200
     assert mint_quote.json()["quote"] == "quote-1"
     assert mint_quote.json()["method"] == "bolt11"
+    assert "pubkey" not in mint_quote.json()
 
     melt_quote = client.post(
         "/v1/melt/quote/bolt11",
@@ -468,7 +470,11 @@ def test_router_rejects_oversized_blinded_points_before_ledger(monkeypatch, path
         json={
             **fields,
             "outputs": [
-                {"id": "00deadbeefdeadbe", "amount": 1, "B_": "02" + "00" * 33}
+                {
+                    "id": "00deadbeefdeadbe",
+                    "amount": 1,
+                    "B_": "02" + "00" * (MAX_PUBKEY_LEN // 2),
+                }
             ],
         },
     )
