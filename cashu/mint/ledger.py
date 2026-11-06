@@ -41,6 +41,7 @@ from ..core.errors import (
     NotAllowedError,
     QuoteAlreadyIssuedError,
     QuoteExpiredError,
+    QuoteNotFoundError,
     QuoteNotPaidError,
     QuotePendingError,
     QuoteSignatureInvalidError,
@@ -54,6 +55,8 @@ from ..core.models import (
     PostMintBatchRequest,
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
+    PostTransactionRequest,
+    PostTransactionResponse,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -68,13 +71,15 @@ from ..lightning.base import (
     StatusResponse,
 )
 from ..mint.crud import LedgerCrudSqlite
+from . import transaction as nut_xx
 from .conditions import LedgerSpendingConditions
-from .db.read import DbReadHelper
+from .db.read import DbReadHelper, _spent_proof_state
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .keysets import LedgerKeysets
 from .tasks import LedgerTasks
+from .transaction import TXOUT_METHOD
 from .verification import LedgerVerification
 from .watchdog import LedgerWatchdog
 
@@ -360,6 +365,7 @@ class Ledger(
     ) -> MeltQuote:
         """Atomically issue change, spend proofs, and mark a melt quote paid."""
         settled_proofs: List[Proof] = []
+        transaction_quotes: List[MintQuote] = []
 
         async with self.db.get_connection(
             locks=[
@@ -384,19 +390,23 @@ class Ledger(
                 db=self.db,
                 conn=conn,
             )
+            # A NUT-XX transaction may pay the melt from quote inputs alone.
+            transaction = await nut_xx.pending_for_melt(self, quote_id, conn)
 
             # A concurrent worker already committed the complete transition.
-            if melt_quote.paid and not settled_proofs:
+            if melt_quote.paid and not settled_proofs and not transaction:
                 return melt_quote
 
             # Internal settlement marks the quote paid before this finalizer
             # consumes its proofs. All external finalizations compare-and-set
             # from PENDING.
-            if not melt_quote.pending and not (melt_quote.paid and settled_proofs):
+            if not melt_quote.pending and not (
+                melt_quote.paid and (settled_proofs or transaction)
+            ):
                 raise TransactionError(
                     f"Cannot settle melt quote in state {melt_quote.state}."
                 )
-            if not settled_proofs:
+            if not settled_proofs and not transaction:
                 raise TransactionError("Pending melt quote has no pending proofs.")
 
             if fee_paid is not None:
@@ -417,7 +427,7 @@ class Ledger(
                 signed=False,
                 conn=conn,
             )
-            if melt_outputs:
+            if melt_outputs and not transaction:
                 fee_reserve_provided = (
                     sum_proofs(settled_proofs)
                     - melt_quote.amount
@@ -449,6 +459,13 @@ class Ledger(
                 emit_events=False,
             )
 
+            if transaction:
+                # A backend fee over the reserve is the mint's loss, as in NUT-08.
+                fee_charged = min(melt_quote.fee_paid, melt_quote.fee_reserve)
+                signatures, transaction_quotes = await nut_xx.settle(
+                    self, transaction, melt_outputs, fee_charged, conn
+                )
+                melt_quote.change = signatures
             if not melt_quote.paid:
                 melt_quote.state = MeltQuoteState.paid
             await self.crud.update_melt_quote(
@@ -458,13 +475,9 @@ class Ledger(
             )
 
         for proof in settled_proofs:
-            await self.events.submit(
-                ProofState(
-                    Y=proof.Y,
-                    state=ProofSpentState.spent,
-                    witness=proof.witness or None,
-                )
-            )
+            await self.events.submit(_spent_proof_state(proof.Y, proof))
+        for quote in transaction_quotes:
+            await self.events.submit(quote)
         await self.events.submit(melt_quote)
         return melt_quote
 
@@ -475,6 +488,7 @@ class Ledger(
     ) -> MeltQuote:
         """Finalize the unpaid outcome for the selected melt attempt."""
         released_proofs: List[Proof] = []
+        transaction_quotes: List[MintQuote] = []
 
         async with self.db.get_connection(
             locks=[
@@ -499,6 +513,8 @@ class Ledger(
                 return melt_quote
             if melt_quote.unpaid:
                 return melt_quote
+            if await nut_xx.paid_internally(self, melt_quote, conn):
+                return melt_quote
             if expected_attempt is not None and melt_quote.attempt != expected_attempt:
                 logger.warning(
                     f"Not failing melt quote {quote_id}: attempt nonce changed "
@@ -518,8 +534,11 @@ class Ledger(
                 db=self.db,
                 conn=conn,
             )
-            if not released_proofs:
+            transaction = await nut_xx.pending_for_melt(self, quote_id, conn)
+            if not released_proofs and not transaction:
                 raise TransactionError("Pending melt quote has no pending proofs.")
+            if transaction:
+                transaction_quotes = await nut_xx.fail(self, transaction, conn)
 
             await self.db_write._unset_proofs_pending(
                 released_proofs,
@@ -544,6 +563,8 @@ class Ledger(
             await self.events.submit(
                 ProofState(Y=proof.Y, state=ProofSpentState.unspent)
             )
+        for quote in transaction_quotes:
+            await self.events.submit(quote)
         await self.events.submit(melt_quote)
         return melt_quote
 
@@ -677,14 +698,16 @@ class Ledger(
             quote_id (str): ID of the mint quote.
 
         Raises:
-            Exception: Quote not found.
+            QuoteNotFoundError: Quote not found.
 
         Returns:
             MintQuote: Mint quote object.
         """
         quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
         if not quote:
-            raise Exception("quote not found")
+            raise QuoteNotFoundError()
+        if quote.method == TXOUT_METHOD:
+            return quote  # paid at creation, no backend behind it (NUT-XX)
 
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
@@ -726,7 +749,7 @@ class Ledger(
                         quote_id=quote_id, db=self.db, conn=conn
                     )
                     if not quote:
-                        raise Exception("quote not found")
+                        raise QuoteNotFoundError()
                     if quote.unpaid:
                         logger.trace(f"Setting quote {quote_id} as paid")
                         quote.state = MintQuoteState.paid
@@ -798,18 +821,23 @@ class Ledger(
             raise QuoteNotPaidError()
 
         # Also validate quotes created before invoice amount checks were added.
-        self._verify_mint_quote_invoice_amount(
-            bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
-        )
+        if quote.method != TXOUT_METHOD:
+            self._verify_mint_quote_invoice_amount(
+                bolt11.decode(quote.request), Amount(Unit[quote.unit], quote.amount)
+            )
 
         previous_state = quote.state
+        # Re-read under the lock: a transaction may have drawn part of the quote.
         quote = await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
             if sum_amount_outputs > (quote.amount_paid if quote.amount_paid is not None else quote.amount) - (quote.amount_issued or 0):
                 raise TransactionError("amount to mint exceeds quote mintable amount")
-            if not v3 and quote.amount != sum_amount_outputs:
+            # A txout quote redeems once and in full (NUT-XX).
+            if (not v3 and quote.amount != sum_amount_outputs) or (
+                quote.method == TXOUT_METHOD and quote.mintable != sum_amount_outputs
+            ):
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry < int(time.time()):
                 raise QuoteExpiredError("quote expired")
@@ -913,14 +941,14 @@ class Ledger(
                     and payload.quote_amounts[i] != quote.amount
                 ):
                     raise TransactionError(
-                        f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.amount}"
+                        f"quote amount {payload.quote_amounts[i]} does not match quote {quote.quote} amount {quote.mintable}"
                     )
                 if not v3 and payload.quote_amounts[i] > quote.amount:
                     raise TransactionError(
-                        f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.amount}"
+                        f"quote amount {payload.quote_amounts[i]} exceeds quote {quote.quote} amount {quote.mintable}"
                     )
 
-        quote_amounts = payload.quote_amounts or [q.amount for q in quotes]
+        quote_amounts = payload.quote_amounts or [q.mintable for q in quotes]
         if Method.bolt11.name in methods or v3:
             if sum(quote_amounts) != sum_amount_outputs:
                 raise TransactionError(
@@ -1214,12 +1242,13 @@ class Ledger(
         await self._restore_melt_change_dleq(melt_quote)
 
         # Complete the proof stage of internal settlement.
-        if melt_quote.paid:
+        if melt_quote.paid or await nut_xx.paid_internally(self, melt_quote):
             pending_proofs = await self.crud.get_pending_proofs_for_quote(
                 quote_id=quote_id,
                 db=self.db,
             )
-            if pending_proofs:
+            transaction = await nut_xx.pending_for_melt(self, quote_id)
+            if pending_proofs or transaction:
                 return await self._finalize_melt_paid(
                     quote_id,
                     fee_paid=melt_quote.fee_paid,
@@ -1245,7 +1274,7 @@ class Ledger(
 
     async def melt_mint_settle_internally(
         self, melt_quote_arg: MeltQuote, proofs: List[Proof]
-    ) -> MeltQuote:
+    ) -> Tuple[MeltQuote, bool]:
         """Settles a melt quote internally if there is a mint quote with the same payment request.
 
         `proofs` are passed to determine the ecash input transaction fees for this melt quote.
@@ -1259,7 +1288,7 @@ class Ledger(
             Exception: Melt quote already issued.
 
         Returns:
-            MeltQuote: Settled melt quote.
+            Tuple[MeltQuote, bool]: The melt quote, and whether it was paid internally.
         """
         if not melt_quote_arg.pending:
             raise TransactionError("melt quote is not pending")
@@ -1270,11 +1299,11 @@ class Ledger(
             request=melt_quote_arg.request, db=self.db
         )
         if not mint_quote:
-            return melt_quote_arg
+            return melt_quote_arg, False
 
         # settle externally if units are different
         if mint_quote.unit != melt_quote_arg.unit:
-            return melt_quote_arg
+            return melt_quote_arg, False
 
         async with self.db.get_connection(
             locks=[
@@ -1337,7 +1366,10 @@ class Ledger(
 
             paid_time = int(time.time())
             melt_quote.fee_paid = 0  # no internal fees
-            melt_quote.state = MeltQuoteState.paid
+            # A transaction's melt quote turns PAID when the transaction settles (NUT-XX).
+            transaction = await nut_xx.pending_for_melt(self, melt_quote.quote, conn)
+            if not transaction:
+                melt_quote.state = MeltQuoteState.paid
             melt_quote.paid_time = paid_time
 
             mint_quote.state = MintQuoteState.paid
@@ -1355,10 +1387,11 @@ class Ledger(
                 conn=conn,
             )
 
-        await self.events.submit(melt_quote)
+        if not transaction:
+            await self.events.submit(melt_quote)
         await self.events.submit(mint_quote)
 
-        return melt_quote
+        return melt_quote, True
 
     async def async_melt(
         self,
@@ -1504,8 +1537,10 @@ class Ledger(
 
         try:
             # if the melt corresponds to an internal mint, mark both as paid
-            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
-            if melt_quote.state == MeltQuoteState.paid:
+            melt_quote, settled = await self.melt_mint_settle_internally(
+                melt_quote, proofs
+            )
+            if settled:
                 # we settled internally
                 melt_quote = await self._finalize_melt_paid(
                     melt_quote.quote,
@@ -1591,6 +1626,12 @@ class Ledger(
             preimage=melt_quote.payment_preimage,
         )
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+
+    async def transaction(
+        self, payload: PostTransactionRequest
+    ) -> PostTransactionResponse:
+        """Run a NUT-XX transaction; see `transaction.run`."""
+        return await nut_xx.run(self, payload)
 
     async def swap(
         self,

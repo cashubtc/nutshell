@@ -281,6 +281,14 @@ class QuoteRequiresPubkeyError(CashuError):
         super().__init__(self.detail, code=self.code)
 
 
+class QuoteNotFoundError(CashuError):
+    detail = "quote not found"
+    code = 20010
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
 class ClearAuthRequiredError(CashuError):
     detail = "Endpoint requires clear auth"
     code = 30001
