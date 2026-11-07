@@ -370,3 +370,19 @@ async def m019_add_p2pk_e_to_proofs(db: Database):
     async with db.connect() as conn:
         await conn.execute("ALTER TABLE proofs ADD COLUMN p2pk_e TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN p2pk_e TEXT")
+
+
+async def m020_create_ecash_transactions(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE ecash_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                unit TEXT NOT NULL,
+                mint TEXT NOT NULL,
+                created_time INTEGER NOT NULL
+            );
+            """
+        )
