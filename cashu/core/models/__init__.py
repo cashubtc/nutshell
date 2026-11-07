@@ -32,6 +32,8 @@ from .mint_quote import (
     PostMintQuoteCheckRequest,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
+    PostMintQuotesByPubkeyRequest,
+    PostMintQuotesByPubkeyResponse,
 )
 from .restore import PostRestoreRequest, PostRestoreResponse
 from .swap import PostSwapRequest, PostSwapResponse
@@ -64,6 +66,8 @@ __all__ = [
     "PostMintQuoteCheckRequest",
     "PostMintQuoteRequest",
     "PostMintQuoteResponse",
+    "PostMintQuotesByPubkeyRequest",
+    "PostMintQuotesByPubkeyResponse",
     "PostRestoreRequest",
     "PostRestoreResponse",
     "PostSwapRequest",
