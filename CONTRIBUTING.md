@@ -152,6 +152,29 @@ CASHU_TEST_MINT_IMAGE=cashubtc/nutshell:0.20.3 make test-wallet-compatibility
 
 The mint must use `FakeWallet` (a local `.env` overrides this) and logs to `test_data/released-mint.log`. `make compatibility-targets` lists the current targets. Against mints older than `MINIMUM_MINT_VERSION` in [tests/compatibility.py](tests/compatibility.py), failures caused by the known incompatibility are reported as expected.
 
+### CDK wallet compatibility
+
+CI runs the latest stable [CDK](https://github.com/cashubtc/cdk) wallet against the
+Nutshell mint from the current checkout, with zero and nonzero input fees. The
+suite checks mint quotes and proofs, WebSocket payment updates, DLEQ verification,
+swaps and token transfers, double-spend rejection, P2PK and HTLC redemption, seed
+restoration, and melting with change. Lightning payments use `FakeWallet`.
+
+Install the current stable Rust toolchain (used in CI), then run:
+
+```bash
+make update-cdk-wallet test-cdk-wallet
+CDK_TEST_INPUT_FEE_PPK=0 make test-cdk-wallet
+```
+
+This starts an isolated test mint on port 3337 using the existing pytest fixtures.
+The normal Python suite skips these tests unless `CASHU_TEST_CDK=1` is set.
+CI refreshes both CDK dependencies before restoring the build cache, including
+new minor and major releases. It prints the resolved versions and uploads the
+resulting `Cargo.lock` with the test report. Build and test steps use `--locked`
+to test that same resolution. Locally, `make test-cdk-wallet` uses the existing
+lockfile to reproduce a run; `make update-cdk-wallet` selects the latest release.
+
 ### Lightning regtest
 
 There are many tests that also run in regtest, a simulated Lightning network environment. To run the regtest, clone [this repository](https://github.com/callebtc/cashu-regtest-enviroment) and run `./start.sh`. This will start your regtest environment with several Lightning node implementations.

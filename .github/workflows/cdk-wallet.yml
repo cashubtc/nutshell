@@ -1,0 +1,46 @@
+name: cdk-wallet
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  wallet:
+    name: CDK wallet (input fee ${{ matrix.input-fee-ppk }} ppk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        input-fee-ppk: [0, 100]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: "3.12"
+          poetry-version: "2.3.2"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve latest stable CDK wallet
+        run: |
+          make update-cdk-wallet
+          cargo tree --locked --manifest-path tests/cdk_wallet/Cargo.toml --depth 1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tests/cdk_wallet -> target
+      - name: Build released CDK wallet tests
+        run: cargo test --locked --manifest-path tests/cdk_wallet/Cargo.toml --test wallet --no-run
+      - name: Test CDK wallet against this mint
+        env:
+          CDK_TEST_INPUT_FEE_PPK: ${{ matrix.input-fee-ppk }}
+        run: make test-cdk-wallet
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdk-wallet-${{ matrix.input-fee-ppk }}-results
+          path: |
+            junit.xml
+            tests/cdk_wallet/Cargo.lock
+          if-no-files-found: ignore

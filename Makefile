@@ -53,6 +53,16 @@ test-wallet-compatibility:
 	DEBUG=true \
 	poetry run pytest tests/wallet --cov-report xml --cov cashu
 
+.PHONY: update-cdk-wallet test-cdk-wallet
+update-cdk-wallet:
+	cargo update --manifest-path tests/cdk_wallet/Cargo.toml --package cdk --package cdk-sqlite
+
+test-cdk-wallet:
+	CASHU_TEST_CDK=1 \
+	MINT_BACKEND_BOLT11_SAT=FakeWallet \
+	TOR=FALSE \
+	poetry run pytest tests/cdk_wallet -v -o junit_logging=all
+
 .PHONY: test-spark-regtest test-spark-backend-regtest test-spark-mint test-spark-wallet
 test-spark-regtest:
 	$(MAKE) test-spark-backend-regtest
