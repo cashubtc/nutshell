@@ -133,18 +133,20 @@ class Connection(Compat):
         task = asyncio.create_task(statement)
         try:
             return await asyncio.shield(task)
-        except asyncio.CancelledError:
-            with anyio.CancelScope(shield=True):
-                while not task.done():
-                    try:
-                        await asyncio.shield(task)
-                    except asyncio.CancelledError:
-                        continue
-                    except Exception:
-                        break
-            if not task.cancelled():
-                task.exception()
-            raise
+        except asyncio.CancelledError as exc:
+            cancellation = exc
+
+        with anyio.CancelScope(shield=True):
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError as exc:
+                    cancellation = exc
+                except Exception:
+                    break
+        if not task.cancelled():
+            task.exception()
+        raise cancellation
 
 
 class Database(Compat):
@@ -279,32 +281,40 @@ class Database(Compat):
             trial += 1
             session: AsyncSession = self.async_session()  # type: ignore
             connection_ready = False
-            try:
-                logger.trace(f"Connecting to database trial: {trial} ({random_int})")
-                async with session.begin() as txn:  # type: ignore
-                    logger.trace("Connected to database. Starting transaction")
-                    wconn = Connection(session, txn, self.type, self.name, self.schema)
-                    await self._acquire_locks(wconn, locks)
-                    connection_ready = True
-                    logger.trace(
-                        f"> Yielding connection. Locks: {locks} - trial {trial} ({random_int})"
-                    )
-                    yield wconn
-                    logger.trace(
-                        f"< Connection yielded. Unlock: {locks} - trial {trial} ({random_int})"
-                    )
-                    return
-            except Exception as e:
-                if not connection_ready and _is_lock_exception(e):
-                    retry_delay = await _handle_lock_retry(
-                        retry_delay, timeout, start_time
-                    )
-                else:
-                    logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
-                    raise
-            finally:
-                logger.trace(f"Closing session trial: {trial} ({random_int})")
-                await session.close()
+            with anyio.CancelScope() as cleanup_scope:
+                try:
+                    logger.trace(f"Connecting to database trial: {trial} ({random_int})")
+                    async with session.begin() as txn:  # type: ignore
+                        try:
+                            logger.trace("Connected to database. Starting transaction")
+                            wconn = Connection(
+                                session, txn, self.type, self.name, self.schema
+                            )
+                            await self._acquire_locks(wconn, locks)
+                            connection_ready = True
+                            logger.trace(
+                                f"> Yielding connection. Locks: {locks} - trial {trial} ({random_int})"
+                            )
+                            yield wconn
+                            logger.trace(
+                                f"< Connection yielded. Unlock: {locks} - trial {trial} ({random_int})"
+                            )
+                            return
+                        except asyncio.CancelledError:
+                            cleanup_scope.shield = True
+                            raise
+                except Exception as e:
+                    if not connection_ready and _is_lock_exception(e):
+                        retry_delay = await _handle_lock_retry(
+                            retry_delay, timeout, start_time
+                        )
+                    else:
+                        logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
+                        raise
+                finally:
+                    cleanup_scope.shield = True
+                    logger.trace(f"Closing session trial: {trial} ({random_int})")
+                    await session.close()
 
         raise Exception(
             f"failed to acquire database locks {locks} after {timeout}s and {trial} trials ({random_int})"

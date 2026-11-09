@@ -99,7 +99,7 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
         await asyncio.sleep(0)
         for _ in range(cancellations - 1):
             assert transaction_task is not None
-            transaction_task.cancel()
+            transaction_task.cancel("independent cancellation")
             await asyncio.sleep(0)
 
         cpu_start = time.thread_time()
@@ -109,7 +109,9 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
         wall_elapsed = time.monotonic() - wall_start
         assert not reader.done()
         release_statement.set()
-        if cancellation_mode == "asyncio":
+        if cancellation_mode == "asyncio" or (
+            cancellation_mode == "anyio_scope" and cancellations > 1
+        ):
             with pytest.raises(asyncio.CancelledError):
                 await reader
         else:
@@ -117,6 +119,8 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
 
         # Retain the cancellation traceback while checking rollback and usability.
         assert len(cancelled_errors) == 1
+        if cancellations > 1:
+            assert cancelled_errors[0].args == ("independent cancellation",)
         assert cpu_elapsed < wall_elapsed * 0.5
         row = await db.fetchone("SELECT value FROM cancellation_values WHERE id = 1")
         assert row["value"] == 0
@@ -129,4 +133,99 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
             if not reader.done():
                 reader.cancel()
             await asyncio.gather(reader, return_exceptions=True)
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancellation_mode", ["asyncio", "anyio_scope", "mixed"])
+@pytest.mark.parametrize("statement_outcome", ["acquired", "timeout"])
+async def test_cancelled_sqlite_lock_wait_releases_lock(
+    tmp_path, cancellation_mode, statement_outcome
+):
+    db = Database("mint", str(tmp_path))
+    lock = LockOptions(table="cancellation_values")
+    lock_statement = db._lock_statement(lock)
+    statement_started = asyncio.Event()
+    transaction_entered = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    cancel_scope = None
+    waiter = None
+    cancelled_errors = []
+
+    def trace_statement(statement):
+        if statement == lock_statement:
+            loop.call_soon_threadsafe(statement_started.set)
+
+    async def acquire_in_transaction():
+        try:
+            async with db.connect(locks=[lock]) as conn:
+                transaction_entered.set()
+                await conn.execute("UPDATE cancellation_values SET value = 2 WHERE id = 1")
+        except asyncio.CancelledError as exc:
+            cancelled_errors.append(exc)
+            raise
+
+    async def run_waiter():
+        nonlocal cancel_scope
+        if cancellation_mode == "asyncio":
+            await acquire_in_transaction()
+        else:
+            with anyio.CancelScope() as cancel_scope:
+                await acquire_in_transaction()
+
+    try:
+        await db.execute(
+            "CREATE TABLE cancellation_values (id INTEGER PRIMARY KEY, value INTEGER)"
+        )
+        await db.execute("INSERT INTO cancellation_values VALUES (1, 0)")
+        async with db.connect(locks=[lock]) as blocker:
+            await blocker.execute("UPDATE cancellation_values SET value = 1 WHERE id = 1")
+
+            @event.listens_for(db.engine.sync_engine, "connect")
+            def configure_waiter(connection, record):
+                cursor = connection.cursor()
+                try:
+                    cursor.execute("PRAGMA busy_timeout=1500")
+                finally:
+                    cursor.close()
+                connection.run_async(
+                    lambda driver: driver.set_trace_callback(trace_statement)
+                )
+
+            waiter = asyncio.create_task(run_waiter())
+            await asyncio.wait_for(statement_started.wait(), timeout=10)
+            assert not waiter.done()
+            if cancel_scope is not None:
+                cancel_scope.cancel()
+            else:
+                waiter.cancel()
+            await asyncio.sleep(0)
+            if cancellation_mode == "mixed":
+                waiter.cancel()
+
+            await asyncio.sleep(0.1)
+            assert not waiter.done()
+            if statement_outcome == "acquired":
+                await blocker.txn.rollback()
+
+            if cancellation_mode == "anyio_scope":
+                await asyncio.wait_for(waiter, timeout=10)
+            else:
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(waiter, timeout=10)
+
+        assert not transaction_entered.is_set()
+        assert len(cancelled_errors) == 1
+        if cancellation_mode == "mixed":
+            assert cancelled_errors[0].args == ()
+        row = await db.fetchone("SELECT value FROM cancellation_values WHERE id = 1")
+        assert row["value"] == (0 if statement_outcome == "acquired" else 1)
+        await db.execute("UPDATE cancellation_values SET value = 3 WHERE id = 1")
+        row = await db.fetchone("SELECT value FROM cancellation_values WHERE id = 1")
+        assert row["value"] == 3
+    finally:
+        if waiter is not None:
+            if not waiter.done():
+                waiter.cancel()
+            await asyncio.gather(waiter, return_exceptions=True)
         await db.engine.dispose()
