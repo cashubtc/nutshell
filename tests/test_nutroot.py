@@ -992,7 +992,7 @@ def test_shared_token_vectors_same_spend_info_from_either_encoder():
             id=full_id,
             amount=v["amount"],
             secret=shape["secret"],
-            C=v["C"],
+            C=shape["C"],
             spend_info=SpendInfo(**si),
         )
         token = TokenV4(
