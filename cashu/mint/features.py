@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Union
 
 from ..core.base import Method
+from ..core.crypto.nutroot import NUTROOT_LEAF_TYPE, NUTROOT_LEAF_VERSION
 from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.mint_info import MintInfo
 from ..core.models import (
@@ -121,7 +122,14 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features[STATE_NUT] = supported_dict
         mint_features[FEE_RETURN_NUT] = supported_dict
         mint_features[RESTORE_NUT] = supported_dict
-        mint_features[SCRIPT_NUT] = supported_dict
+        # NUT-10: the leaf types this mint evaluates, as leaf_version || leaf_type
+        mint_features[SCRIPT_NUT] = dict(
+            supported=True,
+            leaves=[
+                f"{NUTROOT_LEAF_VERSION:02x}{leaf_type:02x}"
+                for leaf_type in NUTROOT_LEAF_TYPE.values()
+            ],
+        )
         mint_features[P2PK_NUT] = supported_dict
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
