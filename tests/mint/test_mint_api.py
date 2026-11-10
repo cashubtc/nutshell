@@ -15,7 +15,7 @@ from cashu.core.models import (
     PostRestoreResponse,
 )
 from cashu.core.nuts import nut20
-from cashu.core.nuts.nuts import MINT_NUT
+from cashu.core.nuts.nuts import MINT_NUT, SCRIPT_NUT
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
@@ -62,6 +62,7 @@ async def test_info(ledger: Ledger):
     info = GetInfoResponse(**response.json())
     assert info.nuts
     assert info.nuts[MINT_NUT]["disabled"] is False
+    assert info.nuts[SCRIPT_NUT] == {"supported": True, "leaves": ["0001", "0002", "0003", "0004"]}
     setting = MintMethodSetting.model_validate(info.nuts[MINT_NUT]["methods"][0])
     assert setting.method == "bolt11"
     assert setting.method_name == "bolt11"
