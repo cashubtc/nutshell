@@ -7,7 +7,7 @@ from ..core.base import Token, TokenV3, TokenV4
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
-from ..core.secret import Tags
+from ..core.secret import Secret, Tags
 from ..core.settings import settings
 from ..wallet import migrations
 from ..wallet.crud import get_keysets
@@ -144,12 +144,16 @@ async def send(
     force_swap: bool = False,
     refund_pubkeys: Optional[List[str]] = None,
     timelock_seconds: Optional[int] = None,
+    secret_lock: Optional[Secret] = None,
 ):
     """
     Prints token to send to stdout.
+
+    Pass secret_lock to preserve a payment request's exact spending conditions.
     """
-    secret_lock = None
     p2pk_e = None
+    if lock and secret_lock is not None:
+        raise ValueError("Specify either lock or secret_lock, not both.")
     if lock:
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
