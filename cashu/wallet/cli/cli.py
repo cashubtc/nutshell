@@ -76,6 +76,8 @@ from ..subscriptions import SubscriptionManager
 
 # JavaScript wallets such as cashu-ts require safe integers; some mints use fixed-width integers.
 PAY_MAX_LOCKTIME = 2**53 - 1
+# Allow one minute for clock differences and payment retries before refund expiry.
+PAY_REFUND_MARGIN_SECONDS = 60
 
 
 class NaturalOrderGroup(click.Group):
@@ -400,6 +402,35 @@ async def _pay(
                 return
 
             tags = pr.nut10.t or []
+            refund_delays = [tag for tag in tags if tag and tag[0] == "refund_delay"]
+            if refund_delays:
+                if len(refund_delays) != 1 or any(
+                    tag and tag[0] in {"locktime", "refund", "n_sigs_refund"}
+                    for tag in tags
+                ):
+                    print(
+                        "Error: refund_delay must appear once and without refund timing tags."
+                    )
+                    return
+                tags = [tag for tag in tags if not tag or tag[0] != "refund_delay"]
+                marker = refund_delays[0]
+                if (
+                    len(marker) == 2
+                    and marker[1].isascii()
+                    and marker[1].isdecimal()
+                    and not marker[1].startswith("0")
+                ):
+                    if len(marker[1]) > len(str(PAY_MAX_LOCKTIME)):
+                        print("Error: Requested refund delay is too large.")
+                        return
+                    locktime = (
+                        int(time.time()) + int(marker[1]) + PAY_REFUND_MARGIN_SECONDS
+                    )
+                    tags = [
+                        *tags,
+                        ["locktime", str(locktime)],
+                        ["refund", await wallet.create_p2pk_pubkey()],
+                    ]
             supported_tags = {
                 "locktime",
                 "refund",
