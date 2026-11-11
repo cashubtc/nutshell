@@ -41,6 +41,25 @@ class LedgerCrud(ABC):
         conn: Optional[Connection] = None,
     ) -> List[MintKeyset]: ...
 
+    async def get_keyset_metadata(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read mutable metadata, with a fallback for custom CRUD implementations."""
+        return [
+            {
+                "id": keyset.id,
+                "active": keyset.active,
+                "valid_from": keyset.valid_from,
+                "valid_to": keyset.valid_to,
+                "first_seen": keyset.first_seen,
+                "final_expiry": keyset.final_expiry,
+            }
+            for keyset in await self.get_keyset(db=db, conn=conn)
+        ]
+
     @abstractmethod
     async def get_proofs_used(
         self,
@@ -1058,6 +1077,20 @@ class LedgerCrudSqlite(LedgerCrud):
             values,
         )
         return [MintKeyset.from_row(row) for row in rows]  # type: ignore
+
+    async def get_keyset_metadata(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT id, active, valid_from, valid_to, first_seen, final_expiry
+            FROM {db.table_with_schema("keysets")}
+            """
+        )
+        return [dict(row) for row in rows]
 
     async def update_keyset(
         self,

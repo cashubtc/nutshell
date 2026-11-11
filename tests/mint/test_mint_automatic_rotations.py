@@ -1,11 +1,14 @@
 import asyncio
 import datetime
 import time
+from unittest.mock import patch
 
 import pytest
 
-from cashu.core.base import MintKeyset, Unit
+from cashu.core.base import BlindedMessage, MintKeyset, Unit
 from cashu.core.crypto.keys import derive_bip39_derivation_path
+from cashu.core.db import Database
+from cashu.core.errors import KeysetInactiveError
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.mint.startup import ledger as global_ledger
@@ -286,6 +289,7 @@ async def test_automatic_keyset_rotation_preserves_grace_period(ledger: Ledger):
         # Generate the timestamp 5 seconds ago using the database's format to avoid timezone shifts
         past_ts = int(time.time() - 5)
         keyset.valid_from = ledger.db.timestamp_from_seconds(past_ts)
+        await ledger.crud.update_keyset(keyset=keyset, db=ledger.db)
 
         # Trigger automatic rotation check
         await ledger.rotate_keysets_if_needed()
@@ -498,6 +502,92 @@ async def test_regression_concurrent_rotation_race(
         keyset.valid_from = original_valid_from
         settings.mint_keyset_rotation_interval_seconds = original_interval
         settings.mint_keyset_rotation_enabled = original_enabled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unit", [Unit.sat, Unit.usd])
+@pytest.mark.parametrize("rotation_enabled", [False, True])
+@pytest.mark.parametrize("mnemonic_enabled", [False, True])
+async def test_worker_adopts_early_manual_rotation(
+    ledger: Ledger,
+    monkeypatch: pytest.MonkeyPatch,
+    unit: Unit,
+    rotation_enabled: bool,
+    mnemonic_enabled: bool,
+):
+    if mnemonic_enabled:
+        monkeypatch.setattr(settings, "mint_mnemonic", MNEMONIC)
+    monkeypatch.setattr(settings, "mint_keyset_rotation_enabled", rotation_enabled)
+    monkeypatch.setattr(settings, "mint_keyset_rotation_interval_seconds", 86400)
+    worker_db = Database(ledger.db.name, ledger.db.db_location)
+    worker = Ledger(
+        db=worker_db,
+        seed=ledger.seed,
+        derivation_path=ledger.derivation_path,
+        backends=ledger.backends,
+        crud=ledger.crud,
+    )
+
+    try:
+        await worker._startup_keysets()
+        default_keyset = worker.keyset
+        old_keyset = next(
+            k for k in worker.keysets.values() if k.active and k.unit == unit
+        )
+        old_public_keys = old_keyset.public_keys
+        assert not worker.should_rotate_keyset(old_keyset)
+        previous_ids = set(worker.keysets)
+
+        replacement = await ledger.rotate_next_keyset(
+            unit=unit,
+            input_fee_ppk=123,
+            final_expiry=int(time.time()) + 172800,
+        )
+        assert old_keyset.active
+        assert replacement.id not in worker.keysets
+
+        await worker.rotate_keysets_if_needed()
+
+        assert worker.keysets[old_keyset.id] is old_keyset
+        assert old_keyset.public_keys is old_public_keys
+        assert not old_keyset.active
+        adopted = worker.keysets[replacement.id]
+        assert adopted.active
+        assert adopted.input_fee_ppk == replacement.input_fee_ppk
+        assert adopted.final_expiry == replacement.final_expiry
+        assert adopted.from_mnemonic == mnemonic_enabled
+        assert set(worker.keysets) == previous_ids | {replacement.id}
+        if unit == default_keyset.unit:
+            assert worker.keyset is adopted
+            assert worker.derivation_path == adopted.derivation_path
+        else:
+            assert worker.keyset is default_keyset
+            assert default_keyset.active
+
+        assert old_public_keys
+        blinded_point = old_public_keys[1].format().hex()
+        with pytest.raises(KeysetInactiveError):
+            await worker._verify_outputs(
+                [BlindedMessage(amount=1, id=old_keyset.id, B_=blinded_point)]
+            )
+        await worker._verify_outputs(
+            [BlindedMessage(amount=1, id=adopted.id, B_=blinded_point)]
+        )
+
+        with patch.object(
+            MintKeyset,
+            "generate_keys",
+            side_effect=AssertionError("Already loaded keys must not be derived again"),
+        ):
+            await worker.rotate_keysets_if_needed()
+        assert worker.keysets[replacement.id] is adopted
+        db_keysets = await ledger.crud.get_keyset(db=ledger.db)
+        assert {k.id for k in db_keysets} == previous_ids | {replacement.id}
+        assert {k.id for k in worker.keysets.values() if k.active} == {
+            k.id for k in db_keysets if k.active
+        }
+    finally:
+        await worker_db.engine.dispose()
 
 
 @pytest.mark.asyncio

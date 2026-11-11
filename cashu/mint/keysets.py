@@ -8,7 +8,7 @@ from loguru import logger
 
 from ..core.base import MintKeyset, Unit
 from ..core.crypto.keys import derive_bip39_derivation_path, derive_keyset_id
-from ..core.db import LockOptions
+from ..core.db import Connection, LockOptions
 from ..core.errors import KeysetError, KeysetNotFoundError
 from ..core.settings import settings
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets, SupportsSeed
@@ -40,6 +40,49 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
                 ):
                     derivation_path = keyset.derivation_path
         return derivation_path
+
+    async def _sync_keysets(self, conn: Optional[Connection] = None) -> None:
+        """Refresh database state while preserving already loaded keys and objects."""
+        new_keysets: Dict[str, MintKeyset] = {}
+        async with self.db.get_connection(
+            conn, locks=[LockOptions(table="keysets")]
+        ) as conn:
+            metadata = await self.crud.get_keyset_metadata(db=self.db, conn=conn)
+            for row in metadata:
+                if row["id"] not in self.keysets:
+                    loaded = await self.crud.get_keyset(
+                        db=self.db, id=row["id"], conn=conn
+                    )
+                    new_keysets.update({k.id: k for k in loaded})
+
+            # Apply the snapshot under the lock after all missing keys are loaded.
+            self.keysets.update(new_keysets)
+            for row in metadata:
+                keyset = self.keysets[row["id"]]
+                keyset.active = bool(row["active"])
+                keyset.valid_from = row["valid_from"]
+                keyset.valid_to = row["valid_to"]
+                keyset.first_seen = row["first_seen"]
+                keyset.final_expiry = row["final_expiry"]
+
+            if not self.keyset.active:
+                active_keyset = max(
+                    (
+                        k
+                        for k in self.keysets.values()
+                        if k.active and k.unit == self.keyset.unit
+                    ),
+                    key=lambda k: int(
+                        k.derivation_path.split("/")[-1].replace("'", "")
+                    ),
+                    default=None,
+                )
+                if active_keyset:
+                    self.keyset = active_keyset
+                    self.derivation_path = active_keyset.derivation_path
+                    logger.info(
+                        f"Updated default keyset to {active_keyset.id} with derivation path {active_keyset.derivation_path}"
+                    )
 
     async def rotate_next_keyset(
         self,
@@ -74,17 +117,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
         logger.info(f"Attempting keyset rotation for unit {str(unit)}")
 
         async with self.db.connect(locks=[LockOptions(table="keysets")]) as conn:
-            # Sync in-memory keysets from DB inside the lock preserving object identity
-            db_keysets = await self.crud.get_keyset(db=self.db, conn=conn)
-            for k in db_keysets:
-                if k.id not in self.keysets:
-                    self.keysets[k.id] = k
-                else:
-                    self.keysets[k.id].active = k.active
-                    self.keysets[k.id].valid_from = k.valid_from
-                    self.keysets[k.id].valid_to = k.valid_to
-                    self.keysets[k.id].first_seen = k.first_seen
-                    self.keysets[k.id].final_expiry = k.final_expiry
+            await self._sync_keysets(conn=conn)
 
             # Avoid concurrent rotations if another task/instance has already rotated
             if active_keyset_id:
@@ -105,12 +138,6 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
                         default=None,
                     )
                     if active_keyset:
-                        if self.keyset and self.keyset.id == active_keyset_id:
-                            self.keyset = active_keyset
-                            self.derivation_path = active_keyset.derivation_path
-                            logger.info(
-                                f"Updated default keyset to {active_keyset.id} with derivation path {active_keyset.derivation_path}"
-                            )
                         return active_keyset
 
             if active_keyset_id:
@@ -466,6 +493,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb, SupportsBackends)
         ) >= settings.mint_keyset_rotation_interval_seconds
 
     async def rotate_keysets_if_needed(self) -> None:
+        await self._sync_keysets()
         if not settings.mint_keyset_rotation_enabled:
             return
 
