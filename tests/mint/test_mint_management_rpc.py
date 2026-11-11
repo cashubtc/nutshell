@@ -178,13 +178,14 @@ async def test_rotate_next_keyset(rpc_servicer):
     assert response.max_order > 0
 
 @pytest.mark.asyncio
-async def test_nut04_quote(rpc_servicer):
+@pytest.mark.parametrize("method", ["bolt11", "bolt12"])
+async def test_nut04_quote(rpc_servicer, method):
     quote_id = "test-mint-quote-123"
     
     # Mock get_mint_quote
     mock_quote = MintQuote(
         quote=quote_id,
-        method="bolt11",
+        method=method,
         request="lnbc...",
         checking_id="chk123",
         unit="sat",
@@ -193,7 +194,9 @@ async def test_nut04_quote(rpc_servicer):
         created_time=int(time.time()),
         expiry=int(time.time()) + 3600,
         mint=None,
-        privkey=None
+        privkey="private-key",
+        amount_paid_internal=8,
+        method_data={"private_receipt": "processor-data"},
     )
     
     rpc_servicer.ledger.get_mint_quote = AsyncMock(return_value=mock_quote)
@@ -208,7 +211,9 @@ async def test_nut04_quote(rpc_servicer):
     assert response_get.quote.amount_paid == 0
     assert response_get.quote.amount_issued == 0
     assert response_get.quote.updated_at > 0
-    
+    assert response_get.quote.method == method
+    assert not response_get.quote.HasField("paid_time")
+
     # Mock UpdateNut04Quote state update
     rpc_servicer.ledger.db_write._update_mint_quote_state = AsyncMock()
     
@@ -225,13 +230,14 @@ async def test_nut04_quote(rpc_servicer):
     )
 
 @pytest.mark.asyncio
-async def test_nut05_quote(rpc_servicer):
+@pytest.mark.parametrize("method", ["bolt11", "bolt12"])
+async def test_nut05_quote(rpc_servicer, method):
     quote_id = "test-melt-quote-123"
     
     # Mock get_melt_quote
     mock_quote = MeltQuote(
         quote=quote_id,
-        method="bolt11",
+        method=method,
         request="lnbc...",
         checking_id="chk123",
         unit="sat",
@@ -241,8 +247,10 @@ async def test_nut05_quote(rpc_servicer):
         created_time=int(time.time()),
         expiry=int(time.time()) + 3600,
         payment_preimage=None,
-        error=None,
-        mint=None
+        error="processor error",
+        mint=None,
+        amountless_msat=100000,
+        method_data={"private_receipt": "processor-data"},
     )
     
     rpc_servicer.ledger.get_melt_quote = AsyncMock(return_value=mock_quote)
@@ -255,7 +263,9 @@ async def test_nut05_quote(rpc_servicer):
     assert response_get.quote.state == str(MeltQuoteState.unpaid)
     assert response_get.quote.amount == 100
     assert response_get.quote.fee_reserve == 5
-    
+    assert response_get.quote.method == method
+    assert not response_get.quote.HasField("payment_preimage")
+
     # Mock UpdateNut05Quote state update
     rpc_servicer.ledger.db_write._update_melt_quote_state = AsyncMock()
     

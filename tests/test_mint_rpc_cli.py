@@ -144,6 +144,11 @@ async def test_update_mint_quote(cli_prefix):
     else:
         pytest.fail("Mint quote was not paid before the RPC update")
     runner = CliRunner()
+    rejected = runner.invoke(
+        cli, [*cli_prefix, "update", "mint-quote", "--", mint_quote.quote, "ISSUED"]
+    )
+    assert "unissued balance" in rejected.output
+    await wallet.mint(100, quote_id=mint_quote.quote)
     # Use -- to prevent Click from interpreting quote_id (e.g. -JmE...) as options
     result = runner.invoke(
         cli, [*cli_prefix, "update", "mint-quote", "--", mint_quote.quote, "ISSUED"]
