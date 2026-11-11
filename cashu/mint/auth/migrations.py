@@ -192,3 +192,12 @@ async def m005_align_promises_with_mint_schema(db: Database):
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
             )
+
+
+async def m006_keysets_final_expiry_bigint(db: Database):
+    if db.type == "POSTGRES":
+        async with db.connect() as conn:
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('keysets')} "
+                "ALTER COLUMN final_expiry TYPE BIGINT"
+            )
