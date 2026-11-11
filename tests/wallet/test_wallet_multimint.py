@@ -15,8 +15,10 @@ from cashu.core.base import (
     PaymentRequest,
     SupportedMethod,
     TokenV3,
+    TokenV3Token,
     TokenV4,
     Unit,
+    WalletTransactionType,
 )
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.nuts.nut18 import serialize
@@ -24,6 +26,7 @@ from cashu.core.nuts.nut26 import serialize as serialize_bech32m
 from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.wallet.cli.cli import cli
+from cashu.wallet.crud import get_history
 from cashu.wallet.errors import BalanceTooLowError
 from cashu.wallet.helpers import (
     deserialize_token_from_string,
@@ -200,6 +203,11 @@ async def test_redeem_token_with_multiple_mints(wallets):
     assert {proof.id for proof in bob.proofs} == {
         alice.keyset_id,
         bob.keyset_id,
+    }
+
+    receipts = [r for r in await get_history(bob.db) if r.type == WalletTransactionType.receive]
+    assert {(r.mint, r.amount) for r in receipts} == {
+        (alice.url, 64), (bob.url, 16)
     }
 
 
@@ -506,3 +514,55 @@ def test_request_selection_handles_unavailable_mint(
     requires_swap = locked or preferred_amount != request.a
     assert token.mint == mint[1 if requires_swap else 0]
     assert token.amount == request.a
+
+@pytest.mark.asyncio
+async def test_history_preserves_successful_leg_when_later_mint_rejects(
+    wallets, tmp_path
+):
+    alice, bob = wallets
+    spent = list(bob.proofs)
+    await bob.redeem(spent)
+    token = TokenV3(
+        token=[
+            TokenV3Token(mint=alice.url, proofs=alice.proofs),
+            TokenV3Token(mint=bob.url, proofs=spent),
+        ]
+    )
+    recipient = await Wallet.with_db(alice.url, str(tmp_path / "recipient"))
+    try:
+        with pytest.raises(Exception, match="already spent"):
+            await receive(recipient, token)
+        rows = await get_history(recipient.db)
+        assert [(r.type, r.amount, r.mint) for r in rows] == [
+            (WalletTransactionType.receive, 64, alice.url)
+        ]
+    finally:
+        await recipient.db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mint", [1000], indirect=True, ids=["input-fees"])
+async def test_history_uses_actual_export_and_net_receipt_with_fees(wallets, tmp_path):
+    sender, _ = wallets
+    _, serialized = await send(
+        sender, amount=8, lock="", legacy=False, include_fees=True
+    )
+    token = deserialize_token_from_string(serialized)
+    assert token.amount > 8
+    receiver = await Wallet.with_db(sender.url, str(tmp_path / "receiver"))
+    try:
+        await receiver.load_mint()
+        proofs = token.proofs
+        await receiver._expand_short_keyset_ids(proofs)
+        fee = receiver.get_fees_for_proofs(proofs)
+        assert fee > 0
+        await receive(receiver, token)
+        rows = await get_history(receiver.db)
+        assert [(r.type, r.amount) for r in rows] == [
+            (WalletTransactionType.receive, token.amount - fee)
+        ]
+        assert rows[0].amount == receiver.balance.amount
+        exports = [r for r in await get_history(sender.db) if r.type == WalletTransactionType.send]
+        assert exports[0].amount == -token.amount
+    finally:
+        await receiver.db.engine.dispose()
