@@ -119,7 +119,10 @@ async def test_api_keysets(ledger: Ledger):
             },
         ]
     }
-    assert response.json() == expected
+    result = response.json()
+    result["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    expected["keysets"].sort(key=lambda keyset: str(keyset["id"]))
+    assert result == expected
 
 
 @pytest.mark.asyncio
