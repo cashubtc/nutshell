@@ -51,6 +51,17 @@ def test_advisory_lock_key_must_fit_bigint(key):
         LockOptions(table="proofs_pending", advisory_key=key)
 
 
+@pytest.mark.parametrize("key", [True, False, 1.0, 1.5, "1"])
+def test_advisory_lock_key_must_be_an_integer(key):
+    with pytest.raises(TypeError, match="must be an integer"):
+        LockOptions(table="proofs_pending", advisory_key=key)
+
+
+@pytest.mark.parametrize("key", [-(2**63), 0, 2**63 - 1])
+def test_advisory_lock_key_accepts_bigint_boundaries(key):
+    assert LockOptions(table="proofs_pending", advisory_key=key).advisory_key == key
+
+
 def test_advisory_and_row_locks_are_separate_options():
     with pytest.raises(ValueError, match="select rows"):
         LockOptions(table="proofs_pending", advisory_key=1, select_statement="y = :y")

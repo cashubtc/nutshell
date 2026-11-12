@@ -45,7 +45,9 @@ class LockOptions:
         if self.advisory_key is not None:
             if self.select_statement:
                 raise ValueError("An advisory lock cannot also select rows.")
-            if not -(2**63) <= self.advisory_key < 2**63:
+            if type(self.advisory_key) is not int:
+                raise TypeError("Advisory lock key must be an integer.")
+            if self.advisory_key < -(2**63) or self.advisory_key > 2**63 - 1:
                 raise ValueError("Advisory lock key must be a signed 64-bit integer.")
 
 
