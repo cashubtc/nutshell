@@ -172,6 +172,7 @@ class Ledger(
             for backend in unitbackends.values():
                 await backend.startup()
         await self._check_backends()
+        self.start_keyset_accounting()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
         if settings.mint_watchdog_enabled:
@@ -185,6 +186,23 @@ class Ledger(
         for derivation_path in settings.mint_derivation_path_list:
             derivation_path = self.maybe_update_derivation_path(derivation_path)
             await self.activate_keyset(derivation_path=derivation_path)
+
+    def start_keyset_accounting(self) -> None:
+        self.regular_tasks.append(asyncio.create_task(self._run_keyset_accounting()))
+
+    async def _run_keyset_accounting(self) -> None:
+        while True:
+            try:
+                count = await self.crud.flush_keyset_accounting(
+                    db=self.db, batch_size=settings.mint_keyset_accounting_batch_size
+                )
+                # Drain a backlog without waiting between full batches.
+                if count == settings.mint_keyset_accounting_batch_size:
+                    await asyncio.sleep(0)
+                    continue
+            except Exception:
+                logger.exception("Keyset accounting aggregation failed")
+            await asyncio.sleep(settings.mint_keyset_accounting_interval_seconds)
 
     async def _run_regular_tasks(self) -> None:
         """
@@ -1924,6 +1942,7 @@ class Ledger(
         keyset = keyset or self.keyset
 
         signatures = []
+        issued_by_keyset: Dict[str, int] = {}
         async with self.db.get_connection(conn) as conn:
             for promise in promises:
                 keyset_id, B_, amount, C_, e, s = promise
@@ -1944,7 +1963,11 @@ class Ledger(
                 )
                 signatures.append(signature)
 
-                # bump keyset balance
+                issued_by_keyset[keyset_id] = (
+                    issued_by_keyset.get(keyset_id, 0) + amount
+                )
+
+            for keyset_id, amount in issued_by_keyset.items():
                 await self.crud.bump_keyset_balance(
                     db=self.db, keyset=self.keysets[keyset_id], amount=amount, conn=conn
                 )
