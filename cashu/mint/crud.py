@@ -1,4 +1,5 @@
 import json
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,8 +17,10 @@ from ..core.base import (
     Unit,
 )
 from ..core.db import (
+    POSTGRES,
     Connection,
     Database,
+    LockOptions,
 )
 
 
@@ -156,6 +159,12 @@ class LedgerCrud(ABC):
         amount: int,
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    async def flush_keyset_accounting(
+        self, *, db: Database, batch_size: int = 1000
+    ) -> int:
+        """Aggregate queued accounting; synchronous CRUD implementations need no work."""
+        return 0
 
     @abstractmethod
     async def get_balance(
@@ -940,6 +949,30 @@ class LedgerCrudSqlite(LedgerCrud):
             },
         )
 
+    async def _store_keyset_accounting(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        balance_delta: int = 0,
+        fees_delta: int = 0,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        if not balance_delta and not fees_delta:
+            return
+        await (conn or db).execute(
+            f"""INSERT INTO {db.table_with_schema('keyset_accounting')}
+                (event_id, keyset_id, balance_delta, fees_delta)
+                SELECT :event_id, id, :balance_delta, :fees_delta
+                FROM {db.table_with_schema('keysets')} WHERE id = :keyset_id""",
+            {
+                "event_id": uuid.uuid4().hex,
+                "keyset_id": keyset.id,
+                "balance_delta": balance_delta,
+                "fees_delta": fees_delta,
+            },
+        )
+
     async def bump_keyset_balance(
         self,
         *,
@@ -948,13 +981,8 @@ class LedgerCrudSqlite(LedgerCrud):
         amount: int,
         conn: Optional[Connection] = None,
     ) -> None:
-        await (conn or db).execute(
-            f"""
-            UPDATE {db.table_with_schema("keysets")}
-            SET balance = balance + :amount
-            WHERE id = :id
-            """,
-            {"amount": amount, "id": keyset.id},
+        await self._store_keyset_accounting(
+            db=db, keyset=keyset, balance_delta=amount, conn=conn
         )
 
     async def try_debit_keyset_balance(
@@ -965,17 +993,17 @@ class LedgerCrudSqlite(LedgerCrud):
         amount: int,
         conn: Optional[Connection] = None,
     ) -> bool:
+        """Check the observed balance without locking a shared keyset row."""
         if amount <= 0:
             raise ValueError("Keyset balance debit amount must be positive")
-        result = await (conn or db).execute(
-            f"""
-            UPDATE {db.table_with_schema("keysets")}
-            SET balance = balance - :amount
-            WHERE id = :id AND balance >= :amount
-            """,
-            {"amount": amount, "id": keyset.id},
-        )
-        return result.rowcount > 0
+        async with db.get_connection(conn) as conn:
+            balance, _ = await self.get_balance(keyset, db, conn)
+            if balance.amount < amount:
+                return False
+            await self.bump_keyset_balance(
+                db=db, keyset=keyset, amount=-amount, conn=conn
+            )
+        return True
 
     async def bump_keyset_fees_paid(
         self,
@@ -985,14 +1013,53 @@ class LedgerCrudSqlite(LedgerCrud):
         amount: int,
         conn: Optional[Connection] = None,
     ) -> None:
-        await (conn or db).execute(
-            f"""
-            UPDATE {db.table_with_schema("keysets")}
-            SET fees_paid = fees_paid + :amount
-            WHERE id = :id
-            """,
-            {"amount": amount, "id": keyset.id},
+        await self._store_keyset_accounting(
+            db=db, keyset=keyset, fees_delta=amount, conn=conn
         )
+
+    async def flush_keyset_accounting(
+        self, *, db: Database, batch_size: int = 1000
+    ) -> int:
+        """Apply and remove one batch atomically, without a timestamp watermark."""
+        if batch_size <= 0:
+            raise ValueError("Accounting batch size must be positive")
+        # PostgreSQL workers claim disjoint event rows. SQLite already has a
+        # single writer; other backends use the existing table-lock fallback.
+        locks = [] if db.type == POSTGRES else [LockOptions(table="keyset_accounting")]
+        async with db.get_connection(locks=locks) as conn:
+            suffix = " FOR UPDATE SKIP LOCKED" if db.type == POSTGRES else ""
+            rows = await conn.fetchall(
+                f"""SELECT event_id, keyset_id, balance_delta, fees_delta
+                    FROM {db.table_with_schema('keyset_accounting')}
+                    ORDER BY event_id LIMIT :batch_size{suffix}""",
+                {"batch_size": batch_size},
+            )
+            totals: Dict[str, Tuple[int, int]] = {}
+            for row in rows:
+                balance, fees = totals.get(row["keyset_id"], (0, 0))
+                totals[row["keyset_id"]] = (
+                    balance + int(row["balance_delta"]),
+                    fees + int(row["fees_delta"]),
+                )
+            for keyset_id, (balance, fees) in sorted(totals.items()):
+                result = await conn.execute(
+                    f"""UPDATE {db.table_with_schema('keysets')}
+                        SET balance = balance + :balance,
+                            fees_paid = fees_paid + :fees
+                        WHERE id = :id""",
+                    {"id": keyset_id, "balance": balance, "fees": fees},
+                )
+                if result.rowcount != 1:
+                    raise ValueError(f"Accounting keyset not found: {keyset_id}")
+            if rows:
+                parameters = {f"id_{i}": row["event_id"] for i, row in enumerate(rows)}
+                placeholders = ", ".join(f":{name}" for name in parameters)
+                await conn.execute(
+                    f"DELETE FROM {db.table_with_schema('keyset_accounting')} "
+                    f"WHERE event_id IN ({placeholders})",
+                    parameters,
+                )
+        return len(rows)
 
     async def get_balance(
         self,
@@ -1002,7 +1069,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Tuple[Amount, Amount]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT balance, fees_paid FROM {db.table_with_schema("keysets")}
+            SELECT balance, fees_paid FROM {db.table_with_schema("keyset_accounting_totals")}
             WHERE id = :id
             """,
             {
@@ -1031,19 +1098,19 @@ class LedgerCrudSqlite(LedgerCrud):
         clauses = []
         values: Dict = {}
         if active is not None:
-            clauses.append("active = :active")
+            clauses.append("k.active = :active")
             values["active"] = active
         if id is not None:
-            clauses.append("id = :id")
+            clauses.append("k.id = :id")
             values["id"] = id
         if derivation_path is not None:
-            clauses.append("derivation_path = :derivation_path")
+            clauses.append("k.derivation_path = :derivation_path")
             values["derivation_path"] = derivation_path
         if seed is not None:
-            clauses.append("seed = :seed")
+            clauses.append("k.seed = :seed")
             values["seed"] = seed
         if unit is not None:
-            clauses.append("unit = :unit")
+            clauses.append("k.unit = :unit")
             values["unit"] = unit
         where = ""
         if clauses:
@@ -1051,12 +1118,20 @@ class LedgerCrudSqlite(LedgerCrud):
 
         rows = await (conn or db).fetchall(  # type: ignore
             f"""
-            SELECT * from {db.table_with_schema("keysets")}
+            SELECT k.*, a.balance AS current_balance, a.fees_paid AS current_fees_paid
+            FROM {db.table_with_schema("keysets")} AS k
+            JOIN {db.table_with_schema("keyset_accounting_totals")} AS a ON a.id = k.id
             {where}
             """,
             values,
         )
-        return [MintKeyset.from_row(row) for row in rows]  # type: ignore
+        keysets = []
+        for row in rows:
+            keyset = MintKeyset.from_row(row)
+            keyset.balance = int(row["current_balance"])
+            keyset.fees_paid = int(row["current_fees_paid"])
+            keysets.append(keyset)
+        return keysets
 
     async def update_keyset(
         self,

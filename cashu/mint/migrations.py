@@ -1393,3 +1393,13 @@ async def m043_keysets_final_expiry_bigint(db: Database):
                 f"ALTER TABLE {db.table_with_schema('keysets')} "
                 "ALTER COLUMN final_expiry TYPE BIGINT"
             )
+
+
+async def m044_add_keyset_accounting_journal(db: Database):
+    """Journal accounting changes for background aggregation.
+
+    Stop all mint workers before upgrading or downgrading this schema.
+    """
+    from .accounting import create_keyset_accounting
+
+    await create_keyset_accounting(db)

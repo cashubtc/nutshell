@@ -151,13 +151,16 @@ class DbWriteHelper:
             conn (Optional[Connection]): Connection to use. If not set, a new connection will be created.
         """
         async with self.db.get_connection(conn) as conn:
+            amounts_by_keyset: Dict[str, int] = {}
             for p in proofs:
                 logger.trace(f"crud: un-setting proof {p.Y} as PENDING")
                 await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                amounts_by_keyset[p.id] = amounts_by_keyset.get(p.id, 0) + p.amount
+            for keyset_id, amount in sorted(amounts_by_keyset.items()):
                 await self.crud.bump_keyset_balance(
                     db=self.db,
-                    keyset=keysets[p.id],
-                    amount=p.amount,
+                    keyset=keysets[keyset_id],
+                    amount=amount,
                     conn=conn,
                 )
 
