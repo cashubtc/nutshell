@@ -1,0 +1,14 @@
+[package]
+name = "nutshell-cdk-wallet-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+cdk = { version = "*", default-features = false, features = ["wallet"] }
+cdk-sqlite = { version = "*", default-features = false, features = ["wallet"] }
+rand = "0.9"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+[profile.dev]
+debug = 0

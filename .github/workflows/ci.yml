@@ -46,6 +46,9 @@ jobs:
       python-version: ${{ matrix.python-version }}
       poetry-version: ${{ matrix.poetry-version }}
 
+  cdk-wallet:
+    uses: ./.github/workflows/cdk-wallet.yml
+
   tests_redis_cache:
     strategy:
       fail-fast: false
