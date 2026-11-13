@@ -1,6 +1,7 @@
 """Tests for `cashu.mint.verification.LedgerVerification`."""
 
 import secrets
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -572,6 +573,8 @@ async def test_sign_blinded_messages_honors_outputs_after_rotation(ledger: Ledge
     await ledger._verify_outputs([output])
     await ledger._store_blinded_messages([output])
 
+    # Elapse the notice period so rotation inactivates the keyset at once
+    ledger.keysets[output.id].active_until = int(time.time()) - 1
     await ledger.rotate_next_keyset(Unit.sat)
     assert not ledger.keysets[output.id].active
     signatures = await ledger._sign_blinded_messages([output])

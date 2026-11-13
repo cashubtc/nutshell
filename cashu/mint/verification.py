@@ -194,7 +194,7 @@ class LedgerVerification(
         # Verify that the keyset id is known and active
         if outputs[0].id not in self.keysets:
             raise TransactionError("keyset id unknown.")
-        if not self.keysets[outputs[0].id].active:
+        if not self.keysets[outputs[0].id].is_active:
             raise KeysetInactiveError()
         if expected_unit and self.keysets[outputs[0].id].unit != expected_unit:
             raise TransactionError(
