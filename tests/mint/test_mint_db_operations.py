@@ -70,6 +70,8 @@ async def test_db_tables(ledger: Ledger):
         tables_expected = [
             "dbversions",
             "keysets",
+            "keyset_accounting",
+            "keyset_accounting_totals",
             "proofs_used",
             "proofs_pending",
             "melt_quotes",
@@ -89,6 +91,7 @@ async def test_db_tables(ledger: Ledger):
             tables_expected.remove("balance")
             tables_expected.remove("balance_issued")
             tables_expected.remove("balance_redeemed")
+            tables_expected.remove("keyset_accounting_totals")
         assert tables == tables_expected
 
 

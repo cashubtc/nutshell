@@ -1384,3 +1384,13 @@ async def m042_add_melt_execution_leases(db: Database):
         await conn.execute(
             f"UPDATE {table} SET payment_uncertain = 1 WHERE state = 'PENDING'"
         )
+
+
+async def m043_add_keyset_accounting_journal(db: Database):
+    """Journal accounting changes for background aggregation.
+
+    Stop all mint workers before upgrading or downgrading this schema.
+    """
+    from .accounting import create_keyset_accounting
+
+    await create_keyset_accounting(db)

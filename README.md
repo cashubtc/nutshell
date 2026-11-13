@@ -257,6 +257,36 @@ through the normal status polling and periodic recovery paths.
 Stop all older workers before upgrading. Migration `m042` adds lease expiry and
 payment uncertainty, treating existing pending payments as uncertain.
 
+### Keyset accounting
+
+Mint, swap, and melt operations append accounting deltas in the same database
+transaction as the corresponding signature or proof change. A background worker
+aggregates these deltas into `keysets.balance` and `keysets.fees_paid`. It runs
+immediately at startup, then waits `MINT_KEYSET_ACCOUNTING_INTERVAL_SECONDS`
+(default: 1 second) between checks. Each batch processes at most
+`MINT_KEYSET_ACCOUNTING_BATCH_SIZE` events (default: 1000); full batches are
+followed immediately by another batch.
+
+The stored keyset columns can lag behind transactions. The
+`keyset_accounting_totals` view and the mint's balance and management queries
+include unapplied deltas, including pending reservations and their releases.
+The redemption balance check is a best-effort observation and does not lock a
+shared keyset row. Proof reservation and spending still use their existing
+database coordination.
+
+Events are applied and removed in one transaction. Failures, restarts, and
+worker cancellation leave unapplied events available for the next attempt.
+PostgreSQL workers claim separate event batches with `SKIP LOCKED`; SQLite
+retains its single-writer behavior. A failed worker logs the error and retries
+after the configured interval.
+
+Stop all mint and auth workers before upgrading to migrations `m043` and auth
+`m006`. Existing keyset totals are retained as the starting values. Before
+downgrading, stop transaction processing and drain the journal completely;
+older versions do not include journal entries in balance reads. Applications
+that embed `Ledger` should use `startup_ledger()` / `shutdown_ledger()`, or
+`start_keyset_accounting()` / `shutdown_ledger()` for a separate auth ledger.
+
 ### NUT-19 Response caching
 
 Nutshell caches successful mint, swap, and melt responses in memory by default so wallets can recover lost responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). Redis can be enabled for shared caching across workers or instances. See [Response caching](docs/response-caching.md) for configuration and cache limits.

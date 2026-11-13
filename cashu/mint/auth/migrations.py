@@ -1,4 +1,5 @@
 from ...core.db import Connection, Database
+from ..accounting import create_keyset_accounting
 
 
 async def m000_create_migrations_table(conn: Connection):
@@ -192,3 +193,8 @@ async def m005_align_promises_with_mint_schema(db: Database):
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
             )
+
+
+async def m006_add_keyset_accounting_journal(db: Database):
+    """Use the same accounting journal as the mint ledger."""
+    await create_keyset_accounting(db)
