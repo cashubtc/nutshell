@@ -1295,7 +1295,15 @@ class Ledger(
                         proofs = await self.crud.get_pending_proofs_for_quote(
                             quote_id=quote_id, db=self.db
                         )
-                        await self.melt_mint_settle_internally(claimed, proofs)
+                        try:
+                            await self.melt_mint_settle_internally(claimed, proofs)
+                        except QuoteExpiredError:
+                            # Nothing was sent to a backend, so expiry is safe to roll back.
+                            return await self._finalize_melt_failed(
+                                quote_id,
+                                lock_token=claimed.melt_lock,
+                                expected_attempt=claimed.attempt,
+                            )
                         melt_quote = await self._finalize_melt_paid(
                             quote_id,
                             lock_token=claimed.melt_lock,

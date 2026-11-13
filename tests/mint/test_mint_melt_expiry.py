@@ -305,6 +305,29 @@ async def test_internal_melt_expiring_after_preparation_releases_proofs(
     assert balance_after == balance_before
 
 
+async def test_internal_melt_expired_before_recovery_releases_proofs(
+    ledger: Ledger, monkeypatch
+):
+    proofs = await issue_proofs(ledger)
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(amount=2, unit="sat"))
+    monkeypatch.setattr(settings, "melt_quote_ttl", 60)
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+    )
+    # The executor dies after preparation, so only recovery can resolve the quote.
+    await ledger._prepare_melt(proofs=proofs, quote=quote.quote)
+    await expire_melt_lease(ledger, quote.quote)
+    assert quote.expiry is not None
+    expired_at = quote.expiry + 1
+    monkeypatch.setattr("cashu.mint.ledger.time.time", lambda: expired_at)
+
+    assert (await ledger.get_melt_quote(quote.quote)).unpaid
+    assert all(
+        state.unspent
+        for state in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    )
+
+
 @pytest.mark.parametrize(
     "result", [PaymentStatusResult.NOT_FOUND, PaymentStatusResult.SETTLED]
 )
