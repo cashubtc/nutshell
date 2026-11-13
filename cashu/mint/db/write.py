@@ -15,7 +15,7 @@ from ...core.base import (
     ProofSpentState,
     ProofState,
 )
-from ...core.db import Connection, Database, LockOptions
+from ...core.db import POSTGRES, Connection, Database, LockOptions
 from ...core.errors import (
     InvoiceAlreadyPaidError,
     ProofsArePendingError,
@@ -27,6 +27,7 @@ from ...core.errors import (
 from ...core.settings import settings
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
+from .locks import proof_locks
 from .read import DbReadHelper
 
 
@@ -70,6 +71,14 @@ class DbWriteHelper:
         if state == MintQuoteState.issued and not quote.issued_time:
             quote.issued_time = now
 
+    async def _lock_proofs(self, proofs: List[Proof], conn: Connection) -> None:
+        """Keep PostgreSQL proof locks until the surrounding transaction ends."""
+        if self.db.type == POSTGRES:
+            async with self.db.get_connection(
+                conn, locks=proof_locks(self.db, [p.Y for p in proofs])
+            ):
+                pass
+
     async def _verify_spent_proofs_and_set_pending(
         self,
         proofs: List[Proof],
@@ -92,7 +101,7 @@ class DbWriteHelper:
         try:
             logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
-                locks=[LockOptions(table="proofs_pending", timeout=1)],
+                locks=proof_locks(self.db, [p.Y for p in proofs]),
                 conn=conn,
             ) as conn:
                 logger.trace("checking whether proofs are already spent")
@@ -150,7 +159,14 @@ class DbWriteHelper:
                 by the invalidate_proofs function when the proofs are spent).
             conn (Optional[Connection]): Connection to use. If not set, a new connection will be created.
         """
-        async with self.db.get_connection(conn) as conn:
+        async with self.db.get_connection(
+            conn,
+            locks=(
+                proof_locks(self.db, [p.Y for p in proofs])
+                if self.db.type == POSTGRES
+                else []
+            ),
+        ) as conn:
             for p in proofs:
                 logger.trace(f"crud: un-setting proof {p.Y} as PENDING")
                 await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
@@ -182,7 +198,14 @@ class DbWriteHelper:
         reservation before invalidating them lets the final checked debit represent
         the single durable spend.
         """
-        async with self.db.get_connection(conn) as conn:
+        async with self.db.get_connection(
+            conn,
+            locks=(
+                proof_locks(self.db, [p.Y for p in proofs])
+                if self.db.type == POSTGRES
+                else []
+            ),
+        ) as conn:
             await self._unset_proofs_pending(proofs, keysets, spent=True, conn=conn)
             await self.invalidate_proofs(
                 proofs=proofs,
@@ -618,8 +641,7 @@ class DbWriteHelper:
         Returns:
             MeltQuote: Updated melt quote object.
         """
-        # Locks are ordered by table name (melt_quotes before proofs_pending),
-        # so declare both upfront to keep the global lock order.
+        # Acquire quote locks before the ordered proof locks.
         async with self.db.get_connection(
             locks=[
                 LockOptions(
@@ -627,7 +649,7 @@ class DbWriteHelper:
                     select_statement="checking_id = :checking_id",
                     parameters={"checking_id": quote.checking_id},
                 ),
-                LockOptions(table="proofs_pending", timeout=1),
+                *proof_locks(self.db, [p.Y for p in proofs]),
             ],
             conn=conn,
         ) as conn:
@@ -785,8 +807,7 @@ class DbWriteHelper:
             keysets (Dict[str, MintKeyset]): Keysets for updating balances.
             state (MeltQuoteState): New state for the melt quote (e.g. UNPAID).
         """
-        # Locks are ordered by table name (melt_quotes before proofs_pending),
-        # so declare both upfront to keep the global lock order.
+        # Acquire quote locks before the ordered proof locks.
         async with self.db.get_connection(
             locks=[
                 LockOptions(
@@ -794,7 +815,7 @@ class DbWriteHelper:
                     select_statement="quote = :quote",
                     parameters={"quote": quote.quote},
                 ),
-                LockOptions(table="proofs_pending", timeout=1),
+                *proof_locks(self.db, [p.Y for p in proofs]),
             ],
         ) as conn:
             quote = await self._unset_melt_quote_pending(quote, state, conn=conn)
@@ -824,7 +845,14 @@ class DbWriteHelper:
             keyset_fees (Optional[Dict[str, int]]): Fees paid per keyset.
             conn (Optional[Connection]): Database connection.
         """
-        async with self.db.get_connection(conn) as conn:
+        async with self.db.get_connection(
+            conn,
+            locks=(
+                proof_locks(self.db, [p.Y for p in proofs])
+                if self.db.type == POSTGRES
+                else []
+            ),
+        ) as conn:
             amounts_by_keyset: Dict[str, int] = {}
             for proof in proofs:
                 amounts_by_keyset[proof.id] = (
@@ -884,8 +912,7 @@ class DbWriteHelper:
             keysets (Dict[str, MintKeyset]): Keysets for updating balances/fees.
             keyset_fees (Dict[str, int]): Fees paid per keyset.
         """
-        # Locks are ordered by table name (melt_quotes before proofs_pending),
-        # so declare both upfront to keep the global lock order.
+        # Acquire quote locks before the ordered proof locks.
         async with self.db.get_connection(
             locks=[
                 LockOptions(
@@ -893,7 +920,7 @@ class DbWriteHelper:
                     select_statement="quote = :quote",
                     parameters={"quote": quote.quote},
                 ),
-                LockOptions(table="proofs_pending", timeout=1),
+                *proof_locks(self.db, [p.Y for p in proofs]),
             ],
         ) as conn:
             # Load the quote within the finalization transaction.

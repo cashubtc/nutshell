@@ -29,18 +29,26 @@ def mask_db_location(db_location: str) -> str:
 
 @dataclass(frozen=True)
 class LockOptions:
-    """Describes one table or row lock in an ordered transaction lock set."""
+    """Describes a table, row, or PostgreSQL transaction advisory lock."""
 
     table: str
     select_statement: Optional[str] = None
     parameters: Mapping[str, Any] = field(default_factory=dict)
     timeout: Optional[float] = None
+    advisory_key: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not self.table:
             raise ValueError("Lock table must not be empty.")
         if self.timeout is not None and self.timeout <= 0:
             raise ValueError("Lock timeout must be greater than zero.")
+        if self.advisory_key is not None:
+            if self.select_statement:
+                raise ValueError("An advisory lock cannot also select rows.")
+            if type(self.advisory_key) is not int:
+                raise TypeError("Advisory lock key must be an integer.")
+            if self.advisory_key < -(2**63) or self.advisory_key > 2**63 - 1:
+                raise ValueError("Advisory lock key must be a signed 64-bit integer.")
 
 
 class Compat:
@@ -105,6 +113,7 @@ class Connection(Compat):
         self.name = name
         self.schema = schema
         self._sqlite_exclusive_lock_acquired = False
+        self._advisory_locks_acquired: set[int] = set()
 
     def rewrite_query(self, query) -> TextClause:
         if self.type in {POSTGRES, COCKROACH}:
@@ -283,7 +292,9 @@ class Database(Compat):
             connection_ready = False
             with anyio.CancelScope() as cleanup_scope:
                 try:
-                    logger.trace(f"Connecting to database trial: {trial} ({random_int})")
+                    logger.trace(
+                        f"Connecting to database trial: {trial} ({random_int})"
+                    )
                     async with session.begin() as txn:  # type: ignore
                         try:
                             logger.trace("Connected to database. Starting transaction")
@@ -309,7 +320,9 @@ class Database(Compat):
                             retry_delay, timeout, start_time
                         )
                     else:
-                        logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
+                        logger.error(
+                            f"Error in session trial: {trial} ({random_int}): {e}"
+                        )
                         raise
                 finally:
                     cleanup_scope.shield = True
@@ -342,28 +355,49 @@ class Database(Compat):
         for lock in locks:
             await self._acquire_lock(wconn, lock)
 
-    def _order_locks(
-        self, locks: Sequence[LockOptions]
-    ) -> tuple[LockOptions, ...]:
-        """Return locks ordered by table name."""
-        return tuple(sorted(locks, key=lambda lock: lock.table))
+    def _order_locks(self, locks: Sequence[LockOptions]) -> tuple[LockOptions, ...]:
+        """Order resources by table, then by advisory key within each table."""
+        return tuple(
+            sorted(
+                locks,
+                key=lambda lock: (
+                    lock.table,
+                    lock.advisory_key is not None,
+                    lock.advisory_key if lock.advisory_key is not None else 0,
+                ),
+            )
+        )
 
     async def _acquire_lock(
         self,
         wconn: Connection,
         lock: LockOptions,
     ) -> None:
-        """Acquire a lock on a table or a row in a table.
+        """Acquire a table, row, or transaction advisory lock.
 
         Args:
             wconn (Connection): Connection object.
             lock (LockOptions): Lock target and acquisition options.
         """
+        if (
+            self.type == POSTGRES
+            and lock.advisory_key is not None
+            and lock.advisory_key in wconn._advisory_locks_acquired
+        ):
+            return
         try:
             logger.trace(
                 f"Acquiring lock on {lock.table} with statement {self._lock_statement(lock)} parameters: {lock.parameters}"
             )
-            await wconn.execute(self._lock_statement(lock), dict(lock.parameters))
+            if self.type == POSTGRES and lock.advisory_key is not None:
+                row = await wconn.fetchone(
+                    self._lock_statement(lock), {"advisory_key": lock.advisory_key}
+                )
+                if not row or not row["locked"]:
+                    raise RuntimeError("could not obtain lock on advisory resource")
+                wconn._advisory_locks_acquired.add(lock.advisory_key)
+            else:
+                await wconn.execute(self._lock_statement(lock), dict(lock.parameters))
             logger.trace(f"Success: Acquired lock on {lock.table}")
             return
         except Exception as e:
@@ -401,6 +435,8 @@ class Database(Compat):
         yield conn
 
     def _lock_statement(self, lock: LockOptions) -> str:
+        if self.type == POSTGRES and lock.advisory_key is not None:
+            return "SELECT pg_try_advisory_xact_lock(:advisory_key) AS locked"
         # with postgres, we can lock a row with a SELECT statement with FOR UPDATE NOWAIT
         if lock.select_statement:
             if self.type == POSTGRES:

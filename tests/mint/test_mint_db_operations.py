@@ -374,7 +374,7 @@ async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_differen
     assert wallet.balance == 64
     assert len(wallet.proofs) == 2
 
-    asyncio.gather(
+    await asyncio.gather(
         ledger.db_write._verify_spent_proofs_and_set_pending(
             wallet.proofs[:1], ledger.keysets
         ),
@@ -448,22 +448,19 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
     is_github_actions,
     reason=("Fails on GitHub Actions for regtest + SQLite"),
 )
-async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
-    # fill wallet
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
-
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
+async def test_db_lock_table(ledger: Ledger):
+    async def acquire_table_lock():
+        async with ledger.db.get_connection(
+            locks=[LockOptions(table="proofs_pending", timeout=0.1)]
+        ):
+            pass
 
     async with ledger.db.connect(
         locks=[LockOptions(table="proofs_pending", timeout=0.1)]
     ) as conn:
         assert isinstance(conn, Connection)
         await assert_err(
-            ledger.db_write._verify_spent_proofs_and_set_pending(
-                wallet.proofs, ledger.keysets
-            ),
+            acquire_table_lock(),
             "failed to acquire database lock",
         )
 
@@ -843,9 +840,9 @@ async def test_get_melt_quote_preserves_change_signatures_order(
     # However we can just verify that C_ values matches what we inserted
     # Since we mocked C_ to be the same as B_ in our test
     for i in range(5):
-        assert quote_db.change[i].C_ == b_values[i], (
-            f"Change signature at index {i} is out of order"
-        )
+        assert (
+            quote_db.change[i].C_ == b_values[i]
+        ), f"Change signature at index {i} is out of order"
 
 
 @pytest.mark.asyncio

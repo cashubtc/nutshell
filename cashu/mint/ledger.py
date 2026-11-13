@@ -72,6 +72,7 @@ from ..lightning.base import (
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
 from .db.lease import maintain_melt_lease
+from .db.locks import proof_locks
 from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
@@ -442,6 +443,7 @@ class Ledger(
             if not settled_proofs:
                 raise TransactionError("Pending melt quote has no pending proofs.")
 
+            await self.db_write._lock_proofs(settled_proofs, conn)
             if fee_paid is not None:
                 melt_quote.fee_paid = fee_paid
             if preimage:
@@ -1554,7 +1556,7 @@ class Ledger(
                     select_statement="checking_id = :checking_id",
                     parameters={"checking_id": melt_quote.checking_id},
                 ),
-                LockOptions(table="proofs_pending", timeout=1),
+                *proof_locks(self.db, [p.Y for p in proofs]),
             ],
         ) as conn:
             if outputs:
@@ -1761,17 +1763,8 @@ class Ledger(
         )
         finalized = False
         try:
-            Ys = [p.Y for p in proofs]
-            lock_parameters = {f"y{i}": y for i, y in enumerate(Ys)}
-            ys_list = ", ".join(f":y{i}" for i in range(len(Ys)))
             async with self.db.get_connection(
-                locks=[
-                    LockOptions(
-                        table="proofs_pending",
-                        select_statement=f"y IN ({ys_list})",
-                        parameters=lock_parameters,
-                    )
-                ],
+                locks=proof_locks(self.db, [p.Y for p in proofs], timeout=None),
             ) as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
 

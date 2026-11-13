@@ -261,6 +261,24 @@ payment uncertainty, treating existing pending payments as uncertain.
 
 Nutshell caches successful mint, swap, and melt responses in memory by default so wallets can recover lost responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)). Redis can be enabled for shared caching across workers or instances. See [Response caching](docs/response-caching.md) for configuration and cache limits.
 
+### PostgreSQL proof coordination
+
+PostgreSQL coordinates proof reservations, spending, and release with
+transaction-scoped advisory locks derived from each nullifier `Y`. Lock keys
+are stable across processes, scoped to the proof table's schema, deduplicated,
+and acquired in sorted order. Requests using unrelated proofs can acquire their
+proof locks concurrently, including when no pending row exists yet.
+
+The locks follow the existing timeout/retry behavior and are released when the
+database transaction commits or rolls back. Pending rows retain reservations
+while a payment is in progress; database locks are not held while waiting for
+the payment backend. Quote execution leases and database uniqueness constraints
+continue to apply. SQLite and CockroachDB retain their existing lock behavior.
+
+Stop all mint and auth workers before upgrading or downgrading this locking
+protocol so every worker uses the same coordination mechanism. No database
+migration is required.
+
 ### NUT-21 Authentication with Keycloak
 
 Cashu supports clear and blind authentication as defined in [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) and [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) to limit the use of a mint to a registered set of users. Clear authentication is supported via an OIDC provider such as Keycloak. You can set up and run Keycloak instance using the docker compose file `docker/keycloak/docker-compose.yml` in this repository.
