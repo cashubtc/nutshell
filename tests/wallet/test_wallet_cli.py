@@ -279,6 +279,38 @@ def test_invoice_uses_normalized_quote_amount(tmp_path, monkeypatch):
     assert wallet.balance == 13
 
 
+@pytest.mark.skipif(is_regtest, reason="uses FakeWallet")
+@xfail_below_minimum
+def test_invoice_fiat_amount_is_rounded_to_cents(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    prefix = ["--wallet", "fiat", "--host", settings.mint_url, "--tests"]
+    runner = CliRunner()
+    # 0.29 * 100 is 28.999999999999996 in floating point
+    result = runner.invoke(cli, [*prefix, "--unit", "usd", "invoice", "-n", "0.29"])
+    assert result.exception is None, result.output
+    assert "Requesting invoice for $0.29 USD." in result.output
+
+
+def test_send_fiat_amount_is_rounded_to_cents(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
+    sent_amounts = []
+
+    async def fake_send(wallet, *, amount, **kwargs):
+        sent_amounts.append(amount)
+
+    async def fake_print_balance(ctx):
+        pass
+
+    monkeypatch.setattr("cashu.wallet.cli.cli.send", fake_send)
+    monkeypatch.setattr("cashu.wallet.cli.cli.print_balance", fake_print_balance)
+    prefix = ["--wallet", "fiat", "--host", settings.mint_url, "--tests"]
+    runner = CliRunner()
+    # 0.29 * 100 is 28.999999999999996 in floating point
+    result = runner.invoke(cli, [*prefix, "--unit", "usd", "send", "0.29"])
+    assert result.exception is None, result.output
+    assert sent_amounts == [29]
+
+
 @xfail_below_minimum
 def test_invoice_with_memo(mint, cli_prefix):
     runner = CliRunner()
