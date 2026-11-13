@@ -220,19 +220,19 @@ async def test_m039_migrates_existing_quote_and_rotates_attempt_nonce(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_m041_adds_proof_digests_after_main_seed_cleanup(tmp_path):
+async def test_m043_adds_proof_digests_after_main_migrations(tmp_path):
     db = Database("mint", str(tmp_path / "proof_digest_migration"))
     main_migrations = SimpleNamespace(
         **{
             name: value
             for name, value in vars(mint_migrations).items()
-            if name != "m041_add_digest_to_proofs"
+            if name != "m043_add_digest_to_proofs"
         }
     )
     try:
         await migrate_databases(db, main_migrations)
         version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
-        assert version and version["version"] == 40
+        assert version and version["version"] == 42
         for table in ("proofs_used", "proofs_pending"):
             await db.execute(
                 f"INSERT INTO {db.table_with_schema(table)} "
@@ -248,7 +248,7 @@ async def test_m041_adds_proof_digests_after_main_seed_cleanup(tmp_path):
 
         await migrate_databases(db, mint_migrations)
         version = await db.fetchone("SELECT version FROM dbversions WHERE db = 'mint'")
-        assert version and version["version"] == 41
+        assert version and version["version"] == 43
         for table in ("proofs_used", "proofs_pending"):
             row = await db.fetchone(
                 f"SELECT c, secret, digest FROM {db.table_with_schema(table)}"

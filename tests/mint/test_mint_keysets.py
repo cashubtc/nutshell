@@ -38,11 +38,11 @@ from cashu.lightning.base import (
     PaymentStatus,
     PaymentStatusResult,
 )
+from cashu.mint import migrations as mint_migrations
 from cashu.mint.auth import migrations as auth_migrations
 from cashu.mint.auth.base import User
 from cashu.mint.auth.crud import AuthLedgerCrudSqlite
 from cashu.mint.auth.server import AuthLedger
-from cashu.mint import migrations as mint_migrations
 from cashu.mint.ledger import Ledger
 from tests.helpers import get_fake_invoice, is_fake
 from tests.mint.test_mint_init import (
@@ -697,7 +697,16 @@ def _unblind(
     return proofs
 
 
-async def _issue_proofs(ledger: Ledger) -> list[Proof]:
+async def _issue_proofs(ledger: Ledger, monkeypatch) -> list[Proof]:
+    monkeypatch.setattr(settings, "version", "0.22.1")
+    legacy = await ledger.activate_keyset(
+        derivation_path="m/0'/0'/1'", version="0.22.1"
+    )
+    for keyset in ledger.keysets.values():
+        if keyset.unit == Unit.sat and keyset.id != legacy.id:
+            keyset.active = False
+            await ledger.crud.update_keyset(keyset=keyset, db=ledger.db)
+    ledger.keyset = legacy
     quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=128))
     outputs, secrets, rs = _outputs(ledger.keyset.id, [128], "funding")
     signatures = await ledger.mint(outputs=outputs, quote_id=quote.quote)
@@ -731,7 +740,7 @@ async def _transact(ledger, operation, proofs, outputs, quote):
 async def test_new_requests_reject_inactive_outputs(
     ledger: Ledger, monkeypatch, operation
 ):
-    proofs = await _issue_proofs(ledger)
+    proofs = await _issue_proofs(ledger, monkeypatch)
     old_keyset = ledger.keyset
     quote = await _request(ledger, operation)
     amounts = [0] * 7 if operation == "melt" else [128]
@@ -765,7 +774,7 @@ async def test_new_requests_reject_inactive_outputs(
 async def test_transactions_honors_outputs_rotated_after_verification(
     ledger: Ledger, monkeypatch, operation
 ):
-    proofs = await _issue_proofs(ledger)
+    proofs = await _issue_proofs(ledger, monkeypatch)
     old_keyset = ledger.keyset
     quote = await _request(ledger, operation)
     amounts = [0] * 7 if operation == "melt" else [128]
@@ -813,7 +822,7 @@ async def test_transactions_honors_outputs_rotated_after_verification(
 async def test_melt_honors_change_rotated_during_payment(
     ledger: Ledger, monkeypatch, settlement
 ):
-    proofs = await _issue_proofs(ledger)
+    proofs = await _issue_proofs(ledger, monkeypatch)
     old_keyset = ledger.keyset
     quote = await _request(ledger, "melt")
     outputs, secrets, rs = _outputs(old_keyset.id, [0] * 7, "change")
@@ -927,7 +936,8 @@ async def test_melt_honors_change_rotated_during_payment(
 
 
 @pytest_asyncio.fixture
-async def auth_ledger(tmp_path):
+async def auth_ledger(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "version", "0.22.1")
     ledger = AuthLedger(
         db=Database("auth", str(tmp_path / "auth_rotation")),
         seed="auth rotation test seed",

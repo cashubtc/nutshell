@@ -173,6 +173,7 @@ async def test_shutdown_drains_external_melt_before_cleanup(ledger, monkeypatch)
         name="wallet_async_melt_shutdown",
     )
     await wallet.load_mint()
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     proofs = await wallet.mint(64, quote_id=mint_quote.quote)
@@ -227,6 +228,7 @@ async def test_shutdown_completes_internal_melt_without_stranding_proofs(
         name="wallet_internal_melt_shutdown",
     )
     await wallet.load_mint()
+    await use_v2_keyset(wallet)
     funding = await wallet.request_mint(64)
     await pay_if_regtest(funding.request)
     proofs = await wallet.mint(64, quote_id=funding.quote)

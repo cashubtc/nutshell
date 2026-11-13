@@ -9,6 +9,7 @@ from cashu.core.base import (
     BlindedMessage,
     Proof,
 )
+from cashu.core.crypto.keys import is_bls_keyset
 from cashu.mint.app import app
 
 ALLOWED_STATUS_CODES = [400, 404, 405, 422, 503]
@@ -43,7 +44,9 @@ blinded_message_strategy = st.builds(
 # Strategy for Proof
 proof_strategy = st.builds(
     Proof,
-    id=st.one_of(keyset_id(), hex_string(16, 16)),
+    id=st.one_of(
+        keyset_id(), hex_string(16, 16).filter(lambda value: not is_bls_keyset(value))
+    ),
     amount=st.integers(min_value=1),
     secret=st.text(min_size=1, max_size=64),
     C=st.one_of(hex_string(), public_key()),

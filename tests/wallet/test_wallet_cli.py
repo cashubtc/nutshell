@@ -1,7 +1,6 @@
 import asyncio
 import json
 import shlex
-import time
 from pathlib import Path
 from typing import Tuple
 
@@ -10,10 +9,10 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, TokenV4
-from cashu.core.nuts.nut18 import deserialize, serialize
-from cashu.core.nuts.nut26 import deserialize as nut26_deserialize
 from cashu.core.crypto.keys import is_bls_keyset
 from cashu.core.errors import NotAllowedError
+from cashu.core.nuts.nut18 import deserialize, serialize
+from cashu.core.nuts.nut26 import deserialize as nut26_deserialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli

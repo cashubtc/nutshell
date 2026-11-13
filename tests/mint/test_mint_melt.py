@@ -14,8 +14,8 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
-from cashu.core.db import Database
 from cashu.core.crypto.keys import is_bls_keyset
+from cashu.core.db import Database
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     LightningPaymentFailedError,
@@ -94,6 +94,8 @@ async def wallet(ledger: Ledger):
 
 
 async def fund_wallet(ledger: Ledger, wallet: Wallet, amount: int = 64):
+    legacy_id = await use_v2_keyset(wallet)
+    ledger.keyset = ledger.keysets[legacy_id]
     mint_quote = await wallet.request_mint(amount)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: marks it paid
     await wallet.mint(amount, quote_id=mint_quote.quote)

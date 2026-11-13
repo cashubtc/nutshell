@@ -2,14 +2,11 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
-    Amount,
     BlindedMessage,
     MeltQuoteState,
-    Method,
     MintKeyset,
     MintQuoteState,
     Proof,
-    Unit,
 )
 from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice
 from cashu.core.crypto.keys import is_bls_keyset
@@ -178,8 +175,8 @@ async def test_melt_stores_spent_proofs_with_C(wallet1: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_pending_proofs_are_read_with_C(ledger: Ledger):
-    proof = _unissued_proof(ledger, 8, "pending-proof-with-C")
+async def test_pending_proofs_are_read_with_C(ledger: Ledger, v2_keyset: MintKeyset):
+    proof = _unissued_proof(v2_keyset, 8, "pending-proof-with-C")
     await ledger.crud.set_proof_pending(db=ledger.db, proof=proof)
 
     pending = await ledger.crud.get_proofs_pending(Ys=[proof.Y], db=ledger.db)

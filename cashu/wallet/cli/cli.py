@@ -385,7 +385,11 @@ async def _pay(
             )
 
         lock = ""
-        nutroot_lock = pr.nutroot if is_bls_keyset(wallet.keyset_id) else None
+        nutroot_lock = (
+            pr.nutroot
+            if pr.nutroot is not None and is_bls_keyset(wallet.keyset_id)
+            else None
+        )
         if pr.nutroot is not None and nutroot_lock is None and pr.nut10 is None:
             print("Error: This payment request requires v3 outputs.")
             return

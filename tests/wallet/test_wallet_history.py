@@ -87,7 +87,11 @@ async def test_quote_only_upgrade_and_projection(tmp_path):
     before.__dict__.update(
         (name, value)
         for name, value in vars(migrations).items()
-        if name != "m020_create_ecash_transactions" and name != "__name__"
+        if name not in (
+            "m020_create_ecash_transactions",
+            "m021_add_nutroot_wallet_data",
+            "__name__",
+        )
     )
     db = Database("wallet", str(tmp_path))
     try:

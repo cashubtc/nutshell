@@ -320,6 +320,7 @@ async def test_startup_recovers_expired_leases(
     ledger: Ledger, wallet: Wallet, monkeypatch: pytest.MonkeyPatch
 ):
     """Recovery respects a valid lease and takes over after a dead owner expires."""
+    await use_v2_keyset(wallet)
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet.mint(64, quote_id=mint_quote.quote)

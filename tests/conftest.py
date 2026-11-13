@@ -82,7 +82,10 @@ _startup_keysets = Ledger._startup_keysets
 
 async def _startup_test_keysets(ledger: Ledger) -> None:
     await _startup_keysets(ledger)
-    await ledger.activate_keyset(derivation_path="m/0'/0'/1'", version="0.20.0")
+    if ledger.seed and not any(
+        keyset.derivation_path == "m/0'/0'/1'" for keyset in ledger.keysets.values()
+    ):
+        await ledger.activate_keyset(derivation_path="m/0'/0'/1'", version="0.20.0")
 
 
 Ledger._startup_keysets = _startup_test_keysets

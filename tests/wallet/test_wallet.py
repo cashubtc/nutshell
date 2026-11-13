@@ -37,6 +37,7 @@ from tests.helpers import (
     is_regtest,
     is_spark_backend,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 # The test mint's active sat keyset, including released compatibility targets.
@@ -285,6 +286,7 @@ async def test_swap_to_send(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_coinselect_many_small_proofs(wallet1: Wallet):
     # one selection step per proof used to be one recursion level
+    await use_v2_keyset(wallet1)
     proofs = [
         Proof(id=wallet1.keyset_id, amount=1, secret=str(i), C="") for i in range(1500)
     ]

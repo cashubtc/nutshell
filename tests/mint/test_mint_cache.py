@@ -21,6 +21,7 @@ from tests.helpers import (
     get_real_invoice,
     is_regtest,
     pay_if_regtest,
+    use_v2_keyset,
 )
 from tests.mint.test_mint_app_router import _build_router_app
 
@@ -204,6 +205,7 @@ async def test_redis_cache_connection_lifecycle(monkeypatch):
 async def wallet(ledger: Ledger, tmp_path):
     wallet = await Wallet.with_db(url=SERVER_ENDPOINT, db=str(tmp_path))
     await wallet.load_mint()
+    await use_v2_keyset(wallet)
     yield wallet
     await wallet.db.engine.dispose()
 

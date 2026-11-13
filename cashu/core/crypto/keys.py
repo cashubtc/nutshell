@@ -53,9 +53,9 @@ def derive_bip39_derivation_path(unit: str, index: int) -> str:
     return f"{BIP39_DERIVATION_PATH}/{unit_index}'/{index}'"
 
 
-def derive_bip39_pubkey(seed: bytes) -> PublicKey:
+def derive_bip39_pubkey(seed: bytes) -> SecpPublicKey:
     """Public key of the master key of a BIP-39 seed."""
-    return PublicKey(BIP32.from_seed(seed).get_pubkey_from_path("m"))
+    return SecpPublicKey(BIP32.from_seed(seed).get_pubkey_from_path("m"))
 
 
 def derive_keys_deprecated_pre_0_15(

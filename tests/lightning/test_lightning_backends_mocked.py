@@ -1078,8 +1078,9 @@ async def test_spark_melt_lifecycle_reconciliation(
 
 
 @pytest_asyncio.fixture
-async def spark_ledger(tmp_path):
+async def spark_ledger(tmp_path, monkeypatch):
     # Keep these transport-mocked cases independent of the shared HTTP mint.
+    monkeypatch.setattr(settings, "version", "0.22.1")
     ledger = Ledger(
         db=Database("mint", str(tmp_path)),
         seed="TEST_PRIVATE_KEY",

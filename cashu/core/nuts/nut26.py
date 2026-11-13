@@ -12,7 +12,14 @@ from bech32 import (
     bech32_encode as _bech32_encode,
 )
 
-from ..base import NUT10Option, NutrootOption, PaymentRequest, SupportedMethod, Transport, Unit
+from ..base import (
+    NUT10Option,
+    NutrootOption,
+    PaymentRequest,
+    SupportedMethod,
+    Transport,
+    Unit,
+)
 from ..crypto.nutroot import read_tlv_records
 
 BECH32M_CONST = 0x2BC830A3
