@@ -276,13 +276,22 @@ def random_hash() -> str:
     """Returns a base64-urlsafe encoded random hash."""
     return base64.urlsafe_b64encode(secrets.token_bytes(30)).decode()
 
-def derive_keys_v3(mnemonic: str, derivation_path: str, amounts: List[int]) -> Dict[int, BlsPrivateKey]:
+def derive_keys_v3(
+    mnemonic: str, derivation_path: str, amounts: List[int]
+) -> Dict[int, BlsPrivateKey]:
+    """Derive BLS keys from a UTF-8 string seed."""
+    return derive_keys_v3_from_seed(mnemonic.encode(), derivation_path, amounts)
+
+
+def derive_keys_v3_from_seed(
+    seed: bytes, derivation_path: str, amounts: List[int]
+) -> Dict[int, BlsPrivateKey]:
     """
-    Deterministic derivation of BLS12-381 keys for 2^n values.
+    Deterministic derivation of BLS12-381 keys for 2^n values from seed bytes.
     Uses rejection sampling to ensure private keys are uniformly distributed in [1, r-1]
     without any modulo bias.
     """
-    bip32 = BIP32.from_seed(mnemonic.encode())
+    bip32 = BIP32.from_seed(seed)
     keys = {}
     for i, a in enumerate(amounts):
         attempt = 0

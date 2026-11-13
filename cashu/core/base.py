@@ -40,6 +40,7 @@ from .crypto.keys import (
     derive_keys_deprecated_pre_0_15,
     derive_keys_from_seed,
     derive_keys_v3,
+    derive_keys_v3_from_seed,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
@@ -1245,19 +1246,29 @@ class MintKeyset:
         if self.from_mnemonic:
             if not settings.mint_mnemonic:
                 raise Exception("MINT_MNEMONIC not set, but keyset is derived from it.")
-            self.private_keys = derive_keys_from_seed(
-                Mnemonic.to_seed(settings.mint_mnemonic),
-                self.derivation_path,
-                self.amounts,
-            )
+            seed = Mnemonic.to_seed(settings.mint_mnemonic)
+            is_v3 = self.version_tuple >= (0, 23, 0)
+            if is_v3:
+                self.private_keys = derive_keys_v3_from_seed(
+                    seed, self.derivation_path, self.amounts
+                )  # type: ignore[assignment]
+            else:
+                self.private_keys = derive_keys_from_seed(
+                    seed, self.derivation_path, self.amounts
+                )
             public_keys = derive_pubkeys(self.private_keys, self.amounts)
             self.public_keys = public_keys
-            keyset_id = derive_keyset_id_v2(
-                public_keys,
-                self.unit.name,
-                self.final_expiry,
-                self.input_fee_ppk,
-            )
+            if is_v3:
+                keyset_id = derive_keyset_id_v3(
+                    public_keys, self.unit.name, self.input_fee_ppk
+                )
+            else:
+                keyset_id = derive_keyset_id_v2(
+                    public_keys,
+                    self.unit.name,
+                    self.final_expiry,
+                    self.input_fee_ppk,
+                )
             # a keyset loaded from the db must derive to its stored id
             if self.id and self.id != keyset_id:
                 raise Exception(f"Keyset {self.id} was not derived from MINT_MNEMONIC.")
