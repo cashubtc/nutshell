@@ -65,8 +65,12 @@ async def test_cancelled_sqlite_statement_rolls_back_and_releases_lock(
         nonlocal transaction_task
         transaction_task = asyncio.current_task()
         try:
-            async with db.connect(locks=[LockOptions(table="cancellation_values")]) as conn:
-                await conn.execute("UPDATE cancellation_values SET value = 1 WHERE id = 1")
+            async with db.connect(
+                locks=[LockOptions(table="cancellation_values")]
+            ) as conn:
+                await conn.execute(
+                    "UPDATE cancellation_values SET value = 1 WHERE id = 1"
+                )
                 await getattr(conn, operation)(query)
         except asyncio.CancelledError as exc:
             cancelled_errors.append(exc)
@@ -160,7 +164,9 @@ async def test_cancelled_sqlite_lock_wait_releases_lock(
         try:
             async with db.connect(locks=[lock]) as conn:
                 transaction_entered.set()
-                await conn.execute("UPDATE cancellation_values SET value = 2 WHERE id = 1")
+                await conn.execute(
+                    "UPDATE cancellation_values SET value = 2 WHERE id = 1"
+                )
         except asyncio.CancelledError as exc:
             cancelled_errors.append(exc)
             raise
@@ -179,7 +185,9 @@ async def test_cancelled_sqlite_lock_wait_releases_lock(
         )
         await db.execute("INSERT INTO cancellation_values VALUES (1, 0)")
         async with db.connect(locks=[lock]) as blocker:
-            await blocker.execute("UPDATE cancellation_values SET value = 1 WHERE id = 1")
+            await blocker.execute(
+                "UPDATE cancellation_values SET value = 1 WHERE id = 1"
+            )
 
             @event.listens_for(db.engine.sync_engine, "connect")
             def configure_waiter(connection, record):

@@ -1504,11 +1504,16 @@ def test_request_creates_payment_request(mint, nut18_cli_prefix):
     result = runner.invoke(
         cli,
         [
-            *nut18_cli_prefix, "request", "100",
-            "-d", "Coffee",
-            "-m", "https://mint.example.com",
+            *nut18_cli_prefix,
+            "request",
+            "100",
+            "-d",
+            "Coffee",
+            "-m",
+            "https://mint.example.com",
             "--preferred",
-            "--method", "bolt11",
+            "--method",
+            "bolt11",
             "-s",
         ],
     )
@@ -1532,9 +1537,13 @@ def test_request_method_with_fee_syntax(mint, nut18_cli_prefix):
     result = runner.invoke(
         cli,
         [
-            *nut18_cli_prefix, "request", "100",
-            "--method", "bolt11",
-            "--method", "onchain:50",
+            *nut18_cli_prefix,
+            "request",
+            "100",
+            "--method",
+            "bolt11",
+            "--method",
+            "onchain:50",
         ],
     )
     assert result.exception is None, f"Exception: {result.exception}"
@@ -1581,7 +1590,14 @@ def test_request_bech32_creates_nut26_request(mint, nut26_cli_prefix):
 
     result = runner.invoke(
         cli,
-        [*nut26_cli_prefix, "request", "100", "-m", "https://mint.example.com", "--bech32"],
+        [
+            *nut26_cli_prefix,
+            "request",
+            "100",
+            "-m",
+            "https://mint.example.com",
+            "--bech32",
+        ],
     )
     assert result.exception is None, f"Exception: {result.exception}"
 
@@ -1615,9 +1631,7 @@ def test_pay_payment_request_sends_method_fee(funded_cli_prefix, encode, mint_po
         mp=True if mint_policy == "preferred" else None,
         sm=[SupportedMethod(mn="bolt11", mf=5)],
     )
-    result = CliRunner().invoke(
-        cli, [*funded_cli_prefix, "pay", encode(request), "-y"]
-    )
+    result = CliRunner().invoke(cli, [*funded_cli_prefix, "pay", encode(request), "-y"])
     assert result.exit_code == 0, (result.output, result.exception)
     token = TokenV4.deserialize(
         next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
