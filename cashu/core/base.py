@@ -1308,7 +1308,7 @@ class MintKeyset:
                 assert self.public_keys is not None
                 self.id = derive_keyset_id(self.public_keys)
                 logger.info(f"Generated keyset v1 ID: {self.id}")
-        elif self.version_tuple < (0, 22):
+        elif self.version_tuple < (0, 23, 0):
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )

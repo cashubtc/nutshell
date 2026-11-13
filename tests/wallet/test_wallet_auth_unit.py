@@ -29,7 +29,11 @@ from cashu.wallet.crud import get_proofs
         ("0.20.0", "01"),
         ("0.21.0", "01"),
         ("0.21.99", "01"),
-        ("0.22.0", "02"),
+        ("0.22.0", "01"),
+        ("0.22.1", "01"),
+        ("0.22.99", "01"),
+        ("0.23.0", "02"),
+        ("0.23.1", "02"),
     ],
 )
 async def test_auth_tokens_mint_and_spend_across_keyset_versions(
@@ -56,7 +60,7 @@ async def test_auth_tokens_mint_and_spend_across_keyset_versions(
         await ledger.auth_crud.create_user(db=db, user=user)
 
         # An upgraded wallet must still mint tokens with older auth keysets.
-        monkeypatch.setattr(settings, "version", "0.22.0")
+        monkeypatch.setattr(settings, "version", "0.23.0")
         wallet.keyset_id = ledger.keyset.id
         wallet.keysets = {
             ledger.keyset.id: WalletKeyset(

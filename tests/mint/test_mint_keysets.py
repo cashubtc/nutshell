@@ -16,6 +16,7 @@ from cashu.core.base import (
     Unit,
 )
 from cashu.core.crypto import b_dhke
+from cashu.core.crypto.b_dhke import step1_alice, step3_alice
 from cashu.core.crypto.bls import PublicKey as BlsPublicKey
 from cashu.core.crypto.keys import (
     derive_keyset_id,
@@ -328,8 +329,8 @@ async def test_keyset_versions_produce_correct_id_format():
     Test that different versions produce the correct keyset ID format:
     - Very old keysets (< 0.15) had base64 IDs
     - Versions 0.15-0.19 use v1 IDs (00...)
-    - Versions 0.20-0.21 use v2 IDs (01...)
-    - Versions 0.22+ use v3 IDs (02...)
+    - Versions 0.20-0.22 use v2 IDs (01...)
+    - Versions 0.23+ use v3 IDs (02...)
     """
     # Test version < 0.12: base64 ID
     keyset_0_11 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.11.0")
@@ -362,9 +363,11 @@ async def test_keyset_versions_produce_correct_id_format():
     assert is_keyset_id_v2(keyset_0_20.id), "Should be detected as v2"
 
 
-@pytest.mark.parametrize("version", ["0.20.0", "0.21.0", "0.21.99"])
+@pytest.mark.parametrize(
+    "version", ["0.20.0", "0.21.0", "0.21.99", "0.22.0", "0.22.1", "0.22.99"]
+)
 @pytest.mark.parametrize("stored_id", ["", V2_KEYSET_ID], ids=["new", "stored"])
-def test_pre_0_22_keysets_preserve_v2_keys(version: str, stored_id: str):
+def test_pre_0_23_keysets_preserve_v2_keys(version: str, stored_id: str):
     keyset = MintKeyset(
         seed=SEED,
         derivation_path=DERIVATION_PATH,
@@ -379,8 +382,8 @@ def test_pre_0_22_keysets_preserve_v2_keys(version: str, stored_id: str):
     assert all(len(key) == 66 for key in keyset.public_keys_hex.values())
 
 
-@pytest.mark.parametrize("version", [None, "0.22.0", "0.22.1", "0.23.0"])
-def test_keysets_from_0_22_use_v3_keys(version: str | None):
+@pytest.mark.parametrize("version", [None, "0.23.0", "0.23.1", "0.24.0"])
+def test_keysets_from_0_23_use_v3_keys(version: str | None):
     keyset = MintKeyset(
         seed=SEED,
         derivation_path=DERIVATION_PATH,
@@ -399,8 +402,10 @@ def test_keysets_from_0_22_use_v3_keys(version: str | None):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("version", ["0.20.0", "0.21.0", "0.21.99"])
-async def test_v2_ledger_keysets_reload_after_0_22_upgrade(
+@pytest.mark.parametrize(
+    "version", ["0.20.0", "0.21.0", "0.21.99", "0.22.0", "0.22.1", "0.22.99"]
+)
+async def test_v2_ledger_keysets_reload_after_0_23_upgrade(
     monkeypatch, tmp_path, version
 ):
     db = Database("mint", str(tmp_path))
@@ -414,7 +419,23 @@ async def test_v2_ledger_keysets_reload_after_0_22_upgrade(
         assert ledger.keyset.id == V2_KEYSET_ID
         original_keys = ledger.keyset.public_keys_hex
 
-        monkeypatch.setattr(settings, "version", "0.22.0")
+        secret = "proof issued before upgrade"
+        blinded, blinding_factor = step1_alice(secret)
+        outputs = [
+            BlindedMessage(amount=1, id=ledger.keyset.id, B_=blinded.format().hex())
+        ]
+        await ledger._store_blinded_messages(outputs)
+        promises = await ledger._sign_blinded_messages(outputs)
+        signature = step3_alice(
+            PublicKey(bytes.fromhex(promises[0].C_)),
+            blinding_factor,
+            PublicKey(bytes.fromhex(original_keys[1])),
+        )
+        proof = Proof(
+            amount=1, id=ledger.keyset.id, secret=secret, C=signature.format().hex()
+        )
+
+        monkeypatch.setattr(settings, "version", "0.23.0")
         restarted = Ledger(
             db=db, seed=SEED, derivation_path=DERIVATION_PATH, backends={}
         )
@@ -422,9 +443,10 @@ async def test_v2_ledger_keysets_reload_after_0_22_upgrade(
         assert restarted.keyset.id == V2_KEYSET_ID
         assert restarted.keyset.version == version
         assert restarted.keyset.public_keys_hex == original_keys
+        await restarted._verify_inputs([proof])
 
         new_keyset = await restarted.activate_keyset(derivation_path="m/0'/0'/1'")
-        assert new_keyset.version == "0.22.0"
+        assert new_keyset.version == "0.23.0"
         assert new_keyset.id.startswith("02")
         assert all(len(key) == 192 for key in new_keyset.public_keys_hex.values())
     finally:

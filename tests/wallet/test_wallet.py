@@ -44,7 +44,7 @@ KEYSET_ID = (
     "009a1f293253e41e"
     if mint_older_than("0.20.0")
     else "01d8a63077d0a51f9855f066409782ffcb322dc8a2265291865221ed06c039f6bc"
-    if mint_older_than("0.22.0")
+    if mint_older_than("0.23.0")
     else "02f1b93860eb420aba7572f58465e29271bb04f2edadfd95ce2ea2d3497cc4d46a"
 )
 

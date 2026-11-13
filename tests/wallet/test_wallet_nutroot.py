@@ -9,7 +9,7 @@ from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import pay_if_regtest
 
 pytestmark = pytest.mark.skipif(
-    mint_older_than("0.22.0"), reason="Nutroot requires a v3 mint"
+    mint_older_than("0.23.0"), reason="Nutroot requires a v3 mint"
 )
 
 

@@ -60,7 +60,7 @@ def _extract_json(output: str) -> dict:
 
 
 def assert_locked_send(result, lock: str):
-    if not mint_older_than("0.22.0"):
+    if not mint_older_than("0.23.0"):
         assert isinstance(result.exception, NotAllowedError)
         assert "pre-v3 keyset" in str(result.exception)
         return

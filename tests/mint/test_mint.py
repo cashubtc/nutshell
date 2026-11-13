@@ -445,7 +445,7 @@ async def test_melt_quote_ttl_setting_limits_invoice_expiry(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_bls_infinity_dos(ledger: Ledger):
-    keyset = MintKeyset(seed="TEST_PRIVATE_KEY", derivation_path="m/0'/0'/0'", version="0.22.0", unit="sat")
+    keyset = MintKeyset(seed="TEST_PRIVATE_KEY", derivation_path="m/0'/0'/0'", version="0.23.0", unit="sat")
     keyset.active = True
     ledger.keysets[keyset.id] = keyset
     
