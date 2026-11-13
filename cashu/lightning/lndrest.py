@@ -532,6 +532,8 @@ class LndRestWallet(LightningBackend):
 
                         payment_hash = base64.b64decode(inv["r_hash"]).hex()
                         yield payment_hash
+            except httpx.ReadTimeout:
+                logger.debug("LND REST invoice wait timed out; reconnecting")
             except Exception as exc:
                 logger.error(
                     f"lost connection to lnd invoices stream: '{exc}', retrying in {retry_delay}"

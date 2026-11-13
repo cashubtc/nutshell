@@ -401,6 +401,8 @@ class CLNRestWallet(LightningBackend):
                         if payment_hash:
                             yield payment_hash
 
+            except httpx.ReadTimeout:
+                logger.debug("CLN REST invoice wait timed out; reconnecting")
             except Exception as exc:
                 logger.error(
                     f"lost connection to clnrest invoices stream: '{exc}', retrying in {retry_delay}"
