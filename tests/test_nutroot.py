@@ -983,9 +983,16 @@ def test_shared_token_vectors_same_spend_info_from_either_encoder():
     spend_info: both strings decode to the same fields on both sides.
     """
     from cashu.core.base import Proof, SpendInfo, TokenV4, TokenV4Proof, TokenV4Token
+    from cashu.core.crypto.bls import PublicKey as BlsPublicKey
+    from cashu.core.crypto.bls_dhke import pairing_verification
 
     v = VECTORS["tokens_v4"]
     full_id = VECTORS["nut13_v3"]["keyset_id"]
+    keyset = VECTORS["keysets"]["sat"]
+    assert full_id == keyset["id"]
+    mint_key = BlsPublicKey(
+        bytes.fromhex(keyset["keys"][str(v["amount"])]), group="G2"
+    )
     for name, shape in v["shapes"].items():
         si = shape["spend_info"]
         proof = Proof(
@@ -1009,6 +1016,10 @@ def test_shared_token_vectors_same_spend_info_from_either_encoder():
         for encoded in (shape["token_nutshell"], shape["token_cashu_ts"]):
             out = TokenV4.deserialize(encoded).proofs[0]
             assert out.secret == shape["secret"], name
+            assert out.C == shape["C"], name
+            assert pairing_verification(
+                mint_key, BlsPublicKey(bytes.fromhex(out.C)), out.secret
+            ), name
             assert out.spend_info is not None, name
             assert out.spend_info.k == si.get("k"), name
             assert out.spend_info.E == si.get("E"), name
@@ -1673,5 +1684,23 @@ def test_signing_package_spec_vector():
     assert unsigned.serialize() == v["package_string"]
     assert unsigned.contexts()[0].hex() == v["input_digest"]
     signed = SigningPackage.deserialize(v["signed_string"])
+    assert signed.serialize() == v["signed_string"]
     assert signed.contexts()[0].hex() == v["input_digest"]
     assert signed.spends[0].signatures == v["witness"]["signatures"]
+    witnesses = unsigned.merge(
+        [signed], expected_transcript=bytes.fromhex(v["transcript"])
+    )
+    assert json.loads(witnesses[0]) == v["witness"]
+
+
+@pytest.mark.parametrize("unit", ["sat", "auth"])
+def test_shared_keyset_ids_match_public_keys(unit):
+    from cashu.core.crypto.bls import PublicKey as BlsPublicKey
+    from cashu.core.crypto.keys import derive_keyset_id_v3
+
+    keyset = VECTORS["keysets"][unit]
+    keys = {
+        int(amount): BlsPublicKey(bytes.fromhex(key), group="G2")
+        for amount, key in keyset["keys"].items()
+    }
+    assert derive_keyset_id_v3(keys, keyset["unit"]) == keyset["id"]
