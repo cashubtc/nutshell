@@ -31,14 +31,18 @@ from ...core.base import (
     Unit,
     WalletTransactionType,
 )
+from ...core.errors import TransactionError
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
 from ...core.models import PostMintQuoteResponse
+from ...core.nuts.nut10 import parse_spending_condition
 from ...core.nuts.nut18 import deserialize as deserialize_payment_request
 from ...core.nuts.nut18 import method_fee as payment_request_method_fee
 from ...core.nuts.nut18 import serialize as serialize_payment_request
 from ...core.nuts.nut26 import serialize as serialize_payment_request_bech32
+from ...core.p2pk import P2PKSecret
+from ...core.secret import Tags
 from ...core.settings import settings
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
@@ -71,6 +75,9 @@ from ..helpers import (
 from ..lnurl import handle_lnurl
 from ..npc import NpubCash
 from ..subscriptions import SubscriptionManager
+
+# JavaScript wallets such as cashu-ts require safe integers; some mints use fixed-width integers.
+PAY_MAX_LOCKTIME = 2**53 - 1
 
 
 class NaturalOrderGroup(click.Group):
@@ -383,40 +390,53 @@ async def _pay(
                 default=True,
             )
 
-        lock = ""
+        secret_lock = None
         if pr.nut10:
-            # Robust check for lock kind
-            if pr.nut10.k == "P2PK":
-                # check if there are any tags
-                if pr.nut10.t:
-                    print(
-                        f"Error: Unsupported lock tags '{pr.nut10.t}' requested. Aborting"
-                        " for safety."
-                    )
-                    return
-                # check if the data is a valid pubkey (33 bytes hex)
-                if len(pr.nut10.d) != 66:
-                    print(
-                        f"Error: Unsupported lock data length '{len(pr.nut10.d)}' requested."
-                        " Aborting for safety."
-                    )
-                    return
-
-                lock = f"P2PK:{pr.nut10.d}"
-                print(f"Applying P2PK lock: {lock}")
-            else:
+            if pr.nut10.k != "P2PK":
                 print(
                     f"Error: Unsupported lock kind '{pr.nut10.k}' requested. Aborting"
                     " for safety."
                 )
                 return
 
+            tags = pr.nut10.t or []
+            supported_tags = {
+                "locktime",
+                "refund",
+                "pubkeys",
+                "n_sigs",
+                "sigflag",
+                "n_sigs_refund",
+            }
+            for tag in tags:
+                if tag and tag[0] not in supported_tags:
+                    print(
+                        f"Error: Unsupported lock tag '{tag[0]}' requested. Aborting for safety."
+                    )
+                    return
+            secret_lock = P2PKSecret(kind="P2PK", data=pr.nut10.d, tags=Tags(tags))
+            serialized = secret_lock.serialize()
+            try:
+                parse_spending_condition(serialized)
+            except TransactionError as exc:
+                print(f"Error: {exc}")
+                return
+            if secret_lock.locktime is not None and secret_lock.locktime > PAY_MAX_LOCKTIME:
+                print("Error: Requested locktime exceeds the maximum supported value.")
+                return
+            # The mint cannot see output secrets during swap, so check its input limit here.
+            if len(serialized) > settings.mint_max_secret_length:
+                print("Error: Requested lock secret exceeds the maximum length.")
+                return
+            print(f"Applying P2PK lock: P2PK:{pr.nut10.d}")
+
         # Send token
         # This will print the token to stdout
         _, token = await send(
             wallet,
             amount=amount_to_pay,
-            lock=lock,
+            lock="",
+            secret_lock=secret_lock,
             legacy=False,
             offline=False,
             include_dleq=True,

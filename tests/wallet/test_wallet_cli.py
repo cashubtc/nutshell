@@ -4,12 +4,14 @@ import shlex
 import time
 from pathlib import Path
 from typing import Tuple
+from unittest.mock import AsyncMock
 
 import bolt11
 import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, TokenV4
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.nuts.nut18 import deserialize, serialize
 from cashu.core.nuts.nut26 import deserialize as nut26_deserialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
@@ -1211,6 +1213,128 @@ def test_pay_nut18_unsupported_lock(mint, nut18_cli_prefix):
     assert "Unsupported lock kind 'HTLC'" in result.output
     # Should not print token (no payment made)
     assert "cashuB" not in result.output
+
+
+_P2PK_REQUEST_KEY = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+_P2PK_OTHER_KEY = "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize("encode", [serialize, nut26_serialize], ids=["nut18", "nut26"])
+@pytest.mark.parametrize(
+    "tags",
+    [
+        [],
+        [["pubkeys", _P2PK_OTHER_KEY], ["n_sigs", "2"], ["sigflag", "SIG_ALL"]],
+        [
+            ["locktime", "4102444800"],
+            ["refund", _P2PK_OTHER_KEY],
+            ["n_sigs_refund", "1"],
+            ["sigflag", "SIG_INPUTS"],
+        ],
+        [["locktime", "4102444800"]],
+        [["refund", _P2PK_OTHER_KEY]],
+    ],
+)
+def test_pay_preserves_requested_p2pk_tags(funded_cli_prefix, encode, tags):
+    request = PaymentRequest(
+        a=10, u="sat", nut10=NUT10Option(k="P2PK", d=_P2PK_REQUEST_KEY, t=tags)
+    )
+    result = CliRunner().invoke(cli, [*funded_cli_prefix, "pay", encode(request), "-y"])
+    assert result.exit_code == 0, (result.output, result.exception)
+    token = TokenV4.deserialize(
+        next(line for line in result.stdout.splitlines() if line.startswith("cashuB"))
+    )
+    assert sum(proof.amount for proof in token.proofs) == 10
+    for proof in token.proofs:
+        secret = P2PKSecret.deserialize(proof.secret)
+        assert secret.kind == "P2PK"
+        assert secret.data == _P2PK_REQUEST_KEY
+        assert secret.tags.root == tags
+
+
+@pytest.mark.skipif(not is_fake, reason="requires FakeWallet")
+@pytest.mark.parametrize(
+    "data, tags, error",
+    [
+        ("not-a-public-key", [], "invalid compressed public key"),
+        pytest.param(
+            _P2PK_REQUEST_KEY,
+            [["locktime", "9007199254740992"]],
+            "Requested locktime exceeds the maximum supported value",
+            id="unsafe-javascript-locktime",
+        ),
+        pytest.param(
+            _P2PK_REQUEST_KEY,
+            [["locktime", "100000000000000000000"]],
+            "Requested locktime exceeds the maximum supported value",
+            id="oversized-locktime",
+        ),
+        pytest.param(
+            _P2PK_REQUEST_KEY,
+            [
+                [
+                    "pubkeys",
+                    *[
+                        PrivateKey(i.to_bytes(32, "big")).public_key.format().hex()
+                        for i in range(2, 16)
+                    ],
+                ]
+            ],
+            "Requested lock secret exceeds the maximum length",
+            id="oversized-secret",
+        ),
+        (_P2PK_REQUEST_KEY, [["unknown", "value"]], "Unsupported lock tag 'unknown'"),
+        (
+            _P2PK_REQUEST_KEY,
+            [["refund_delay", "3600"]],
+            "Unsupported lock tag 'refund_delay'",
+        ),
+        (
+            _P2PK_REQUEST_KEY,
+            [["locktime", "1"], ["locktime", "2"]],
+            "duplicate locktime tag",
+        ),
+        (_P2PK_REQUEST_KEY, [["n_sigs", "0"]], "n_sigs must be a positive integer"),
+        (_P2PK_REQUEST_KEY, [["n_sigs", "two"]], "n_sigs must be a positive integer"),
+        (_P2PK_REQUEST_KEY, [["n_sigs", "2"]], "n_sigs exceeds available pubkeys"),
+        (
+            _P2PK_REQUEST_KEY,
+            [["n_sigs_refund", "-1"]],
+            "n_sigs_refund must be a positive integer",
+        ),
+        (
+            _P2PK_REQUEST_KEY,
+            [["n_sigs_refund", "two"]],
+            "n_sigs_refund must be a positive integer",
+        ),
+        (
+            _P2PK_REQUEST_KEY,
+            [["n_sigs_refund", "1"]],
+            "n_sigs_refund exceeds available pubkeys",
+        ),
+        (_P2PK_REQUEST_KEY, [["locktime", "tomorrow"]], "locktime must be an integer"),
+    ],
+)
+def test_pay_rejects_invalid_p2pk_tags_before_spending(
+    funded_cli_prefix, monkeypatch, data, tags, error
+):
+    swap = AsyncMock()
+    select = AsyncMock()
+    reserve = AsyncMock()
+    monkeypatch.setattr(Wallet, "swap_to_send", swap)
+    monkeypatch.setattr(Wallet, "select_to_send", select)
+    monkeypatch.setattr(Wallet, "set_reserved_for_send", reserve)
+    request = PaymentRequest(a=10, u="sat", nut10=NUT10Option(k="P2PK", d=data, t=tags))
+    result = CliRunner().invoke(
+        cli, [*funded_cli_prefix, "pay", serialize(request), "-y"]
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert error in result.output, (result.output, result.exception)
+    assert "cashuB" not in result.stdout
+    swap.assert_not_awaited()
+    select.assert_not_awaited()
+    reserve.assert_not_awaited()
 
 
 @pytest.mark.skipif(not is_fake, reason="only works with FakeWallet")
