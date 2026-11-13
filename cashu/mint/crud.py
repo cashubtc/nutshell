@@ -45,6 +45,25 @@ class LedgerCrud(ABC):
         conn: Optional[Connection] = None,
     ) -> List[MintKeyset]: ...
 
+    async def get_keyset_metadata(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read mutable metadata, with a fallback for custom CRUD implementations."""
+        return [
+            {
+                "id": keyset.id,
+                "active": keyset.active,
+                "valid_from": keyset.valid_from,
+                "valid_to": keyset.valid_to,
+                "first_seen": keyset.first_seen,
+                "final_expiry": keyset.final_expiry,
+            }
+            for keyset in await self.get_keyset(db=db, conn=conn)
+        ]
+
     @abstractmethod
     async def get_proofs_used(
         self,
@@ -911,6 +930,15 @@ class LedgerCrudSqlite(LedgerCrud):
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
     ) -> None:
+        # NOTE: back-fills timestamps on the caller's keyset object (mutation is
+        # intentional) so in-memory copies stay consistent with the stored row.
+        if not keyset.valid_from:
+            keyset.valid_from = db.timestamp_now_str()
+        if not keyset.valid_to:
+            keyset.valid_to = db.timestamp_now_str()
+        if not keyset.first_seen:
+            keyset.first_seen = db.timestamp_now_str()
+
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema("keysets")}
@@ -923,13 +951,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "encrypted_seed": keyset.encrypted_seed,
                 "seed_encryption_method": keyset.seed_encryption_method,
                 "derivation_path": keyset.derivation_path,
-                "valid_from": db.to_timestamp(
-                    keyset.valid_from or db.timestamp_now_str()
-                ),
-                "valid_to": db.to_timestamp(keyset.valid_to or db.timestamp_now_str()),
-                "first_seen": db.to_timestamp(
-                    keyset.first_seen or db.timestamp_now_str()
-                ),
+                "valid_from": db.to_timestamp(keyset.valid_from),
+                "valid_to": db.to_timestamp(keyset.valid_to),
+                "first_seen": db.to_timestamp(keyset.first_seen),
                 "active": True,
                 "version": keyset.version,
                 "unit": keyset.unit.name,
@@ -1058,6 +1082,20 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return [MintKeyset.from_row(row) for row in rows]  # type: ignore
 
+    async def get_keyset_metadata(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Dict[str, Any]]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT id, active, valid_from, valid_to, first_seen, final_expiry
+            FROM {db.table_with_schema("keysets")}
+            """
+        )
+        return [dict(row) for row in rows]
+
     async def update_keyset(
         self,
         *,
@@ -1089,7 +1127,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 "version": keyset.version,
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
-                "balance": keyset.balance,
                 "final_expiry": keyset.final_expiry,  # NEW: Update final expiry
             },
         )
