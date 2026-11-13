@@ -15,6 +15,7 @@ from tests.helpers import (
     get_real_invoice,
     is_fake,
     pay_if_regtest,
+    use_v2_keyset,
 )
 
 
@@ -157,6 +158,8 @@ async def test_balance_update_on_mint(wallet: Wallet, ledger: Ledger):
 async def test_balance_update_on_test_melt_internal(
     wallet: Wallet, ledger: Ledger, monkeypatch
 ):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     monkeypatch.setattr(settings, "fakewallet_brr", False)
     # mint twice so we have enough to pay the second invoice back
     mint_quote = await wallet.request_mint(128)
@@ -222,6 +225,8 @@ async def test_balance_update_on_test_melt_internal(
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
+    # Inherited test: it melts without nutroot witnesses, so it belongs on the v2 keyset.
+    await use_v2_keyset(wallet)
     # mint twice so we have enough to pay the second invoice back
     mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(mint_quote.request)

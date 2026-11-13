@@ -1,0 +1,678 @@
+{
+  "description": "Shared nutroot-v3 test vectors, worked NUT-10/NUT-28 examples (nuts tests/10-tests.md, tests/28-tests.md). Canonical copy: cashu-ts test/vectors/nutroot-v3.json; nutshell copy: tests/nutroot_v3_vectors.json. If vectors change, update both copies in the same commit set. All signatures are BIP-340 with aux randomness = 32 zero bytes.",
+  "tags": {
+    "leaf": "Cashu_NutrootLeaf",
+    "branch": "Cashu_NutrootBranch",
+    "tweak": "Cashu_NutrootTweak",
+    "p2bk": "Cashu_P2BK_v1"
+  },
+  "receiver_keyed_refund": {
+    "comment": "Alice pays Carol 8 sats, refundable to Alice after time t. Receiver-keyed (P2BK slot 0) internal key, one after leaf.",
+    "carol_priv": "0000000000000000000000000000000000000000000000000000000000000003",
+    "carol_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "alice_refund_priv": "0000000000000000000000000000000000000000000000000000000000000004",
+    "alice_refund_pub": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "ephemeral_priv": "0000000000000000000000000000000000000000000000000000000000000005",
+    "ephemeral_pub": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+    "p2bk_slot": 0,
+    "p2bk_r": "7dfb649b0edda814f7cf0feb889e5657eb2083a528aa60a3a943fe0cea066181",
+    "internal_key": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
+    "refund_time": 1755561600,
+    "leaf_after": "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80",
+    "merkle_root": "9ed9c0b8907f7af4fce51cbeac218907bbf80ba40f3342df2406bce30616589a",
+    "tweak": "b3b7846b14be0650bb03272d179931221637744d1997df80bf27d2df5effe8a4",
+    "secret": "02d310a4d661e3158e7d360617e739d6bacbf015431b24a43168db0ab99ef8f828",
+    "keypath_priv": "31b2e906239bae65b2d23718a037877b46a91b0b92f99fe8a899725f78d008e7",
+    "keypath_signature": "619e0726595b5adff06cc3e6ea1c409f10f7b064cf8888f0eed0efbac854eabf4632642930bdc7c4d7d983379301a4f263991dbd19d96e5ebcfab9e8583bd510",
+    "scriptpath_witness": {
+      "leaf": "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80",
+      "control": {
+        "K": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
+        "path": []
+      },
+      "signatures": [
+        "0b2ea247bfca1264db86907aef4cb19935ed9a5b2043a757259dcdb5c599372c230602f2cfc0cd8b11aa98ff17fbed91f38f07db817263fcc7c50c846715873e"
+      ]
+    },
+    "bearer_contrast": {
+      "k": "0000000000000000000000000000000000000000000000000000000000000007",
+      "secret": "025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc"
+    },
+    "illustrative_input_digest_preimage": "illustrative transaction transcript",
+    "illustrative_input_digest": "e1d7170b89a2b6eedec90453e32b6c320dfadd590e6a6454bddec95a0e3834cd"
+  },
+  "two_leaf_covenant": {
+    "comment": "Allowance covenant: kid may melt toward family node until vesting, parent holds key path. Two leaves, one branch. The melt_to leaf type (0x05) is unallocated in NUT-10, so the nuts tests reuse this tree as the fail-closed unknown-type vector.",
+    "kid_priv": "0000000000000000000000000000000000000000000000000000000000000003",
+    "kid_pub": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "parent_priv": "0000000000000000000000000000000000000000000000000000000000000006",
+    "internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+    "node_pub": "03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+    "vest_time": 1758240000,
+    "leaf_melt_to": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+    "leaf_after": "00020200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f906000468cc9d00",
+    "leaf_hash_melt_to": "8714a51c3019861df9c4d0d6a1f30f0465ea1252e9c3b949802f73eda61cb101",
+    "leaf_hash_after": "80468218b6e329d4d80682883617af0acd1d4a9d5b1658fbc448cc4781b4f254",
+    "merkle_root": "9d8170c0f86d30de108834ff1ee334decac6ae094fb07652801d9c159c7b1bed",
+    "tweak": "153e9c65e6bea3351f4e78145f328e5aae7e7a4722967bf347f057bcaa47bfba",
+    "secret": "02f4ff2c2894698847760b62bce9d0d6c6c745d0d85c83577a00337d75437bccf0",
+    "melt_witness": {
+      "leaf": "00050200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f90a002103acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe",
+      "control": {
+        "K": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+        "path": [
+          "80468218b6e329d4d80682883617af0acd1d4a9d5b1658fbc448cc4781b4f254"
+        ]
+      },
+      "signatures": [
+        "27f53ffb8fe7bae5da0a754fd63aeb04fbfc7ee16c865fb5af3fb4411785b784df09a810c470386602fab69c450dc249efb465cff27f5322d1305e3eaec4d6fb"
+      ]
+    },
+    "after_witness_path": [
+      "8714a51c3019861df9c4d0d6a1f30f0465ea1252e9c3b949802f73eda61cb101"
+    ],
+    "illustrative_input_digest_preimage": "illustrative melt transcript",
+    "illustrative_input_digest": "c3530da6be5c8425076a9235228d3ffd24998b9595a5b548b6ee6a4342361765"
+  },
+  "nut13_v3": {
+    "comment": "NUT-13 v3 derivation (nuts 13.md, the v3 message): HMAC(seed, message_v3) with message_v3 = \"Cashu_KDF_HMAC_SHA256\" || u32_be(len(scope_bytes)) || scope_bytes || u64_be(counter) || type || u32_be(attempt) || type_suffix. Every type rejection samples: 0x00 the internal private key k (secret is K = k*G compressed) and 0x02 the NUMS offset u against SECP256K1_N, 0x01 the blinding factor against BLS Fr, 0x03 a self-owned leaf key with suffix u32_be(i), and 0x04 a mint quote lock key on its own per-mint quote counter, whose scope_bytes is the mint identity pubkey (mint_identity, the NUT-06 example identity) rather than a keyset id, so quote_locks below do not depend on keyset_id. Types 0x00-0x03 share the proof counter, 0x04 the quote counter. The framing is V3 only: the V2 message keeps its unframed form. Key derivation (0x00) accepts at attempts 0, 0, 0, 0 and blinding factors (0x01) at attempts 0, 3, 0, 1 for counters 0, 1, 2, 3, exercising the rejection loop. Counter 0 also carries Y = bls_hash_to_curve(raw 33 secret bytes) pinning the binary-secret hashing rule and DST across implementations.",
+    "seed_hex": "6e757431332076332074657374207365656400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+    "outputs": [
+      {
+        "counter": 0,
+        "secret_key": "930c88ad9dc8531c147862d4ef9c0981200ff1f510c0a9e1c024db725a1d56c6",
+        "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+        "blinding_factor": "4381a54d5fb006bf9cd63a30e857f0ef4b58a5a123c7cd8909099abe77d5736e",
+        "Y": "90f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8",
+        "nums_offset": "c4b697b346799e55a80ba7a0b6f7670a7f62a985c97de685dc693e87dc6d137a"
+      },
+      {
+        "counter": 1,
+        "secret_key": "a2ac179175fc3bb7c8cf05542193017a0d33b3316ea5d8a97777c7660d2a55b6",
+        "secret": "0385fe6eb0608c6b5241e0fd86ebbd5dd30a6a97a0014a110c0c6297001147e5be",
+        "blinding_factor": "2349fa461401f98e1ffa80d34baf1c11bbe62014bbd076985229f0706cda83f1",
+        "nums_offset": "1b864ba8bba906c1bd1b56e58c1b0fe4ee8d3bea42849309102c81a8854f312d"
+      },
+      {
+        "counter": 2,
+        "secret_key": "fec1f9c77a85ea144b6ea2ecd90a61a226855b4ed692a7e8c7db7afb600f7205",
+        "secret": "0390617487ad222beef9f247dbfbd5993313a2d5235add388bd868969c594794a2",
+        "blinding_factor": "7121cd4ce638011afaea356eefe1834b03a86080064c7c28f1eab45c32d7b06e",
+        "nums_offset": "b19ab48593e7ad6fc3c68c23697b6b2544920a1949ca234a6d10a2cdb6455922"
+      },
+      {
+        "counter": 3,
+        "secret_key": "1aa7018e67ac4655d3d6dd120a2c715adb6bcd6b54dbf90a685ae452916edb61",
+        "secret": "039e49f114e0ab5f616b996e93f04ae265e29282df093c08996c093f1fcbb4385f",
+        "blinding_factor": "46186ec0f98f00aaf51a7cb59472c65e35a33f94e2785b6b384d1666b9c1759c",
+        "nums_offset": "3ee8a5612ad8ff4a6f5b7bcf5b6bef7c7a2379fc789401e8e03afbf32da6dfad"
+      }
+    ],
+    "leaf_keys": [
+      {
+        "counter": 0,
+        "index": 0,
+        "privkey": "e6573de10fb740e60350346f7a90e15dfff01efb476c745018f59b6ab5132644",
+        "pubkey": "036ed2c40140c79e5080a15e88cb55f7c08c0107b465cfef8ddcfe66a2ba3532f9"
+      },
+      {
+        "counter": 0,
+        "index": 1,
+        "privkey": "2ab582bed4c0a4c0d746b8bfbe906cf7d7becf88f4dfe66cd194851c64d44bb1",
+        "pubkey": "0369e4632867bd810a4a7065494b48c7fda2dd6ec4eba4fd93ce545bd32d5c45df"
+      },
+      {
+        "counter": 0,
+        "index": 2,
+        "privkey": "520f39607492fad03cf0b2c44929680ef3b0955adf20a9b2d9b64b18bffaeaa4",
+        "pubkey": "037864253663cfeadc8bd3d5d573ca1858378951bbd7fe971712940f38c4c47c86"
+      }
+    ],
+    "quote_locks": [
+      {
+        "counter": 0,
+        "privkey": "8140af6b627ddf38f9148c7266dca12d396de9266859648df699727c5b205a99",
+        "pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+        "id_preimage": "edf57d1f17ccb29ae99e87c539c822cc347cb6912a7992dab04b917b4cd0bc0c",
+        "quote_id": "5abf39c7dd0fe3b17ea04b2ff67bb3de4d8beb6eb7c1c197a6b9c25d077e42e7"
+      },
+      {
+        "counter": 1,
+        "privkey": "5980da641d9391abed79f528dbea0b85a61cff419bc93bce744d105779413b7a",
+        "pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
+        "id_preimage": "54b61b1f5d56ce358cb3b919a4ed1d41e7aae6892376fb0a4fabc0a65a7d6e68",
+        "quote_id": "0118a4cdd84f17f6d59d6bfc8a3bb8be51fb251c661a8211b1f9f77125fb87c5"
+      }
+    ],
+    "mint_identity": "0338596797cef0627f653cd6568387361b00314add55d9f1ea9c94f46ae421e3da"
+  },
+  "transcript": {
+    "comment": "Transaction transcript (NUT-00). digest = SHA256(TLV stream). Each input signs tagged_hash(\"Cashu_TransactionInput\", digest || SHA256(its own container record)) (BIP-340, aux = 32 zero bytes). Containers (high nibble is the section, 1 inputs, 2 outputs): 11 proof input (fields: 01 amount, 02 keyset id, 03 Y = hash_to_curve(secret) on the keyset curve, 04 C), 12 mint quote input (01 amount, 02 quote id utf8, 03 lock key, 04 issued), 21 blinded output (01 amount, 02 keyset id, 03 SHA256(B_)), 22 melt quote output (01 amount, 02 quote id utf8). Container types ascend; request order within a type; amounts minimal big-endian; points and keyset ids raw bytes.",
+    "swap": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+            "C": "a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 4,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          },
+          {
+            "amount": 4,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "a14669f181e074cc466e2a165c47ab7db5b3939e42b349f1201874033943ef279f36476e627ab1c937e8ea6a76448fc2"
+          }
+        ]
+      },
+      "transcript": "11008e01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d70103003090f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8040030a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b621004b01000104020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004b01000104020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d7010300200081a8744c8f3309419a09b08f3ae7e8cdaaaaad64309b78f6fd91f61dfaf502",
+      "digest": "e88d16feadb0abc0cf4a08a7f5929a3a7c5e595f8d4e659d9ba66086aead402e",
+      "signature": "3c2ce5dc36aea01a9b9f44287ef12e67a7fb0e0113720c3a000b5942835426e6635b09c087dbd30bde77ddf03b43b87858b3d2bf29d4b3ca7895f73e4839d3c2",
+      "input_id": "194bd20817e5806bbe198206e63938c8f0ad38a0d89af2179bb517e24caf1db2",
+      "input_digest": "88a664e4f25fbd76baf5846221aa8f9d95beb0341f67d5458332e4f6809abcde"
+    },
+    "mint": {
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-mint-0001",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+            "issued": 0
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "12003d0100010802000f71756f74652d6d696e742d303030310300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d20981204000021004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+      "digest": "37e64e944b7580653f44cfa06b416fac9a548d5bbf372e6545c9c982e5a3a70f",
+      "input_id": "d294012dd54976b05eb3e36eb218b9a6d66b19d79ec122944a35b99b8ddd8839",
+      "input_digest": "b8218d99fe1d3138c16230ed0b119a8ea8a17975131fedd9b7459f2af9aa483a"
+    },
+    "melt": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+            "C": "a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6"
+          }
+        ],
+        "melt_quote_outputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-melt-0001"
+          }
+        ]
+      },
+      "transcript": "11008e01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d70103003090f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8040030a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b62200160100010802000f71756f74652d6d656c742d30303031",
+      "digest": "f2fd9eaf27d572e47d776bd09856f760b3bb18338a9b497bee18b5ebec804048",
+      "input_id": "194bd20817e5806bbe198206e63938c8f0ad38a0d89af2179bb517e24caf1db2",
+      "input_digest": "e5bde063cdeb9187aafc8e521a63c3463188836ff8e1c6575e60c5a045f620b6"
+    },
+    "melt_with_change": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+            "C": "a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 0,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          },
+          {
+            "amount": 0,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "a14669f181e074cc466e2a165c47ab7db5b3939e42b349f1201874033943ef279f36476e627ab1c937e8ea6a76448fc2"
+          }
+        ],
+        "melt_quote_outputs": [
+          {
+            "amount": 8,
+            "quote_id": "quote-melt-0002"
+          }
+        ]
+      },
+      "transcript": "11008e01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d70103003090f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8040030a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b621004a010000020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004a010000020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d7010300200081a8744c8f3309419a09b08f3ae7e8cdaaaaad64309b78f6fd91f61dfaf5022200160100010802000f71756f74652d6d656c742d30303032",
+      "digest": "6649c7b016115b0d7f94fecef9af59ed616a32bb3e9f0313222427d29d087b80",
+      "input_id": "194bd20817e5806bbe198206e63938c8f0ad38a0d89af2179bb517e24caf1db2",
+      "input_digest": "b30a18aa22aabb380329dbf7e2c7915662b26a6f4b901f8799b068fb4ec2fc2f",
+      "quote": {
+        "amount": 5,
+        "fee_reserve": 3
+      },
+      "change": [
+        {
+          "amount": 1,
+          "id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+          "C_": "b8323ba04c279ce45cfd572020ceedd2925f5112769fdc97f8669f9b0e9080d78cc28c1846d59157f8fa6e329c90ad3d"
+        },
+        {
+          "amount": 2,
+          "id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+          "C_": "a5845c6eff7c6eb2a1b17e7579ed880c1b335e137f1527c143b82c7e606f366bee79d7f9937799fb9941f1e9a060c752"
+        }
+      ],
+      "signature": "8129d244fa8d370a70c511f934788f2327f35739b8a60dac4545f190882a72774a947323ef6399d3e5e16e8687810549c19dcaab054f700caf05cbcd2e9c457b"
+    },
+    "multi_input": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+            "C": "a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6"
+          },
+          {
+            "amount": 4,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "secret": "0385fe6eb0608c6b5241e0fd86ebbd5dd30a6a97a0014a110c0c6297001147e5be",
+            "C": "84c2b06e690cf434f38bca886cfe2ca2d8739231f14b350d907bd4dd62ef901c0c99453d30651d43727cdbb2f07fd1b3"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          },
+          {
+            "amount": 4,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "a14669f181e074cc466e2a165c47ab7db5b3939e42b349f1201874033943ef279f36476e627ab1c937e8ea6a76448fc2"
+          }
+        ]
+      },
+      "transcript": "11008e01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d70103003090f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8040030a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b611008e01000104020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030030852a4d9ee7d55ac32177661defca80c7baee2743d2473ae38515bf99cf64f2fe1c8437282fa09ef733d6359340fe4f4a04003084c2b06e690cf434f38bca886cfe2ca2d8739231f14b350d907bd4dd62ef901c0c99453d30651d43727cdbb2f07fd1b321004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004b01000104020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d7010300200081a8744c8f3309419a09b08f3ae7e8cdaaaaad64309b78f6fd91f61dfaf502",
+      "digest": "9430a89c2db9df2a8c645369ea6f8ca1100f21b3c365ac0bb153422d2fd7e483",
+      "inputs": [
+        {
+          "input_id": "194bd20817e5806bbe198206e63938c8f0ad38a0d89af2179bb517e24caf1db2",
+          "input_digest": "56a8a7ea8c0e785f2c4b77b99648daca04f7e110dac4c86b2d6372a34ce9393e",
+          "signature": "d390c4ad38c949c3dceb1d6a75de4bbb68291e2a72a4abef26ea3a0d373a24840572aef6d4359f8baea1ae2ed62336c8d833e91aaf3e78f32c7cf9c0581c3552"
+        },
+        {
+          "input_id": "810d7cc016b5e6af4dff55b4c96ee7ed397c5e845058abf04ecd479edc50b69a",
+          "input_digest": "681a5a9f1881a685e5e8fb0d33dabd7c8987bf78a1e9424bb4535d124dfe6877",
+          "signature": "f608bb156579e85c5788de9e7d89e10a0aeb39ba6983bc352583406cd8eab1743cdb1eb0b7fb31f2679a2f0c4138b72cfbc92888d409af26c4109016a378a74a"
+        }
+      ]
+    },
+    "batch_mint": {
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 5,
+            "quote_id": "quote-mint-0002",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+            "issued": 0
+          },
+          {
+            "amount": 3,
+            "quote_id": "quote-mint-0003",
+            "lock_pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
+            "issued": 0
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "12003d0100010502000f71756f74652d6d696e742d303030320300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d20981204000012003d0100010302000f71756f74652d6d696e742d3030303303002102b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d04000021004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+      "digest": "8203006b339dd16a3f6293c0f300bebb3c9ad620755477b1372c0fa479540c72",
+      "inputs": [
+        {
+          "quote_id": "quote-mint-0002",
+          "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+          "input_id": "8c7f916779dfba1b7ea2e0d3e69d1ee7eed1895af2891406fe8bdb7fbe0f39aa",
+          "input_digest": "5b87defd8dadbd2b0faf359f53b00a74b0642e5b91dd4046e0183738a812ed13",
+          "signature": "badda23b373f0d1da963af4d424dbbbccce933ba0c81bc3e2c8ade13decdad8df57ca75efcb4eaa2e02eee9bd43066fce76fee22599f4a513354c138efa6bfb6"
+        },
+        {
+          "quote_id": "quote-mint-0003",
+          "lock_pubkey": "02b357c1ec7bdd73e4ede25d68619ee607c632409e89bcc518a82370b3f499615d",
+          "input_id": "f7a60306c44e910fd5dea355541c4a4bb251220690688279bf08e7d19b3e9e45",
+          "input_digest": "ac0d58749a343394a0fe5605771be16466ece1ecb331fa1aae0c92ac00136c13",
+          "signature": "f272dca3c46470511b4ac1ab47a2135d1c7a6af4b6b49ec7c1d120f7704888cce5af8f2026c548a2d5201aebe384f2b798a2c1e439c89d9decc915bc890a4474"
+        }
+      ]
+    },
+    "partial_mint": {
+      "quote_amount": 8,
+      "tx": {
+        "mint_quote_inputs": [
+          {
+            "amount": 4,
+            "quote_id": "quote-mint-0004",
+            "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+            "issued": 3
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 4,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          }
+        ]
+      },
+      "transcript": "12003e0100010402000f71756f74652d6d696e742d303030340300210292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d2098120400010321004b01000104020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+      "digest": "90d943e1f02938e5d50a7ead9f04ec1a633bc207bf7976f54569632db62d8d4d",
+      "lock_pubkey": "0292905560a6a511a13e383ee27e220aeffc85b7a7bc293e6935b1d3678d209812",
+      "input_id": "c2e4168d079d7ccc6c9fc80c480e75a255282ec41e660afad42cf743c95f14e3",
+      "input_digest": "7754960e452ae522213f1112c6eb5946b0bac278b0a307e38927d59531ed558e",
+      "signature": "c6709751b0d3c14fef333326f4cd9d45c7af327ea4659a7b4637e92d9a82b0f6c25a4bce9e99385f40f39ea6fe26af9ba07bfaf2c378f2f47a1eb2d474a0a7a6",
+      "blind_signatures": [
+        {
+          "amount": 4,
+          "id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+          "C_": "98a471f36a34323f96a1b5783bd98829f9fc69687a9c4f6774c23d89b8f0f2c93e8510992c7942e1980746138c90ae26"
+        }
+      ]
+    },
+    "mixed_keysets": {
+      "tx": {
+        "proof_inputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+            "C": "a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6"
+          },
+          {
+            "amount": 2,
+            "keyset_id": "00456a94ab4e1c46",
+            "secret": "d341ee4871f1f889041e63cf0d3823c713eea6aff01e80f1719f08f9e5be98f6",
+            "C": "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+          }
+        ],
+        "blinded_outputs": [
+          {
+            "amount": 8,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+          },
+          {
+            "amount": 2,
+            "keyset_id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+            "B_": "a14669f181e074cc466e2a165c47ab7db5b3939e42b349f1201874033943ef279f36476e627ab1c937e8ea6a76448fc2"
+          }
+        ]
+      },
+      "transcript": "11008e01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d70103003090f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8040030a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b61100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba221004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004b01000102020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d7010300200081a8744c8f3309419a09b08f3ae7e8cdaaaaad64309b78f6fd91f61dfaf502",
+      "digest": "c08be9ca9632ce753c31227e470ecb38ff19df071fd828d1818eb14ea4da489f",
+      "inputs": [
+        {
+          "Y": "90f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8",
+          "container": "11008e01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d70103003090f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8040030a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6",
+          "input_id": "194bd20817e5806bbe198206e63938c8f0ad38a0d89af2179bb517e24caf1db2",
+          "input_digest": "94a0d329d7c66c55e0c968bbb680fbb4c7f4d01f6a29f93d6a5975dd15812776",
+          "signature": "d5e861c7ee7635fa2b8dc58aabe2ceb0997651a6e1e85cc3aed31aad42871f4d2444707ad20337a21da5f35e561ca83ec36880ecb2fd8c25eccf33856b99ca93"
+        },
+        {
+          "Y": "029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae",
+          "container": "1100570100010202000800456a94ab4e1c46030021029ef117210f475254efd911de93a9d22d471e356f5b1e3f00df8c24bbb37bd3ae04002102a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+          "input_id": "efbdd5d14874cb021fc962d93a9848553ca65ae101e9b57f6678aa37ffe1ebd9"
+        }
+      ]
+    }
+  },
+  "tokens_v4": {
+    "comment": "Cross-implementation V4 token vectors (NUT-10 spend-info shapes). One 8-sat proof per token, mint https://mint.test, unit sat, keyset nut13_v3.keyset_id, each shape carries its proof's signature C. The `si` CBOR map carries k (bearer scalar), e (ephemeral E), i (internal key K), u (NUMS offset, present iff i is H + u*G), t (serialized leaves). The two encoders legitimately differ on things NUT-00 leaves free: cashu-ts writes the short (8-byte) keyset id and orders the top-level map m,u,t; nutshell writes the full 33-byte id and orders it t,m,u. What must agree is the spend_info: each side decodes BOTH strings to the same fields, and reproduces its own string exactly, so encoder drift shows up here.",
+    "mint": "https://mint.test",
+    "unit": "sat",
+    "amount": 8,
+    "shapes": {
+      "bearer_k": {
+        "secret": "0240c186f3e19f6f8cd00db81c5266d5c74ddca48ff848efd0e3e125b2846f30d9",
+        "C": "a33dd4de26ea950060ae5c45bdc408d72aaf51ba9f4ccdeee4a040df067ca87c799a406fec88c2a328b75b290e27f7b6",
+        "spend_info": {
+          "k": "930c88ad9dc8531c147862d4ef9c0981200ff1f510c0a9e1c024db725a1d56c6"
+        },
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAIlRqsKLe6fYXCBpGFhCGFzeEIwMjQwYzE4NmYzZTE5ZjZmOGNkMDBkYjgxYzUyNjZkNWM3NGRkY2E0OGZmODQ4ZWZkMGUzZTEyNWIyODQ2ZjMwZDlhY1gwoz3U3ibqlQBgrlxFvcQI1yqvUbqfTM3u5KBA3wZ8qHx5mkBv7IjCoyi3WykOJ_e2YnNpoWFrWCCTDIitnchTHBR4YtTvnAmBIA_x9RDAqeHAJNtyWh1Wxg",
+        "token_nutshell": "cashuBo2F0gaJhaVghAiVGqwot7p95UQ9OIKTj2eiUqXNhBHxZSQJXOn5k-dcBYXCBpGFhCGFzeEIwMjQwYzE4NmYzZTE5ZjZmOGNkMDBkYjgxYzUyNjZkNWM3NGRkY2E0OGZmODQ4ZWZkMGUzZTEyNWIyODQ2ZjMwZDlhY1gwoz3U3ibqlQBgrlxFvcQI1yqvUbqfTM3u5KBA3wZ8qHx5mkBv7IjCoyi3WykOJ_e2YnNpoWFrWCCTDIitnchTHBR4YtTvnAmBIA_x9RDAqeHAJNtyWh1WxmFtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0"
+      },
+      "receiver_keyed_E": {
+        "secret": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
+        "C": "8ebb4624404a3ea52ae2eed274c2997ad6c698505cacf2011e521c915c59690981c36c1a2cb8453e37de7d4ce58b2336",
+        "spend_info": {
+          "E": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4"
+        },
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAIlRqsKLe6fYXCBpGFhCGFzeEIwM2EzZTEyY2MwNzdlNTYwNWYzNjQ0MTA0NmY1MGMxMTRmY2M4ODNiMDc5YTM0MDI4YmVkNjY3MzJlM2E0MTllNTFhY1gwjrtGJEBKPqUq4u7SdMKZetbGmFBcrPIBHlIckVxZaQmBw2waLLhFPjfefUzliyM2YnNpoWFlWCECL4veTRoHIJNVtKclClxRKOiLhL3cYZq3y6jVabJA7-Q",
+        "token_nutshell": "cashuBo2F0gaJhaVghAiVGqwot7p95UQ9OIKTj2eiUqXNhBHxZSQJXOn5k-dcBYXCBpGFhCGFzeEIwM2EzZTEyY2MwNzdlNTYwNWYzNjQ0MTA0NmY1MGMxMTRmY2M4ODNiMDc5YTM0MDI4YmVkNjY3MzJlM2E0MTllNTFhY1gwjrtGJEBKPqUq4u7SdMKZetbGmFBcrPIBHlIckVxZaQmBw2waLLhFPjfefUzliyM2YnNpoWFlWCECL4veTRoHIJNVtKclClxRKOiLhL3cYZq3y6jVabJA7-RhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA"
+      },
+      "receiver_keyed_tree": {
+        "secret": "02d310a4d661e3158e7d360617e739d6bacbf015431b24a43168db0ab99ef8f828",
+        "C": "84da102b0f13957bbea4a92665c31bff64a8c7a5c00867c3f54dae1579ad7c641ba87c35de54db0868934a0b966e3d4c",
+        "spend_info": {
+          "E": "022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4",
+          "tree": [
+            "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+          ]
+        },
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAIlRqsKLe6fYXCBpGFhCGFzeEIwMmQzMTBhNGQ2NjFlMzE1OGU3ZDM2MDYxN2U3MzlkNmJhY2JmMDE1NDMxYjI0YTQzMTY4ZGIwYWI5OWVmOGY4MjhhY1gwhNoQKw8TlXu-pKkmZcMb_2Sox6XACGfD9U2uFXmtfGQbqHw13lTbCGiTSguWbj1MYnNpomFlWCECL4veTRoHIJNVtKclClxRKOiLhL3cYZq3y6jVabJA7-RhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoA",
+        "token_nutshell": "cashuBo2F0gaJhaVghAiVGqwot7p95UQ9OIKTj2eiUqXNhBHxZSQJXOn5k-dcBYXCBpGFhCGFzeEIwMmQzMTBhNGQ2NjFlMzE1OGU3ZDM2MDYxN2U3MzlkNmJhY2JmMDE1NDMxYjI0YTQzMTY4ZGIwYWI5OWVmOGY4MjhhY1gwhNoQKw8TlXu-pKkmZcMb_2Sox6XACGfD9U2uFXmtfGQbqHw13lTbCGiTSguWbj1MYnNpomFlWCECL4veTRoHIJNVtKclClxRKOiLhL3cYZq3y6jVabJA7-RhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoBhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA"
+      },
+      "explicit_K_tree": {
+        "secret": "02d310a4d661e3158e7d360617e739d6bacbf015431b24a43168db0ab99ef8f828",
+        "C": "84da102b0f13957bbea4a92665c31bff64a8c7a5c00867c3f54dae1579ad7c641ba87c35de54db0868934a0b966e3d4c",
+        "spend_info": {
+          "K": "03a3e12cc077e5605f36441046f50c114fcc883b079a34028bed66732e3a419e51",
+          "tree": [
+            "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+          ]
+        },
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAIlRqsKLe6fYXCBpGFhCGFzeEIwMmQzMTBhNGQ2NjFlMzE1OGU3ZDM2MDYxN2U3MzlkNmJhY2JmMDE1NDMxYjI0YTQzMTY4ZGIwYWI5OWVmOGY4MjhhY1gwhNoQKw8TlXu-pKkmZcMb_2Sox6XACGfD9U2uFXmtfGQbqHw13lTbCGiTSguWbj1MYnNpomFpWCEDo-EswHflYF82RBBG9QwRT8yIOweaNAKL7WZzLjpBnlFhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoA",
+        "token_nutshell": "cashuBo2F0gaJhaVghAiVGqwot7p95UQ9OIKTj2eiUqXNhBHxZSQJXOn5k-dcBYXCBpGFhCGFzeEIwMmQzMTBhNGQ2NjFlMzE1OGU3ZDM2MDYxN2U3MzlkNmJhY2JmMDE1NDMxYjI0YTQzMTY4ZGIwYWI5OWVmOGY4MjhhY1gwhNoQKw8TlXu-pKkmZcMb_2Sox6XACGfD9U2uFXmtfGQbqHw13lTbCGiTSguWbj1MYnNpomFpWCEDo-EswHflYF82RBBG9QwRT8yIOweaNAKL7WZzLjpBnlFhdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoBhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA"
+      },
+      "script_only_u": {
+        "secret": "035f02db4e3b429de04669e8fba1e786719de8336cedeff3048e944ebcfaf08e23",
+        "C": "96a00e75fb006e1ebbeae860e0a0953c9da1aef46ba4616611c99191a31a96edf2a809cf365de4a4febc26413cb914cf",
+        "spend_info": {
+          "K": "031ed5e2846820073c39cca136f69aa3509b88b8f7f0e9f30159dea1178fa725f5",
+          "u": "c4b697b346799e55a80ba7a0b6f7670a7f62a985c97de685dc693e87dc6d137a",
+          "tree": [
+            "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80"
+          ]
+        },
+        "token_nutshell": "cashuBo2F0gaJhaVghAiVGqwot7p95UQ9OIKTj2eiUqXNhBHxZSQJXOn5k-dcBYXCBpGFhCGFzeEIwMzVmMDJkYjRlM2I0MjlkZTA0NjY5ZThmYmExZTc4NjcxOWRlODMzNmNlZGVmZjMwNDhlOTQ0ZWJjZmFmMDhlMjNhY1gwlqAOdfsAbh676uhg4KCVPJ2hrvRrpGFmEcmRkaMalu3yqAnPNl3kpP68JkE8uRTPYnNpo2FpWCEDHtXihGggBzw5zKE29pqjUJuIuPfw6fMBWd6hF4-nJfVhdVggxLaXs0Z5nlWoC6egtvdnCn9iqYXJfeaF3Gk-h9xtE3phdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoBhbXFodHRwczovL21pbnQudGVzdGF1Y3NhdA",
+        "token_cashu_ts": "cashuBo2FtcWh0dHBzOi8vbWludC50ZXN0YXVjc2F0YXSBomFpSAIlRqsKLe6fYXCBpGFhCGFzeEIwMzVmMDJkYjRlM2I0MjlkZTA0NjY5ZThmYmExZTc4NjcxOWRlODMzNmNlZGVmZjMwNDhlOTQ0ZWJjZmFmMDhlMjNhY1gwlqAOdfsAbh676uhg4KCVPJ2hrvRrpGFmEcmRkaMalu3yqAnPNl3kpP68JkE8uRTPYnNpo2FpWCEDHtXihGggBzw5zKE29pqjUJuIuPfw6fMBWd6hF4-nJfVhdVggxLaXs0Z5nlWoC6egtvdnCn9iqYXJfeaF3Gk-h9xtE3phdIFYMQACAgABAQQAIQLkk9vxwQ2A81geSQSTCxQEzGwTkA7gdYR0-pSr6MTNEwYABGijvoA"
+      }
+    }
+  },
+  "empty_tweak": {
+    "comment": "Empty tweak (NUT-10, the internal key): an aggregated key commits to having no script path by tweaking with the key alone. t = tagged_hash(\"Cashu_NutrootTweak\", K) with no merkle root, secret = K + t*G. The key is receiver_keyed_refund.carol_priv, so the internal key is receiver_keyed_refund.carol_pub. keypath_priv is (k + t) mod n, the key that signs a spend.",
+    "internal_key": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "tweak": "764c0e0da0d17acb5cc863fbe939211869e04e522c017171a0b71e91d5b69908",
+    "secret": "03b2bb251c006ae42d9c19f3157d02b3c347b1fb6512885225a8699a06d9233aee",
+    "keypath_priv": "764c0e0da0d17acb5cc863fbe939211869e04e522c017171a0b71e91d5b6990b"
+  },
+  "leaf_forms": {
+    "comment": "The leaf types and tree shapes the worked examples never show. Keys are receiver_keyed_refund's, so everything ties back to it. three_leaf_* exercises NUT-10's odd-count sorted fold: ascending by leaf hash the order is leaf 0, leaf 2, leaf 1, so leaves 0 and 2 pair, leaf 1 is promoted unchanged, and the path for leaf 2 is two siblings. blind_slot1_* is NUT-28's positional slot map: alice_refund_pub blinded at slot 1 under receiver_keyed_refund's ephemeral.",
+    "threshold_1of1": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "threshold_2of2": "00010200010204004202f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f902e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "hashlock_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "hashlock": "00030200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9080020a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "three_leaf_tree": [
+      "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "00020200010104002102e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd1306000468a3be80",
+      "00030200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9080020a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+    ],
+    "three_leaf_root": "3d4fbecf46f5c716d7cebd48863f3c4ab89e675e3beb4b3a28f3bd13b49d43ad",
+    "three_leaf_path_index_2": [
+      "23e8ff1693496ecad495b7ed3cdd7f8595c52a3adc0b92475835b0fb839116cb",
+      "9ed9c0b8907f7af4fce51cbeac218907bbf80ba40f3342df2406bce30616589a"
+    ],
+    "three_leaf_secret": "022d17fddb224e53e12b40c58ab3e8828d08931640105c52fc4eaf765ed51b9999",
+    "nums_key": "0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0",
+    "blind_slot1_key": "02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13",
+    "blind_slot1_result": "039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca81",
+    "blind_slot1_leaf": "000202000101040021039ca57991c48db95252bff61e02c31cf9b1e9ec2ef27d9dee33db6f0324e6ca8106000468a3be80",
+    "duplicate_pair_tree": [
+      "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
+    ],
+    "duplicate_pair_leaf_hash": "23e8ff1693496ecad495b7ed3cdd7f8595c52a3adc0b92475835b0fb839116cb",
+    "duplicate_pair_root": "1eaf291448e2f3c3a4fc00bfd591917bbb807e63af0fb905d054002bddd2cbc6",
+    "duplicate_pair_internal_key": "03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556",
+    "duplicate_pair_secret": "03dd2f11ab23b670222ada50325b5d49cd07e1d7a721d9b52fa2039df1f1b0dbfd",
+    "leaf_unknown_field": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9090004deadbeef",
+    "leaf_unknown_type": "00ff0200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "leaf_commit_with_n": "00040200010108002064451ff981aa92887b070762e97302df00a0ab97a853c323394b0a9cfaf46fae"
+  },
+  "auditable_lock": {
+    "comment": "Single-key script-only lock: NUMS offset u = 7 and one threshold leaf n = 1 to test key 3, with unconditional witness publication.",
+    "P": "02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "u": "0000000000000000000000000000000000000000000000000000000000000007",
+    "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+    "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "merkle_root": "23e8ff1693496ecad495b7ed3cdd7f8595c52a3adc0b92475835b0fb839116cb",
+    "tweak": "b1d264fb8815f86a0d07579eecdf976ab761167746c7b22f46504e6dc1c58dff",
+    "secret": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+    "Y": "ac45f4919697dc6fd6b0da10716c3c07b9479e2f8c3219f4341226db51d4e31ea0f91cb28fdbf1d51c285ebfea3a08a5",
+    "tx": {
+      "proof_inputs": [
+        {
+          "amount": 8,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "secret": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+          "C": "84d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d03327"
+        }
+      ],
+      "blinded_outputs": [
+        {
+          "amount": 4,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+        },
+        {
+          "amount": 4,
+          "keyset_id": "02b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6",
+          "B_": "b42a0bcc39598db1dca617aeea6bc367f2566636826dc961a54faae15b3b8d10afc1cb0206e70ab3b0e12c2b9478cd55"
+        }
+      ]
+    },
+    "transcript": "11008e0100010802002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030030ac45f4919697dc6fd6b0da10716c3c07b9479e2f8c3219f4341226db51d4e31ea0f91cb28fdbf1d51c285ebfea3a08a504003084d1b7291ae5737f3c851aa33cafe0f7afeb5ccb4da086c482bb85b7525e61547f1b5a6d1a01b1fed1f960d1a9d0332721004b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee21004b0100010402002102b7e077d020fabed456a6be138a8e20e9ef40b44d873fa12c005b656eb0cf99f6030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+    "digest": "2d0fa0f6c9a314f7685c2798837b644fae3744ecfdfbea8b240bac055bc86e85",
+    "input_id": "a11afbab2a056fcc72a4f0f6be068268e8eebfeea33c8a02df2d67b6bbfe5f45",
+    "input_digest": "f6b36eb4384a1c0155d77d19642aef9a833a0096723f5ce3df690277c27d76a5",
+    "witness": "{\"leaf\":\"00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"control\":{\"K\":\"028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407\",\"path\":[]},\"signatures\":[\"064383cc142820ba2516243c4dac275e18e7b2fa10e0b6d40a3b8d19b0a209d9b4d2d0e212b9b9b26b2323f2210733f34a77f9d17f2e7f9fe1a827161405e2f6\"]}"
+  },
+  "commit_leaf": {
+    "comment": "NUT-10 commit leaf (type 0x04): NUMS offset u = 7 over threshold_1of1 (key 3) and a commit leaf of SHA256(\"external data\"). Key 3 spends through the threshold leaf with path [leaf_hash_commit]; a witness revealing the commit leaf is rejected.",
+    "u": "0000000000000000000000000000000000000000000000000000000000000007",
+    "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+    "hash": "64451ff981aa92887b070762e97302df00a0ab97a853c323394b0a9cfaf46fae",
+    "leaf_threshold": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+    "leaf_commit": "000408002064451ff981aa92887b070762e97302df00a0ab97a853c323394b0a9cfaf46fae",
+    "leaf_hash_threshold": "23e8ff1693496ecad495b7ed3cdd7f8595c52a3adc0b92475835b0fb839116cb",
+    "leaf_hash_commit": "20cccc22a45ddfdbec0647032487870dbeadb03471164eb6767b1234f9914f27",
+    "merkle_root": "a23cd934664be4637fd2d9a16febca5ed06e7e3d0adef2231eeb7bcacaa156cd",
+    "tweak": "26992654d7ef6a6422bc84867ce87e7c641a59dacf86e2b339e434a92af374cf",
+    "secret": "028f86ae14b1a813b7093473faf7b1024979dd6da4db0790126daa2922331afce0"
+  },
+  "nut07_commitments": {
+    "comment": "witness_hash = SHA256 over the UTF-8 bytes of the exact witness string value; Y contributes raw compressed bytes.",
+    "key_path": {
+      "Y": "90f53b3088936b80ecfcc065a0746c5c1843ffd4527dbe3b9aba5a6109aed338ddc0f109511e9dfd37342aa99dd816d8",
+      "input_digest": "88a664e4f25fbd76baf5846221aa8f9d95beb0341f67d5458332e4f6809abcde",
+      "witness": "{\"signatures\":[\"3c2ce5dc36aea01a9b9f44287ef12e67a7fb0e0113720c3a000b5942835426e6635b09c087dbd30bde77ddf03b43b87858b3d2bf29d4b3ca7895f73e4839d3c2\"]}",
+      "witness_hash": "22868a7c211c15a4c3be53106e802f52108c9c2a7b7b59b845aeb013771702bd",
+      "commitment": "1674f6e65653806da9b89b3c4a5920c1a4e96f19d886335557e1060a7d7b8545"
+    },
+    "script_path": {
+      "Y": "ac45f4919697dc6fd6b0da10716c3c07b9479e2f8c3219f4341226db51d4e31ea0f91cb28fdbf1d51c285ebfea3a08a5",
+      "input_digest": "f6b36eb4384a1c0155d77d19642aef9a833a0096723f5ce3df690277c27d76a5",
+      "witness": "{\"leaf\":\"00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",\"control\":{\"K\":\"028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407\",\"path\":[]},\"signatures\":[\"064383cc142820ba2516243c4dac275e18e7b2fa10e0b6d40a3b8d19b0a209d9b4d2d0e212b9b9b26b2323f2210733f34a77f9d17f2e7f9fe1a827161405e2f6\"]}",
+      "witness_hash": "c5434bc7ef33ba6335c4a4fb90ebef59fea26f595bf541f56dc05cada11f8f07",
+      "commitment": "c8e25f27b06482807e69f35fc52e5bb50efef2f4fd36e6112f0403749dc32fb5"
+    }
+  },
+  "transport_strings": {
+    "comment": "Prefix plus base64url of the JSON. The signing package is the auditable lock spent in the pinned swap; the spend receipt is the swap bearer input.",
+    "signing_package": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWM0NWY0OTE5Njk3ZGM2ZmQ2YjBkYTEwNzE2YzNjMDdiOTQ3OWUyZjhjMzIxOWY0MzQxMjI2ZGI1MWQ0ZTMxZWEwZjkxY2IyOGZkYmYxZDUxYzI4NWViZmVhM2EwOGE1MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6W119XX0",
+    "signing_package_signed": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYWM0NWY0OTE5Njk3ZGM2ZmQ2YjBkYTEwNzE2YzNjMDdiOTQ3OWUyZjhjMzIxOWY0MzQxMjI2ZGI1MWQ0ZTMxZWEwZjkxY2IyOGZkYmYxZDUxYzI4NWViZmVhM2EwOGE1MDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyIwNjQzODNjYzE0MjgyMGJhMjUxNjI0M2M0ZGFjMjc1ZTE4ZTdiMmZhMTBlMGI2ZDQwYTNiOGQxOWIwYTIwOWQ5YjRkMmQwZTIxMmI5YjliMjZiMjMyM2YyMjEwNzMzZjM0YTc3ZjlkMTdmMmU3ZjlmZTFhODI3MTYxNDA1ZTJmNiJdfV19",
+    "spend_receipt": "nutrcAeyJ0b2tlbiI6ImNhc2h1Qm8yRnRjV2gwZEhCek9pOHZiV2x1ZEM1MFpYTjBZWFZqYzJGMFlYU0JvbUZwU0FLMzRIZlFJUHEtWVhDQnBHRmhDR0Z6ZUVJd01tVTJaVGRqWm1FM1lqZ3laRFJpTTJJME5EbG1ZVFkwTmpaak9Ea3pORFk1WVRjeU4yUXdNakUwWkRRNFpHSTBPVFUyWVRZd05UUmlPREF5TW1FeU9XSmhZMWd3aE5HM0tScmxjMzg4aFJxalBLX2c5Nl9yWE10Tm9JYkVncnVGdDFKZVlWUl9HMXB0R2dHeF90SDVZTkdwMERNblluTnBvV0ZyV0NCSEdXM0FnUlVNNFRfUTVIaTR0eGd4dUNXLU9KSVJ5Y1ZxZ0dLbUd2Y0RSdyIsInJlY2VpcHRzIjpbeyJZIjoiYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczIiwia2V5c2V0SWQiOiIwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYiLCJpbnB1dERpZ2VzdCI6ImVjYTY3YjY4MDAxNWQ0MmZmYjkzMzliOGMwNDc1YTkwZDE2MmQxODliZDM2YTE1ZDhiNjkxMGRlNDg5MjdlZGQiLCJ3aXRuZXNzIjoie1wic2lnbmF0dXJlc1wiOltcIjViNGIyY2JkYjVlYTc1ZGQyYTY0NTFiZjJmMzQ4ZThiODM3NDM4Mzc1ZGQ1ZTc4YmE1Y2IyZjNjNTQ5MjU4ZGY4ZmYyNzRlOGRlOTk4N2U3ZGFiODhjMjIxZjBkZTgyMDU0NmU0MjkwN2NlYzgxNmUyYjI5MGFmODE0MDMwYTk0XCJdfSIsImNvbW1pdG1lbnQiOiJlYjNkY2U4MjMyMjAxYWE2OWY0MzQ0Zjg5ZTA3ZGJmYTY2OTBjMTBjZmIyNmVmZjllZjQ4YThiZTZlZmJmNTIyIiwidHJhbnNjcmlwdCI6IjExMDA4ZTAxMDAwMTA4MDIwMDIxMDJiN2UwNzdkMDIwZmFiZWQ0NTZhNmJlMTM4YThlMjBlOWVmNDBiNDRkODczZmExMmMwMDViNjU2ZWIwY2Y5OWY2MDMwMDMwYTBhY2Y5MzlmMDMzZTNkMGFlOWI1Zjc4NDM0MWZhZGEzODM2N2VlYzE5MGVkZmIzNGUxZjBjY2U5MDUwYzgwNjcyZGJlZTc3YTc1MTJiNzI0MzU0NGM4NWFlMjkwYTczMDQwMDMwODRkMWI3MjkxYWU1NzM3ZjNjODUxYWEzM2NhZmUwZjdhZmViNWNjYjRkYTA4NmM0ODJiYjg1Yjc1MjVlNjE1NDdmMWI1YTZkMWEwMWIxZmVkMWY5NjBkMWE5ZDAzMzI3MjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlMjEwMDRiMDEwMDAxMDQwMjAwMjEwMmI3ZTA3N2QwMjBmYWJlZDQ1NmE2YmUxMzhhOGUyMGU5ZWY0MGI0NGQ4NzNmYTEyYzAwNWI2NTZlYjBjZjk5ZjYwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIn1dfQ"
+  },
+  "local_changes": "NUMS locks, script witnesses and signing packages use unconditional witness publication; affected values were regenerated with hashlib, coincurve and pyblst independently of the Cashu helpers.",
+  "signing_package": {
+    "comment": "NUT-XX signing package: the mint vector with its quote locked to a script-only key (NUMS offset u = 7, threshold_1of1 key 3). Strings are the prefix plus base64url of the JSON.",
+    "lock_key": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+    "transcript": "12003d0100010802000f71756f74652d6d696e742d30303031030021034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af27604000021004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+    "digest": "33d8def7c0f5235c150863773e105568d44d079aa2f1d59149bb72254dc6df05",
+    "input_id": "a639745001afaad8964370e8ddc1406bbf14d478c6d56819f188c9b10392fe45",
+    "input_digest": "7c0b3967b3b7ba4e5daa7e8ea11607cff36062d6ff24863c8bdf31ee8346f8e4",
+    "package": {
+      "version": "nutspA",
+      "transcript": "12003d0100010802000f71756f74652d6d696e742d30303031030021034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af27604000021004b01000108020021022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701030020567b4ba980dd0c51c80919633b384c0764b30e5250c4a8b8e3957c9f4208cdee",
+      "spends": [
+        {
+          "input": 0,
+          "secret": "034b15129a9c665f37fbe9f6c80a7fe6ec0c809f34edde98d298aff94a1e8af276",
+          "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+          "control": {
+            "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+            "path": []
+          },
+          "signatures": []
+        }
+      ]
+    },
+    "package_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMjI1NDZhYjBhMmRlZTlmNzk1MTBmNGUyMGE0ZTNkOWU4OTRhOTczNjEwNDdjNTk0OTAyNTczYTdlNjRmOWQ3MDEwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6W119XX0",
+    "signed_string": "nutspAeyJ2ZXJzaW9uIjoibnV0c3BBIiwidHJhbnNjcmlwdCI6IjEyMDAzZDAxMDAwMTA4MDIwMDBmNzE3NTZmNzQ2NTJkNmQ2OTZlNzQyZDMwMzAzMDMxMDMwMDIxMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2MDQwMDAwMjEwMDRiMDEwMDAxMDgwMjAwMjEwMjI1NDZhYjBhMmRlZTlmNzk1MTBmNGUyMGE0ZTNkOWU4OTRhOTczNjEwNDdjNTk0OTAyNTczYTdlNjRmOWQ3MDEwMzAwMjA1NjdiNGJhOTgwZGQwYzUxYzgwOTE5NjMzYjM4NGMwNzY0YjMwZTUyNTBjNGE4YjhlMzk1N2M5ZjQyMDhjZGVlIiwic3BlbmRzIjpbeyJpbnB1dCI6MCwic2VjcmV0IjoiMDM0YjE1MTI5YTljNjY1ZjM3ZmJlOWY2YzgwYTdmZTZlYzBjODA5ZjM0ZWRkZTk4ZDI5OGFmZjk0YTFlOGFmMjc2IiwibGVhZiI6IjAwMDEwMjAwMDEwMTA0MDAyMTAyZjkzMDhhMDE5MjU4YzMxMDQ5MzQ0Zjg1Zjg5ZDUyMjliNTMxYzg0NTgzNmY5OWIwODYwMWYxMTNiY2UwMzZmOSIsImNvbnRyb2wiOnsiSyI6IjAyOGVkZmViZDZmZGVhM2UxZDg5MzU5YWYyMDg2OGEyZTc2MzE1YjM2Y2RiMWE3OWRlNDk3YTE3NTdjYTdiZDQwNyIsInBhdGgiOltdfSwic2lnbmF0dXJlcyI6WyJiMDY1NmRiZGUxNDNiZDY4MjVlMTQxNTUxY2FlNjhmMTQyOGE2MmVlMWQ3NGMwZjhkZjhmNzM1ZDU4NDE0NzFkNmYyMGYzOTQ2NjU4YmRhZDIyNWI2YjMwZGM5MGNlYTk1NmEwYWVkZTEzMmVkZjZlYjE0MTVmOTVhZmIzMGNhMiJdfV19",
+    "witness": {
+      "leaf": "00010200010104002102f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "control": {
+        "K": "028edfebd6fdea3e1d89359af20868a2e76315b36cdb1a79de497a1757ca7bd407",
+        "path": []
+      },
+      "signatures": [
+        "b0656dbde143bd6825e141551cae68f1428a62ee1d74c0f8df8f735d5841471d6f20f3946658bdad225b6b30dc90cea956a0aede132edf6eb1415f95afb30ca2"
+      ]
+    }
+  },
+  "keysets": {
+    "comment": "NUT-02 V3 keysets behind these vectors. Mint scalars are 7, 13, 29 and 71 for amounts 1, 2, 4 and 8, so a blind signature is C_ = scalar * B_. Transactions use sat; auth is the NUT-22 blind auth keyset.",
+    "sat": {
+      "id": "022546ab0a2dee9f79510f4e20a4e3d9e894a97361047c594902573a7e64f9d701",
+      "unit": "sat",
+      "keys": {
+        "1": "8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c",
+        "2": "8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c",
+        "4": "8c60dae92451206390e30b5daa7151d63624dee496753c87dd54eadc92dc9602081fae02a1a53bac97e984a571923a5d0a29e38da2d42fd4712052800c7c8dd6e94fd9f506e946068aaac799d60b94c2d7515769ffdd32ea95d3910330ec47de",
+        "8": "a55dafcdf339360f74e3fd32296d062d5e36db3c2570e13a889b38502c0ff71864b19e324bc9c661c29b07c9cc378b5919c1656979648d7c3ef4bd6501fcc96490a34e47fe25afc8b14d60f1c3772138acaf8a0a5e4f940f57206eba74fdc973"
+      }
+    },
+    "auth": {
+      "id": "0245806e75095be59688cdbedb9493988f011dd767ed52f4add9bc845bdebb6574",
+      "unit": "auth",
+      "keys": {
+        "1": "8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c"
+      }
+    }
+  }
+}

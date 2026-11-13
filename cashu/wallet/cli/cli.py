@@ -31,6 +31,7 @@ from ...core.base import (
     Unit,
     WalletTransactionType,
 )
+from ...core.crypto.keys import is_bls_keyset
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -384,7 +385,15 @@ async def _pay(
             )
 
         lock = ""
-        if pr.nut10:
+        nutroot_lock = (
+            pr.nutroot
+            if pr.nutroot is not None and is_bls_keyset(wallet.keyset_id)
+            else None
+        )
+        if pr.nutroot is not None and nutroot_lock is None and pr.nut10 is None:
+            print("Error: This payment request requires v3 outputs.")
+            return
+        if pr.nut10 and nutroot_lock is None:
             # Robust check for lock kind
             if pr.nut10.k == "P2PK":
                 # check if there are any tags
@@ -422,6 +431,7 @@ async def _pay(
             include_dleq=True,
             include_fees=True,
             memo=pr.d,  # Use description as memo
+            nutroot_lock=nutroot_lock,
         )
 
         # Handle Transport

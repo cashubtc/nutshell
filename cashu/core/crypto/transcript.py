@@ -1,0 +1,304 @@
+"""Transaction transcript (NUT-10).
+
+One shared digest, one derived message per input:
+transaction_digest = SHA256(TLV stream); each input carries
+one BIP-340 signature over its input digest,
+tagged_hash("Cashu_TransactionInput", transaction_digest || SHA256(its own
+container record)). Containers: 0x11 proof input, 0x12 mint quote input
+(which commits the quote's lock key and amount_issued), 0x21 blinded message output (carrying
+SHA256(B_)), 0x22 melt quote output. Container types ascend (inputs before outputs by construction); elements keep request
+order within their type; field streams inside are ascending unique.
+Byte-identical with cashu-ts src/crypto/transcript.ts, pinned by the
+shared vectors.
+"""
+
+import hashlib
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+from .bls import PublicKey as BlsPublicKey
+from .nutroot import (
+    minimal_be,
+    read_minimal_be,
+    read_tlv_records,
+    tagged_hash,
+    tlv_record,
+)
+from .secp import PublicKey
+
+TRANSCRIPT_INPUT_TAG = "Cashu_TransactionInput"
+SPEND_COMMITMENT_TAG = "Cashu_SpendCommitment"
+QUOTE_ID_TAG = "Cashu_QuoteId"
+
+# The high nibble is the section: 0x1n inputs, 0x2n outputs, 0xFn never in a transaction.
+_CONTAINER_PROOF_INPUT = 0x11
+_CONTAINER_MINT_QUOTE_INPUT = 0x12
+_CONTAINER_BLINDED_OUTPUT = 0x21
+_CONTAINER_MELT_QUOTE_OUTPUT = 0x22
+
+
+_CONTAINER_AUTHORIZED_REQUEST = 0xF1
+
+
+@dataclass
+class TranscriptProofInput:
+    amount: int
+    keyset_id: bytes
+    Y: bytes  # the keyset's hash_to_curve of the secret; the secret itself never appears
+    C: bytes
+
+
+@dataclass
+class TranscriptQuote:
+    amount: int
+    quote_id: str
+    pubkey: Optional[bytes] = None  # 33-byte lock key; required on a mint quote input
+    # The quote's amount_issued before this transaction; required on a mint quote input.
+    issued: Optional[int] = None
+
+
+@dataclass
+class TranscriptBlindedOutput:
+    amount: int
+    keyset_id: bytes
+    B_: bytes
+
+
+@dataclass
+class TransactionShape:
+    proof_inputs: Optional[List[TranscriptProofInput]] = None
+    mint_quote_inputs: Optional[List[TranscriptQuote]] = None
+    blinded_outputs: Optional[List[TranscriptBlindedOutput]] = None
+    melt_quote_outputs: Optional[List[TranscriptQuote]] = None
+
+
+def _amount_record(amount: int) -> bytes:
+    if amount < 0:
+        raise ValueError("Transcript amount must be non-negative")
+    return tlv_record(0x01, minimal_be(amount))
+
+
+def _proof_input_container(p: TranscriptProofInput) -> bytes:
+    # Field 03 is Y on the keyset's curve (NUT-10): 48 bytes under a v3 keyset,
+    # 33 under a v0-v2 one, which mixed transactions carry beside v3 inputs.
+    if len(p.Y) not in (33, 48):
+        raise ValueError("Transcript proof Y must be a compressed curve point")
+    return tlv_record(
+        _CONTAINER_PROOF_INPUT,
+        _amount_record(p.amount)
+        + tlv_record(0x02, p.keyset_id)
+        + tlv_record(0x03, p.Y)
+        + tlv_record(0x04, p.C),
+    )
+
+
+def _quote_fields(q: TranscriptQuote) -> bytes:
+    """Fields 01 amount and 02 quote id, shared by the mint quote input and melt quote output."""
+    if not q.quote_id:
+        raise ValueError("Transcript quote id must be non-empty")
+    return _amount_record(q.amount) + tlv_record(0x02, q.quote_id.encode("utf-8"))
+
+
+def _mint_quote_input_container(q: TranscriptQuote) -> bytes:
+    # The container commits the lock key, so an offline co-signer can tell which key the input needs.
+    if q.pubkey is None or len(q.pubkey) != 33:
+        raise ValueError("Transcript mint quote input needs its 33-byte lock key")
+    if q.issued is None:
+        raise ValueError("Transcript mint quote input needs the quote's amount_issued")
+    return tlv_record(
+        _CONTAINER_MINT_QUOTE_INPUT,
+        _quote_fields(q)
+        + tlv_record(0x03, q.pubkey)
+        + tlv_record(0x04, minimal_be(q.issued)),
+    )
+
+
+def _melt_quote_output_container(q: TranscriptQuote) -> bytes:
+    return tlv_record(_CONTAINER_MELT_QUOTE_OUTPUT, _quote_fields(q))
+
+
+def _blinded_output_container(o: TranscriptBlindedOutput) -> bytes:
+    return tlv_record(
+        _CONTAINER_BLINDED_OUTPUT,
+        _amount_record(o.amount)
+        + tlv_record(0x02, o.keyset_id)
+        + tlv_record(0x03, hashlib.sha256(o.B_).digest()),
+    )
+
+
+def build_transaction_transcript(tx: TransactionShape) -> bytes:
+    """Serialize a transaction to its TLV transcript."""
+    proofs = tx.proof_inputs or []
+    mint_quotes = tx.mint_quote_inputs or []
+    blinded = tx.blinded_outputs or []
+    melt_quotes = tx.melt_quote_outputs or []
+    if not proofs and not mint_quotes:
+        raise ValueError("Transaction requires at least one input")
+    if not blinded and not melt_quotes:
+        raise ValueError("Transaction requires at least one output")
+    # NUT-10: the same proof or quote twice would sign one input digest for two inputs.
+    if len({p.Y for p in proofs}) != len(proofs):
+        raise ValueError("Transaction repeats a proof input")
+    if len({q.quote_id for q in mint_quotes}) != len(mint_quotes):
+        raise ValueError("Transaction repeats a mint quote input")
+    return (
+        b"".join(_proof_input_container(p) for p in proofs)
+        + b"".join(_mint_quote_input_container(q) for q in mint_quotes)
+        + b"".join(_blinded_output_container(o) for o in blinded)
+        + b"".join(_melt_quote_output_container(q) for q in melt_quotes)
+    )
+
+
+def transaction_digest(tx: TransactionShape) -> bytes:
+    """The shared 32-byte digest: SHA256(transcript)."""
+    return hashlib.sha256(build_transaction_transcript(tx)).digest()
+
+
+def input_digest(transaction_digest_: bytes, container: bytes) -> bytes:
+    """The message one input signs: tagged_hash(input tag, transaction_digest || SHA256(container))."""
+    if len(transaction_digest_) != 32:
+        raise ValueError("Transaction digest must be 32 bytes")
+    return tagged_hash(
+        TRANSCRIPT_INPUT_TAG, transaction_digest_, hashlib.sha256(container).digest()
+    )
+
+
+@dataclass
+class InputContext:
+    """One input's signing context: its container record and the digest it signs."""
+
+    container: bytes
+    digest: bytes
+
+
+def transaction_inputs(
+    tx: TransactionShape,
+) -> Tuple[bytes, Dict[bytes, InputContext], Dict[str, InputContext]]:
+    """(transaction_digest, proof contexts by Y bytes, quote contexts by quote id).
+
+    The transcript builder has already refused duplicates, so the keys are unique.
+    """
+    digest = transaction_digest(tx)
+    proofs = {
+        p.Y: InputContext(container=c, digest=input_digest(digest, c))
+        for p in (tx.proof_inputs or [])
+        for c in [_proof_input_container(p)]
+    }
+    quotes = {
+        q.quote_id: InputContext(container=c, digest=input_digest(digest, c))
+        for q in (tx.mint_quote_inputs or [])
+        for c in [_mint_quote_input_container(q)]
+    }
+    return digest, proofs, quotes
+
+
+def spend_commitment(Y: bytes, input_digest_: bytes, witness: str) -> bytes:
+    """The NUT-07 spend commitment: tagged_hash(tag, Y || input_digest || SHA256(witness)).
+
+    `witness` is the exact string value as sent; `Y` contributes its raw compressed bytes.
+    """
+    return tagged_hash(
+        SPEND_COMMITMENT_TAG,
+        Y,
+        input_digest_,
+        hashlib.sha256(witness.encode("utf-8")).digest(),
+    )
+
+
+def derived_quote_id(id_preimage: bytes) -> str:
+    """A derived quote id (NUT-04): hex(tagged_hash("Cashu_QuoteId", id_preimage))."""
+    if len(id_preimage) != 32:
+        raise ValueError("Quote id preimage must be 32 bytes")
+    return tagged_hash(QUOTE_ID_TAG, id_preimage).hex()
+
+
+def build_request_transcript(method: str, target: str, body: bytes) -> bytes:
+    """Serialize a request to its authorized-request transcript (NUT-22).
+
+    One 0xF1 container: 01 the uppercase HTTP method, 02 the origin-form
+    request-target as sent, 03 SHA256 over the exact body bytes (a request
+    without a body hashes the empty byte string).
+    """
+    if not method or not target:
+        raise ValueError("Request transcript requires a method and a target")
+    return tlv_record(
+        _CONTAINER_AUTHORIZED_REQUEST,
+        tlv_record(0x01, method.upper().encode("ascii"))
+        + tlv_record(0x02, target.encode("utf-8"))
+        + tlv_record(0x03, hashlib.sha256(body).digest()),
+    )
+
+
+TRANSCRIPT_REQUEST_TAG = "Cashu_AuthorizedRequest"
+
+
+def request_digest(method: str, target: str, body: bytes) -> bytes:
+    """The 32-byte message a version 02 BAT witness signs (NUT-22).
+
+    tagged_hash("Cashu_AuthorizedRequest", SHA256(request transcript)).
+    """
+    return tagged_hash(
+        TRANSCRIPT_REQUEST_TAG,
+        hashlib.sha256(build_request_transcript(method, target, body)).digest(),
+    )
+
+
+@dataclass(frozen=True)
+class TranscriptContainer:
+    type: int
+    fields: Dict[int, bytes]
+    record: bytes
+
+
+def parse_transaction_transcript(transcript: bytes) -> List[TranscriptContainer]:
+    """Decode and validate the four transaction containers allocated by NUT-10."""
+    containers: List[TranscriptContainer] = []
+    previous = 0
+    proof_ids: set[bytes] = set()
+    quote_ids: set[bytes] = set()
+    fields_by_type = {
+        0x11: {1, 2, 3, 4},
+        0x12: {1, 2, 3, 4},
+        0x21: {1, 2, 3},
+        0x22: {1, 2},
+    }
+    for kind, data in read_tlv_records(transcript):
+        if kind not in fields_by_type or kind < previous:
+            raise ValueError("Unknown or unordered transaction container")
+        previous = kind
+        fields = dict(read_tlv_records(data, unique_ascending=True))
+        if set(fields) != fields_by_type[kind] or not fields[2]:
+            raise ValueError("Transaction container has invalid fields")
+        read_minimal_be(fields[1])
+        if kind == 0x11:
+            if len(fields[3]) == 48:
+                BlsPublicKey(fields[3])
+                BlsPublicKey(fields[4])
+            elif len(fields[3]) == 33 and len(fields[4]) == 33:
+                PublicKey(fields[3])
+                PublicKey(fields[4])
+            else:
+                raise ValueError("Invalid proof input points")
+            if fields[3] in proof_ids:
+                raise ValueError("Transaction repeats a proof input")
+            proof_ids.add(fields[3])
+        elif kind == 0x12:
+            if len(fields[3]) != 33:
+                raise ValueError("Mint quote needs a compressed lock key")
+            PublicKey(fields[3])
+            read_minimal_be(fields[4])
+            fields[2].decode("utf-8")
+            if fields[2] in quote_ids:
+                raise ValueError("Transaction repeats a mint quote input")
+            quote_ids.add(fields[2])
+        elif kind == 0x21:
+            if len(fields[3]) != 32:
+                raise ValueError("Blinded output commitment must be 32 bytes")
+        elif kind == 0x22:
+            fields[2].decode("utf-8")
+        containers.append(TranscriptContainer(kind, fields, tlv_record(kind, data)))
+    if not proof_ids and not quote_ids:
+        raise ValueError("Transaction requires at least one input")
+    if not any(container.type in (0x21, 0x22) for container in containers):
+        raise ValueError("Transaction requires at least one output")
+    return containers

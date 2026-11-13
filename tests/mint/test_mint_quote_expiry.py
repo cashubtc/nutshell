@@ -15,6 +15,9 @@ from tests.helpers import pay_if_regtest
 async def test_paid_quote_can_be_minted_after_expiry(
     ledger: Ledger, monkeypatch: pytest.MonkeyPatch, batch: bool
 ):
+    keyset = await ledger.activate_keyset(
+        derivation_path="m/0'/0'/1'", version="0.22.1"
+    )
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
     await pay_if_regtest(quote.request)
 
@@ -34,7 +37,7 @@ async def test_paid_quote_can_be_minted_after_expiry(
 
     blinded_message, _ = step1_alice(secrets.token_hex(16))
     outputs = [
-        BlindedMessage(amount=8, B_=blinded_message.format().hex(), id=ledger.keyset.id)
+        BlindedMessage(amount=8, B_=blinded_message.format().hex(), id=keyset.id)
     ]
     if batch:
         promises = await ledger.mint_batch(

@@ -1,5 +1,3 @@
-import hashlib
-import os
 import shutil
 from pathlib import Path
 
@@ -8,7 +6,6 @@ import pytest_asyncio
 
 from cashu.core.base import Unit
 from cashu.core.crypto.keys import generate_uuid_v7
-from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import (
     BlindAuthFailedError,
     BlindAuthRateLimitExceededError,
@@ -130,7 +127,7 @@ async def test_wallet_auth_mint_manually(wallet: Wallet):
     reason="settings.mint_require_auth is False",
 )
 @pytest.mark.asyncio
-async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
+async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet, monkeypatch):
     auth_wallet = await WalletAuth.with_db(
         url=wallet.url,
         db=wallet.db.db_location,
@@ -146,20 +143,12 @@ async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
 
     # invalidate CAT in the database
     auth_wallet.oidc_client.access_token = generate_uuid_v7()
-
-    # this is the code executed in auth_wallet.mint_blind_auth():
-    clear_auth_token = auth_wallet.oidc_client.access_token
-    if not clear_auth_token:
-        raise Exception("No clear auth token available.")
-
-    amounts = auth_wallet.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
-    secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-    rs = [PrivateKey(os.urandom(32)) for _ in amounts]
-    outputs, rs = auth_wallet._construct_outputs(amounts, secrets, rs)
+    # Send the malformed token to the mint without parsing it for local expiry.
+    monkeypatch.setattr(auth_wallet.oidc_client, "is_token_expired", lambda: False)
 
     # should fail because of invalid CAT
     await assert_err(
-        auth_wallet.blind_mint_blind_auth(clear_auth_token, outputs),
+        auth_wallet.mint_blind_auth(),
         ClearAuthFailedError.detail,
     )
 
@@ -213,10 +202,13 @@ async def test_wallet_auth_invoice_invalid_bat(wallet: Wallet):
     await auth_wallet.load_proofs()
     assert len(auth_wallet.proofs) == auth_wallet.mint_info.bat_max_mint
 
-    # invalidate blind auth proofs
-    for p in auth_wallet.proofs:
+    # Invalidate signatures while retaining each BAT's request-signing key.
+    assert len(auth_wallet.proofs) > 1
+    for index, p in enumerate(auth_wallet.proofs):
+        tampered_signature = auth_wallet.proofs[(index + 1) % len(auth_wallet.proofs)].C
         await auth_wallet.db.execute(
-            f"UPDATE proofs SET secret = '{generate_uuid_v7()}' WHERE secret = '{p.secret}'"
+            "UPDATE proofs SET c = :tampered_signature WHERE secret = :secret",
+            {"tampered_signature": tampered_signature, "secret": p.secret},
         )
 
     wallet.auth_db = auth_wallet.db

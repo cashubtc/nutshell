@@ -44,6 +44,10 @@ def main():
             for key, value in os.environ.items()
             if key not in {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"}
         }
+        # Keep source builds using the existing Rust installation after HOME changes.
+        for key, default in (("RUSTUP_HOME", ".rustup"), ("CARGO_HOME", ".cargo")):
+            toolchain_home = Path(env.get(key) or Path.home() / default)
+            env[key] = str(toolchain_home.expanduser().resolve())
         env.update(
             HOME=str(home),
             USERPROFILE=str(home),

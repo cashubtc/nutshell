@@ -5,6 +5,9 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import Method, MintQuoteState, ProofState
+from cashu.core.crypto.keys import is_bls_keyset
+from cashu.core.crypto.nutroot import verify_nutroot_witness
+from cashu.core.crypto.secp import PublicKey
 from cashu.core.json_rpc.base import JSONRPCNotficationParams, JSONRPCSubscriptionKinds
 from cashu.core.nuts.nuts import WEBSOCKETS_NUT
 from cashu.core.settings import settings
@@ -83,6 +86,7 @@ async def test_wallet_subscription_swap(wallet: Wallet):
         triggered = True
         msg_stack.append(msg)
 
+    inputs_by_y = {proof.Y: proof for proof in wallet.proofs}
     n_subscriptions = len(wallet.proofs)
     state, sub = await wallet.check_proof_state_with_callback(
         wallet.proofs, callback=callback
@@ -115,6 +119,19 @@ async def test_wallet_subscription_swap(wallet: Wallet):
     for msg in spent_stack:
         proof_state = ProofState.model_validate(msg.payload)
         assert proof_state.spent
+
+    for msg in msg_stack[n_subscriptions:]:
+        proof_state = ProofState.model_validate(msg.payload)
+        proof = inputs_by_y[proof_state.Y]
+        if is_bls_keyset(proof.id):
+            assert proof_state.witness is not None
+            assert proof_state.input_digest is not None
+            assert "commitment" not in msg.payload
+            verify_nutroot_witness(
+                PublicKey(bytes.fromhex(proof.secret)),
+                bytes.fromhex(proof_state.input_digest),
+                proof_state.witness,
+            )
 
 
 @pytest.mark.asyncio

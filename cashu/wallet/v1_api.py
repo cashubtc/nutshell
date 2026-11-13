@@ -15,8 +15,9 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.crypto.keys import is_supported_keyset_version
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.bls import PublicKey as BlsPublicKey
+from ..core.crypto.keys import PublicKey, is_bls_keyset, is_supported_keyset_version
+from ..core.crypto.secp import PublicKey as SecpPublicKey
 from ..core.db import Database
 from ..core.models import (
     GetInfoResponse,
@@ -40,6 +41,7 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from ..core.nuts import nut22
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .crud import (
@@ -158,6 +160,7 @@ class LedgerAPI(SupportsAuth):
     async def _request(self, method: str, path: str, noprefix=False, **kwargs):
         if not noprefix:
             path = join(self.api_prefix, path)
+        blind_auth: Optional[Tuple[Proof, Database]] = None
         if self.mint_info and self.mint_info.requires_blind_auth_path(method, path):
             if not self.auth_db:
                 raise Exception(
@@ -173,14 +176,7 @@ class LedgerAPI(SupportsAuth):
                     "Mint requires blind auth, but no blind auth tokens were found."
                 )
             # select one auth proof
-            proof = proofs[0]
-            auth_token = AuthProof.from_proof(proof).to_base64()
-            kwargs.setdefault("headers", {}).update(
-                {
-                    "Blind-auth": f"{auth_token}",
-                }
-            )
-            await invalidate_proof(proof=proof, db=self.auth_db)
+            blind_auth = (proofs[0], self.auth_db)
         if self.mint_info and self.mint_info.requires_clear_auth_path(method, path):
             logger.debug(f"Using clear auth token for {path}")
             clear_auth_token = kwargs.pop("clear_auth_token")
@@ -201,7 +197,29 @@ class LedgerAPI(SupportsAuth):
                 request_info += f"\nPayload: {json.dumps(kwargs['json'], indent=2)}"
             print(f"Request: {request_info}")
 
-        resp = await self.httpx.request(method, path, **kwargs)
+        # These options belong to send(), while timeout and encoding options
+        # belong to build_request(). Omitted options keep the client defaults.
+        send_kwargs = {
+            option: kwargs.pop(option)
+            for option in ("auth", "follow_redirects")
+            if option in kwargs
+        }
+        request = self.httpx.build_request(method, path, **kwargs)
+        if blind_auth is not None:
+            proof, auth_db = blind_auth
+            bat_key = nut22.bat_private_key(proof.derivation_path)
+            if is_bls_keyset(proof.id) and (bat_key is None or bat_key.public_key.format().hex() != proof.secret):
+                raise ValueError("Missing private key for the authentication token")
+            if bat_key is not None:
+                # NUT-22 binds the exact encoded target and body HTTPX sends.
+                body = await request.aread()
+                target = nut22.relative_request_target(request.url.raw_path, httpx.URL(self.url).path)
+                proof.witness = nut22.sign_request(
+                    bat_key, request.method, target, body
+                )
+            request.headers["Blind-auth"] = AuthProof.from_proof(proof).to_base64()
+            await invalidate_proof(proof=proof, db=auth_db)
+        resp = await self.httpx.send(request, **send_kwargs)
 
         # Verbose logging of responses when enabled
         if settings.wallet_verbose_requests:
@@ -242,6 +260,7 @@ class LedgerAPI(SupportsAuth):
         keys = KeysResponse.model_validate(keys_dict)
         keysets_str = " ".join([f"{k.id} ({k.unit})" for k in keys.keysets])
         logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
+        
         ret = []
         for keyset in keys.keysets:
             if not is_supported_keyset_version(keyset.id):
@@ -250,14 +269,19 @@ class LedgerAPI(SupportsAuth):
                 )
                 continue
             try:
+                is_v3 = is_bls_keyset(keyset.id)
+                pub_keys: dict[int, PublicKey] = {}
+                for amt, val in keyset.keys.items():
+                    if is_v3:
+                        pub_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
+                    else:
+                        pub_keys[int(amt)] = SecpPublicKey(bytes.fromhex(val))
+                
                 ret.append(
                     WalletKeyset(
                         id=keyset.id,
                         unit=keyset.unit,
-                        public_keys={
-                            int(amt): PublicKey(bytes.fromhex(val))
-                            for amt, val in keyset.keys.items()
-                        },
+                        public_keys=pub_keys,
                         mint_url=self.url,
                     )
                 )
@@ -291,12 +315,18 @@ class LedgerAPI(SupportsAuth):
 
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
+
         keys = KeysResponse.model_validate(keys_dict)
         this_keyset = keys.keysets[0]
-        keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val))
-            for amt, val in this_keyset.keys.items()
-        }
+        is_v3 = is_bls_keyset(this_keyset.id)
+        
+        keyset_keys: dict[int, PublicKey] = {}
+        for amt, val in this_keyset.keys.items():
+            if is_v3:
+                keyset_keys[int(amt)] = BlsPublicKey(bytes.fromhex(val), group="G2")
+            else:
+                keyset_keys[int(amt)] = SecpPublicKey(bytes.fromhex(val))
+                
         keyset = WalletKeyset(
             id=keyset_id,
             unit=this_keyset.unit,

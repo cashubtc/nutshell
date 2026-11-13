@@ -41,6 +41,7 @@ import sys
 import uvicorn
 from cashu.core.settings import settings
 
+settings.version = "0.22.1"
 settings.mint_private_key = sys.argv[1]
 settings.mint_seed_decryption_key = ""
 settings.mint_database = sys.argv[2]
