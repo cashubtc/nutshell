@@ -92,6 +92,26 @@ def test_verify_input_output_spending_conditions_requires_equal_secrets_with_sig
         cond._verify_input_output_spending_conditions([p1, p2], outputs)
 
 
+def test_verify_sigall_spending_conditions_ignores_legacy_only_witness():
+    # The pre-0.21 message format does not commit to C values or output
+    # amounts, so a witness carrying only such a signature must not satisfy
+    # the mint.
+    cond = LedgerSpendingConditions()
+    outputs = [BlindedMessage(id="ks", amount=1, B_="abcd")]
+    signer = PrivateKey()
+    signer_pub = signer.public_key.format().hex()
+    raw_secret = secret_str(
+        kind=SecretKind.P2PK, data=signer_pub, sigflag=SigFlags.SIG_ALL
+    )
+    proofs = [proof(raw_secret), proof(raw_secret)]
+    legacy_msg = "".join(p.secret for p in proofs) + "".join(o.B_ for o in outputs)
+    signature = schnorr_sign(legacy_msg.encode("utf-8"), signer).hex()
+    proofs[0].witness = P2PKWitness(signatures=[signature]).model_dump_json()
+
+    with pytest.raises(Exception, match="signature threshold not met"):
+        cond._verify_sigall_spending_conditions(proofs, outputs)
+
+
 def test_verify_sigall_spending_conditions_absent_witness_reports_no_signatures():
     # Pins the wire contract for an absent SIG_ALL witness
     # (cashubtc/nutshell#1126): code 11000 with "no signatures in proof.".
