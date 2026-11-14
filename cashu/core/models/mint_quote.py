@@ -1,6 +1,6 @@
 from typing import Annotated, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from cashu.core.base import MintQuote
 from cashu.core.constants import (
@@ -9,6 +9,7 @@ from cashu.core.constants import (
     MAX_QUOTE_ID_LEN,
     MAX_UNIT_LEN,
 )
+from cashu.core.nuts.nutxx import SCHNORR_SIGNATURE_HEX_LENGTH
 from cashu.core.settings import settings
 
 
@@ -27,6 +28,33 @@ class PostMintQuoteCheckRequest(BaseModel):
     quotes: List[Annotated[str, Field(max_length=MAX_QUOTE_ID_LEN)]] = Field(
         ..., max_length=settings.mint_max_request_length
     )
+
+
+class PostMintQuotesByPubkeyRequest(BaseModel):
+    pubkeys: List[
+        Annotated[str, Field(min_length=MAX_PUBKEY_LEN, max_length=MAX_PUBKEY_LEN)]
+    ]
+    pubkey_signatures: List[
+        Annotated[
+            str,
+            Field(
+                min_length=SCHNORR_SIGNATURE_HEX_LENGTH,
+                max_length=SCHNORR_SIGNATURE_HEX_LENGTH,
+            ),
+        ]
+    ]
+    timestamp: int = Field(..., strict=True, ge=0)
+    limit: Optional[int] = Field(default=None, strict=True, gt=0)
+    cursor: Optional[str] = Field(
+        default=None, strict=True, min_length=1, max_length=1024
+    )
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def validate_limit(cls, value):
+        if value is None:
+            raise ValueError("limit must be a positive integer when provided")
+        return value
 
 
 class PostMintQuoteResponse(BaseModel):
@@ -51,3 +79,8 @@ class PostMintQuoteResponse(BaseModel):
         to_dict["amount_issued"] = mint_quote.amount_issued
         to_dict["updated_at"] = mint_quote.updated_at
         return cls.model_validate(to_dict)
+
+
+class PostMintQuotesByPubkeyResponse(BaseModel):
+    quotes: List[PostMintQuoteResponse]
+    next_cursor: Optional[str]

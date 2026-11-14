@@ -1,6 +1,6 @@
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..nuts.nuts import BOOLEAN_SUPPORTED_NUTS
 
@@ -49,9 +49,11 @@ class GetInfoResponse(BaseModel):
     urls: Optional[List[str]] = None
     time: Optional[int] = None
     max_array_length: Optional[int] = None
-    nuts: Optional[Dict[int, Any]] = None
+    nuts: Optional[
+        Dict[Annotated[Union[int, str], Field(union_mode="left_to_right")], Any]
+    ] = None
 
-    def supports(self, nut: int) -> bool:
+    def supports(self, nut: Union[int, str]) -> bool:
         if not self.nuts or nut not in self.nuts:
             return False
         if nut in BOOLEAN_SUPPORTED_NUTS:
