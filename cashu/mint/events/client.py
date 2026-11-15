@@ -197,10 +197,18 @@ class LedgerEventClientManager:
         if kind not in self.subscriptions:
             self.subscriptions[kind] = {}
 
-        if len(self.subscriptions[kind]) >= self.max_subscriptions:
+        # Count (filter, subId) entries, including the ones being added, so
+        # repeated filters or subIds cannot grow past the cap.
+        new_filters = [
+            f
+            for f in dict.fromkeys(filters)
+            if subId not in self.subscriptions[kind].get(f, [])
+        ]
+        num_subscriptions = sum(len(s) for s in self.subscriptions[kind].values())
+        if num_subscriptions + len(new_filters) > self.max_subscriptions:
             raise ValueError("Max subscriptions reached")
 
-        for f in filters:
+        for f in new_filters:
             logger.debug(f"Adding subscription {subId} for filter {f}")
             self.subscriptions[kind].setdefault(f, []).append(subId)
 

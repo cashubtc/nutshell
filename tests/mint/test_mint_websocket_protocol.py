@@ -149,6 +149,30 @@ def test_add_subscription_rejects_when_max_reached():
 
 
 @pytest.mark.asyncio
+async def test_add_subscription_cap_counts_entries_not_filter_keys(monkeypatch):
+    manager = _client_manager(FakeWebSocket())
+    manager.max_subscriptions = 2
+    monkeypatch.setattr(manager, "create_task", lambda coro: coro.close())
+    kind = JSONRPCSubscriptionKinds.PROOF_STATE
+
+    # the same filter and subId again, or duplicated within one request, adds
+    # nothing
+    manager.add_subscription(kind, ["Y1", "Y1"], "sub-1")
+    manager.add_subscription(kind, ["Y1"], "sub-1")
+    assert manager.subscriptions[kind] == {"Y1": ["sub-1"]}
+
+    # a second subId on the same filter counts against the cap
+    manager.add_subscription(kind, ["Y1"], "sub-2")
+    with pytest.raises(ValueError, match="Max subscriptions reached"):
+        manager.add_subscription(kind, ["Y1"], "sub-3")
+    # and so do the filters of the request being added
+    manager.subscriptions[kind] = {}
+    with pytest.raises(ValueError, match="Max subscriptions reached"):
+        manager.add_subscription(kind, ["Y1", "Y2", "Y3"], "sub-4")
+    assert manager.subscriptions[kind] == {}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["subscribe", "unsubscribe"])
 async def test_handle_request_rejects_long_subscription_id(method):
     manager = _client_manager(FakeWebSocket())
