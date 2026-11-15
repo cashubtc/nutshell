@@ -1,3 +1,4 @@
+import ipaddress
 from typing import Optional
 
 from fastapi import WebSocket, status
@@ -23,23 +24,59 @@ def _rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONRespon
     )
 
 
+def _is_trusted_proxy(host: Optional[str]) -> bool:
+    """Whether `host` is in `mint_forwarded_allow_ips` (IPs, networks or '*')."""
+    allowed = [h.strip() for h in settings.mint_forwarded_allow_ips.split(",")]
+    if "*" in allowed:
+        return True
+    if not host:
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host in allowed
+    for entry in allowed:
+        try:
+            if address in ipaddress.ip_network(entry, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _client_ip_from_headers(headers, peer: Optional[str]) -> Optional[str]:
+    """Client IP from proxy headers, believed only if the connecting peer is a
+    trusted proxy. Anyone else could set them to pick their own rate-limit
+    bucket."""
+    if not settings.mint_rate_limit_proxy_trust or not _is_trusted_proxy(peer):
+        return None
+    cf_ip = headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    xff = headers.get("x-forwarded-for")
+    if xff:
+        # proxies append, so the rightmost untrusted entry is the client
+        hosts = [h.strip() for h in xff.split(",") if h.strip()]
+        for host in reversed(hosts):
+            if not _is_trusted_proxy(host):
+                return host
+        if hosts:
+            return hosts[0]
+    return None
+
+
 def _get_client_ip(request: Request) -> str:
     """Extract the client IP from the request, checking proxy headers first
-    if configured to trust them.
+    if configured to trust them and the request comes from a trusted proxy
+    (`mint_forwarded_allow_ips`).
 
     Header priority (when proxy trust is enabled):
       1. CF-Connecting-IP  – set by Cloudflare
-      2. X-Forwarded-For   – set by most reverse proxies (first entry)
+      2. X-Forwarded-For   – set by most reverse proxies (rightmost untrusted entry)
       3. request.client     – direct connection IP (fallback)
     """
-    if settings.mint_rate_limit_proxy_trust:
-        cf_ip = request.headers.get("cf-connecting-ip")
-        if cf_ip:
-            return cf_ip.strip()
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",")[0].strip()
-    return get_remote_address(request)
+    peer = request.client.host if request.client else None
+    return _client_ip_from_headers(request.headers, peer) or get_remote_address(request)
 
 
 def get_remote_address_excluding_local(request: Request) -> str:
@@ -96,13 +133,10 @@ def get_ws_remote_address(ws: WebSocket) -> str:
     Returns:
         str: The ip address for the current websocket.
     """
-    if settings.mint_rate_limit_proxy_trust:
-        cf_ip = ws.headers.get("cf-connecting-ip")
-        if cf_ip:
-            return cf_ip.strip()
-        xff = ws.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",")[0].strip()
+    peer = ws.client.host if ws.client else None
+    forwarded = _client_ip_from_headers(ws.headers, peer)
+    if forwarded:
+        return forwarded
     if not ws.client or not ws.client.host:
         return "127.0.0.1"
 

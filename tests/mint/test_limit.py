@@ -34,7 +34,7 @@ def test_get_client_ip_proxy_trust_enabled():
         "client": ("127.0.0.1", 8000),
     }
     request = Request(scope)
-    assert _get_client_ip(request) == "203.0.113.2"
+    assert _get_client_ip(request) == "198.51.100.1"
 
     # Test fallback to client IP
     scope = {
@@ -44,6 +44,41 @@ def test_get_client_ip_proxy_trust_enabled():
     }
     request = Request(scope)
     assert _get_client_ip(request) == "203.0.113.3"
+
+
+def test_get_client_ip_ignores_headers_from_untrusted_peer(monkeypatch):
+    monkeypatch.setattr(settings, "mint_rate_limit_proxy_trust", True)
+    monkeypatch.setattr(settings, "mint_forwarded_allow_ips", "127.0.0.1")
+    # a client connecting directly cannot choose its rate-limit bucket
+    scope = {
+        "type": "http",
+        "headers": [
+            (b"cf-connecting-ip", b"203.0.113.1"),
+            (b"x-forwarded-for", b"203.0.113.2"),
+        ],
+        "client": ("198.51.100.7", 8000),
+    }
+    assert _get_client_ip(Request(scope)) == "198.51.100.7"
+
+    # behind a trusted proxy that appends, a spoofed leading entry is ignored
+    scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"6.6.6.6, 198.51.100.7")],
+        "client": ("127.0.0.1", 8000),
+    }
+    assert _get_client_ip(Request(scope)) == "198.51.100.7"
+
+    # trusted networks and '*' are honoured
+    monkeypatch.setattr(settings, "mint_forwarded_allow_ips", "10.0.0.0/8")
+    scope = {
+        "type": "http",
+        "headers": [(b"cf-connecting-ip", b"203.0.113.1")],
+        "client": ("10.1.2.3", 8000),
+    }
+    assert _get_client_ip(Request(scope)) == "203.0.113.1"
+    monkeypatch.setattr(settings, "mint_forwarded_allow_ips", "*")
+    scope["client"] = ("198.51.100.7", 8000)
+    assert _get_client_ip(Request(scope)) == "203.0.113.1"
 
 
 def test_get_client_ip_proxy_trust_disabled():
@@ -88,7 +123,7 @@ def test_get_ws_remote_address_proxy_trust_enabled():
         "client": ("127.0.0.1", 8000),
     }
     ws = WebSocket(scope, dummy_receive, dummy_send)
-    assert get_ws_remote_address(ws) == "203.0.113.2"
+    assert get_ws_remote_address(ws) == "198.51.100.1"
 
     # Test fallback to client IP
     scope = {
