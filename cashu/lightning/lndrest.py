@@ -30,6 +30,11 @@ from .base import (
 from .http import STREAM_READ_TIMEOUT, http_timeout
 from .macaroon import load_macaroon
 
+# gRPC status codes with which the REST proxy rejects a request before it is
+# handed to the payment router: INVALID_ARGUMENT, NOT_FOUND,
+# PERMISSION_DENIED, UNIMPLEMENTED, UNAUTHENTICATED.
+REST_PROXY_REJECTION_CODES = {3, 5, 7, 12, 16}
+
 PAYMENT_RESULT_MAP = {
     "UNKNOWN": PaymentResult.ERROR,
     "IN_FLIGHT": PaymentResult.PENDING,
@@ -271,15 +276,22 @@ class LndRestWallet(LightningBackend):
                         result=PaymentResult.ERROR, error_message=message
                     )
 
-                # immediate (non-streaming) errors from the REST proxy reject
-                # the request before any payment is initiated, e.g.
+                # immediate (non-streaming) errors from the REST proxy, e.g.
                 # {"code": 5, "message": "Not Found", "details": []} when the
-                # route is unavailable. No payment was created, so this is an
-                # explicit FAILED.
+                # route is unavailable. Only a code that rejects the request
+                # itself (unknown route, malformed request, auth) proves that
+                # no payment was created and is an explicit FAILED. A
+                # transport code such as UNAVAILABLE or UNKNOWN can come back
+                # after lnd received the request, so it is reported as ERROR
+                # and the ledger keeps the payment uncertain, like the gRPC
+                # backend does for SendPaymentV2 RPC errors.
                 if line.get("message") and "result" not in line:
-                    return PaymentResponse(
-                        result=PaymentResult.FAILED, error_message=line["message"]
+                    result = (
+                        PaymentResult.FAILED
+                        if line.get("code") in REST_PROXY_REJECTION_CODES
+                        else PaymentResult.ERROR
                     )
+                    return PaymentResponse(result=result, error_message=line["message"])
 
                 payment = line.get("result")
                 if payment is None or not payment.get("status"):
