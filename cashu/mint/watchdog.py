@@ -154,12 +154,14 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             return False
 
         if last_balance_log_entry:
-            last_balance_delta = last_balance_log_entry.backend_balance - (
-                last_balance_log_entry.keyset_balance
-                + last_balance_log_entry.keyset_fees_paid
+            # plain ints: a row stored under MINT_WATCHDOG_IGNORE_MISMATCH can
+            # hold a negative delta, which an Amount cannot represent
+            last_balance_delta = last_balance_log_entry.backend_balance.amount - (
+                last_balance_log_entry.keyset_balance.amount
+                + last_balance_log_entry.keyset_fees_paid.amount
             )
-            current_balance_delta = backend_balance - (
-                keyset_balance + keyset_fees_paid
+            current_balance_delta = backend_balance.amount - (
+                keyset_balance.amount + keyset_fees_paid.amount
             )
             if last_balance_delta > current_balance_delta:
                 logger.warning(

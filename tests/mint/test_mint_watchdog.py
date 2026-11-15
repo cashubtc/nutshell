@@ -320,3 +320,25 @@ async def test_backend_status_error_is_not_zero_reserves(ledger: Ledger, monkeyp
     await _run_checker_passes(ledger, backend, Unit.sat, 3)
     assert backend.calls >= 3, "checker must survive a failing status() call"
     assert ledger.abort_queue.empty(), "status failure must not abort the mint"
+
+
+@pytest.mark.asyncio
+async def test_ignored_insolvency_then_recovery_does_not_crash(ledger: Ledger):
+    ledger.abort_queue = asyncio.Queue()
+    # an undercollateralised row, as stored in MINT_WATCHDOG_IGNORE_MISMATCH mode
+    last_balance_log_entry = MintBalanceLogEntry(
+        unit=Unit.sat,
+        backend_balance=Amount(Unit.sat, 50),
+        keyset_balance=Amount(Unit.sat, 100),
+        keyset_fees_paid=Amount(Unit.sat, 0),
+        time=datetime.datetime.now(),
+    )
+    ok = await ledger.check_balances_and_abort(
+        ledger.backends[Method.bolt11][Unit.sat],
+        last_balance_log_entry,
+        Amount(Unit.sat, 150),
+        Amount(Unit.sat, 100),
+        Amount(Unit.sat, 0),
+    )
+    assert ok
+    assert ledger.abort_queue.empty()
