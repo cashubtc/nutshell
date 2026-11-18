@@ -528,6 +528,7 @@ async def test_v4_roundtrip_without_pe(wallet1: Wallet, wallet2: Wallet):
         deserialized_proofs = token.proofs
     else:
         from cashu.core.base import TokenV3
+
         token_v3 = TokenV3.deserialize(token_str)
         deserialized_proofs = token_v3.proofs
 
@@ -576,18 +577,24 @@ def test_p2bk_refund_key_unblind():
     assert sender_derived is not None
 
     # Cross-check: sender CANNOT unblind data slot, receiver CANNOT unblind refund slot
-    assert derive_blinded_private_key(
-        privkey=sender_priv,
-        ephemeral_pubkey_hex=E,
-        blinded_pubkey_hex=blinded_data,
-        slot_index=0,
-    ) is None
-    assert derive_blinded_private_key(
-        privkey=receiver_priv,
-        ephemeral_pubkey_hex=E,
-        blinded_pubkey_hex=blinded_refund[0],
-        slot_index=1,
-    ) is None
+    assert (
+        derive_blinded_private_key(
+            privkey=sender_priv,
+            ephemeral_pubkey_hex=E,
+            blinded_pubkey_hex=blinded_data,
+            slot_index=0,
+        )
+        is None
+    )
+    assert (
+        derive_blinded_private_key(
+            privkey=receiver_priv,
+            ephemeral_pubkey_hex=E,
+            blinded_pubkey_hex=blinded_refund[0],
+            slot_index=1,
+        )
+        is None
+    )
 
     # Both derived keys can sign and verify
     msg = b"refund path works"
@@ -630,7 +637,8 @@ def test_p2bk_cosigner_refund_path():
     secret.tags["pubkeys"] = [blinded_add[0]]
     secret.tags["refund"] = [blinded_refund[0]]
     proof = Proof(
-        id="test", amount=1,
+        id="test",
+        amount=1,
         secret=secret.serialize(),
         C="02" + "aa" * 32,
         p2pk_e=E,
@@ -643,6 +651,7 @@ def test_p2bk_cosigner_refund_path():
 
         def _derive_p2bk_signing_keys(self, proof):
             from cashu.wallet.p2bk import WalletP2BK
+
             return WalletP2BK._derive_p2bk_signing_keys(self, proof)  # type: ignore[arg-type]
 
     wallet = _FakeWallet()
@@ -658,12 +667,20 @@ def test_p2bk_cosigner_refund_path():
     # Each signature must validate against its own blinded pubkey
     pk1 = PublicKey(bytes.fromhex(blinded_add[0]))
     pk2 = PublicKey(bytes.fromhex(blinded_refund[0]))
-    assert verify_schnorr_signature(msg, pk1, sig1), "slot-1 sig must be valid for slot-1 pk"
-    assert verify_schnorr_signature(msg, pk2, sig2), "slot-2 sig must be valid for slot-2 pk"
+    assert verify_schnorr_signature(msg, pk1, sig1), (
+        "slot-1 sig must be valid for slot-1 pk"
+    )
+    assert verify_schnorr_signature(msg, pk2, sig2), (
+        "slot-2 sig must be valid for slot-2 pk"
+    )
 
     # Cross-validation must fail: slot-1 sig is wrong for slot-2 pk, and vice versa
-    assert not verify_schnorr_signature(msg, pk2, sig1), "slot-1 sig must NOT validate for slot-2 pk"
-    assert not verify_schnorr_signature(msg, pk1, sig2), "slot-2 sig must NOT validate for slot-1 pk"
+    assert not verify_schnorr_signature(msg, pk2, sig1), (
+        "slot-1 sig must NOT validate for slot-2 pk"
+    )
+    assert not verify_schnorr_signature(msg, pk1, sig2), (
+        "slot-2 sig must NOT validate for slot-1 pk"
+    )
 
 
 def test_p2bk_multisig_slot_independence():
@@ -890,14 +907,14 @@ async def test_p2bk_lock_no_tag_duplication(wallet1: Wallet):
     tags.root.append(["pubkeys", pubkey])
     tags.root.append(["pubkeys", pubkey])
 
-    secret_lock, _ = await wallet1.create_p2bk_lock(
-        pubkey, tags=tags
-    )
+    secret_lock, _ = await wallet1.create_p2bk_lock(pubkey, tags=tags)
 
     # Check that there is only one "pubkeys" tag in secret_lock.tags.root
     pubkeys_tags = [t for t in secret_lock.tags.root if t[0] == "pubkeys"]
 
-    assert len(pubkeys_tags) == 1, f"Expected exactly 1 pubkeys tag, got {len(pubkeys_tags)}"
+    assert len(pubkeys_tags) == 1, (
+        f"Expected exactly 1 pubkeys tag, got {len(pubkeys_tags)}"
+    )
 
 
 async def _create_outputs(wallet: Wallet, amount: int) -> List[BlindedMessage]:

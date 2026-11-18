@@ -22,8 +22,8 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
-      - name: Ruff check
-        run: make ruff-check
+      - name: Ruff lint + format check
+        run: make ruff-check ruff-format-check
       - name: Mutation tooling regression tests
         run: poetry run pytest scripts/tests -o addopts=
   mypy:
@@ -43,3 +43,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/ruff-action@v3
+        with:
+          # Keep in sync with pyproject.toml and .pre-commit-config.yaml.
+          version: "0.15.4"

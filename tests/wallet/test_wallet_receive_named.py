@@ -110,7 +110,9 @@ async def test_redeem_tokenv3_custom_db_dir_reuses_receivers_private_key(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name", ["wallet", "bob"])
-async def test_select_mint_and_receive_pending_reuse_wallet(tmp_path, monkeypatch, name):
+async def test_select_mint_and_receive_pending_reuse_wallet(
+    tmp_path, monkeypatch, name
+):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path / "cli-default"))
     wallet = await Wallet.with_db(SERVER_ENDPOINT, str(tmp_path / "custom"), name=name)
     try:

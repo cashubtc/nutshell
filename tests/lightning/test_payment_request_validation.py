@@ -48,7 +48,9 @@ def test_expired_invoice_is_rejected(backend, expiry):
 
 
 def test_amountless_invoice_is_rejected(backend):
-    with pytest.raises(AmountlessInvoiceNotSupportedError, match="invoice has no amount"):
+    with pytest.raises(
+        AmountlessInvoiceNotSupportedError, match="invoice has no amount"
+    ):
         backend.validate_payment_request(get_fake_invoice(0))
 
 

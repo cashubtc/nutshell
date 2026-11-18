@@ -205,10 +205,10 @@ async def test_redeem_token_with_multiple_mints(wallets):
         bob.keyset_id,
     }
 
-    receipts = [r for r in await get_history(bob.db) if r.type == WalletTransactionType.receive]
-    assert {(r.mint, r.amount) for r in receipts} == {
-        (alice.url, 64), (bob.url, 16)
-    }
+    receipts = [
+        r for r in await get_history(bob.db) if r.type == WalletTransactionType.receive
+    ]
+    assert {(r.mint, r.amount) for r in receipts} == {(alice.url, 64), (bob.url, 16)}
 
 
 async def _fund_request_wallet(url, directory, name, amount, unit="sat", split=None):
@@ -361,9 +361,7 @@ def test_payment_request_swaps_proofs_with_insufficient_net_value(
 ):
     monkeypatch.setattr(settings, "cashu_dir", str(tmp_path))
     monkeypatch.setattr(settings, "mint_url", mint[1])
-    asyncio.run(
-        _fund_request_wallet(mint[0], tmp_path, "payer", 32, split=[16, 16])
-    )
+    asyncio.run(_fund_request_wallet(mint[0], tmp_path, "payer", 32, split=[16, 16]))
     request = PaymentRequest(a=15, u="sat", m=[mint[0]])
     prefix = ["--wallet", "payer", "--tests", "--yes"]
     if explicit:
@@ -440,7 +438,9 @@ def test_request_selection_requires_net_funded_proofs(
     monkeypatch.setattr(settings, "mint_url", mint[1])
     for url, amount in zip(mint, [7 if locked else 3, 64]):
         asyncio.run(
-            _fund_request_wallet(url, tmp_path, "payer", amount, split=amount_split(amount))
+            _fund_request_wallet(
+                url, tmp_path, "payer", amount, split=amount_split(amount)
+            )
         )
     request = PaymentRequest(
         a=1,
@@ -482,7 +482,9 @@ def test_request_selection_handles_unavailable_mint(
     monkeypatch.setattr(settings, "mint_url", mint[1])
     for url, amount in zip(mint, [preferred_amount, 64]):
         asyncio.run(
-            _fund_request_wallet(url, tmp_path, "payer", amount, split=amount_split(amount))
+            _fund_request_wallet(
+                url, tmp_path, "payer", amount, split=amount_split(amount)
+            )
         )
 
     get_keysets = Wallet._get_keysets
@@ -514,6 +516,7 @@ def test_request_selection_handles_unavailable_mint(
     requires_swap = locked or preferred_amount != request.a
     assert token.mint == mint[1 if requires_swap else 0]
     assert token.amount == request.a
+
 
 @pytest.mark.asyncio
 async def test_history_preserves_successful_leg_when_later_mint_rejects(
@@ -562,7 +565,11 @@ async def test_history_uses_actual_export_and_net_receipt_with_fees(wallets, tmp
             (WalletTransactionType.receive, token.amount - fee)
         ]
         assert rows[0].amount == receiver.balance.amount
-        exports = [r for r in await get_history(sender.db) if r.type == WalletTransactionType.send]
+        exports = [
+            r
+            for r in await get_history(sender.db)
+            if r.type == WalletTransactionType.send
+        ]
         assert exports[0].amount == -token.amount
     finally:
         await receiver.db.engine.dispose()

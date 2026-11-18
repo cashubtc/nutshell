@@ -13,6 +13,7 @@ from .events.events import LedgerEventManager
 class SupportsSeed(Protocol):
     seed: Optional[str]
 
+
 class SupportsKeysets(Protocol):
     amounts: List[int]
     keyset: MintKeyset

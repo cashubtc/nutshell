@@ -179,9 +179,7 @@ async def test_pending_invoice_fails_on_check(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_invoice_payment_response_reconciliation(
-    wallet: Wallet, ledger: Ledger
-):
+async def test_invoice_payment_response_reconciliation(wallet: Wallet, ledger: Ledger):
     proofs, melt_quote = await quote_melt(
         wallet, description(check_payment_state="FAILED", pay_err=True)
     )

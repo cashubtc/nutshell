@@ -133,7 +133,4 @@ class WalletP2BK(SupportsPrivateKey, SupportsDb):
 
     def filter_p2bk_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Filter P2BK proofs (those with p2pk_e) that we can unblind."""
-        return [
-            p for p in proofs
-            if p.p2pk_e and self._derive_p2bk_signing_keys(p)
-        ]
+        return [p for p in proofs if p.p2pk_e and self._derive_p2bk_signing_keys(p)]

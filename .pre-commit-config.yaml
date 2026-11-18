@@ -1,3 +1,5 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -19,7 +21,7 @@ repos:
         args: [--fix]
       - id: ruff-format
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v1.20.2
     hooks:
       - id: mypy
         args:
@@ -27,3 +29,12 @@ repos:
           - --check-untyped-defs
         additional_dependencies:
           - types-redis
+  - repo: local
+    hooks:
+      - id: conventional-commits
+        name: conventional-commits
+        description: Enforce Conventional Commits in commit messages (AGENTS.md)
+        entry: python scripts/check_commit_msg.py
+        language: python
+        stages: [commit-msg]
+        always_run: true

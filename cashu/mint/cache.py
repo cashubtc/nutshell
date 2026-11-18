@@ -86,7 +86,9 @@ class RedisCache:
 
     def _redis_failed(self):
         if self._redis_available:
-            logger.warning("Redis cache unavailable; using process-local response cache.")
+            logger.warning(
+                "Redis cache unavailable; using process-local response cache."
+            )
         self._redis_available = False
 
     async def test_connection(self):
@@ -146,7 +148,9 @@ class RedisCache:
                 key = request.url.path + payload.model_dump_json()
                 task = self._inflight.get(key)
                 if task is None:
-                    task = asyncio.create_task(self._execute(func, request, payload, key))
+                    task = asyncio.create_task(
+                        self._execute(func, request, payload, key)
+                    )
                     self._inflight[key] = task
                     task.add_done_callback(self._consume_exception)
                 # Finish and cache successful operations even if the caller disconnects.

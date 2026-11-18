@@ -14,7 +14,9 @@ def mint():
         patch.setattr(settings, "mint_backend_bolt11_sat", "FakeWallet")
         patch.setattr(settings, "mint_backend_bolt11_usd", "FakeWallet")
         patch.setattr(
-            settings, "mint_input_fee_ppk", int(os.getenv("CDK_TEST_INPUT_FEE_PPK", "100"))
+            settings,
+            "mint_input_fee_ppk",
+            int(os.getenv("CDK_TEST_INPUT_FEE_PPK", "100")),
         )
         # Allow CDK to subscribe before the simulated Lightning payment arrives.
         patch.setattr(settings, "fakewallet_delay_incoming_payment", 1)

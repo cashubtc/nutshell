@@ -27,7 +27,9 @@ def test_mint_request_rejects_long_secret_before_hashing(
     }
     hashed = Mock(side_effect=AssertionError("rejected secret must not be hashed"))
     monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
-    adapter = TypeAdapter(Annotated[model, BeforeValidator(validate_input_secret_lengths)])
+    adapter = TypeAdapter(
+        Annotated[model, BeforeValidator(validate_input_secret_lengths)]
+    )
 
     with pytest.raises(ValidationError) as exc:
         adapter.validate_python({**fields, "inputs": [proof], "outputs": []})
@@ -49,7 +51,9 @@ def test_mint_request_secret_limit_accepts_boundary(model, fields, secret_charac
         "C": POINT,
         "secret": secret,
     }
-    adapter = TypeAdapter(Annotated[model, BeforeValidator(validate_input_secret_lengths)])
+    adapter = TypeAdapter(
+        Annotated[model, BeforeValidator(validate_input_secret_lengths)]
+    )
     request = adapter.validate_python({**fields, "inputs": [proof], "outputs": []})
 
     assert type(request.inputs[0]) is Proof
@@ -60,7 +64,9 @@ def test_mint_request_secret_limit_accepts_boundary(model, fields, secret_charac
 def test_mint_request_rejects_first_long_secret_before_hashing(monkeypatch):
     valid = {"secret": "valid"}
     invalid = {"secret": "x" * (settings.mint_max_secret_length + 1)}
-    hashed = Mock(side_effect=AssertionError("rejected request must not hash any proof"))
+    hashed = Mock(
+        side_effect=AssertionError("rejected request must not hash any proof")
+    )
     monkeypatch.setattr("cashu.core.base.hash_to_curve", hashed)
     adapter = TypeAdapter(
         Annotated[PostSwapRequest, BeforeValidator(validate_input_secret_lengths)]

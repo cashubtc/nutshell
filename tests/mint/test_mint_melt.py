@@ -1078,9 +1078,7 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
 
     # Invoice for 64 sats (+2 fee = 66 sats needed)
     invoice = (
-        get_real_invoice(64)["payment_request"]
-        if is_regtest
-        else get_fake_invoice(64)
+        get_real_invoice(64)["payment_request"] if is_regtest else get_fake_invoice(64)
     )
     melt_quote1 = await wallet.melt_quote(invoice)
     melt_quote2 = await wallet.melt_quote(invoice)
@@ -1105,9 +1103,9 @@ async def test_melt_race_condition_fixed(wallet: Wallet, ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
 
     # We expect them to NOT be pending if the bug is fixed
-    assert not any(
-        s.pending for s in states
-    ), "Proofs from failed melt request stuck in pending!"
+    assert not any(s.pending for s in states), (
+        "Proofs from failed melt request stuck in pending!"
+    )
 
 
 @pytest.mark.asyncio
@@ -1878,7 +1876,9 @@ async def test_melt_executor_exit_releases_lease(
     async def persistence_error(*args, **kwargs):
         raise RuntimeError("could not persist payment result")
 
-    monkeypatch.setattr(ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", payment)
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", payment
+    )
     monkeypatch.setattr(ledger, "_update_melt_checking_id", persistence_error)
     task = asyncio.create_task(ledger._execute_melt_payment(quote, [proof], None))
     await asyncio.wait_for(started.wait(), 2)
@@ -1969,11 +1969,14 @@ async def test_prepare_melt_failure_rolls_back(
     assert not current.payment_uncertain
     assert all(
         state.unspent
-        for state in await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
+        for state in await ledger.db_read.get_proofs_states(
+            [p.Y for p in wallet.proofs]
+        )
     )
-    assert await ledger.crud.get_blinded_messages_melt_id(
-        db=ledger.db, melt_id=quote_id
-    ) == []
+    assert (
+        await ledger.crud.get_blinded_messages_melt_id(db=ledger.db, melt_id=quote_id)
+        == []
+    )
     assert (
         await ledger.crud.get_balance(db=ledger.db, keyset=ledger.keyset)
         == balance_before
@@ -2026,7 +2029,11 @@ async def test_melt_recovery_bounds_stalled_status_lookup(ledger: Ledger, monkey
 @pytest.mark.parametrize("settled_internally", [False, True])
 @pytest.mark.parametrize("overpaid", [False, True])
 async def test_expired_internal_melt_recovers_without_lightning_send(
-    ledger: Ledger, wallet: Wallet, monkeypatch, settled_internally: bool, overpaid: bool
+    ledger: Ledger,
+    wallet: Wallet,
+    monkeypatch,
+    settled_internally: bool,
+    overpaid: bool,
 ):
     await fund_wallet(ledger, wallet)
     _, proofs = await wallet.swap_to_send(wallet.proofs, 64 if overpaid else 16)
