@@ -131,6 +131,7 @@ async def start_auth():
     logger.info("Starting auth ledger.")
     await auth_ledger.init_keysets()
     await auth_ledger.init_auth()
+    auth_ledger.start_keyset_accounting()
     logger.info("Auth ledger started.")
 
 
@@ -144,6 +145,8 @@ async def start_mint():
 
 async def shutdown_mint():
     await ledger.shutdown_ledger()
+    if settings.mint_require_auth:
+        await auth_ledger.shutdown_ledger()
     logger.info("Mint shutdown.")
     logger.remove()
 

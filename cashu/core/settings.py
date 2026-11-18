@@ -84,6 +84,9 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
+    mint_keyset_accounting_interval_seconds: float = Field(default=1, gt=0)
+    mint_keyset_accounting_batch_size: int = Field(default=1000, gt=0)
+
     mint_melt_lease_seconds: int = Field(default=60, gt=0)
     mint_melt_execution_timeout_seconds: int = Field(default=120, gt=0)
 

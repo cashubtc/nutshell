@@ -73,6 +73,9 @@ settings.mint_input_fee_ppk = 0
 settings.db_connection_pool = True
 # Preserve mint_require_auth from the environment for the Keycloak integration job.
 settings.mint_watchdog_enabled = False
+# Fixtures replace the mint database between tests while the HTTP server lives
+# for the session. Accounting tests drive aggregation explicitly.
+settings.mint_keyset_accounting_interval_seconds = 3600
 
 settings.mint_rpc_server_enable = True
 settings.mint_rpc_server_mutual_tls = False
