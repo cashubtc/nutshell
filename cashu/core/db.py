@@ -29,13 +29,14 @@ def mask_db_location(db_location: str) -> str:
 
 @dataclass(frozen=True)
 class LockOptions:
-    """Describes a table, row, or PostgreSQL transaction advisory lock."""
+    """Describe locks, optionally restricted to a backend with ``only_on``."""
 
     table: str
     select_statement: Optional[str] = None
     parameters: Mapping[str, Any] = field(default_factory=dict)
     timeout: Optional[float] = None
     advisory_key: Optional[int] = None
+    only_on: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.table:
@@ -49,6 +50,10 @@ class LockOptions:
                 raise TypeError("Advisory lock key must be an integer.")
             if self.advisory_key < -(2**63) or self.advisory_key > 2**63 - 1:
                 raise ValueError("Advisory lock key must be a signed 64-bit integer.")
+
+    def resolve(self, db: "Database") -> Sequence["LockOptions"]:
+        """Expand a lock option into the resources required by this database."""
+        return (self,)
 
 
 class Compat:
@@ -240,13 +245,14 @@ class Database(Compat):
         Args:
             conn (Optional[Connection], optional): Connection object. Defaults to None.
             locks (Optional[Sequence[LockOptions]], optional): Ordered locks to acquire.
+                Variants are resolved and backend restrictions applied before acquisition.
                 If more than one timeout is provided, the shortest applies to
                 acquisition of the complete lock set.
 
         Yields:
             Connection: Connection object.
         """
-        locks = tuple(locks or ())
+        locks = self._resolve_locks(locks or ())
         if conn is not None:
             logger.trace("Reusing existing connection")
             await self._acquire_locks(conn, locks)
@@ -261,7 +267,7 @@ class Database(Compat):
         self,
         locks: Optional[Sequence[LockOptions]] = None,
     ):
-        locks = tuple(locks or ())
+        locks = self._resolve_locks(locks or ())
 
         async def _handle_lock_retry(retry_delay, timeout, start_time) -> float:
             await asyncio.sleep(retry_delay)
@@ -331,6 +337,14 @@ class Database(Compat):
 
         raise Exception(
             f"failed to acquire database locks {locks} after {timeout}s and {trial} trials ({random_int})"
+        )
+
+    def _resolve_locks(self, locks: Sequence[LockOptions]) -> tuple[LockOptions, ...]:
+        return tuple(
+            resolved
+            for lock in locks
+            if lock.only_on is None or lock.only_on == self.type
+            for resolved in lock.resolve(self)
         )
 
     async def _acquire_locks(

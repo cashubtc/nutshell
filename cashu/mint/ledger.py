@@ -72,7 +72,7 @@ from ..lightning.base import (
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
 from .db.lease import maintain_melt_lease
-from .db.locks import proof_locks
+from .db.locks import ProofLockOptions
 from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
@@ -1574,7 +1574,7 @@ class Ledger(
                     select_statement="checking_id = :checking_id",
                     parameters={"checking_id": melt_quote.checking_id},
                 ),
-                *proof_locks(self.db, [p.Y for p in proofs]),
+                ProofLockOptions(Ys=[p.Y for p in proofs]),
             ],
         ) as conn:
             if outputs:
@@ -1782,7 +1782,7 @@ class Ledger(
         finalized = False
         try:
             async with self.db.get_connection(
-                locks=proof_locks(self.db, [p.Y for p in proofs], timeout=None),
+                locks=[ProofLockOptions(Ys=[p.Y for p in proofs], timeout=None)],
             ) as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
 

@@ -27,7 +27,7 @@ from ...core.errors import (
 from ...core.settings import settings
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
-from .locks import proof_locks
+from .locks import ProofLockOptions
 from .read import DbReadHelper
 
 
@@ -73,11 +73,10 @@ class DbWriteHelper:
 
     async def _lock_proofs(self, proofs: List[Proof], conn: Connection) -> None:
         """Keep PostgreSQL proof locks until the surrounding transaction ends."""
-        if self.db.type == POSTGRES:
-            async with self.db.get_connection(
-                conn, locks=proof_locks(self.db, [p.Y for p in proofs])
-            ):
-                pass
+        async with self.db.get_connection(
+            conn, locks=[ProofLockOptions(Ys=[p.Y for p in proofs], only_on=POSTGRES)]
+        ):
+            pass
 
     async def _verify_spent_proofs_and_set_pending(
         self,
@@ -101,7 +100,7 @@ class DbWriteHelper:
         try:
             logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
-                locks=proof_locks(self.db, [p.Y for p in proofs]),
+                locks=[ProofLockOptions(Ys=[p.Y for p in proofs])],
                 conn=conn,
             ) as conn:
                 logger.trace("checking whether proofs are already spent")
@@ -161,11 +160,7 @@ class DbWriteHelper:
         """
         async with self.db.get_connection(
             conn,
-            locks=(
-                proof_locks(self.db, [p.Y for p in proofs])
-                if self.db.type == POSTGRES
-                else []
-            ),
+            locks=[ProofLockOptions(Ys=[p.Y for p in proofs], only_on=POSTGRES)],
         ) as conn:
             amounts_by_keyset: Dict[str, int] = {}
             for p in proofs:
@@ -203,11 +198,7 @@ class DbWriteHelper:
         """
         async with self.db.get_connection(
             conn,
-            locks=(
-                proof_locks(self.db, [p.Y for p in proofs])
-                if self.db.type == POSTGRES
-                else []
-            ),
+            locks=[ProofLockOptions(Ys=[p.Y for p in proofs], only_on=POSTGRES)],
         ) as conn:
             await self._unset_proofs_pending(proofs, keysets, spent=True, conn=conn)
             await self.invalidate_proofs(
@@ -652,7 +643,7 @@ class DbWriteHelper:
                     select_statement="checking_id = :checking_id",
                     parameters={"checking_id": quote.checking_id},
                 ),
-                *proof_locks(self.db, [p.Y for p in proofs]),
+                ProofLockOptions(Ys=[p.Y for p in proofs]),
             ],
             conn=conn,
         ) as conn:
@@ -818,7 +809,7 @@ class DbWriteHelper:
                     select_statement="quote = :quote",
                     parameters={"quote": quote.quote},
                 ),
-                *proof_locks(self.db, [p.Y for p in proofs]),
+                ProofLockOptions(Ys=[p.Y for p in proofs]),
             ],
         ) as conn:
             quote = await self._unset_melt_quote_pending(quote, state, conn=conn)
@@ -850,11 +841,7 @@ class DbWriteHelper:
         """
         async with self.db.get_connection(
             conn,
-            locks=(
-                proof_locks(self.db, [p.Y for p in proofs])
-                if self.db.type == POSTGRES
-                else []
-            ),
+            locks=[ProofLockOptions(Ys=[p.Y for p in proofs], only_on=POSTGRES)],
         ) as conn:
             amounts_by_keyset: Dict[str, int] = {}
             for proof in proofs:
@@ -923,7 +910,7 @@ class DbWriteHelper:
                     select_statement="quote = :quote",
                     parameters={"quote": quote.quote},
                 ),
-                *proof_locks(self.db, [p.Y for p in proofs]),
+                ProofLockOptions(Ys=[p.Y for p in proofs]),
             ],
         ) as conn:
             # Load the quote within the finalization transaction.
