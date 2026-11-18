@@ -1384,3 +1384,12 @@ async def m042_add_melt_execution_leases(db: Database):
         await conn.execute(
             f"UPDATE {table} SET payment_uncertain = 1 WHERE state = 'PENDING'"
         )
+
+
+async def m043_keysets_final_expiry_bigint(db: Database):
+    if db.type == "POSTGRES":
+        async with db.connect() as conn:
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('keysets')} "
+                "ALTER COLUMN final_expiry TYPE BIGINT"
+            )

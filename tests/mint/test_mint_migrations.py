@@ -14,6 +14,7 @@ from cashu.core.base import (
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
+from cashu.core.settings import settings
 from cashu.mint import migrations as mint_migrations
 from cashu.mint.auth import migrations as auth_migrations
 from cashu.mint.auth.base import User
@@ -518,4 +519,49 @@ async def test_m042_marks_existing_pending_payments_uncertain(tmp_path):
             "UNPAID": False,
         }
     finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "migration",
+    [
+        mint_migrations.m043_keysets_final_expiry_bigint,
+        auth_migrations.m006_keysets_final_expiry_bigint,
+    ],
+    ids=["mint", "auth"],
+)
+async def test_keyset_final_expiry_migration(tmp_path, migration):
+    location = settings.mint_test_database
+    db = Database(
+        "ext_final_expiry_test", location if "://" in location else str(tmp_path)
+    )
+    table = db.table_with_schema("keysets")
+    try:
+        async with db.connect() as conn:
+            if db.type != "SQLITE":
+                await conn.execute("CREATE SCHEMA final_expiry_test")
+            await conn.execute(
+                f"CREATE TABLE {table} (id TEXT PRIMARY KEY, final_expiry INTEGER NULL)"
+            )
+            await conn.execute(
+                f"INSERT INTO {table} VALUES ('existing', :expiry), ('unset', NULL)",
+                {"expiry": 2**31 - 1},
+            )
+
+        await migration(db)
+
+        rows = await db.fetchall(f"SELECT final_expiry FROM {table} ORDER BY id")
+        assert [row["final_expiry"] for row in rows] == [2**31 - 1, None]
+
+        await db.execute(
+            f"INSERT INTO {table} VALUES ('larger', :expiry)", {"expiry": 2**31}
+        )
+        row = await db.fetchone(
+            f"SELECT final_expiry FROM {table} WHERE id = 'larger'"
+        )
+        assert row["final_expiry"] == 2**31
+    finally:
+        if db.type != "SQLITE":
+            await db.execute("DROP SCHEMA final_expiry_test CASCADE")
         await db.engine.dispose()
