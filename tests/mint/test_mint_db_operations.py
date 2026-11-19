@@ -1188,3 +1188,62 @@ async def test_concurrent_swap_different_proofs(wallet: Wallet, ledger: Ledger):
     )
     errors = [r for r in results if isinstance(r, Exception)]
     assert len(errors) == 0, f"Expected 0 errors, got: {errors}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_github_actions,
+    reason=("Fails on GitHub Actions for regtest + SQLite"),
+)
+async def test_concurrent_swap_different_proofs_same_outputs(
+    wallet: Wallet, ledger: Ledger, monkeypatch
+):
+    # Both swaps are held after setting their proofs pending, so both pass the
+    # early output check. The loser then fails storing the duplicate outputs
+    # and must release its proofs and restore the keyset balance.
+    set_pending = ledger.db_write._verify_spent_proofs_and_set_pending
+    both_pending = asyncio.Event()
+    pending_count = 0
+
+    async def set_pending_with_barrier(*args, **kwargs):
+        nonlocal pending_count
+        await set_pending(*args, **kwargs)
+        pending_count += 1
+        if pending_count == 2:
+            both_pending.set()
+        await asyncio.wait_for(both_pending.wait(), timeout=5)
+
+    monkeypatch.setattr(
+        ledger.db_write,
+        "_verify_spent_proofs_and_set_pending",
+        set_pending_with_barrier,
+    )
+
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote, split=[32, 32])
+
+    proofs1 = wallet.proofs[:1]
+    proofs2 = wallet.proofs[1:]
+
+    secrets, rs, _ = await wallet.generate_n_secrets(1)
+    outputs, _ = wallet._construct_outputs([32], secrets, rs)
+
+    balance_before, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+
+    results = await asyncio.gather(
+        ledger.swap(proofs=proofs1, outputs=outputs),
+        ledger.swap(proofs=proofs2, outputs=outputs),
+        return_exceptions=True,
+    )
+    success = sum(1 for r in results if not isinstance(r, Exception))
+    errors = [r for r in results if isinstance(r, Exception)]
+    assert success == 1, f"Expected 1 success, got {success}. Errors: {errors}"
+    assert len(errors) == 1, f"Expected 1 error, got {len(errors)}"
+
+    failed_proofs = proofs1 if isinstance(results[0], Exception) else proofs2
+    states = await ledger.db_read.get_proofs_states([p.Y for p in failed_proofs])
+    assert all(s.unspent for s in states), f"Proofs not released: {states}"
+
+    balance_after, _ = await ledger.crud.get_balance(ledger.keyset, ledger.db)
+    assert balance_after == balance_before
