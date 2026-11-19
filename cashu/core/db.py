@@ -4,6 +4,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from itertools import groupby
 from typing import Any, Mapping, Optional, Sequence, Union
 
 import anyio
@@ -252,10 +253,12 @@ class Database(Compat):
         Yields:
             Connection: Connection object.
         """
-        locks = self._resolve_locks(locks or ())
         if conn is not None:
             logger.trace("Reusing existing connection")
-            await self._acquire_locks(conn, locks)
+            if locks:
+                resolved = self._resolve_locks(locks)
+                deadline = time.monotonic() + self._lock_timeout(resolved)
+                await self._acquire_locks(conn, resolved, retry_deadline=deadline)
             yield conn
         else:
             logger.trace("get_connection: Creating new connection")
@@ -285,8 +288,7 @@ class Database(Compat):
                 logger.trace(f"Lock exception: {e}")
                 return True
 
-        configured_timeouts = [lock.timeout for lock in locks if lock.timeout]
-        timeout = min(configured_timeouts, default=5)
+        timeout = self._lock_timeout(locks)
         start_time = time.time()
         retry_delay = 0.1
         random_int = int(time.time() * 1000)
@@ -347,10 +349,14 @@ class Database(Compat):
             for resolved in lock.resolve(self)
         )
 
+    def _lock_timeout(self, locks: Sequence[LockOptions]) -> float:
+        return min((lock.timeout for lock in locks if lock.timeout), default=5)
+
     async def _acquire_locks(
         self,
         wconn: Connection,
         locks: Sequence[LockOptions],
+        retry_deadline: Optional[float] = None,
     ) -> None:
         if not locks:
             return
@@ -366,52 +372,67 @@ class Database(Compat):
                 wconn._sqlite_exclusive_lock_acquired = True
             return
 
-        for lock in locks:
-            await self._acquire_lock(wconn, lock)
+        for _, table_locks in groupby(locks, key=lambda lock: lock.table):
+            keys: set[int] = set()
+            for lock in table_locks:
+                if self.type == POSTGRES and lock.advisory_key is not None:
+                    keys.add(lock.advisory_key)
+                else:
+                    await self._acquire_lock(wconn, lock)
+            missing_keys = sorted(keys - wconn._advisory_locks_acquired)
+            if missing_keys:
+                await self._acquire_advisory_locks(wconn, missing_keys, retry_deadline)
 
     def _order_locks(self, locks: Sequence[LockOptions]) -> tuple[LockOptions, ...]:
-        """Order resources by table, then by advisory key within each table."""
-        return tuple(
-            sorted(
-                locks,
-                key=lambda lock: (
-                    lock.table,
-                    lock.advisory_key is not None,
-                    lock.advisory_key if lock.advisory_key is not None else 0,
-                ),
+        """Order tables before acquiring their row and advisory locks."""
+        return tuple(sorted(locks, key=lambda lock: lock.table))
+
+    async def _acquire_advisory_locks(
+        self, conn: Connection, keys: list[int], retry_deadline: Optional[float]
+    ) -> None:
+        # Scan the sorted array in order and stop at the first busy key.
+        # A fresh transaction rolls back partial acquisition before retrying.
+        # A reused transaction keeps its locks and can retry the remaining suffix.
+        remaining = keys
+        delay = 0.1
+        while True:
+            busy = await conn.fetchone(
+                """
+                SELECT key FROM unnest(CAST(:keys AS bigint[])) AS requested(key)
+                WHERE NOT pg_try_advisory_xact_lock(key)
+                LIMIT 1
+                """,
+                {"keys": remaining},
             )
-        )
+            if busy is None:
+                conn._advisory_locks_acquired.update(keys)
+                return
+            if retry_deadline is None:
+                break
+            time_left = retry_deadline - time.monotonic()
+            if time_left <= 0:
+                break
+            remaining = remaining[remaining.index(busy["key"]) :]
+            await asyncio.sleep(min(delay, time_left))
+            delay *= 2
+        raise RuntimeError("could not obtain lock on advisory resource")
 
     async def _acquire_lock(
         self,
         wconn: Connection,
         lock: LockOptions,
     ) -> None:
-        """Acquire a table, row, or transaction advisory lock.
+        """Acquire a table or row lock.
 
         Args:
             wconn (Connection): Connection object.
             lock (LockOptions): Lock target and acquisition options.
         """
-        if (
-            self.type == POSTGRES
-            and lock.advisory_key is not None
-            and lock.advisory_key in wconn._advisory_locks_acquired
-        ):
-            return
         try:
             logger.trace(
                 f"Acquiring lock on {lock.table} with statement {self._lock_statement(lock)} parameters: {lock.parameters}"
             )
-            if self.type == POSTGRES and lock.advisory_key is not None:
-                row = await wconn.fetchone(
-                    self._lock_statement(lock), {"advisory_key": lock.advisory_key}
-                )
-                if not row or not row["locked"]:
-                    raise RuntimeError("could not obtain lock on advisory resource")
-                wconn._advisory_locks_acquired.add(lock.advisory_key)
-            else:
-                await wconn.execute(self._lock_statement(lock), dict(lock.parameters))
+            await wconn.execute(self._lock_statement(lock), dict(lock.parameters))
             logger.trace(f"Success: Acquired lock on {lock.table}")
             return
         except Exception as e:
@@ -449,8 +470,6 @@ class Database(Compat):
         yield conn
 
     def _lock_statement(self, lock: LockOptions) -> str:
-        if self.type == POSTGRES and lock.advisory_key is not None:
-            return "SELECT pg_try_advisory_xact_lock(:advisory_key) AS locked"
         # with postgres, we can lock a row with a SELECT statement with FOR UPDATE NOWAIT
         if lock.select_statement:
             if self.type == POSTGRES:

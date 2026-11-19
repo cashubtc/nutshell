@@ -14,7 +14,7 @@ from cashu.core.base import (
     Proof,
     Unit,
 )
-from cashu.core.db import Database
+from cashu.core.db import POSTGRES, Connection, Database
 from cashu.core.errors import (
     InvoiceAlreadyPaidError,
     LightningPaymentFailedError,
@@ -35,6 +35,7 @@ from cashu.lightning.base import (
 )
 from cashu.lightning.lnd_grpc import lnd_grpc
 from cashu.mint.db.lease import maintain_melt_lease
+from cashu.mint.db.locks import ProofLockOptions
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -113,6 +114,34 @@ async def create_pending_melts(
     )
     assert melt_quotes
     return pending_proof, quote
+
+
+@pytest.mark.asyncio
+async def test_finalize_paid_melt_waits_for_busy_proof(ledger: Ledger, monkeypatch):
+    if ledger.db.type != POSTGRES:
+        pytest.skip("Requires PostgreSQL advisory locks")
+    proof, quote = await create_pending_melts(ledger)
+    contended = asyncio.Event()
+    fetchone = Connection.fetchone
+
+    async def observe_lock(conn, query, *args, **kwargs):
+        row = await fetchone(conn, query, *args, **kwargs)
+        if "pg_try_advisory_xact_lock" in query and row is not None:
+            contended.set()
+        return row
+
+    async with ledger.db.get_connection(locks=[ProofLockOptions(Ys=[proof.Y])]):
+        monkeypatch.setattr(Connection, "fetchone", observe_lock)
+        finalizer = asyncio.create_task(ledger._finalize_melt_paid(quote.quote))
+        try:
+            await asyncio.wait_for(contended.wait(), 2)
+        except BaseException:
+            finalizer.cancel()
+            await asyncio.gather(finalizer, return_exceptions=True)
+            raise
+    result = await asyncio.wait_for(finalizer, 2)
+    assert result.paid
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].spent
 
 
 @pytest.mark.asyncio

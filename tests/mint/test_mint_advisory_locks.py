@@ -5,11 +5,13 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import event
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, Unit
 from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database, LockOptions
 from cashu.core.errors import ProofsAlreadySpentError, ProofsArePendingError
 from cashu.mint.db.locks import ProofLockOptions
+from tests.mint.invoice_amount_helpers import make_outputs, unblind_promises
 
 Y_A = "02" + "ab" * 32
 Y_B = "03" + "cd" * 32
@@ -50,20 +52,30 @@ def test_empty_proofs_do_not_request_locks(backend):
     assert ProofLockOptions(Ys=[]).resolve(database(backend)) == []
 
 
+@pytest.fixture
+def lock_statements(ledger):
+    statements = []
+
+    def record(conn, cursor, sql, parameters, context, executemany):
+        if "advisory_xact_lock" in sql or sql.startswith(
+            ("LOCK TABLE", "BEGIN EXCLUSIVE")
+        ):
+            statements.append((sql, parameters))
+
+    engine = ledger.db.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("entrypoint", ["connect", "get_connection", "reuse"])
 @pytest.mark.parametrize("matching_backend", [False, True])
 async def test_backend_restrictions_apply_to_lock_variants(
-    ledger, monkeypatch, entrypoint, matching_backend
+    ledger, lock_statements, entrypoint, matching_backend
 ):
-    acquired = []
-    acquire_lock = ledger.db._acquire_lock
-
-    async def record_lock(conn, lock):
-        acquired.append(lock)
-        await acquire_lock(conn, lock)
-
-    monkeypatch.setattr(ledger.db, "_acquire_lock", record_lock)
     locks = [
         ProofLockOptions(
             Ys=[Y_A, Y_B],
@@ -80,36 +92,53 @@ async def test_backend_restrictions_apply_to_lock_variants(
             await conn.fetchone("SELECT 1")
 
     if not matching_backend:
-        assert acquired == []
+        assert lock_statements == []
     elif ledger.db.type == POSTGRES:
-        assert len(acquired) == 2
-        assert all(lock.advisory_key is not None for lock in acquired)
+        ((sql, params),) = lock_statements
+        assert "pg_try_advisory_xact_lock" in sql
+        assert len(params[0]) == 2
     else:
-        assert acquired == [LockOptions(table="proofs_pending", timeout=1)]
+        ((sql, _),) = lock_statements
+        assert sql == ledger.db._lock_statement(LockOptions(table="proofs_pending"))
 
 
 @pytest.mark.asyncio
-async def test_resolved_proof_locks_follow_quote_locks(postgres_ledger, monkeypatch):
+async def test_resolved_proof_locks_follow_quote_locks(
+    postgres_ledger, lock_statements
+):
     db = postgres_ledger.db
-    acquired = []
-    acquire_lock = db._acquire_lock
-
-    async def record_lock(conn, lock):
-        acquired.append(lock)
-        await acquire_lock(conn, lock)
-
-    monkeypatch.setattr(db, "_acquire_lock", record_lock)
+    proof_locks = ProofLockOptions(Ys=[Y_B, Y_A, Y_A])
+    keys = [lock.advisory_key for lock in proof_locks.resolve(db)]
     async with db.get_connection(
-        locks=[ProofLockOptions(Ys=[Y_B, Y_A]), LockOptions(table="melt_quotes")]
+        locks=[proof_locks, LockOptions(table="melt_quotes")]
     ) as conn:
         async with db.get_connection(conn, locks=[ProofLockOptions(Ys=[Y_A, Y_B])]):
-            assert len(conn._advisory_locks_acquired) == 2
-    assert [lock.table for lock in acquired[:3]] == [
-        "melt_quotes",
-        "proofs_pending",
-        "proofs_pending",
+            assert conn._advisory_locks_acquired == set(keys)
+    (quote_sql, _), (proof_sql, params) = lock_statements
+    assert "LOCK TABLE melt_quotes" in quote_sql
+    assert "pg_try_advisory_xact_lock" in proof_sql
+    assert params[0] == sorted(keys)
+
+
+@pytest.mark.asyncio
+async def test_eight_proof_swap_batches_each_transactions_locks(
+    postgres_ledger, lock_statements
+):
+    ledger = postgres_ledger
+    outputs, secrets = make_outputs(ledger, 255, Unit.sat)
+    await ledger._store_blinded_messages(outputs)
+    proofs = unblind_promises(
+        ledger, await ledger._sign_blinded_messages(outputs), secrets
+    )
+    assert len(proofs) == 8
+    outputs, _ = make_outputs(ledger, 255, Unit.sat)
+    lock_statements.clear()
+    await ledger.swap(proofs=proofs, outputs=outputs)
+    batches = [
+        params[0] for sql, params in lock_statements if "advisory_xact_lock" in sql
     ]
-    assert acquired[1].advisory_key < acquired[2].advisory_key
+    expected = ProofLockOptions(Ys=[p.Y for p in proofs]).resolve(ledger.db)
+    assert batches == [[lock.advisory_key for lock in expected]] * 2
 
 
 @pytest.mark.parametrize("key", [-(2**63) - 1, 2**63])
@@ -231,13 +260,19 @@ async def test_reservation_coordinates_with_completion(postgres_ledger, spend):
 
 
 @pytest.mark.asyncio
-async def test_partial_lock_acquisition_rolls_back_on_timeout(postgres_ledger):
+@pytest.mark.parametrize("reuse", [False, True])
+async def test_partial_lock_acquisition_rolls_back_on_timeout(postgres_ledger, reuse):
     ledger = postgres_ledger
     locks = ProofLockOptions(Ys=[Y_A, Y_B], timeout=0.1).resolve(ledger.db)
     async with ledger.db.get_connection(locks=[locks[1]]):
-        with pytest.raises(Exception, match="failed to acquire database locks"):
-            async with ledger.db.get_connection(locks=locks):
-                pytest.fail("conflicting lock was acquired")
+        with pytest.raises(
+            Exception, match="failed to acquire database locks|could not obtain lock"
+        ):
+            async with ledger.db.get_connection() as conn:
+                async with ledger.db.get_connection(
+                    conn if reuse else None, locks=locks
+                ):
+                    pytest.fail("conflicting lock was acquired")
         async with ledger.db.get_connection(locks=[locks[0]]):
             pass
     async with ledger.db.get_connection(locks=locks):
