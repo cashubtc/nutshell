@@ -1504,9 +1504,11 @@ dependencies = [
 name = "nutshell-cdk-wallet-tests"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "cdk",
  "cdk-sqlite",
  "rand 0.9.5",
+ "serde_json",
  "tokio",
 ]
 
