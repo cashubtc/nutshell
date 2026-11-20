@@ -195,6 +195,16 @@ async def send(
         else:
             raise Exception("Error: lock has to start with P2PK:, P2PK-SIGALL:, P2BK:, or P2BK-SIGALL:")
 
+        # The mint only sees blinded outputs during the swap, so it accepts an
+        # oversized lock here and refuses the proofs later, when they are spent.
+        secret_length = len(secret_lock.serialize())
+        if secret_length > settings.mint_max_secret_length:
+            raise Exception(
+                f"Error: lock secret is {secret_length} characters, more than the"
+                f" mint's limit of {settings.mint_max_secret_length}. Use fewer"
+                " refund keys."
+            )
+
     await wallet.load_proofs()
 
     await wallet.load_mint()

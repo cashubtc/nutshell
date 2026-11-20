@@ -4,12 +4,14 @@ import shlex
 import time
 from pathlib import Path
 from typing import Tuple
+from unittest.mock import AsyncMock
 
 import bolt11
 import pytest
 from click.testing import CliRunner
 
 from cashu.core.base import NUT10Option, PaymentRequest, SupportedMethod, TokenV4
+from cashu.core.crypto.secp import PrivateKey
 from cashu.core.nuts.nut18 import deserialize, serialize
 from cashu.core.nuts.nut26 import deserialize as nut26_deserialize
 from cashu.core.nuts.nut26 import serialize as nut26_serialize
@@ -788,6 +790,37 @@ def test_send_with_lock_and_refund(mint, funded_cli_prefix):
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert fake_refund_pubkey in token.token[0].proofs[0].secret
+
+
+def _refund_args(count: int) -> list:
+    keys = [PrivateKey(i.to_bytes(32, "big")).public_key.format().hex() for i in range(2, 2 + count)]
+    return [arg for key in keys for arg in ("--refund", key)]
+
+
+@pytest.mark.parametrize("kind", ["P2PK", "P2BK"])
+def test_send_refuses_lock_longer_than_mint_limit(funded_cli_prefix, monkeypatch, kind):
+    # 12 refund keys make a lock secret over the 1024-character default; the mint
+    # would accept the swap and then refuse to ever redeem the proofs.
+    swap = AsyncMock()
+    monkeypatch.setattr(Wallet, "swap_to_send", swap)
+    lock = f"{kind}:" + PrivateKey((1).to_bytes(32, "big")).public_key.format().hex()
+    result = CliRunner().invoke(
+        cli, [*funded_cli_prefix, "send", "8", "--lock", lock, *_refund_args(12)]
+    )
+    assert result.exception is not None
+    assert "more than the mint's limit" in str(result.exception)
+    swap.assert_not_awaited()
+
+
+@xfail_below_minimum
+def test_send_with_lock_at_eleven_refund_keys(mint, funded_cli_prefix):
+    lock = "P2PK:" + PrivateKey((1).to_bytes(32, "big")).public_key.format().hex()
+    result = CliRunner().invoke(
+        cli, [*funded_cli_prefix, "send", "8", "--lock", lock, *_refund_args(11)]
+    )
+    assert result.exception is None, result.output
+    token = TokenV4.deserialize(result.stdout.split("\n")[0]).to_tokenv3()
+    assert len(token.token[0].proofs[0].secret) <= settings.mint_max_secret_length
 
 
 @xfail_below_minimum
