@@ -1,6 +1,6 @@
 import time
 from typing import Callable, List
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlunsplit
 
 from loguru import logger
 from websocket._app import WebSocketApp
@@ -25,16 +25,16 @@ class SubscriptionManager:
     callback_map: dict[str, Callable] = {}
 
     def __init__(self, url: str):
-        # parse hostname from url with urlparse
-        hostname = urlparse(url).hostname
-        port = urlparse(url).port
-        if port:
-            hostname = f"{hostname}:{port}"
-        scheme = urlparse(url).scheme
-        ws_scheme = "wss" if scheme == "https" else "ws"
-        ws_url = f"{ws_scheme}://{hostname}/v1/ws"
-        self.url = ws_url
-        self.websocket = WebSocketApp(ws_url, on_message=self._on_message)
+        mint_url = urlsplit(url)
+        scheme = "wss" if mint_url.scheme == "https" else "ws"
+        host = mint_url.hostname or ""
+        if ":" in host:  # urlsplit strips the brackets from IPv6 literals.
+            host = f"[{host}]"
+        port = mint_url.port
+        host_port = f"{host}:{port}" if port is not None else host
+        path = f"{mint_url.path.rstrip('/')}/v1/ws"
+        self.url = urlunsplit((scheme, host_port, path, "", ""))
+        self.websocket = WebSocketApp(self.url, on_message=self._on_message)
 
     def _on_message(self, ws, message):
         logger.trace(f"Received message: {message}")
