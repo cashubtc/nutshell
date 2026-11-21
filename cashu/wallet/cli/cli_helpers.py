@@ -221,7 +221,7 @@ async def verify_mint(ctx: Context, mint_wallet: Wallet, url: str):
     logger.debug(f"Verifying mint {url}")
     # we check the db whether we know this mint already and ask the user if not
     mint_keysets = await get_keysets(mint_url=url, db=mint_wallet.db)
-    if mint_keysets is None:
+    if not mint_keysets:
         # we encountered a new mint and ask for a user confirmation
         if ctx.obj.get("YES"):
             return
