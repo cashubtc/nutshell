@@ -5,21 +5,22 @@ import pytest
 
 from cashu.core.base import Amount, Unit
 
+COMPARISONS = (operator.eq, operator.lt, operator.le, operator.gt, operator.ge)
+
 
 @pytest.mark.parametrize("as_amount", [False, True])
 @pytest.mark.parametrize(
-    "other, equal, greater_equal",
-    [(0, False, True), (41, False, True), (42, True, True), (43, False, False)],
+    "value, other", [(0, 0), (42, 0), (42, 41), (42, 42), (42, 43)]
 )
-def test_amount_comparisons(as_amount, other, equal, greater_equal):
-    amount = Amount(Unit.sat, 42)
+@pytest.mark.parametrize("compare", COMPARISONS)
+def test_amount_comparisons(as_amount, value, other, compare):
+    amount = Amount(Unit.sat, value)
     operand = Amount(Unit.sat, other) if as_amount else other
 
-    assert (amount == operand) is equal
-    assert (amount >= operand) is greater_equal
+    assert compare(amount, operand) is compare(value, other)
 
 
-@pytest.mark.parametrize("compare", [operator.eq, operator.ge])
+@pytest.mark.parametrize("compare", COMPARISONS)
 @pytest.mark.parametrize("unit", [Unit.msat, Unit.usd])
 def test_amount_comparisons_reject_mismatched_units(compare, unit):
     with pytest.raises(Exception, match="^Units must be the same$"):
@@ -31,12 +32,3 @@ def test_amount_comparisons_reject_mismatched_units(compare, unit):
 )
 def test_amount_equality_rejects_unrelated_types(other):
     assert (Amount(Unit.sat, 42) == other) is False
-
-
-@pytest.mark.parametrize("as_amount", [False, True])
-def test_zero_amount_comparisons(as_amount):
-    zero = Amount(Unit.sat, 0)
-    operand = Amount(Unit.sat, 0) if as_amount else 0
-
-    assert (zero == operand) is True
-    assert (zero >= operand) is True
