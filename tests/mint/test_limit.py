@@ -81,6 +81,33 @@ def test_get_client_ip_ignores_headers_from_untrusted_peer(monkeypatch):
     assert _get_client_ip(Request(scope)) == "203.0.113.1"
 
 
+def test_get_client_ip_trusted_proxy_edge_cases(monkeypatch):
+    monkeypatch.setattr(settings, "mint_rate_limit_proxy_trust", True)
+
+    # a peer that is not an IP literal is matched by name; an invalid
+    # entry in the list is skipped rather than raising
+    monkeypatch.setattr(settings, "mint_forwarded_allow_ips", "not-an-ip, proxy.local")
+    scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"203.0.113.9")],
+        "client": ("proxy.local", 8000),
+    }
+    assert _get_client_ip(Request(scope)) == "203.0.113.9"
+    scope["client"] = ("other.local", 8000)
+    assert _get_client_ip(Request(scope)) == "other.local"
+    scope["client"] = ("198.51.100.7", 8000)
+    assert _get_client_ip(Request(scope)) == "198.51.100.7"
+
+    # when every forwarded entry is itself a trusted proxy, the leftmost wins
+    monkeypatch.setattr(settings, "mint_forwarded_allow_ips", "10.0.0.0/8")
+    scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"10.0.0.2, 10.0.0.3")],
+        "client": ("10.0.0.4", 8000),
+    }
+    assert _get_client_ip(Request(scope)) == "10.0.0.2"
+
+
 def test_get_client_ip_proxy_trust_disabled():
     settings.mint_rate_limit_proxy_trust = False
 
