@@ -1,6 +1,8 @@
 import json
 from typing import Any, cast
 
+import pytest
+
 from cashu.core.json_rpc.base import (
     JSONRPCMethods,
     JSONRPCNotficationParams,
@@ -30,14 +32,28 @@ class FakeWebSocketApp:
         return None
 
 
-def test_subscription_manager_builds_websocket_url(monkeypatch):
-    monkeypatch.setattr("cashu.wallet.subscriptions.WebSocketApp", FakeWebSocketApp)
+@pytest.mark.parametrize(
+    "mint_url, endpoint",
+    [
+        ("http://mint.test", "ws://mint.test/v1/ws"),
+        ("https://mint.test:444", "wss://mint.test:444/v1/ws"),
+        ("https://Mint.test/Mints/Alpha", "wss://mint.test/Mints/Alpha/v1/ws"),
+        (
+            "https://mint.test:444/Team%2FBlue/mint/",
+            "wss://mint.test:444/Team%2FBlue/mint/v1/ws",
+        ),
+        ("http://[::1]:3338/mint", "ws://[::1]:3338/mint/v1/ws"),
+        (
+            "https://operator@mint.test/mint/?view=info#top",
+            "wss://mint.test/mint/v1/ws",
+        ),
+    ],
+)
+def test_subscription_manager_builds_websocket_url(mint_url, endpoint):
+    manager = SubscriptionManager(mint_url)
 
-    http_mgr = SubscriptionManager("http://mint.test")
-    https_mgr = SubscriptionManager("https://mint.test:444")
-
-    assert http_mgr.url == "ws://mint.test/v1/ws"
-    assert https_mgr.url == "wss://mint.test:444/v1/ws"
+    assert manager.url == endpoint
+    assert manager.websocket.url == endpoint
 
 
 def test_subscription_manager_subscribe_and_close(monkeypatch):
