@@ -595,6 +595,39 @@ async def update_bolt11_melt_quote(
     )
 
 
+async def update_bolt11_melt_quote_change_outputs(
+    db: Database,
+    quote: str,
+    change_outputs: Optional[str],
+    conn: Optional[Connection] = None,
+) -> None:
+    """Store (or clear, with None) the JSON-encoded blank outputs of a pending melt."""
+    await (conn or db).execute(
+        """
+        UPDATE bolt11_melt_quotes
+        SET change_outputs = :change_outputs
+        WHERE quote = :quote
+        """,
+        {"change_outputs": change_outputs, "quote": quote},
+    )
+
+
+async def get_bolt11_melt_quote_change_outputs(
+    db: Database,
+    quote: str,
+    conn: Optional[Connection] = None,
+) -> Optional[str]:
+    """Return the JSON-encoded blank outputs stored for a pending melt, if any."""
+    row = await (conn or db).fetchone(
+        """
+        SELECT change_outputs FROM bolt11_melt_quotes
+        WHERE quote = :quote
+        """,
+        {"quote": quote},
+    )
+    return row["change_outputs"] if row and row["change_outputs"] else None
+
+
 async def bump_secret_derivation(
     db: Database,
     keyset_id: str,

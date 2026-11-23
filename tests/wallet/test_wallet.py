@@ -7,6 +7,8 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
+    BlindedMessage,
+    BlindedSignature,
     MeltQuote,
     MeltQuoteState,
     MintKeyset,
@@ -14,16 +16,21 @@ from cashu.core.base import (
     Proof,
     WalletKeyset,
 )
+from cashu.core.crypto.b_dhke import step2_bob
+from cashu.core.crypto.secp import PublicKey
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
 from cashu.core.helpers import sum_proofs
+from cashu.core.models import PostMeltQuoteResponse
 from cashu.core.settings import settings
 from cashu.wallet.crud import (
     get_bolt11_melt_quote,
     get_bolt11_mint_quote,
     get_keysets,
     get_proofs,
+    store_bolt11_melt_quote,
     store_keyset,
 )
+from cashu.wallet.v1_api import LedgerAPI
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.compatibility import mint_older_than
@@ -452,6 +459,105 @@ async def test_get_melt_quote_state(wallet1: Wallet):
     assert melt_quote_api_resp.request == melt_quote_wallet.request, "Wrong request"
     assert melt_quote_api_resp.state == melt_quote_wallet.state, "Wrong state"
     assert melt_quote_api_resp.unit == melt_quote_wallet.unit, "Wrong unit"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="signs change with the test mint's keys")
+async def test_melt_pending_then_paid_stores_change(wallet1: Wallet, monkeypatch):
+    """A melt that is PENDING at first and PAID with NUT-08 change on a later
+    quote check must add the change to the wallet (#1269)."""
+    mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(128, quote_id=mint_quote.quote)
+
+    amount, fee_reserve, fee_paid = 64, 8, 2
+    request = "lnbc1pendingmelt"
+    quote_id = "pending-melt-quote"
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, amount + fee_reserve)
+    await store_bolt11_melt_quote(
+        db=wallet1.db,
+        quote=MeltQuote(
+            quote=quote_id,
+            method="bolt11",
+            request=request,
+            checking_id="",
+            unit="sat",
+            amount=amount,
+            fee_reserve=fee_reserve,
+            state=MeltQuoteState.unpaid,
+            mint=wallet1.url,
+        ),
+    )
+
+    def quote_response(state: MeltQuoteState, change=None) -> PostMeltQuoteResponse:
+        return PostMeltQuoteResponse(
+            quote=quote_id,
+            amount=amount,
+            unit="sat",
+            request=request,
+            fee_reserve=fee_reserve,
+            state=state.value,
+            expiry=None,
+            change=change,
+        )
+
+    # The mint accepts the melt but the payment is still in flight.
+    sent_outputs: List[BlindedMessage] = []
+
+    async def melt_pending(self, quote, proofs, outputs, prefer_async=None):
+        sent_outputs.extend(outputs or [])
+        return quote_response(MeltQuoteState.pending)
+
+    monkeypatch.setattr(LedgerAPI, "melt", melt_pending)
+    melt_response = await wallet1.melt(
+        proofs=send_proofs,
+        invoice=request,
+        fee_reserve_sat=fee_reserve,
+        quote_id=quote_id,
+    )
+    assert melt_response.state == MeltQuoteState.pending.value
+    assert sent_outputs, "melt sent no blank outputs for change"
+
+    # Later the payment settles: the mint signs the overpaid fee reserve
+    # (8 - 2 = 6 sat as 2 + 4) onto the first blank outputs.
+    mint_keyset = MintKeyset(
+        seed=settings.mint_private_key, derivation_path=settings.mint_derivation_path
+    )
+    assert mint_keyset.id == wallet1.keyset_id
+    change = []
+    for output, change_amount in zip(sent_outputs, [2, 4]):
+        C_, _, _ = step2_bob(
+            PublicKey(bytes.fromhex(output.B_)),
+            mint_keyset.private_keys[change_amount],
+        )
+        change.append(
+            BlindedSignature(
+                id=mint_keyset.id, amount=change_amount, C_=C_.format().hex()
+            )
+        )
+
+    async def quote_paid(self, quote):
+        return quote_response(MeltQuoteState.paid, change)
+
+    monkeypatch.setattr(LedgerAPI, "get_melt_quote", quote_paid)
+    melt_quote = await wallet1.get_melt_quote(quote_id)
+    assert melt_quote
+    assert melt_quote.state == MeltQuoteState.paid
+
+    # The inputs are spent and the 6 sat change is back in the wallet.
+    assert wallet1.balance == 128 - amount - fee_paid
+    proofs_db = await get_proofs(db=wallet1.db)
+    assert sum_proofs(proofs_db) == 128 - amount - fee_paid
+    change_secrets = {p.secret for p in proofs_db} & {
+        p.secret for p in wallet1.proofs if p.amount in (2, 4)
+    }
+    assert change_secrets, "change proofs were not stored"
+
+    # Checking the quote again must not add the change a second time.
+    await wallet1.get_melt_quote(quote_id)
+    assert wallet1.balance == 128 - amount - fee_paid
+    proofs_db = await get_proofs(db=wallet1.db)
+    assert sum_proofs(proofs_db) == 128 - amount - fee_paid
 
 
 @pytest.mark.asyncio

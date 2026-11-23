@@ -386,3 +386,15 @@ async def m020_create_ecash_transactions(db: Database):
             );
             """
         )
+
+
+async def m021_add_change_outputs_to_melt_quotes(db: Database):
+    """
+    Column to keep the blank outputs (secrets, blinding factors, derivation paths)
+    of a melt that is still PENDING, so the NUT-08 change can be unblinded when a
+    later quote check reports the melt as PAID.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            "ALTER TABLE bolt11_melt_quotes ADD COLUMN change_outputs TEXT"
+        )
