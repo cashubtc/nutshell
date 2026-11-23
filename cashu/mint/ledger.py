@@ -1304,8 +1304,14 @@ class Ledger(
                         )
                         try:
                             await self.melt_mint_settle_internally(claimed, proofs)
-                        except QuoteExpiredError:
-                            # Nothing was sent to a backend, so expiry is safe to roll back.
+                        except (
+                            QuoteExpiredError,
+                            InvoiceAlreadyPaidError,
+                            QuoteAlreadyIssuedError,
+                            TransactionError,
+                        ):
+                            # Nothing was sent to a backend, so a refused internal
+                            # settlement is safe to roll back.
                             return await self._finalize_melt_failed(
                                 quote_id,
                                 lock_token=claimed.melt_lock,
