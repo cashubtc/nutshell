@@ -32,7 +32,7 @@ def get_remote_address_excluding_local(request: HTTPConnection) -> str:
     client = request.client
     # Uvicorn assigns port zero to addresses resolved from forwarding headers.
     if client and client.host == "127.0.0.1" and client.port:
-        if not any(
+        if not settings.mint_rate_limit_proxy_trust or not any(
             header in request.headers
             for header in ("x-forwarded-for", "x-forwarded-proto", "cf-connecting-ip")
         ):

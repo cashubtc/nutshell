@@ -141,15 +141,16 @@ class MintLimits(MintSettings):
         title="Prefer the verified Cloudflare client address",
         description=(
             "Enable only when every proxy in mint_forwarded_allow_ips verifies"
-            " CF-Connecting-IP. Requires mint_rate_limit_proxy_trust."
+            " CF-Connecting-IP. Requires mint_rate_limit_proxy_trust. When running"
+            " Uvicorn directly, use --no-proxy-headers to let the mint resolve both headers."
         ),
     )
     mint_forwarded_allow_ips: str = Field(
         default="127.0.0.1",
         title="Forwarded-allow IPs",
         description=(
-            "Comma-separated list of proxy IPs to trust for X-Forwarded-For"
-            " headers at the uvicorn level, or '*' to trust all."
+            "Comma-separated proxy IPs, networks, or absolute paths to access-controlled"
+            " Unix sockets. Use '*' to trust all."
             " Only relevant when mint_rate_limit_proxy_trust is enabled."
             " Use '*' only when all connections arrive through trusted proxies."
         ),
