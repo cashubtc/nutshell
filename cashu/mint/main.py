@@ -1,10 +1,60 @@
-from typing import Optional
+from ipaddress import ip_address
+from typing import Optional, cast
 
 import click
 import uvicorn
 from click import Context
+from starlette.datastructures import Headers
+from uvicorn._types import (
+    ASGI3Application,
+    ASGIReceiveCallable,
+    ASGISendCallable,
+    Scope,
+)
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from ..core.settings import VERSION, settings
+
+
+def _cloudflare_address(headers: Headers) -> Optional[str]:
+    values = headers.getlist("cf-connecting-ip")
+    if len(values) != 1:
+        return None
+    try:
+        return str(ip_address(values[0].strip()))
+    except ValueError:
+        return None
+
+
+class CloudflareProxyHeadersMiddleware(ProxyHeadersMiddleware):
+    async def __call__(
+        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
+    ) -> None:
+        if scope["type"] != "lifespan":
+            peer = scope.get("client")
+            if (peer[0] if peer else None) in self.trusted_hosts:
+                headers = Headers(raw=list(scope["headers"]))
+                address = _cloudflare_address(headers)
+                if address is not None:
+                    forwarded = headers.mutablecopy()
+                    forwarded["x-forwarded-for"] = address
+                    scope = scope.copy()
+                    scope["headers"] = forwarded.raw
+        await super().__call__(scope, receive, send)
+
+
+def create_server_app() -> ASGI3Application:
+    from .app import app
+
+    asgi_app = cast(ASGI3Application, app)
+    if not settings.mint_rate_limit_proxy_trust:
+        return asgi_app
+    middleware = (
+        CloudflareProxyHeadersMiddleware
+        if settings.mint_trust_cloudflare_connecting_ip
+        else ProxyHeadersMiddleware
+    )
+    return middleware(asgi_app, trusted_hosts=settings.mint_forwarded_allow_ips)
 
 
 @click.command(
@@ -42,13 +92,13 @@ def main(
             d[a.strip("--")] = True  # argument like --key
 
     config = uvicorn.Config(
-        "cashu.mint.app:app",
+        "cashu.mint.main:create_server_app",
+        factory=True,
         port=port,
         host=host,
         ssl_keyfile=ssl_keyfile,
         ssl_certfile=ssl_certfile,
-        proxy_headers=settings.mint_rate_limit_proxy_trust,
-        forwarded_allow_ips=settings.mint_forwarded_allow_ips,
+        proxy_headers=False,
         **d,  # type: ignore
     )
 

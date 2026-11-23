@@ -134,12 +134,14 @@ class MintLimits(MintSettings):
     mint_rate_limit_proxy_trust: bool = Field(
         default=True,
         title="Trust proxy headers for rate limiting",
+        description="Use Uvicorn's client address from trusted forwarding proxies.",
+    )
+    mint_trust_cloudflare_connecting_ip: bool = Field(
+        default=False,
+        title="Prefer the verified Cloudflare client address",
         description=(
-            "Extract client IP from proxy headers (X-Forwarded-For,"
-            " CF-Connecting-IP) for rate limiting. Enable this if the mint"
-            " is behind a reverse proxy (Caddy, nginx) or CDN (Cloudflare)."
-            " Disable if the mint is directly exposed to the internet to"
-            " prevent clients from spoofing their IP via headers."
+            "Enable only when every proxy in mint_forwarded_allow_ips verifies"
+            " CF-Connecting-IP. Requires mint_rate_limit_proxy_trust."
         ),
     )
     mint_forwarded_allow_ips: str = Field(
@@ -149,7 +151,7 @@ class MintLimits(MintSettings):
             "Comma-separated list of proxy IPs to trust for X-Forwarded-For"
             " headers at the uvicorn level, or '*' to trust all."
             " Only relevant when mint_rate_limit_proxy_trust is enabled."
-            " Set to '*' if your proxy's IP is dynamic or unknown."
+            " Use '*' only when all connections arrive through trusted proxies."
         ),
     )
     mint_global_rate_limit_per_minute: int = Field(
