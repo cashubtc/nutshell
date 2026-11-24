@@ -14,6 +14,7 @@ from ..core.errors import CashuError
 from ..core.logging import configure_logger
 from ..core.settings import settings
 from .auth.router import auth_router
+from .proxy import ForwardedClientMiddleware
 from .router import redis, router
 from .startup import (
     shutdown_management_rpc,
@@ -121,3 +122,5 @@ app.include_router(router=router, tags=["Mint"])
 
 if settings.mint_require_auth:
     app.include_router(auth_router, tags=["Auth"])
+
+app.add_middleware(ForwardedClientMiddleware)

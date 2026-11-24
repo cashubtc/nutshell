@@ -5,8 +5,7 @@ from fastapi.responses import JSONResponse
 from limits import RateLimitItemPerMinute
 from loguru import logger
 from slowapi import Limiter
-from slowapi.util import get_remote_address
-from starlette.requests import Request
+from starlette.requests import HTTPConnection, Request
 
 from ..core.settings import settings
 
@@ -23,30 +22,22 @@ def _rate_limit_exceeded_handler(request: Request, exc: Exception) -> JSONRespon
     )
 
 
-def _get_client_ip(request: Request) -> str:
-    """Extract the client IP from the request, checking proxy headers first
-    if configured to trust them.
-
-    Header priority (when proxy trust is enabled):
-      1. CF-Connecting-IP  – set by Cloudflare
-      2. X-Forwarded-For   – set by most reverse proxies (first entry)
-      3. request.client     – direct connection IP (fallback)
-    """
-    if settings.mint_rate_limit_proxy_trust:
-        cf_ip = request.headers.get("cf-connecting-ip")
-        if cf_ip:
-            return cf_ip.strip()
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",")[0].strip()
-    return get_remote_address(request)
+def _get_client_ip(request: HTTPConnection) -> str:
+    """Use the client address resolved by the ASGI server."""
+    client = request.client
+    return client.host if client and client.host else "unknown"
 
 
-def get_remote_address_excluding_local(request: Request) -> str:
-    remote_address = _get_client_ip(request)
-    if remote_address == "127.0.0.1":
-        return ""
-    return remote_address
+def get_remote_address_excluding_local(request: HTTPConnection) -> str:
+    client = request.client
+    # Uvicorn assigns port zero to addresses resolved from forwarding headers.
+    if client and client.host == "127.0.0.1" and client.port:
+        if not settings.mint_rate_limit_proxy_trust or not any(
+            header in request.headers
+            for header in ("x-forwarded-for", "x-forwarded-proto", "cf-connecting-ip")
+        ):
+            return ""
+    return _get_client_ip(request)
 
 
 limiter_global = Limiter(
@@ -88,38 +79,10 @@ def assert_limit(identifier: str, limit: Optional[int] = None):
 
 
 def get_ws_remote_address(ws: WebSocket) -> str:
-    """Returns the ip address for the current websocket (or 127.0.0.1 if none found)
-
-    Args:
-        ws (WebSocket): The FastAPI WebSocket object.
-
-    Returns:
-        str: The ip address for the current websocket.
-    """
-    if settings.mint_rate_limit_proxy_trust:
-        cf_ip = ws.headers.get("cf-connecting-ip")
-        if cf_ip:
-            return cf_ip.strip()
-        xff = ws.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",")[0].strip()
-    if not ws.client or not ws.client.host:
-        return "127.0.0.1"
-
-    return ws.client.host
+    return _get_client_ip(ws)
 
 
 def limit_websocket(ws: WebSocket):
-    """Websocket rate limit handler that accepts a FastAPI WebSocket object.
-    This function will raise an exception if the rate limit is exceeded.
-
-    Args:
-        ws (WebSocket): The FastAPI WebSocket object.
-
-    Raises:
-        Exception: If the rate limit is exceeded.
-    """
-    remote_address = get_ws_remote_address(ws)
-    if remote_address == "127.0.0.1":
-        return
-    assert_limit(remote_address)
+    remote_address = get_remote_address_excluding_local(ws)
+    if remote_address:
+        assert_limit(remote_address)

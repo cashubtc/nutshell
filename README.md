@@ -216,6 +216,8 @@ cashu receive cashuBo2F0gaJhaUgA2...
 
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
 
+For per-client rate limits, see [Configuring the mint behind a proxy](docs/mint-proxy-setup.md).
+
 ## Docker
 
 Run the mint using the pre-built Docker image. This method sets environment variables directly and works reliably regardless of local `.env` files:

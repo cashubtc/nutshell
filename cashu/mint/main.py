@@ -1,10 +1,24 @@
+from functools import partial
+from os.path import abspath
 from typing import Optional
 
 import click
 import uvicorn
 from click import Context
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ..core.settings import VERSION, settings
+
+
+def _unix_socket_app(path: str) -> ASGIApp:
+    from .app import app
+
+    async def serve(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in {"http", "websocket"} and scope.get("server") is None:
+            scope["server"] = (path, None)
+        await app(scope, receive, send)
+
+    return serve
 
 
 @click.command(
@@ -41,14 +55,20 @@ def main(
         else:
             d[a.strip("--")] = True  # argument like --key
 
+    uds = d.get("uds")
+    application = (
+        partial(_unix_socket_app, abspath(uds))
+        if isinstance(uds, str) and "fd" not in d
+        else "cashu.mint.app:app"
+    )
     config = uvicorn.Config(
-        "cashu.mint.app:app",
+        application,
+        factory=not isinstance(application, str),
         port=port,
         host=host,
         ssl_keyfile=ssl_keyfile,
         ssl_certfile=ssl_certfile,
-        proxy_headers=settings.mint_rate_limit_proxy_trust,
-        forwarded_allow_ips=settings.mint_forwarded_allow_ips,
+        proxy_headers=False,
         **d,  # type: ignore
     )
 
