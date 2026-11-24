@@ -347,6 +347,7 @@ async def test_mint_rejects_output_amount_without_keyset_key(
     assert response.status_code == 400, f"{response.url} {response.status_code}"
     assert response.json()["code"] == 11000
     assert "invalid amount for keyset" in response.json()["detail"]
+    assert await ledger._check_outputs_pending_or_issued_before(outputs) == []
 
     # the quote is still mintable with valid outputs
     secrets, rs, _ = await wallet.generate_secrets_from_to(10110, 10111)
