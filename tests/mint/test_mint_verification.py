@@ -567,6 +567,17 @@ async def test_verify_outputs_rejects_inactive_keyset(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_verify_outputs_rejects_amount_without_keyset_key(ledger: Ledger):
+    # 3 passes the range check, but a power-of-two keyset has no key for it.
+    # It must be rejected before the outputs are stored, not when signing.
+    assert 3 not in ledger.keyset.private_keys
+    o3 = _blinded_output(ledger, amount=3, label="no-key-3")
+    o1 = _blinded_output(ledger, amount=1, label="no-key-1")
+    with pytest.raises(TransactionError, match="invalid amount for keyset"):
+        await ledger._verify_outputs([o3, o1])
+
+
+@pytest.mark.asyncio
 async def test_sign_blinded_messages_honors_outputs_after_rotation(ledger: Ledger):
     output = _blinded_output(ledger, label="accepted-before-rotation")
     await ledger._verify_outputs([output])

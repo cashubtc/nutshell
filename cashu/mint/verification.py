@@ -208,6 +208,11 @@ class LedgerVerification(
         if not skip_amount_check:
             if not all([self._verify_amount(o.amount) for o in outputs]):
                 raise TransactionError("invalid amount.")
+            # the keyset must have a key for every amount, or signing fails
+            # after the outputs were already stored
+            private_keys = self.keysets[outputs[0].id].private_keys
+            if not all([o.amount in private_keys for o in outputs]):
+                raise TransactionError("invalid amount for keyset.")
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionDuplicateOutputsError()

@@ -324,6 +324,48 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_mint_rejects_output_amount_without_keyset_key(
+    ledger: Ledger, wallet: Wallet
+):
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    assert mint_quote.privkey
+
+    # 3 is in range but the keyset has no key for it
+    secrets, rs, _ = await wallet.generate_secrets_from_to(10100, 10105)
+    outputs, rs = wallet._construct_outputs([3, 1, 4, 8, 16, 32], secrets, rs)
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/bolt11",
+        json={
+            "quote": mint_quote.quote,
+            "outputs": [o.model_dump() for o in outputs],
+            "signature": signature,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 400, f"{response.url} {response.status_code}"
+    assert response.json()["code"] == 11000
+    assert "invalid amount for keyset" in response.json()["detail"]
+    assert await ledger._check_outputs_pending_or_issued_before(outputs) == []
+
+    # the quote is still mintable with valid outputs
+    secrets, rs, _ = await wallet.generate_secrets_from_to(10110, 10111)
+    outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/bolt11",
+        json={
+            "quote": mint_quote.quote,
+            "outputs": [o.model_dump() for o in outputs],
+            "signature": signature,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+
+
+@pytest.mark.asyncio
 async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
     """
     For backwards compatibility, we do not require a NUT-20 signature
