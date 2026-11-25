@@ -71,7 +71,8 @@ async def test_info(ledger: Ledger):
     assert setting.unit == "sat"
     assert setting.options
     assert setting.options.description is True
-    assert response.json().get("demo") == (True if is_fake else None)
+    # conftest runs the usd unit on FakeWallet, whatever backs sat
+    assert response.json()["demo"] is True
 
 
 _REAL_BACKEND = SimpleNamespace(
