@@ -4,7 +4,15 @@ from unittest.mock import AsyncMock, Mock
 import bolt11
 import pytest
 
-from cashu.core.base import Amount, Method, MintQuote, MintQuoteState, Unit
+from cashu.core.base import (
+    Amount,
+    MeltQuoteState,
+    Method,
+    MintQuote,
+    MintQuoteState,
+    Proof,
+    Unit,
+)
 from cashu.core.errors import QuoteExpiredError
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
@@ -303,6 +311,86 @@ async def test_internal_melt_expiring_after_preparation_releases_proofs(
     )
     balance_after, _ = await ledger.crud.get_balance(db=ledger.db, keyset=ledger.keyset)
     assert balance_after == balance_before
+
+
+async def test_internal_melt_expired_before_recovery_releases_proofs(
+    ledger: Ledger, monkeypatch
+):
+    proofs = await issue_proofs(ledger)
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(amount=2, unit="sat"))
+    monkeypatch.setattr(settings, "melt_quote_ttl", 60)
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+    )
+    # The executor dies after preparation, so only recovery can resolve the quote.
+    await ledger._prepare_melt(proofs=proofs, quote=quote.quote)
+    await expire_melt_lease(ledger, quote.quote)
+    assert quote.expiry is not None
+    expired_at = quote.expiry + 1
+    monkeypatch.setattr("cashu.mint.ledger.time.time", lambda: expired_at)
+
+    assert (await ledger.get_melt_quote(quote.quote)).unpaid
+    assert all(
+        state.unspent
+        for state in await ledger.db_read.get_proofs_states([p.Y for p in proofs])
+    )
+
+
+@pytest.mark.parametrize("refusal", ["target_paid_externally", "melt_expired"])
+async def test_recovered_internal_melt_that_cannot_settle_is_released(
+    ledger: Ledger, monkeypatch, refusal: str
+):
+    monkeypatch.setattr(settings, "fakewallet_brr", False)
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=16))
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+        )
+    ).quote
+    melt_quote = await ledger.crud.get_melt_quote(quote_id=quote_id, db=ledger.db)
+    assert melt_quote is not None
+    melt_quote.state = MeltQuoteState.pending
+    await ledger.crud.update_melt_quote(quote=melt_quote, db=ledger.db)
+    if refusal == "melt_expired":
+        await ledger.db.execute(
+            f"UPDATE {ledger.db.table_with_schema('melt_quotes')} "
+            "SET expiry = 1 WHERE quote = :quote",
+            {"quote": quote_id},
+        )
+    proof = Proof(
+        amount=16,
+        C="recovered-internal-melt-proof",
+        secret="recovered-internal-melt-secret",
+        id=ledger.keyset.id,
+    )
+    await ledger.crud.bump_keyset_balance(
+        db=ledger.db, keyset=ledger.keyset, amount=proof.amount
+    )
+    await ledger.crud.set_proof_pending(proof=proof, quote_id=quote_id, db=ledger.db)
+    assert await ledger.crud.try_debit_keyset_balance(
+        db=ledger.db, keyset=ledger.keyset, amount=proof.amount
+    )
+
+    if refusal == "target_paid_externally":
+        current_mint = await ledger.crud.get_mint_quote(
+            quote_id=mint_quote.quote, db=ledger.db
+        )
+        assert current_mint is not None
+        current_mint.state = MintQuoteState.paid
+        await ledger.crud.update_mint_quote(quote=current_mint, db=ledger.db)
+
+    async def unexpected_send(quote, fee_limit_msat):
+        pytest.fail("Recovering an internal melt must not send a Lightning payment")
+
+    monkeypatch.setattr(
+        ledger.backends[Method.bolt11][Unit.sat], "pay_invoice", unexpected_send
+    )
+    recovered = await ledger.get_melt_quote(quote_id)
+    assert recovered.unpaid
+    assert (await ledger.db_read.get_proofs_states([proof.Y]))[0].unspent
+    assert not await ledger.crud.get_pending_proofs_for_quote(
+        quote_id=quote_id, db=ledger.db
+    )
 
 
 @pytest.mark.parametrize(
