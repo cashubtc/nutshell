@@ -8,7 +8,7 @@ from cashu.core.db import Connection, Database
 
 from ..core.base import Amount, MintBalanceLogEntry, Unit
 from ..core.settings import settings
-from ..lightning.base import LightningBackend
+from ..lightning.base import LightningBackend, StatusResponse
 from .protocols import SupportsBackends, SupportsDb
 
 
@@ -70,7 +70,22 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             f"Dispatching backend checker for unit: {unit.name} and backend: {backend.__class__.__name__}"
         )
         while True:
-            backend_status = await backend.status()
+            try:
+                backend_status = await backend.status()
+            except Exception as e:
+                backend_status = StatusResponse(
+                    balance=Amount(unit, 0), error_message=str(e)
+                )
+            if backend_status.error_message:
+                # a failed status call says nothing about the reserves; do not
+                # treat its placeholder balance as a measured zero
+                logger.warning(
+                    f"Skipping balance check for unit {unit.name}: backend {backend.__class__.__name__} status failed: {backend_status.error_message}"
+                )
+                await asyncio.sleep(
+                    settings.mint_watchdog_balance_check_interval_seconds
+                )
+                continue
             backend_balance = backend_status.balance
             last_balance_log_entry: MintBalanceLogEntry | None = None
             async with self.watcher_db.connect() as conn:
@@ -139,12 +154,14 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             return False
 
         if last_balance_log_entry:
-            last_balance_delta = last_balance_log_entry.backend_balance - (
-                last_balance_log_entry.keyset_balance
-                + last_balance_log_entry.keyset_fees_paid
+            # plain ints: a row stored under MINT_WATCHDOG_IGNORE_MISMATCH can
+            # hold a negative delta, which an Amount cannot represent
+            last_balance_delta = last_balance_log_entry.backend_balance.amount - (
+                last_balance_log_entry.keyset_balance.amount
+                + last_balance_log_entry.keyset_fees_paid.amount
             )
-            current_balance_delta = backend_balance - (
-                keyset_balance + keyset_fees_paid
+            current_balance_delta = backend_balance.amount - (
+                keyset_balance.amount + keyset_fees_paid.amount
             )
             if last_balance_delta > current_balance_delta:
                 logger.warning(

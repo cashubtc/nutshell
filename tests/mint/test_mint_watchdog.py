@@ -264,3 +264,81 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
     )
     assert balance_after == balance_before - 64 - fees_paid
     assert fees_paid_after == fees_paid_before
+
+
+class _StatusBackend:
+    """Backend stub whose status() is scripted per call; the last entry repeats."""
+
+    def __init__(self, statuses):
+        self.statuses = list(statuses)
+        self.calls = 0
+
+    async def status(self):
+        self.calls += 1
+        status = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+        if isinstance(status, Exception):
+            raise status
+        return status
+
+
+async def _run_checker_passes(ledger: Ledger, backend, unit: Unit, passes: int):
+    """Run dispatch_backend_checker until it has called status() `passes` times."""
+    task = asyncio.create_task(ledger.dispatch_backend_checker(unit, backend))
+    for _ in range(500):
+        if backend.calls >= passes or task.done():
+            break
+        await asyncio.sleep(0.01)
+    # let the last pass finish its comparison
+    await asyncio.sleep(0.05)
+    done = task.done()
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    return done
+
+
+@pytest.mark.asyncio
+async def test_backend_status_error_is_not_zero_reserves(ledger: Ledger, monkeypatch):
+    from cashu.lightning.base import StatusResponse
+
+    ledger.abort_queue = asyncio.Queue()
+    monkeypatch.setattr(settings, "mint_watchdog_balance_check_interval_seconds", 0)
+
+    async def liabilities(*args, **kwargs):
+        return Amount(Unit.sat, 1000), Amount(Unit.sat, 0)
+
+    monkeypatch.setattr(ledger, "get_unit_balance_and_fees", liabilities)
+    backend = _StatusBackend(
+        [
+            StatusResponse(balance=Amount(Unit.sat, 0), error_message="unreachable"),
+            RuntimeError("connection refused"),
+            StatusResponse(balance=Amount(Unit.sat, 5000)),
+        ]
+    )
+    await _run_checker_passes(ledger, backend, Unit.sat, 3)
+    assert backend.calls >= 3, "checker must survive a failing status() call"
+    assert ledger.abort_queue.empty(), "status failure must not abort the mint"
+
+
+@pytest.mark.asyncio
+async def test_ignored_insolvency_then_recovery_does_not_crash(ledger: Ledger):
+    ledger.abort_queue = asyncio.Queue()
+    # an undercollateralised row, as stored in MINT_WATCHDOG_IGNORE_MISMATCH mode
+    last_balance_log_entry = MintBalanceLogEntry(
+        unit=Unit.sat,
+        backend_balance=Amount(Unit.sat, 50),
+        keyset_balance=Amount(Unit.sat, 100),
+        keyset_fees_paid=Amount(Unit.sat, 0),
+        time=datetime.datetime.now(),
+    )
+    ok = await ledger.check_balances_and_abort(
+        ledger.backends[Method.bolt11][Unit.sat],
+        last_balance_log_entry,
+        Amount(Unit.sat, 150),
+        Amount(Unit.sat, 100),
+        Amount(Unit.sat, 0),
+    )
+    assert ok
+    assert ledger.abort_queue.empty()
