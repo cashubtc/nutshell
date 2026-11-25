@@ -53,6 +53,7 @@ class MintInfo(BaseModel):
     tos_url: Optional[str]
     time: Optional[int]
     max_array_length: Optional[int] = None
+    demo: Optional[bool] = None
     nuts: Dict[int, Any]
 
     def __str__(self):
