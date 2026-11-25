@@ -83,11 +83,18 @@ async def wallets(tmp_path):
 @pytest.mark.asyncio
 async def test_quote_only_upgrade_and_projection(tmp_path):
     # Run the actual pre-history migrations, then upgrade a populated wallet.
+    # Leave out m020 and every later migration: a later one would record a
+    # higher version and make the upgrade skip m020.
+    def is_pre_history(name: str) -> bool:
+        if name == "__name__":
+            return False
+        return not (name[:1] == "m" and name[1:4].isdigit() and int(name[1:4]) >= 20)
+
     before = ModuleType("cashu.wallet.migrations")
     before.__dict__.update(
         (name, value)
         for name, value in vars(migrations).items()
-        if name != "m020_create_ecash_transactions" and name != "__name__"
+        if is_pre_history(name)
     )
     db = Database("wallet", str(tmp_path))
     try:

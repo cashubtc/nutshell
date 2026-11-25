@@ -50,6 +50,7 @@ from .crud import (
     bump_secret_derivation,
     delete_keyset,
     get_bolt11_melt_quote,
+    get_bolt11_melt_quote_change_outputs,
     get_bolt11_mint_quote,
     get_keysets,
     get_mint_by_url,
@@ -64,6 +65,7 @@ from .crud import (
     store_mint,
     store_proof,
     update_bolt11_melt_quote,
+    update_bolt11_melt_quote_change_outputs,
     update_bolt11_mint_quote,
     update_keyset,
     update_mint,
@@ -892,14 +894,46 @@ class Wallet(
                     await self.invalidate(proofs)
 
                 if melt_quote.change:
-                    logger.warning(
-                        "Melt quote contains change but change is not supported yet."
-                    )
+                    await self._receive_pending_melt_change(quote, melt_quote.change)
 
             if melt_quote.state == MeltQuoteState.unpaid:
                 logger.debug("Updating unpaid status of melt quote.")
                 await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
         return melt_quote
+
+    async def _receive_pending_melt_change(
+        self, quote: str, change: List[BlindedSignature]
+    ) -> None:
+        """Unblinds and stores the NUT-08 change of a melt that was PENDING when
+        `melt` returned, using the blank outputs `melt` kept for this quote."""
+        change_outputs_json = await get_bolt11_melt_quote_change_outputs(
+            db=self.db, quote=quote
+        )
+        if not change_outputs_json:
+            logger.warning(
+                f"Melt quote {quote} contains change but its blank outputs are not "
+                "stored. Restore the wallet from its seed to recover the change."
+            )
+            return
+        change_outputs = json.loads(change_outputs_json)
+        if len(change) > len(change_outputs):
+            logger.error(
+                f"Mint returned {len(change)} change signatures for melt quote "
+                f"{quote} but only {len(change_outputs)} blank outputs were sent."
+            )
+            return
+        change_outputs = change_outputs[: len(change)]
+        change_proofs = await self._construct_proofs(
+            change,
+            [o["secret"] for o in change_outputs],
+            [PrivateKey(bytes.fromhex(o["r"])) for o in change_outputs],
+            [o["derivation_path"] for o in change_outputs],
+        )
+        # the blank outputs are used up: never construct this change twice
+        await update_bolt11_melt_quote_change_outputs(
+            db=self.db, quote=quote, change_outputs=None
+        )
+        logger.debug(f"Received change: {self.unit.str(sum_proofs(change_proofs))}")
 
     async def melt(
         self,
@@ -953,8 +987,21 @@ class Wallet(
             await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
             raise Exception("could not pay invoice.")
         elif melt_quote.state == MeltQuoteState.pending:
-            # payment is still pending
+            # payment is still pending. Keep the blank outputs so that the change
+            # can be unblinded when get_melt_quote later sees the quote as paid.
             logger.debug("Payment is still pending.")
+            await update_bolt11_melt_quote_change_outputs(
+                db=self.db,
+                quote=quote_id,
+                change_outputs=json.dumps(
+                    [
+                        {"secret": secret, "r": r.to_hex(), "derivation_path": path}
+                        for secret, r, path in zip(
+                            change_secrets, change_rs, change_derivation_paths
+                        )
+                    ]
+                ),
+            )
             return melt_quote_resp
 
         # invoice was paid successfully
