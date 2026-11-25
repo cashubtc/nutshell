@@ -49,6 +49,7 @@ class GetInfoResponse(BaseModel):
     urls: Optional[List[str]] = None
     time: Optional[int] = None
     max_array_length: Optional[int] = None
+    demo: Optional[bool] = None
     nuts: Optional[Dict[int, Any]] = None
 
     def supports(self, nut: int) -> bool:

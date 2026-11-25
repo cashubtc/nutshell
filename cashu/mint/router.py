@@ -257,6 +257,7 @@ async def info() -> GetInfoResponse:
         motd=mint_info.motd,
         time=int(time.time()),
         max_array_length=mint_info.max_array_length,
+        demo=mint_info.demo,
     )
 
 

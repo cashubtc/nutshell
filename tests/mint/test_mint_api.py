@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import bolt11
 import httpx
 import pytest
@@ -16,6 +18,8 @@ from cashu.core.models import (
 )
 from cashu.core.nuts import nut20
 from cashu.core.nuts.nuts import MINT_NUT
+from cashu.lightning.fake import FakeWallet
+from cashu.mint.features import LedgerFeatures
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
@@ -67,6 +71,30 @@ async def test_info(ledger: Ledger):
     assert setting.unit == "sat"
     assert setting.options
     assert setting.options.description is True
+    # conftest runs the usd unit on FakeWallet, whatever backs sat
+    assert response.json()["demo"] is True
+
+
+_REAL_BACKEND = SimpleNamespace(
+    supports_description=True,
+    supports_mpp=False,
+    supports_incoming_payment_stream=False,
+)
+
+
+@pytest.mark.parametrize(
+    "units, demo",
+    [
+        ({Unit.sat: FakeWallet()}, True),
+        ({Unit.sat: _REAL_BACKEND}, None),
+        ({Unit.sat: _REAL_BACKEND, Unit.usd: FakeWallet(Unit.usd)}, True),
+    ],
+)
+def test_mint_info_demo_follows_backends(units, demo):
+    features = LedgerFeatures()
+    features.backends = {Method.bolt11: units}
+    features.pubkey = None
+    assert features.mint_info.demo is demo
 
 
 @pytest.mark.asyncio

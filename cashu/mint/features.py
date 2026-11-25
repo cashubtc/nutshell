@@ -29,6 +29,7 @@ from ..core.nuts.nuts import (
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
+from ..lightning.fake import FakeWallet
 from ..mint.protocols import SupportsBackends, SupportsPubkey
 
 _VERSION_PREFIX = "Nutshell"
@@ -64,6 +65,12 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
             motd=settings.mint_info_motd,
             time=None,
             max_array_length=settings.mint_max_request_length,
+            demo=any(
+                isinstance(backend, FakeWallet)
+                for unit_dict in self.backends.values()
+                for backend in unit_dict.values()
+            )
+            or None,
         )
 
     @property

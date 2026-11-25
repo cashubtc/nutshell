@@ -58,6 +58,7 @@ def _dummy_ledger():
         tos_url="https://mint.test/tos",
         motd="Hello",
         max_array_length=1000,
+        demo=None,
     )
 
     async def mint_quote(payload):
