@@ -6,7 +6,11 @@ import pytest_asyncio
 
 from cashu.core.base import Proof, TokenV3, TokenV3Token
 from cashu.core.settings import settings
-from cashu.wallet.cli.cli_helpers import get_mint_wallet, receive_all_pending
+from cashu.wallet.cli.cli_helpers import (
+    get_mint_wallet,
+    receive_all_pending,
+    verify_mint,
+)
 from cashu.wallet.crud import get_reserved_proofs
 from cashu.wallet.helpers import receive, redeem_TokenV3
 from cashu.wallet.wallet import Wallet
@@ -141,3 +145,14 @@ async def test_select_mint_and_receive_pending_reuse_wallet(tmp_path, monkeypatc
         await received.db.engine.dispose()
     finally:
         await wallet.db.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_verify_mint_asks_about_unknown_mint(tmp_path, monkeypatch):
+    wallet = await Wallet.with_db(SERVER_ENDPOINT, str(tmp_path / "new"), name="new")
+    asked = []
+    monkeypatch.setattr(click, "confirm", lambda *a, **kw: asked.append(a))
+    ctx = click.Context(click.Command("receive"), obj={"YES": False})
+    await verify_mint(ctx, wallet, "http://unknown-mint.example")
+    assert asked
+    await wallet.db.engine.dispose()
