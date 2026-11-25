@@ -623,6 +623,42 @@ async def test_lndrest_pay_invoice_returns_failed_on_rest_proxy_error(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        {"code": 14, "message": 'connection error: desc = "transport is closing"'},
+        {"code": 2, "message": "unexpected EOF"},
+        {"message": "Bad Gateway"},
+    ],
+)
+async def test_lndrest_pay_invoice_error_on_ambiguous_rest_proxy_error(
+    monkeypatch, envelope
+):
+    # A top-level envelope with a transport code can come back after lnd
+    # received the send, so it must not be an explicit FAILED.
+    wallet = object.__new__(LndRestWallet)
+    wallet.unit = Unit.sat
+    wallet.supports_mpp = False
+
+    lines = [json.dumps(envelope)]
+
+    class Client:
+        def stream(self, method, url, json=None, timeout=None):
+            return _StreamResponse(lines)
+
+    cast(Any, wallet).client = Client()
+    monkeypatch.setattr(
+        "cashu.lightning.lndrest.bolt11.decode",
+        lambda request: SimpleNamespace(amount_msat=1000),
+    )
+    result = await wallet.pay_invoice(
+        _quote("lnbc1fake", amount=1), fee_limit_msat=1000
+    )
+    assert result.result == PaymentResult.ERROR
+    assert result.error_message == envelope["message"]
+
+
+@pytest.mark.asyncio
 async def test_lndrest_pay_invoice_unknown_on_stream_error(monkeypatch):
     # a streaming error envelope (e.g. payment already in flight) arrives after
     # the request was accepted, so the payment may be live: must be UNKNOWN, not
