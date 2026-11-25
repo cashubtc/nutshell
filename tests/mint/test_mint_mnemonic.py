@@ -1,3 +1,4 @@
+import time
 from typing import Mapping, Optional
 
 import pytest
@@ -99,3 +100,31 @@ async def test_rotation_switches_unit_to_mnemonic(ledger: Ledger, monkeypatch):
     active = [k for k in restarted.keysets.values() if k.active]
     assert [k.id for k in active if k.unit == Unit.sat] == [keyset.id]
     assert [k.from_mnemonic for k in active if k.unit == Unit.usd] == [False]
+
+
+@pytest.mark.asyncio
+async def test_mnemonic_automatic_rotation_on_startup(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "mint_mnemonic", MNEMONIC)
+    monkeypatch.setattr(settings, "mint_keyset_rotation_enabled", True)
+    monkeypatch.setattr(settings, "mint_keyset_rotation_interval_seconds", 86400)
+    db = Database("mint", str(tmp_path / "mint"))
+    await migrate_databases(db, mint_migrations)
+    backends = {Method.bolt11: {Unit.sat: FakeWallet(Unit.sat)}}
+
+    try:
+        ledger = await start_ledger(db, None, backends)
+        old_keyset = ledger.keyset
+        old_keyset.valid_from = db.timestamp_from_seconds(int(time.time()) - 172800)
+        await ledger.crud.update_keyset(db=db, keyset=old_keyset)
+
+        restarted = await start_ledger(db, None, backends)
+        assert not restarted.keysets[old_keyset.id].active
+        assert restarted.keyset.from_mnemonic
+        assert restarted.keyset.id != old_keyset.id
+        assert restarted.keyset.derivation_path == derive_bip39_derivation_path("sat", 2)
+
+        restarted_again = await start_ledger(db, None, backends)
+        assert set(restarted_again.keysets) == set(restarted.keysets)
+        assert restarted_again.keyset.id == restarted.keyset.id
+    finally:
+        await db.engine.dispose()
