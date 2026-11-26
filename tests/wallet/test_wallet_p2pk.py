@@ -14,7 +14,7 @@ from cashu.core.base import P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.errors import TransactionError
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import P2PKSecret, SigFlags
+from cashu.core.p2pk import P2PKSecret, SigFlags, schnorr_sign
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
@@ -326,6 +326,30 @@ async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
     send_proofs = wallet1.sign_p2pk_sig_inputs(send_proofs)
     # here we add the signatures of wallet2
     await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_p2pk_multisig_11_of_11(wallet1: Wallet):
+    # The largest NUT-11 lock (data + 10 pubkeys) needs a witness of more than
+    # 1024 characters, which the mint must accept by default.
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+    privkeys = [PrivateKey() for _ in range(11)]
+    pubkeys = [k.public_key.format().hex() for k in privkeys]
+    secret_lock = await wallet1.create_p2pk_lock(
+        pubkeys[0], tags=Tags([["pubkeys", *pubkeys[1:]]]), n_sigs=11
+    )
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    for proof in send_proofs:
+        signatures = [
+            schnorr_sign(proof.secret.encode("utf-8"), k).hex() for k in privkeys
+        ]
+        proof.witness = P2PKWitness(signatures=signatures).model_dump_json()
+        assert len(proof.witness) > 1024
+    await wallet1.redeem(send_proofs)
 
 
 @pytest.mark.asyncio
