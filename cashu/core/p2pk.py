@@ -50,19 +50,30 @@ class P2PKSecret(Secret):
         return n_sigs_refund
 
 
-def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
+def schnorr_sign_digest(digest: bytes, private_key: PrivateKey) -> bytes:
+    """Signs a 32-byte digest directly (no further hashing)."""
     signature = private_key.sign_schnorr(
-        hashlib.sha256(message).digest(),
+        digest,
         None,  # type: ignore
     )
     return signature
 
 
+def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
+    return schnorr_sign_digest(hashlib.sha256(message).digest(), private_key)
+
+
+def verify_schnorr_signature_digest(
+    digest: bytes, pubkey: PublicKey, signature: bytes
+) -> bool:
+    """Verifies a signature over a 32-byte digest directly (no further hashing)."""
+    xonly_pubkey: PublicKeyXOnly = PublicKeyXOnly(pubkey.format()[1:])
+    return xonly_pubkey.verify(signature, digest)
+
+
 def verify_schnorr_signature(
     message: bytes, pubkey: PublicKey, signature: bytes
 ) -> bool:
-    xonly_pubkey: PublicKeyXOnly = PublicKeyXOnly(pubkey.format()[1:])
-    return xonly_pubkey.verify(
-        signature,
-        hashlib.sha256(message).digest(),
+    return verify_schnorr_signature_digest(
+        hashlib.sha256(message).digest(), pubkey, signature
     )

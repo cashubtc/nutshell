@@ -1,10 +1,13 @@
+from hashlib import sha256
 from typing import List
 
 import pytest
 
 from cashu.core.base import BlindedMessage, Proof
+from cashu.core.crypto.secp import PublicKey
 from cashu.core.errors import TransactionError
 from cashu.core.nuts import nut11
+from cashu.core.p2pk import verify_schnorr_signature_digest
 from cashu.mint.conditions import LedgerSpendingConditions
 
 
@@ -401,3 +404,86 @@ def test_sig_all_swap_multisig_valid():
     outputs = _outputs_from_list(output_dicts)
     cond = LedgerSpendingConditions()
     assert cond._verify_input_output_spending_conditions(proofs, outputs) is True
+
+
+# --- SIG_ALL v1 (typed records, tagged hash) message vectors ---
+# Canonical vectors from nuts tests/11-test.md ("SIG_ALL Test Vectors"),
+# pinned byte-for-byte in cashu-ts and cdk too. Signing key is the well-known
+# test key (privkey 0x...01).
+
+
+def test_sig_all_v1_message_canonical_vector():
+    pub = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    inputs = [
+        {
+            "amount": 8,
+            "id": "01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82",
+            "secret": f'["P2PK",{{"nonce":"7d544630128e1455d15012e4a88e83d59d89a7c176a73ceab1eda5d4f5744cca","data":"{pub}","tags":[["sigflag","SIG_ALL"]]}}]',
+            "C": "03c0bdc5da4ffde1f36d261b05106682733217d5eaa0be2fe7288ccf7c4006ee0c",
+        },
+        {
+            "amount": 2,
+            "id": "01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82",
+            "secret": f'["P2PK",{{"nonce":"2616f858162c6550227c9bee1f480cf0e33941ae0196e3bddd5c80fdaee15f70","data":"{pub}","tags":[["sigflag","SIG_ALL"]]}}]',
+            "C": "037a12e58c9205ca2e73371b838463fe360138e667ffca3b58c311f62a8d466c67",
+        },
+    ]
+    outputs = [
+        {
+            "amount": 8,
+            "id": "01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82",
+            "B_": "027c9a3f3dae60a2967dfc3aeea06535fff329cbc196842ecc12a5fb66a2eb9087",
+        },
+        {
+            "amount": 2,
+            "id": "01b8afe98cfccddc07e53fe5f081657f729c322266a1fda00937d27bba3cdf6a82",
+            "B_": "03cd583efc731edcab6935e0a817cec65851ace7ca842396422ff2c0e9db9c49bc",
+        },
+    ]
+    quote_id = "9d745270-1405-46de-b5c5-e2762b4f5e00"
+    proofs = [_proof_from_dict(i) for i in inputs]
+    outs = _outputs_from_list(outputs)
+
+    assert (
+        sha256(nut11.SIGALL_SIG_TAG_V1.encode()).hexdigest()
+        == "c83c413c874b6f3da4c6310558d0d174c56f1a0a034023ae225ab3648e9626b3"
+    )
+
+    swap_msg = nut11.sigall_message_to_sign_v1(proofs, outs)
+    assert len(swap_msg) == 552
+    assert swap_msg[0] == 0x11
+    swap_hash = nut11.sigall_message_hash_v1(proofs, outs)
+    assert (
+        swap_hash.hex()
+        == "211b753e260375ce45e36b2a1e90d60b0a589f3f8c701d1913930c47b5244e53"
+    )
+    # Pinned signature by the test key over the swap message hash
+    assert verify_schnorr_signature_digest(
+        digest=swap_hash,
+        pubkey=PublicKey(bytes.fromhex(pub)),
+        signature=bytes.fromhex(
+            "5fba32e9a91078651406bf8afe067ea1e68a03dec3c5ca8ef5ee2afc5be85a0c8ac637ed3789eb1e5bdf00e121b3554026c24112913b685a8a99cb8466bcbd49"
+        ),
+    )
+
+    # A melt is the swap message plus a trailing 0x22 quote record
+    melt_msg = nut11.sigall_message_to_sign_v1(proofs, outs, quote_id)
+    assert len(melt_msg) == 593
+    assert melt_msg[: len(swap_msg)] == swap_msg
+    assert (
+        melt_msg[len(swap_msg) :].hex()
+        == "2200000024"
+        + "39643734353237302d313430352d343664652d623563352d653237363262346635653030"
+    )
+    melt_hash = nut11.sigall_message_hash_v1(proofs, outs, quote_id)
+    assert (
+        melt_hash.hex()
+        == "d30001353eb216fa9f9296bbe10be23defcd3bd2a567d89e212d586d573ddf7e"
+    )
+    assert verify_schnorr_signature_digest(
+        digest=melt_hash,
+        pubkey=PublicKey(bytes.fromhex(pub)),
+        signature=bytes.fromhex(
+            "b5ef213225d90a16ea651b8ad1eca10eefcdfe973dcd33796677b7122dcbadc069ce64e7196d8ad5951411202471e560ef2e949b91509db6b2345c970c50149d"
+        ),
+    )
