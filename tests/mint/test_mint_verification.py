@@ -1,12 +1,14 @@
 """Tests for `cashu.mint.verification.LedgerVerification`."""
 
 import secrets
+from typing import List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from cashu.core.base import (
     BlindedMessage,
+    HTLCWitness,
     Method,
     MintQuote,
     MintQuoteState,
@@ -153,6 +155,40 @@ def test_verify_input_witness_criteria_rejects_long_witness(ledger: Ledger):
     with pytest.raises(WitnessTooLongError) as exc_info:
         ledger._verify_input_witness_criteria(p)
     assert exc_info.value.code == 11000
+
+
+def _signatures(n: int) -> List[str]:
+    return [schnorr_sign(secrets.token_bytes(32), PrivateKey()).hex() for _ in range(n)]
+
+
+def test_default_witness_length_fits_largest_p2pk_witness(ledger: Ledger):
+    # NUT-11 allows up to 11 signing keys (data + 10 pubkeys or refund keys)
+    witness = P2PKWitness(signatures=_signatures(11)).model_dump_json()
+    assert len(witness) > 1024
+    p = Proof(
+        id=ledger.keyset.id,
+        amount=8,
+        secret="s",
+        C="02" + "ab" * 32,
+        witness=witness,
+    )
+    assert ledger._verify_input_witness_criteria(p) is True
+
+
+def test_default_witness_length_fits_largest_htlc_witness(ledger: Ledger):
+    # An HTLC carries a 32-byte preimage plus up to 10 signatures
+    witness = HTLCWitness(
+        preimage=secrets.token_hex(32), signatures=_signatures(10)
+    ).model_dump_json()
+    assert len(witness) > 1024
+    p = Proof(
+        id=ledger.keyset.id,
+        amount=8,
+        secret="s",
+        C="02" + "ab" * 32,
+        witness=witness,
+    )
+    assert ledger._verify_input_witness_criteria(p) is True
 
 
 # ---------------------------------------------------------------------------
